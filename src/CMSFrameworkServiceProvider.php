@@ -13,4 +13,9 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 			return new CMSFramework();
 		} );
 	}
+
+	public function boot(): void
+	{
+		new CMSFramework();
+	}
 }
