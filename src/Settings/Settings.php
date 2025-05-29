@@ -3,6 +3,7 @@
 namespace ArtisanPackUI\CMSFramework\Settings;
 
 use ArtisanPackUI\CMSFramework\Util\Interfaces\Module;
+use TorMorten\Eventy\Facades\Eventy;
 
 class Settings implements Module
 {
@@ -19,7 +20,7 @@ class Settings implements Module
 
 	public function init(): void
 	{
-		// TODO: Implement init() method.
+		Eventy::addFilter( 'ap.migrations.directories', [ $this, 'settingsMigrations' ] );
 	}
 
 	public function registerSetting( $name, $value, $callback )
@@ -45,5 +46,11 @@ class Settings implements Module
 	public function deleteSetting( $setting )
 	{
 
+	}
+
+	public function settingsMigrations( $directories )
+	{
+		$directories[] = __DIR__ . '/migrations';
+		return $directories;
 	}
 }
