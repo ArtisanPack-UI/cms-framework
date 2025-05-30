@@ -63,11 +63,11 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function boot(): void
 	{
-        global $cmsFramework;
+		global $cmsFramework;
 		$cmsFramework = new CMSFramework();
 
 		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
-        $this->loadViewsFrom( $this->getViewsDirectories(), 'cmsframework' );
+		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
 	}
 
 	/**
@@ -88,7 +88,61 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		return Eventy::filter( 'ap.migrations.directories', [] );
 	}
 
-    public function getViewsDirectories(): array {
-        return Eventy::filter( 'ap.views.directories', [] );
-    }
+	/**
+	 * Loads views from the specified directories.
+	 *
+	 * This method is used to allow for customization of the view directories
+	 * by other modules.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @see   CMSFrameworkServiceProvider
+	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+	 *
+	 * @param array $directories List of directories to load views from.
+	 *
+	 * @return void
+	 */
+	public function loadViewsFromDirectories( $directories )
+	{
+		if ( $directories ) {
+			foreach ( $directories as $directory ) {
+				$this->loadViewsFrom( $directory['path'], $directory['namespace'] );
+			}
+		}
+	}
+
+	/**
+	 * Returns an array of view directories to load.
+	 *
+	 * This method is used to allow for customization of the view directories
+	 * by other modules.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @see   CMSFrameworkServiceProvider
+	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+	 *
+	 * @return array List of view directories.
+	 */
+	public function getViewsDirectories(): array
+	{
+		/**
+		 * Loads the view directories from the modules.
+		 *
+		 * Grabs the view directories from the modules that have been registered and returns them as an array.
+		 * The returned array includes the path and namespace for each view directory.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $directories List of directories to load views from.
+		 * @return array {
+		 *                           List of view directories.
+		 *
+		 * @type string $path        Path to the view directory.
+		 * @type string $namespace   Namespace for the view directory.
+		 *                           }
+		 */
+		return Eventy::filter( 'ap.views.directories', [] );
+	}
 }
