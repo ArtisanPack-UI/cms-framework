@@ -15,7 +15,9 @@ class Settings implements Module
 
 	public function functions(): array
 	{
-		return [];
+		return [
+            'registerSetting' => [ $this, 'registerSetting' ],
+        ];
 	}
 
 	public function init(): void
@@ -25,7 +27,7 @@ class Settings implements Module
 
 	public function registerSetting( $name, $value, $callback )
 	{
-
+        dd('registering settings');
 	}
 
 	public function getSettings( $args = [] )

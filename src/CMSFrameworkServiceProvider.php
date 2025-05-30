@@ -63,8 +63,11 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function boot(): void
 	{
-		new CMSFramework();
+        global $cmsFramework;
+		$cmsFramework = new CMSFramework();
+
 		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
+        $this->loadViewsFrom( $this->getViewsDirectories(), 'cmsframework' );
 	}
 
 	/**
@@ -84,4 +87,8 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	{
 		return Eventy::filter( 'ap.migrations.directories', [] );
 	}
+
+    public function getViewsDirectories(): array {
+        return Eventy::filter( 'ap.views.directories', [] );
+    }
 }
