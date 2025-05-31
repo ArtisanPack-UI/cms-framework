@@ -2,15 +2,17 @@
 
 use ArtisanPackUI\CMSFramework\CMSFramework;
 
-if ( !function_exists( 'cmsframework' ) ) {
-	/**
-	 * Get the Eventy instance.
-	 *
-	 * @return CMSFramework
-	 */
-	function cmsframework()
+if ( !function_exists( 'cmsFramework' ) ) {
+
+	function cmsFramework()
 	{
-		return app( 'cmsframework' );
+        global $cmsFramework;
+
+        if ( is_null( $cmsFramework ) ) {
+            $cmsFramework = new CMSFramework();
+        }
+
+        return $cmsFramework->functions();
 	}
 }
 
