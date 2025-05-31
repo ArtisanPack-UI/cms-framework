@@ -133,6 +133,23 @@ class CMSFramework
 		$modules = [
 			new Settings(),
 		];
+
+		/**
+		 * An array representing the modules included in the application.
+		 *
+		 * The $modules variable holds a list of modules, which could correspond
+		 * to functionalities, components, or services that are part of a larger
+		 * software system. Each module in the array can have properties such as
+		 * its name, version, dependencies, and other configurations.
+		 *
+		 * This variable can be used to dynamically load or initialize various
+		 * modules as required by the application. It serves as a central registry
+		 * to manage and reference the available modules.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $modules Associative array of module details.
+		 */
 		return Eventy::filter( 'ap.modules.list', $modules );
 	}
 
@@ -156,6 +173,13 @@ class CMSFramework
 			}
 		);
 
+		/**
+		 * Fires when the CMSFramework is initialized.
+		 *
+		 * Runs any actions that have been registered with the ap.init event at the start of the application.
+		 *
+		 * @since 1.0.0.
+		 */
 		Eventy::action( 'ap.init' );
 	}
 
@@ -179,6 +203,13 @@ class CMSFramework
 			}
 		);
 
+		/**
+		 * Fires when the admin side of the CMSFramework is initialized.
+		 *
+		 * Runs any actions that have been registered with the ap.init event at the start of the application if the view is in the admin area of the Framework.
+		 *
+		 * @since 1.0.0.
+		 */
 		Eventy::action( 'ap.admin.init' );
 	}
 
@@ -202,6 +233,13 @@ class CMSFramework
 			}
 		);
 
+		/**
+		 * Fires when the public side of the CMSFramework is initialized.
+		 *
+		 * Runs any actions that have been registered with the ap.public.init event at the start of the application if the view is in the public area of the Framework.
+		 *
+		 * @since 1.0.0
+		 */
 		Eventy::action( 'ap.public.init' );
 	}
 
@@ -225,6 +263,13 @@ class CMSFramework
 			}
 		);
 
+		/**
+		 * Fires when the auth side of the CMSFramework is initialized.
+		 *
+		 * Runs any actions that have been registered with the ap.auth.init event at the start of the application if the view is in the auth area of the Framework.
+		 *
+		 * @since 1.0.0
+		 */
 		Eventy::action( 'ap.auth.init' );
 	}
 

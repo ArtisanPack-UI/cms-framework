@@ -85,6 +85,15 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function getMigrationDirectories(): array
 	{
+		/**
+		 * Loads the migration directories from the modules.
+		 *
+		 * Grabs the migration directories from the modules that have been registered and returns them as an array.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param array $directories List of directories to load migrations from.
+		 */
 		return Eventy::filter( 'ap.migrations.directories', [] );
 	}
 
