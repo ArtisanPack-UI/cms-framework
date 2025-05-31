@@ -5,18 +5,19 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
-	public function up(): void
-	{
-		Schema::create( 'settings', function ( Blueprint $table ) {
-			$table->id();
-			$table->string( 'key' );
-			$table->string( 'value' )->nullable();
-			$table->timestamps();
-		} );
-	}
+    public function up(): void
+    {
+        Schema::create( 'settings', function ( Blueprint $table ) {
+            $table->id();
+            $table->string( 'key' );
+            $table->text( 'value' )->nullable();
+            $table->string( 'category' )->nullable();
+            $table->timestamps();
+        } );
+    }
 
-	public function down(): void
-	{
-		Schema::dropIfExists( 'settings' );
-	}
+    public function down(): void
+    {
+        Schema::dropIfExists( 'settings' );
+    }
 };
