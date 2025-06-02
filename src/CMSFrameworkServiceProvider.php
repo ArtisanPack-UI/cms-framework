@@ -67,7 +67,26 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		$cmsFramework = new CMSFramework();
 
 		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
+
+		/**
+		 * Fires when the migrations are loaded.
+		 *
+		 * Runs functions that need to wait until the migrations are loaded in order to work.
+		 *
+		 * @since 1.0.0
+		 */
+		Eventy::action( 'ap.init.migrations-loaded' );
+
 		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
+
+		/**
+		 * Fires when the views are loaded.
+		 *
+		 * Runs functions that need to wait until the views are loaded in order to work.
+		 *
+		 * @since 1.0.0
+		 */
+		Eventy::action( 'ap.init.views-loaded' );
 	}
 
 	/**
