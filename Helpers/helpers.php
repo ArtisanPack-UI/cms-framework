@@ -1,18 +1,12 @@
 <?php
 
-use ArtisanPackUI\CMSFramework\CMSFramework;
+use ArtisanPackUI\CMSFramework\CMSManager;
 
 if ( !function_exists( 'cmsFramework' ) ) {
 
 	function cmsFramework()
 	{
-        global $cmsFramework;
-
-        if ( is_null( $cmsFramework ) ) {
-            $cmsFramework = new CMSFramework();
-        }
-
-        return $cmsFramework->functions();
+		return app( CMSManager::class );
 	}
 }
 
