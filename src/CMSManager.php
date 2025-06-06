@@ -16,6 +16,7 @@
 
 namespace ArtisanPackUI\CMSFramework;
 
+use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use BadMethodCallException;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Str;
@@ -33,13 +34,13 @@ use Illuminate\Support\Str;
 class CMSManager
 {
 	/**
-	 * An array of registered feature managers.
-	 * Key: normalized feature name (e.g., 'posts', 'pages')
-	 * Value: FQCN of the feature manager.
+	 * Registry of feature managers.
+	 *
+	 * @since 1.0.0
 	 * @var array
 	 */
 	protected $featureManagers = [
-		// Add all your feature managers here
+		'settings' => SettingsManager::class,
 	];
 
 	/**

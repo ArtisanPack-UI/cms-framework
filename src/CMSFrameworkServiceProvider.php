@@ -14,6 +14,7 @@
 
 namespace ArtisanPackUI\CMSFramework;
 
+use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use Illuminate\Support\ServiceProvider;
 use TorMorten\Eventy\Facades\Eventy;
 
@@ -43,7 +44,13 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function register(): void
 	{
-		// Register feature service providers
+		$this->app->singleton( CMSManager::class, function ( $app ) {
+			return new CMSManager(); // CmsManager itself doesn't have constructor dependencies in this setup
+		} );
+		$this->app->singleton( SettingsManager::class, function ( $app ) {
+			return new SettingsManager();
+		} );
+		//$this->app->register( ServiceProvider::class );
 	}
 
 	/**
@@ -92,7 +99,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		 *
 		 * @param array $directories List of directories to load migrations from.
 		 */
-		return Eventy::filter( 'ap.cms.migrations.directories', [] );
+		return Eventy::filter( 'ap.cms.migrations.directories', [ __DIR__ . '/../database/migrations' ] );
 	}
 
 	/**
