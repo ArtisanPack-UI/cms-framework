@@ -43,9 +43,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function register(): void
 	{
-		$this->app->singleton( 'cmsframework', function ( $app ) {
-			return new CMSFramework();
-		} );
+		// Register feature service providers
 	}
 
 	/**
@@ -63,11 +61,11 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function boot(): void
 	{
-		global $cmsFramework;
-		$cmsFramework = new CMSFramework();
-
 		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
 		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
+		$this->publishes( [
+			__DIR__ . '/../config/cms.php' => config_path( 'cms.php' ),
+		], 'cms-config' );
 	}
 
 	/**
@@ -94,7 +92,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		 *
 		 * @param array $directories List of directories to load migrations from.
 		 */
-		return Eventy::filter( 'ap.migrations.directories', [] );
+		return Eventy::filter( 'ap.cms.migrations.directories', [] );
 	}
 
 	/**
@@ -152,6 +150,6 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		 * @type string $namespace   Namespace for the view directory.
 		 *                           }
 		 */
-		return Eventy::filter( 'ap.views.directories', [] );
+		return Eventy::filter( 'ap.cms.views.directories', [] );
 	}
 }

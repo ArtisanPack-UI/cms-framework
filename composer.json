@@ -9,7 +9,7 @@
       "ArtisanPackUI\\CMSFramework\\": "src/"
     },
     "files": [
-      "src/helpers.php"
+      "Helpers/helpers.php"
     ]
   },
   "autoload-dev": {
