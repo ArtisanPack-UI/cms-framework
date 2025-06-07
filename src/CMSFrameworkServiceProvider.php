@@ -15,6 +15,7 @@
 namespace ArtisanPackUI\CMSFramework;
 
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
+use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
 use Illuminate\Support\ServiceProvider;
 use TorMorten\Eventy\Facades\Eventy;
 
@@ -44,13 +45,13 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function register(): void
 	{
+		$this->mergeConfigFrom(
+			__DIR__ . '/../config/cms.php', 'cms'
+		);
+		$this->app->register( SettingsServiceProvider::class );
 		$this->app->singleton( CMSManager::class, function ( $app ) {
-			return new CMSManager(); // CmsManager itself doesn't have constructor dependencies in this setup
+			return new CMSManager();
 		} );
-		$this->app->singleton( SettingsManager::class, function ( $app ) {
-			return new SettingsManager();
-		} );
-		//$this->app->register( ServiceProvider::class );
 	}
 
 	/**
