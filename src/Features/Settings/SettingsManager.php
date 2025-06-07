@@ -1,6 +1,6 @@
 <?php
 /**
- * Class SettingsManager
+ * Settings Manager
  *
  * Manages CRUD operations and event filters for application settings.
  *
@@ -9,17 +9,20 @@
  * @package    ArtisanPackUI\CMSFramework
  * @subpackage ArtisanPackUI\CMSFramework\Features\Settings
  * @since      1.0.0
+ *
  */
 
 namespace ArtisanPackUI\CMSFramework\Features\Settings;
 
 use ArtisanPackUI\CMSFramework\Models\Setting;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Arr;
 use TorMorten\Eventy\Facades\Eventy;
 
 /**
- * Class SettingsManager
+ * Class for managing application settings
  *
- * The SettingsManager class provides functionality to manage application settings, including
+ * Provides functionality to manage application settings, including
  * registering, adding, updating, retrieving, and deleting settings.
  *
  * @since 1.0.0
@@ -27,132 +30,191 @@ use TorMorten\Eventy\Facades\Eventy;
 class SettingsManager
 {
 	/**
-	 * Registers a setting with the application.
+	 * Merged settings from config and database
 	 *
-	 * Registers a setting with the application. The setting will be added to the database if it does not already exist.
-	 * The callback function will be used to retrieve the setting's value.
-	 *
-	 * @since  1.0.0
-	 *
-	 * @link   https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param string   $name     The name of the setting.
-	 * @param string   $value    The default value of the setting.
-	 * @param callable $callback The callback function to use when retrieving the setting.
-	 * @param string   $category The category of the setting.
+	 * @since 1.0.0
+	 * @var array
 	 */
-	public function registerSetting( string $name, string $value, callable $callback, string $category = '' ): void
-	{
-		if ( !Setting::where( 'name', $name )->exists() ) {
-			$this->addSetting( $name, $value, $category );
-		}
+	protected $mergedSettings = [];
 
-		Eventy::addFilter( 'ap.cms.settings.settingsList', function ( array $settings ) use ( $name, $callback ) {
-			$settings[ $name ] = $callback;
-			return $settings;
+	/**
+	 * Cache key for storing settings
+	 *
+	 * @since 1.0.0
+	 * @var string
+	 */
+	protected $cacheKey = 'cms.settings.resolved';
+
+	/**
+	 * Cache time-to-live in minutes (60 * 24 = 1 day)
+	 *
+	 * @since 1.0.0
+	 * @var int
+	 */
+	protected $cacheTtl = 60 * 24;
+
+	/**
+	 * Constructor
+	 *
+	 * Initializes the settings manager by loading settings from config and database.
+	 *
+	 * @since 1.0.0
+	 */
+	public function __construct()
+	{
+		$this->loadSettings();
+	}
+
+	/**
+	 * Load settings from config and database
+	 *
+	 * Merges default settings from config with overrides from database.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	protected function loadSettings(): void
+	{
+		$configDefaults       = config( 'cms', [] );
+		$dbOverrides          = Cache::remember( $this->cacheKey, $this->cacheTtl, function () {
+			return Setting::all()->keyBy( 'key' )->map->value->toArray();
 		} );
-
+		$this->mergedSettings = array_replace_recursive( $configDefaults, Arr::undot( $dbOverrides ) );
 	}
 
 	/**
-	 * Adds a setting to the database.
+	 * Get all currently active settings
 	 *
-	 * @since   1.0.0
-	 *
-	 * @link    https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param string $name     The name of the setting.
-	 * @param string $value    The default value of the setting.
-	 * @param string $category The category of the setting.
-	 */
-	public function addSetting( string $name, string $value, string $category = '' ): void
-	{
-		Setting::create( [
-			'name'     => $name,
-			'value'    => $value,
-			'category' => $category,
-		] );
-	}
-
-	/**
-	 * Retrieves the value of a specified setting.
-	 *
-	 * Fetches the value of the specified setting from the database. If the setting is not found, the provided default
-	 * value is returned.
+	 * Returns all settings merged from config and database.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param string $setting The name of the setting to retrieve.
-	 * @param string $default The default value to return if the setting is not found.
-	 * @return string The value of the setting, or the default value if the setting does not exist.
+	 * @return array Array of all settings
 	 */
-	public function getSetting( string $setting, string $default = '' ): string
+	public function all(): array
 	{
-		$setting = Setting::where( 'name', $setting )->first();
-		if ( $setting ) {
-			return $setting->value;
-		}
-		return $default;
+		return $this->mergedSettings;
 	}
 
 	/**
-	 * Retrieves settings based on the provided arguments or returns all settings if no arguments are specified.
+	 * Get a setting value
+	 *
+	 * Retrieves a setting value from the resolved configuration.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param array $args Options for filtering settings. Recognized key:
-	 *                    - 'category' (string): Filters settings by category.
-	 * @return array The retrieved settings as an array.
+	 * @param string $key     The setting key to retrieve
+	 * @param mixed  $default Default value if setting doesn't exist
+	 * @return mixed The setting value or default if not found
 	 */
-	public function getSettings( array $args = [] ): array
+	public function get( string $key, $default = null )
 	{
-		if ( !empty( $args['category'] ) ) {
-			return Setting::where( 'category', $args['category'] )->get()->toArray();
-		}
-		return Setting::all()->toArray();
+		return Arr::get( $this->mergedSettings, $key, $default );
 	}
 
 	/**
-	 * Updates a specific setting with a new value.
+	 * Register a default setting programmatically
+	 *
+	 * Registers a setting with a default value. If the setting already exists
+	 * in the database, it will NOT be overwritten. This is useful for
+	 * modules/plugins to set their initial defaults.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param string $setting The name of the setting to update.
-	 * @param string $value   The new value to assign to the setting.
-	 * @return Setting|bool The updated setting on success, or false if the setting does not exist.
+	 * @param string      $key          The setting key
+	 * @param mixed       $defaultValue The default value for the setting
+	 * @param string|null $type         Optional. Explicit type of the setting. Default null.
+	 * @param string|null $description  Optional. A description for the setting (useful for UI). Default null.
+	 * @return Setting|null The created setting model or null if already exists
 	 */
-	public function updateSetting( string $setting, string $value ): Setting|bool
+	public function register( string $key, $defaultValue, ?string $type = null, ?string $description = null ): ?Setting
 	{
-		$settings = Eventy::filter( 'ap.cms.settings.settingsList', [] );
-		if ( !isset( $settings[ $setting ] ) ) {
-			return false;
+		// Check if the setting already exists in the database
+		$existingSetting = Setting::where( 'key', $key )->first();
+
+		if ( $existingSetting ) {
+			return $existingSetting; // Setting already exists in DB, do not overwrite
 		}
-		$updatedValue = call_user_func_array( $settings[ $setting ], [ $value ] );
-		return Setting::where( 'name', $setting )->update( [ 'value' => $updatedValue ] );
+
+		// If it doesn't exist, use the set method to store it with the default value
+		// The set method will handle type detection if $type is null
+		$setting = $this->set( $key, $defaultValue, $type );
+
+		// Optionally, if you have a 'description' column in your settings table
+		// and it's not handled by the set() method, you'd add it here:
+		if ( $description !== null && $setting->description !== $description ) {
+			$setting->description = $description;
+			$setting->save(); // Save again if description was updated
+			$this->refreshSettingsCache(); // Re-refresh if description was changed
+		}
+
+		return $setting;
 	}
 
 	/**
-	 * Deletes a specific setting based on its name.
+	 * Set a setting value
+	 *
+	 * Sets a setting value in the database and refreshes the cached settings.
+	 * This method is used for user-initiated changes, always writing to DB.
 	 *
 	 * @since 1.0.0
-	 *
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param string $setting The name of the setting to delete.
-	 * @return bool|int False if the setting does not exist, or the number of rows affected by the delete operation.
+	 * @param string      $key   The setting key (dot-notation supported)
+	 * @param mixed       $value The value to store
+	 * @param string|null $type  Optional. Explicit type ('string', 'boolean', 'integer', 'json').
+	 *                           Auto-detected if null. Default null.
+	 * @return Setting The setting model instance
 	 */
-	public function deleteSetting( string $setting ): bool|int
+	public function set( string $key, $value, ?string $type = null ): Setting
 	{
-		if ( !Setting::where( 'name', $setting )->exists() ) {
-			return false;
+		// Determine type if not explicitly provided (same logic as before)
+		if ( $type === null ) {
+			if ( is_bool( $value ) ) {
+				$type = 'boolean';
+			} else if ( is_int( $value ) ) {
+				$type = 'integer';
+			} else if ( is_array( $value ) || is_object( $value ) ) {
+				$type = 'json';
+			} else {
+				$type = 'string';
+			}
 		}
 
-		return Setting::destroy( Setting::where( 'name', $setting )->first()->id );
+		$setting = Setting::updateOrCreate(
+			[ 'key' => $key ],
+			[ 'value' => $value, 'type' => $type ]
+		);
+
+		$this->refreshSettingsCache();
+
+		return $setting;
+	}
+
+	/**
+	 * Refresh settings cache
+	 *
+	 * Clears the settings cache and forces a reload of the merged settings.
+	 *
+	 * @since 1.0.0
+	 * @return void
+	 */
+	public function refreshSettingsCache(): void
+	{
+		Cache::forget( $this->cacheKey );
+		$this->loadSettings(); // Reloads merged settings from fresh sources
+	}
+
+	/**
+	 * Delete a setting
+	 *
+	 * Deletes a setting from the database and refreshes the cached settings.
+	 *
+	 * @since 1.0.0
+	 * @param string $key The setting key to delete
+	 * @return bool|null True if deleted, false if not found, null on error
+	 */
+	public function delete( string $key ): ?bool
+	{
+		$deleted = Setting::where( 'key', $key )->delete();
+		if ( $deleted ) {
+			$this->refreshSettingsCache();
+		}
+		return $deleted;
 	}
 }

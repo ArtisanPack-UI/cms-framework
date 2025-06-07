@@ -1,6 +1,6 @@
 <?php
 /**
- * Class SettingsServiceProvider
+ * Settings Service Provider
  *
  * Provides the service registration and bootstrapping for the settings feature
  * of the CMS framework. This service provider is responsible for defining
@@ -18,34 +18,41 @@ namespace ArtisanPackUI\CMSFramework\Features\Settings;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Class SettingsServiceProvider
+ * Class for providing settings services
  *
  * Provides the necessary methods to register and boot the settings services within the application.
  *
  * @since 1.0.0
- *
  * @see   ServiceProvider
  */
 class SettingsServiceProvider extends ServiceProvider
 {
 
 	/**
-	 * Registers a service or functionality within the system.
+	 * Register settings services
+	 *
+	 * Registers the SettingsManager as a singleton service in the application container.
 	 *
 	 * @since 1.0.0
+	 * @return void
 	 */
 	public function register()
 	{
-
+		$this->app->singleton( SettingsManager::class, function ( $app ) {
+			return new SettingsManager();
+		} );
 	}
 
 	/**
-	 * Boots the necessary components or services required during the application's startup process.
+	 * Boot settings services
+	 *
+	 * Configures the cache prefix for settings to avoid conflicts with other cached data.
 	 *
 	 * @since 1.0.0
+	 * @return void
 	 */
 	public function boot()
 	{
-
+		config( [ 'cache.stores.file.prefix' => config( 'cache.stores.file.prefix' ) . '.settings_cache' ] );
 	}
 }
