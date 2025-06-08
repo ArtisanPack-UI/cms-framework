@@ -8,6 +8,7 @@
 stages:
   - build
   - test
+  - code-style
 sast:
   stage: test
 include:
@@ -46,3 +47,21 @@ tests:
   image: php:8.2
   script:
     - ./vendor/bin/pest --ci
+
+code-style:
+  stage: code-style
+  dependencies:
+    - build:vendors
+  only:
+    refs:
+      - merge_requests
+      - push
+  cache:
+    key:
+      files:
+        - composer.lock
+    policy: pull
+  image: php:8.2
+  allow_failure: true
+  script:
+    - ./vendor/bin/phpcs --standard=ArtisanPackUIStandard

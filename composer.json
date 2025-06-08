@@ -43,15 +43,9 @@
     "orchestra/testbench": "^10.2",
     "artisanpack-ui/accessibility": "@dev",
     "artisanpack-ui/security": "@dev",
-    "artisanpack-ui/code-style": "@dev",
+    "artisanpack-ui/code-style": "^1.0.0",
     "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
   },
-  "repositories": [
-    {
-      "type": "path",
-      "url": "../code-style"
-    }
-  ],
   "config": {
     "allow-plugins": {
       "pestphp/pest-plugin": true,
