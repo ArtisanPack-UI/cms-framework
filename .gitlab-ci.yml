@@ -64,4 +64,4 @@ code-style:
   image: php:8.2
   allow_failure: true
   script:
-    - ./vendor/bin/phpcs --standard=ArtisanPackUIStandard
+    - ./vendor/bin/phpcs --standard=ArtisanPackUIStandard src
