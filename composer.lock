@@ -5916,16 +5916,16 @@
         },
         {
             "name": "artisanpack-ui/code-style",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "source": {
                 "type": "git",
                 "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style.git",
-                "reference": "23dff9292bc4661c72ec827f47fbd208a6211eb9"
+                "reference": "3134f3cebab76115d5b4fa3c0a23f1645299b0b9"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=23dff9292bc4661c72ec827f47fbd208a6211eb9",
-                "reference": "23dff9292bc4661c72ec827f47fbd208a6211eb9",
+                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=3134f3cebab76115d5b4fa3c0a23f1645299b0b9",
+                "reference": "3134f3cebab76115d5b4fa3c0a23f1645299b0b9",
                 "shasum": ""
             },
             "require": {
@@ -5970,9 +5970,9 @@
             "description": "package name",
             "support": {
                 "issues": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/issues",
-                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/tree/v1.0.0"
+                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/tree/v1.0.1"
             },
-            "time": "2025-06-08T16:17:15+00:00"
+            "time": "2025-06-08T18:49:14+00:00"
         },
         {
             "name": "artisanpack-ui/security",
@@ -7351,16 +7351,16 @@
         },
         {
             "name": "orchestra/testbench",
-            "version": "v10.3.0",
+            "version": "v10.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/orchestral/testbench.git",
-                "reference": "6d0930e33724809a2dbd3c9ecd686295b899e6c9"
+                "reference": "36674005fb1b5cddfd953b8c440507394af8695d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/orchestral/testbench/zipball/6d0930e33724809a2dbd3c9ecd686295b899e6c9",
-                "reference": "6d0930e33724809a2dbd3c9ecd686295b899e6c9",
+                "url": "https://api.github.com/repos/orchestral/testbench/zipball/36674005fb1b5cddfd953b8c440507394af8695d",
+                "reference": "36674005fb1b5cddfd953b8c440507394af8695d",
                 "shasum": ""
             },
             "require": {
@@ -7368,7 +7368,7 @@
                 "fakerphp/faker": "^1.23",
                 "laravel/framework": "^12.8.0",
                 "mockery/mockery": "^1.6.10",
-                "orchestra/testbench-core": "^10.3.0",
+                "orchestra/testbench-core": "^10.4.0",
                 "orchestra/workbench": "^10.0.6",
                 "php": "^8.2",
                 "phpunit/phpunit": "^11.5.3|^12.0.1",
@@ -7400,9 +7400,9 @@
             ],
             "support": {
                 "issues": "https://github.com/orchestral/testbench/issues",
-                "source": "https://github.com/orchestral/testbench/tree/v10.3.0"
+                "source": "https://github.com/orchestral/testbench/tree/v10.4.0"
             },
-            "time": "2025-05-12T06:36:03+00:00"
+            "time": "2025-06-08T23:29:04+00:00"
         },
         {
             "name": "orchestra/testbench-core",

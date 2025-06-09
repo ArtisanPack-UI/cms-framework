@@ -28,31 +28,31 @@ use Illuminate\Support\ServiceProvider;
 class SettingsServiceProvider extends ServiceProvider
 {
 
-	/**
-	 * Register settings services
-	 *
-	 * Registers the SettingsManager as a singleton service in the application container.
-	 *
-	 * @since 1.0.0
-	 * @return void
-	 */
-	public function register()
-	{
-		$this->app->singleton( SettingsManager::class, function ( $app ) {
-			return new SettingsManager();
-		} );
-	}
+    /**
+     * Register settings services
+     *
+     * Registers the SettingsManager as a singleton service in the application container.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function register(): void
+    {
+        $this->app->singleton( SettingsManager::class, function ( $app ) {
+            return new SettingsManager();
+        } );
+    }
 
-	/**
-	 * Boot settings services
-	 *
-	 * Configures the cache prefix for settings to avoid conflicts with other cached data.
-	 *
-	 * @since 1.0.0
-	 * @return void
-	 */
-	public function boot()
-	{
-		config( [ 'cache.stores.file.prefix' => config( 'cache.stores.file.prefix' ) . '.settings_cache' ] );
-	}
+    /**
+     * Boot settings services
+     *
+     * Configures the cache prefix for settings to avoid conflicts with other cached data.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function boot(): void
+    {
+        config( [ 'cache.stores.file.prefix' => config( 'cache.stores.file.prefix' ) . '.settings_cache' ] );
+    }
 }

@@ -30,84 +30,84 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
  */
 class SettingController
 {
-	use AuthorizesRequests;
+    use AuthorizesRequests;
 
-	/**
-	 * Display a listing of all settings.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return AnonymousResourceCollection A collection of setting resources.
-	 */
-	public function index()
-	{
-		$this->authorize( 'viewAny', Setting::class );
+    /**
+     * Display a listing of all settings.
+     *
+     * @since 1.0.0
+     *
+     * @return AnonymousResourceCollection A collection of setting resources.
+     */
+    public function index(): AnonymousResourceCollection
+    {
+        $this->authorize( 'viewAny', Setting::class );
 
-		return SettingResource::collection( Setting::all() );
-	}
+        return SettingResource::collection( Setting::all() );
+    }
 
-	/**
-	 * Store a newly created setting in the database.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param SettingRequest $request The validated request containing setting data.
-	 * @return SettingResource The newly created setting resource.
-	 */
-	public function store( SettingRequest $request )
-	{
-		$this->authorize( 'create', Setting::class );
+    /**
+     * Store a newly created setting in the database.
+     *
+     * @since 1.0.0
+     *
+     * @param SettingRequest $request The validated request containing setting data.
+     * @return SettingResource The newly created setting resource.
+     */
+    public function store( SettingRequest $request ): SettingResource
+    {
+        $this->authorize( 'create', Setting::class );
 
-		return new SettingResource( Setting::create( $request->validated() ) );
-	}
+        return new SettingResource( Setting::create( $request->validated() ) );
+    }
 
-	/**
-	 * Display the specified setting.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param Setting $setting The setting to display.
-	 * @return SettingResource The specified setting resource.
-	 */
-	public function show( Setting $setting )
-	{
-		$this->authorize( 'view', $setting );
+    /**
+     * Display the specified setting.
+     *
+     * @since 1.0.0
+     *
+     * @param Setting $setting The setting to display.
+     * @return SettingResource The specified setting resource.
+     */
+    public function show( Setting $setting ): SettingResource
+    {
+        $this->authorize( 'view', $setting );
 
-		return new SettingResource( $setting );
-	}
+        return new SettingResource( $setting );
+    }
 
-	/**
-	 * Update the specified setting in the database.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param SettingRequest $request The validated request containing updated setting data.
-	 * @param Setting        $setting The setting to update.
-	 * @return SettingResource The updated setting resource.
-	 */
-	public function update( SettingRequest $request, Setting $setting )
-	{
-		$this->authorize( 'update', $setting );
+    /**
+     * Update the specified setting in the database.
+     *
+     * @since 1.0.0
+     *
+     * @param SettingRequest $request The validated request containing updated setting data.
+     * @param Setting        $setting The setting to update.
+     * @return SettingResource The updated setting resource.
+     */
+    public function update( SettingRequest $request, Setting $setting ): SettingResource
+    {
+        $this->authorize( 'update', $setting );
 
-		$setting->update( $request->validated() );
+        $setting->update( $request->validated() );
 
-		return new SettingResource( $setting );
-	}
+        return new SettingResource( $setting );
+    }
 
-	/**
-	 * Remove the specified setting from the database.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param Setting $setting The setting to delete.
-	 * @return JsonResponse A JSON response indicating success.
-	 */
-	public function destroy( Setting $setting ): JsonResponse
-	{
-		$this->authorize( 'delete', $setting );
+    /**
+     * Remove the specified setting from the database.
+     *
+     * @since 1.0.0
+     *
+     * @param Setting $setting The setting to delete.
+     * @return JsonResponse A JSON response indicating success.
+     */
+    public function destroy( Setting $setting ): JsonResponse
+    {
+        $this->authorize( 'delete', $setting );
 
-		$setting->delete();
+        $setting->delete();
 
-		return response()->json();
-	}
+        return response()->json();
+    }
 }
