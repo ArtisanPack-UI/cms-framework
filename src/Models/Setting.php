@@ -92,7 +92,7 @@ class Setting extends Model
      * @param mixed $value The value to be stored
      * @return void
      */
-    public function setValueAttribute( string $value ): void
+    public function setValueAttribute( mixed $value ): void
     {
         if ( is_array( $value ) || is_object( $value ) ) {
             $this->attributes['value'] = json_encode( $value );
