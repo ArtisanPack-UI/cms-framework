@@ -42,11 +42,14 @@
     "squizlabs/php_codesniffer": "3.11.3",
     "orchestra/testbench": "^10.2",
     "artisanpack-ui/accessibility": "@dev",
-    "artisanpack-ui/security": "@dev"
+    "artisanpack-ui/security": "@dev",
+    "artisanpack-ui/code-style": "^1.0.3",
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
   },
   "config": {
     "allow-plugins": {
-      "pestphp/pest-plugin": true
+      "pestphp/pest-plugin": true,
+      "dealerdirect/phpcodesniffer-composer-installer": true
     }
   },
   "extra": {
