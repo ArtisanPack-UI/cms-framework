@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "28563fb25ebfa873a1d1902b32b60b5b",
+    "content-hash": "9a783bfd7ad863c7903e3be38ae903b1",
     "packages": [
         {
             "name": "brick/math",
@@ -5916,20 +5916,19 @@
         },
         {
             "name": "artisanpack-ui/code-style",
-            "version": "1.0.3",
+            "version": "1.0.4",
             "source": {
                 "type": "git",
                 "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style.git",
-                "reference": "e8a3195ae48e10f845b2d877582abed1f8ee0e29"
+                "reference": "3d930f928c72d2578c8c35cd966f8e6d3b4df1e8"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=e8a3195ae48e10f845b2d877582abed1f8ee0e29",
-                "reference": "e8a3195ae48e10f845b2d877582abed1f8ee0e29",
+                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=3d930f928c72d2578c8c35cd966f8e6d3b4df1e8",
+                "reference": "3d930f928c72d2578c8c35cd966f8e6d3b4df1e8",
                 "shasum": ""
             },
             "require": {
-                "illuminate/support": ">=5.3",
                 "php": "^8.2",
                 "squizlabs/php_codesniffer": "^3.7"
             },
@@ -5939,20 +5938,9 @@
             },
             "type": "phpcodesniffer-standard",
             "extra": {
-                "laravel": {
-                    "aliases": {
-                        "Package": "ArtisanPackUI\\CodeStyle\\Facades\\CodeStyle"
-                    },
-                    "providers": [
-                        "ArtisanPackUI\\CodeStyle\\CodeStyleServiceProvider"
-                    ]
-                },
                 "phpcodesniffer-standard": "ArtisanPackUIStandard"
             },
             "autoload": {
-                "files": [
-                    "src/helpers.php"
-                ],
                 "psr-4": {
                     "ArtisanPackUI\\sniffs\\": "src/ArtisanPackUI/Sniffs/"
                 }
@@ -5967,12 +5955,12 @@
                     "email": "me@jacobmartella.com"
                 }
             ],
-            "description": "package name",
+            "description": "A custom PHP code style standard based on PHPStorm settings. This package provides custom sniffs for PHP_CodeSniffer that enforce consistent code style across your PHP projects.",
             "support": {
                 "issues": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/issues",
-                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/tree/v1.0.3"
+                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/tree/v1.0.4"
             },
-            "time": "2025-06-08T20:55:14+00:00"
+            "time": "2025-06-09T10:03:50+00:00"
         },
         {
             "name": "artisanpack-ui/security",
@@ -9992,7 +9980,8 @@
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
-        "php": "^8.2"
+        "php": "^8.2",
+        "ext-zip": "*"
     },
     "platform-dev": {},
     "plugin-api-version": "2.6.0"
