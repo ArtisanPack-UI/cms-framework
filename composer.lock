@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f48c84bfc326fd5d27f4a70579bf75b2",
+    "content-hash": "28563fb25ebfa873a1d1902b32b60b5b",
     "packages": [
         {
             "name": "brick/math",
@@ -5916,16 +5916,16 @@
         },
         {
             "name": "artisanpack-ui/code-style",
-            "version": "1.0.1",
+            "version": "1.0.3",
             "source": {
                 "type": "git",
                 "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style.git",
-                "reference": "3134f3cebab76115d5b4fa3c0a23f1645299b0b9"
+                "reference": "e8a3195ae48e10f845b2d877582abed1f8ee0e29"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=3134f3cebab76115d5b4fa3c0a23f1645299b0b9",
-                "reference": "3134f3cebab76115d5b4fa3c0a23f1645299b0b9",
+                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-code-style/repository/archive.zip?sha=e8a3195ae48e10f845b2d877582abed1f8ee0e29",
+                "reference": "e8a3195ae48e10f845b2d877582abed1f8ee0e29",
                 "shasum": ""
             },
             "require": {
@@ -5970,9 +5970,9 @@
             "description": "package name",
             "support": {
                 "issues": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/issues",
-                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/tree/v1.0.1"
+                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-code-style/-/tree/v1.0.3"
             },
-            "time": "2025-06-08T18:49:14+00:00"
+            "time": "2025-06-08T20:55:14+00:00"
         },
         {
             "name": "artisanpack-ui/security",

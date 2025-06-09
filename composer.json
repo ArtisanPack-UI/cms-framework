@@ -43,7 +43,7 @@
     "orchestra/testbench": "^10.2",
     "artisanpack-ui/accessibility": "@dev",
     "artisanpack-ui/security": "@dev",
-    "artisanpack-ui/code-style": "^1.0.0",
+    "artisanpack-ui/code-style": "^1.0.3",
     "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
   },
   "config": {
