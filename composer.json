@@ -6,7 +6,8 @@
   "version": "1.0.0",
   "autoload": {
     "psr-4": {
-      "ArtisanPackUI\\CMSFramework\\": "src/"
+      "ArtisanPackUI\\CMSFramework\\": "src/",
+      "ArtisanPackUI\\Database\\": "database/"
     },
     "files": [
       "Helpers/helpers.php"

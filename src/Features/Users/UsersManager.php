@@ -68,6 +68,8 @@ class UsersManager
 	 */
 	public function findUser( int $userId ): ?User
 	{
+		$user = User::find( $userId );
+
 		/**
 		 * Filters a user found by their ID.
 		 *
@@ -76,7 +78,10 @@ class UsersManager
 		 * @param User|null $user   The User model if found, otherwise null.
 		 * @param int       $userId The ID of the user being searched for.
 		 */
-		return Eventy::filter( 'ap.cms.users.find', User::find( $userId ), $userId );
+		$filtered = Eventy::filter( 'ap.cms.users.find', $user, $userId );
+
+		// Ensure we return a User object or null
+		return ($filtered instanceof User) ? $filtered : $user;
 	}
 
 	/**
@@ -190,6 +195,8 @@ class UsersManager
 	 */
 	public function findRole( int $roleId ): ?Role
 	{
+		$role = Role::find( $roleId );
+
 		/**
 		 * Filters a role found by its ID.
 		 *
@@ -198,7 +205,10 @@ class UsersManager
 		 * @param Role|null $role   The Role model if found, otherwise null.
 		 * @param int       $roleId The ID of the role being searched for.
 		 */
-		return Eventy::filter( 'ap.cms.roles.find', Role::find( $roleId ), $roleId );
+		$filtered = Eventy::filter( 'ap.cms.roles.find', $role, $roleId );
+
+		// Ensure we return a Role object or null
+		return ($filtered instanceof Role) ? $filtered : $role;
 	}
 
 	/**

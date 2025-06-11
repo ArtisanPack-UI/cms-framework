@@ -13,11 +13,11 @@
 
 namespace ArtisanPackUI\CMSFramework\Models;
 
+use ArtisanPackUI\Database\factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use phpDocumentor\Reflection\Types\Iterable_;
 use TorMorten\Eventy\Facades\Eventy;
 
 /**
@@ -30,190 +30,203 @@ use TorMorten\Eventy\Facades\Eventy;
  */
 class User extends Authenticatable
 {
-	use HasFactory, Notifiable;
+    use HasFactory, Notifiable;
 
-	/**
-	 * The table associated with the model.
-	 *
-	 * @since 1.0.0
-	 * @var string
-	 */
-	protected $table = 'users';
+    /**
+     * The factory that should be used to instantiate the model.
+     *
+     * @since 1.0.0
+     * @var string
+     */
+    protected static $factory = UserFactory::class;
+    /**
+     * The table associated with the model.
+     *
+     * @since 1.0.0
+     * @var string
+     */
+    protected $table = 'users';
+    /**
+     * The attributes that are mass assignable.
+     *
+     * @since 1.0.0
+     * @var array<int, string>
+     */
+    protected $fillable = [
+        'username',
+        'email',
+        'password',
+        'role_id',
+        'first_name',
+        'last_name',
+        'website',
+        'bio',
+        'links',
+        'settings',
+    ];
 
-	/**
-	 * The attributes that are mass assignable.
-	 *
-	 * @since 1.0.0
-	 * @var array<int, string>
-	 */
-	protected $fillable = [
-		'username',
-		'email',
-		'password',
-		'role_id',
-		'first_name',
-		'last_name',
-		'website',
-		'bio',
-		'links',
-		'settings',
-	];
+    /**
+     * The attributes that should be hidden for serialization.
+     *
+     * @since 1.0.0
+     * @var array<int, string>
+     */
+    protected $hidden = [
+        'password',
+        'remember_token',
+    ];
 
-	/**
-	 * The attributes that should be hidden for serialization.
-	 *
-	 * @since 1.0.0
-	 * @var array<int, string>
-	 */
-	protected $hidden = [
-		'password',
-		'remember_token',
-	];
+    /**
+     * The attributes that should be cast.
+     *
+     * @since 1.0.0
+     * @var array<string, string>
+     */
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'password'          => 'hashed',
+        'links'             => 'array',
+        'settings'          => 'array',
+    ];
 
-	/**
-	 * The attributes that should be cast.
-	 *
-	 * @since 1.0.0
-	 * @var array<string, string>
-	 */
-	protected $casts = [
-		'email_verified_at' => 'datetime',
-		'password'          => 'hashed',
-		'links'             => 'array',
-		'settings'          => 'array',
-	];
+    /**
+     * Get the role that the user belongs to.
+     *
+     * @since 1.0.0
+     * @return BelongsTo
+     */
+    public function role(): BelongsTo
+    {
+        return $this->belongsTo( Role::class );
+    }
 
-	/**
-	 * Get the role that the user belongs to.
-	 *
-	 * @since 1.0.0
-	 * @return BelongsTo
-	 */
-	public function role(): BelongsTo
-	{
-		return $this->belongsTo( Role::class );
-	}
+    /**
+     * Checks if the user has a given capability through their assigned role.
+     *
+     * @since 1.0.0
+     * @param Iterable|string $abilities The capability to check for.
+     * @param array           $arguments Additional arguments for the check.
+     * @return bool True if the user has the capability, false otherwise.
+     */
+    public function can( $abilities, $arguments = [] ): bool
+    {
+        /**
+         * Filters whether a user has a specific capability.
+         *
+         * This hook allows for custom logic to determine if a user has a capability,
+         * bypassing the default role-based check if necessary.
+         *
+         * @since 1.0.0
+         *
+         * @param bool   $hasCapability Whether the user has the capability. Default false.
+         * @param string $abilities     The capability being checked.
+         * @param User   $user          The user model instance.
+         */
+        $hasCapability = Eventy::filter( 'ap.cms.users.user_can', false, $abilities, $this );
 
-	/**
-	 * Checks if the user has a given capability through their assigned role.
-	 *
-	 * @since 1.0.0
-	 * @param Iterable|string $abilities The capability to check for.
-	 * @param array           $arguments Additional arguments for the check.
-	 * @return bool True if the user has the capability, false otherwise.
-	 */
-	public function can( $abilities, $arguments = [] ): bool
-	{
-		/**
-		 * Filters whether a user has a specific capability.
-		 *
-		 * This hook allows for custom logic to determine if a user has a capability,
-		 * bypassing the default role-based check if necessary.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param bool   $hasCapability Whether the user has the capability. Default false.
-		 * @param string $abilities     The capability being checked.
-		 * @param User   $user          The user model instance.
-		 */
-		$hasCapability = Eventy::filter( 'ap.cms.users.user_can', false, $abilities, $this );
+        if ( $hasCapability ) {
+            return true;
+        }
 
-		if ( $hasCapability ) {
-			return true;
-		}
+        if ( $this->role ) {
+            return $this->role->hasCapability( $abilities );
+        }
 
-		if ( $this->role ) {
-			return $this->role->hasCapability( $abilities );
-		}
+        return false;
+    }
 
-		return false;
-	}
+    /**
+     * Get a user-specific setting.
+     *
+     * @since 1.0.0
+     * @param mixed  $default Optional. The default value if the setting is not found. Default null.
+     * @param string $key     The setting key to retrieve.
+     * @return mixed The setting value.
+     */
+    public function getSetting( string $key, mixed $default = null ): mixed
+    {
+        $settings = $this->settings ?? [];
+        $value    = $settings[ $key ] ?? $default;
 
-	/**
-	 * Get a user-specific setting.
-	 *
-	 * @since 1.0.0
-	 * @param mixed  $default Optional. The default value if the setting is not found. Default null.
-	 * @param string $key     The setting key to retrieve.
-	 * @return mixed The setting value.
-	 */
-	public function getSetting( string $key, mixed $default = null ): mixed
-	{
-		$settings = $this->settings ?? [];
-		$value    = $settings[ $key ] ?? $default;
+        /**
+         * Filters a user-specific setting value retrieved from the user's settings column.
+         *
+         * @since 1.0.0
+         *
+         * @param mixed  $value The setting value.
+         * @param string $key   The setting key.
+         * @param User   $user  The user model instance.
+         */
+        $filtered = Eventy::filter( 'ap.cms.users.user_setting.get', $value, $key, $this );
 
-		/**
-		 * Filters a user-specific setting value retrieved from the user's settings column.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param mixed  $value The setting value.
-		 * @param string $key   The setting key.
-		 * @param User   $user  The user model instance.
-		 */
-		return Eventy::filter( 'ap.cms.users.user_setting.get', $value, $key, $this );
-	}
+        // Ensure we return null if the setting doesn't exist and default is null
+        if ($value === null && $default === null && $filtered === '') {
+            return null;
+        }
 
-	/**
-	 * Set a user-specific setting.
-	 *
-	 * @since 1.0.0
-	 * @param mixed  $value The value to store.
-	 * @param string $key   The setting key to set.
-	 * @return bool True if the setting was set and saved, false otherwise.
-	 */
-	public function setSetting( string $key, mixed $value ): bool
-	{
-		$settings         = $this->settings ?? [];
-		$settings[ $key ] = $value;
-		$this->settings   = $settings;
-		$saved            = $this->save();
+        return $filtered;
+    }
 
-		if ( $saved ) {
-			/**
-			 * Fires after a user-specific setting has been set and saved.
-			 *
-			 * @since 1.0.0
-			 *
-			 * @param string $key   The setting key.
-			 * @param mixed  $value The value that was set.
-			 * @param User   $user  The user model instance.
-			 */
-			Eventy::action( 'ap.cms.users.user_setting.set', $key, $value, $this );
-		}
+    /**
+     * Set a user-specific setting.
+     *
+     * @since 1.0.0
+     * @param mixed  $value The value to store.
+     * @param string $key   The setting key to set.
+     * @return bool True if the setting was set and saved, false otherwise.
+     */
+    public function setSetting( string $key, mixed $value ): bool
+    {
+        $settings         = $this->settings ?? [];
+        $settings[ $key ] = $value;
+        $this->settings   = $settings;
+        $saved            = $this->save();
 
-		return $saved;
-	}
+        if ( $saved ) {
+            /**
+             * Fires after a user-specific setting has been set and saved.
+             *
+             * @since 1.0.0
+             *
+             * @param string $key   The setting key.
+             * @param mixed  $value The value that was set.
+             * @param User   $user  The user model instance.
+             */
+            Eventy::action( 'ap.cms.users.user_setting.set', $key, $value, $this );
+        }
 
-	/**
-	 * Delete a user-specific setting.
-	 *
-	 * @since 1.0.0
-	 * @param string $key The setting key to delete.
-	 * @return bool True if the setting was deleted and saved, false otherwise.
-	 */
-	public function deleteSetting( string $key ): bool
-	{
-		$settings = $this->settings ?? [];
-		if ( isset( $settings[ $key ] ) ) {
-			unset( $settings[ $key ] );
-			$this->settings = $settings;
-			$saved          = $this->save();
+        return $saved;
+    }
 
-			if ( $saved ) {
-				/**
-				 * Fires after a user-specific setting has been deleted and saved.
-				 *
-				 * @since 1.0.0
-				 *
-				 * @param string $key  The setting key that was deleted.
-				 * @param User   $user The user model instance.
-				 */
-				Eventy::action( 'ap.cms.users.user_setting.deleted', $key, $this );
-			}
+    /**
+     * Delete a user-specific setting.
+     *
+     * @since 1.0.0
+     * @param string $key The setting key to delete.
+     * @return bool True if the setting was deleted and saved, false otherwise.
+     */
+    public function deleteSetting( string $key ): bool
+    {
+        $settings = $this->settings ?? [];
+        if ( isset( $settings[ $key ] ) ) {
+            unset( $settings[ $key ] );
+            $this->settings = $settings;
+            $saved          = $this->save();
 
-			return $saved;
-		}
-		return false;
-	}
+            if ( $saved ) {
+                /**
+                 * Fires after a user-specific setting has been deleted and saved.
+                 *
+                 * @since 1.0.0
+                 *
+                 * @param string $key  The setting key that was deleted.
+                 * @param User   $user The user model instance.
+                 */
+                Eventy::action( 'ap.cms.users.user_setting.deleted', $key, $this );
+            }
+
+            return $saved;
+        }
+        return false;
+    }
 }

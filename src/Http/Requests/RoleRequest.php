@@ -8,12 +8,22 @@ class RoleRequest extends FormRequest
 {
 	public function rules(): array
 	{
-		return [
-			'name'         => [ 'required' ],
-			'slug'         => [ 'required' ],
-			'description'  => [ 'required' ],
-			'capabilities' => [ 'required' ],
+		$rules = [
+			'description'  => [ 'nullable' ],
+			'capabilities' => [ 'nullable', 'array' ],
 		];
+
+		// Only require name and slug for store requests
+		if ($this->isMethod('POST')) {
+			$rules['name'] = [ 'required' ];
+			$rules['slug'] = [ 'required', 'unique:roles,slug' ];
+		} else {
+			$rules['name'] = [ 'sometimes' ];
+			// For update requests, we need to ignore the current role's slug
+			$rules['slug'] = [ 'sometimes', 'unique:roles,slug,' . $this->route('role') ];
+		}
+
+		return $rules;
 	}
 
 	public function authorize(): bool

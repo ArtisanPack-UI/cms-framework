@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework;
 
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersServiceProvider;
+use ArtisanPackUI\CMSFramework\AuthServiceProvider;
 use Illuminate\Support\ServiceProvider;
 use TorMorten\Eventy\Facades\Eventy;
 
@@ -50,6 +51,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		);
 		$this->app->register( SettingsServiceProvider::class );
 		$this->app->register( UsersServiceProvider::class );
+		$this->app->register( AuthServiceProvider::class );
 		$this->app->singleton( CMSManager::class, function ( $app ) {
 			return new CMSManager();
 		} );
@@ -72,6 +74,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	{
 		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
 		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
+		$this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
 		$this->publishes( [
 			__DIR__ . '/../config/cms.php' => config_path( 'cms.php' ),
 		], 'cms-config' );
