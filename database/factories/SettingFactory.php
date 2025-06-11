@@ -14,7 +14,7 @@
  * Description:
  */
 
-namespace Database\Factories;
+namespace ArtisanPackUI\Database\Factories;
 
 use ArtisanPackUI\CMSFramework\Models\Setting;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -30,30 +30,30 @@ use Illuminate\Support\Carbon;
  */
 class SettingFactory extends Factory
 {
-	/**
-	 * The model that this factory creates
-	 *
-	 * @since 1.0.0
-	 * @var string
-	 */
-	protected $model = Setting::class;
+    /**
+     * The model that this factory creates
+     *
+     * @since 1.0.0
+     * @var string
+     */
+    protected $model = Setting::class;
 
-	/**
-	 * Define the model's default state
-	 *
-	 * Generates fake data for a Setting model instance.
-	 *
-	 * @since 1.0.0
-	 * @return array<string, mixed> An array of attributes to set on the model
-	 */
-	public function definition(): array
-	{
-		return [
-			'key'        => $this->faker->unique()->word(),
-			'value'      => $this->faker->word(),
-			'type'       => $this->faker->randomElement( [ 'integer', 'json', 'boolean', 'string' ] ),
-			'created_at' => Carbon::now(),
-			'updated_at' => Carbon::now(),
-		];
-	}
+    /**
+     * Define the model's default state
+     *
+     * Generates fake data for a Setting model instance.
+     *
+     * @since 1.0.0
+     * @return array<string, mixed> An array of attributes to set on the model
+     */
+    public function definition(): array
+    {
+        return [
+            'key'        => $this->faker->unique()->word(),
+            'value'      => $this->faker->word(),
+            'type'       => $this->faker->randomElement( [ 'integer', 'json', 'boolean', 'string' ] ),
+            'created_at' => Carbon::now(),
+            'updated_at' => Carbon::now(),
+        ];
+    }
 }
