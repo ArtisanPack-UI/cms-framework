@@ -20,6 +20,9 @@ return new class extends Migration {
 			$table->text( 'bio' )->nullable();
 			$table->json( 'links' )->nullable();
 			$table->json( 'settings' )->nullable();
+			$table->string( 'two_factor_code' )->nullable();
+			$table->timestamp( 'two_factor_expires_at' )->nullable();
+			$table->timestamp( 'two_factor_enabled_at' )->nullable();
 			$table->rememberToken();
 			$table->timestamps();
 		} );
