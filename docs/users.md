@@ -291,7 +291,7 @@ The Roles module creates a `roles` table in the database with the following colu
 
 ## API Endpoints
 
-The Users and Roles module provides RESTful API endpoints for managing users and roles.
+The Users and Roles module provides RESTful API endpoints for managing users and roles. These endpoints are protected by Laravel Sanctum authentication.
 
 ### UserController
 
@@ -304,14 +304,14 @@ namespace ArtisanPackUI\CMSFramework\Http\Controllers;
 
 #### Methods
 
-##### index()
+##### index(): JsonResponse
 Lists all users.
 
 **@since** 1.0.0
 
 **@return** JsonResponse A JSON response containing all users.
 
-##### store(UserRequest $request)
+##### store(UserRequest $request): UserResource
 Creates a new user.
 
 **@since** 1.0.0
@@ -319,7 +319,7 @@ Creates a new user.
 **@param** UserRequest $request The request containing the user data.
 **@return** UserResource The newly created user resource.
 
-##### show($id)
+##### show(int $id): UserResource
 Shows a specific user.
 
 **@since** 1.0.0
@@ -327,7 +327,7 @@ Shows a specific user.
 **@param** int $id The ID of the user to show.
 **@return** UserResource The user resource.
 
-##### update(UserRequest $request, $id)
+##### update(UserRequest $request, int $id): UserResource
 Updates a user.
 
 **@since** 1.0.0
@@ -336,7 +336,7 @@ Updates a user.
 **@param** int $id The ID of the user to update.
 **@return** UserResource The updated user resource.
 
-##### destroy($id)
+##### destroy(int $id): JsonResponse
 Deletes a user.
 
 **@since** 1.0.0
@@ -355,14 +355,14 @@ namespace ArtisanPackUI\CMSFramework\Http\Controllers;
 
 #### Methods
 
-##### index()
+##### index(): JsonResponse
 Lists all roles.
 
 **@since** 1.0.0
 
 **@return** JsonResponse A JSON response containing all roles.
 
-##### store(RoleRequest $request)
+##### store(RoleRequest $request): RoleResource
 Creates a new role.
 
 **@since** 1.0.0
@@ -370,7 +370,7 @@ Creates a new role.
 **@param** RoleRequest $request The request containing the role data.
 **@return** RoleResource The newly created role resource.
 
-##### show($id)
+##### show(int $id): RoleResource
 Shows a specific role.
 
 **@since** 1.0.0
@@ -378,7 +378,7 @@ Shows a specific role.
 **@param** int $id The ID of the role to show.
 **@return** RoleResource The role resource.
 
-##### update(RoleRequest $request, $id)
+##### update(RoleRequest $request, int $id): RoleResource
 Updates a role.
 
 **@since** 1.0.0
@@ -387,13 +387,123 @@ Updates a role.
 **@param** int $id The ID of the role to update.
 **@return** RoleResource The updated role resource.
 
-##### destroy($id)
+##### destroy(int $id): JsonResponse
 Deletes a role.
 
 **@since** 1.0.0
 
 **@param** int $id The ID of the role to delete.
 **@return** JsonResponse An empty JSON response.
+
+### Authentication
+
+All API endpoints are protected by Laravel Sanctum authentication. To access these endpoints, you need to include a valid Sanctum token in the `Authorization` header of your HTTP request:
+
+```
+Authorization: Bearer {your-token}
+```
+
+The user associated with the token must have the appropriate role capabilities to perform the requested action. For more information about API authentication, see the [API Authentication](api-authentication.md) documentation.
+
+### Example Requests
+
+#### List all users
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->get('https://your-app.com/api/cms/users');
+```
+
+#### Create a new user
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->post('https://your-app.com/api/cms/users', [
+        'username' => 'johndoe',
+        'email' => 'john@example.com',
+        'password' => 'password123',
+        'password_confirmation' => 'password123',
+        'first_name' => 'John',
+        'last_name' => 'Doe',
+    ]);
+```
+
+#### Get a specific user
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->get('https://your-app.com/api/cms/users/1');
+```
+
+#### Update a user
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->put('https://your-app.com/api/cms/users/1', [
+        'first_name' => 'Jane',
+        'last_name' => 'Doe',
+    ]);
+```
+
+#### Delete a user
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->delete('https://your-app.com/api/cms/users/1');
+```
+
+#### List all roles
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->get('https://your-app.com/api/cms/roles');
+```
+
+#### Create a new role
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->post('https://your-app.com/api/cms/roles', [
+        'name' => 'Editor',
+        'slug' => 'editor',
+        'description' => 'Can edit content',
+        'capabilities' => ['edit_posts', 'publish_posts'],
+    ]);
+```
+
+#### Get a specific role
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->get('https://your-app.com/api/cms/roles/1');
+```
+
+#### Update a role
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->put('https://your-app.com/api/cms/roles/1', [
+        'name' => 'Senior Editor',
+        'description' => 'Can edit and publish content',
+    ]);
+```
+
+#### Delete a role
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->delete('https://your-app.com/api/cms/roles/1');
+```
 
 ### UserRequest
 

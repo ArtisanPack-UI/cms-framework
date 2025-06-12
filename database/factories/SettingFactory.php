@@ -14,7 +14,7 @@
  * Description:
  */
 
-namespace ArtisanPackUI\Database\Factories;
+namespace ArtisanPackUI\Database\factories;
 
 use ArtisanPackUI\CMSFramework\Models\Setting;
 use Illuminate\Database\Eloquent\Factories\Factory;

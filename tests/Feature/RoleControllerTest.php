@@ -34,7 +34,7 @@ it('can list all roles', function () {
     Role::factory()->count(3)->create();
 
     // Act as admin to pass authorization
-    $response = $this->actingAs($this->admin)->getJson('/api/roles');
+    $response = $this->actingAs($this->admin)->getJson('/api/cms/roles');
 
     // Assert response is successful
     $response->assertStatus(200);
@@ -55,7 +55,7 @@ it('can create a new role', function () {
         'capabilities' => ['create_posts', 'edit_own_posts']
     ];
 
-    $response = $this->actingAs($this->admin)->postJson('/api/roles', $roleData);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/roles', $roleData);
 
     $response->assertStatus(201);
     $response->assertJsonFragment([
@@ -73,7 +73,7 @@ it('can create a new role', function () {
 });
 
 it('can show a specific role', function () {
-    $response = $this->actingAs($this->admin)->getJson("/api/roles/{$this->role->id}");
+    $response = $this->actingAs($this->admin)->getJson("/api/cms/roles/{$this->role->id}");
 
     $response->assertStatus(200);
     $response->assertJsonFragment([
@@ -91,7 +91,7 @@ it('can update a role', function () {
         'capabilities' => ['edit_posts', 'publish_posts', 'delete_posts']
     ];
 
-    $response = $this->actingAs($this->admin)->putJson("/api/roles/{$this->role->id}", $updateData);
+    $response = $this->actingAs($this->admin)->putJson("/api/cms/roles/{$this->role->id}", $updateData);
 
     $response->assertStatus(200);
     $response->assertJsonFragment([
@@ -109,7 +109,7 @@ it('can update a role', function () {
 });
 
 it('can delete a role', function () {
-    $response = $this->actingAs($this->admin)->deleteJson("/api/roles/{$this->role->id}");
+    $response = $this->actingAs($this->admin)->deleteJson("/api/cms/roles/{$this->role->id}");
 
     $response->assertStatus(200);
 
@@ -120,7 +120,7 @@ it('can delete a role', function () {
 });
 
 it('validates required fields when creating a role', function () {
-    $response = $this->actingAs($this->admin)->postJson('/api/roles', []);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/roles', []);
 
     $response->assertStatus(422);
     $response->assertJsonValidationErrors(['name', 'slug']);
@@ -133,7 +133,7 @@ it('validates unique slug when creating a role', function () {
         'description' => 'Another editor role',
     ];
 
-    $response = $this->actingAs($this->admin)->postJson('/api/roles', $roleData);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/roles', $roleData);
 
     $response->assertStatus(422);
     $response->assertJsonValidationErrors(['slug']);
@@ -144,28 +144,28 @@ it('prevents unauthorized users from accessing role endpoints', function () {
     $regularUser = User::factory()->create();
 
     // Try to list all roles
-    $response = $this->actingAs($regularUser)->getJson('/api/roles');
+    $response = $this->actingAs($regularUser)->getJson('/api/cms/roles');
     $response->assertStatus(403);
 
     // Try to create a role
-    $response = $this->actingAs($regularUser)->postJson('/api/roles', [
+    $response = $this->actingAs($regularUser)->postJson('/api/cms/roles', [
         'name' => 'New Role',
         'slug' => 'new-role',
     ]);
     $response->assertStatus(403);
 
     // Try to view a role
-    $response = $this->actingAs($regularUser)->getJson("/api/roles/{$this->role->id}");
+    $response = $this->actingAs($regularUser)->getJson("/api/cms/roles/{$this->role->id}");
     $response->assertStatus(403);
 
     // Try to update a role
-    $response = $this->actingAs($regularUser)->putJson("/api/roles/{$this->role->id}", [
+    $response = $this->actingAs($regularUser)->putJson("/api/cms/roles/{$this->role->id}", [
         'name' => 'Updated Role',
     ]);
     $response->assertStatus(403);
 
     // Try to delete a role
-    $response = $this->actingAs($regularUser)->deleteJson("/api/roles/{$this->role->id}");
+    $response = $this->actingAs($regularUser)->deleteJson("/api/cms/roles/{$this->role->id}");
     $response->assertStatus(403);
 });
 
@@ -177,7 +177,7 @@ it('handles capabilities as an array', function () {
         'capabilities' => ['create_posts']
     ];
 
-    $response = $this->actingAs($this->admin)->postJson('/api/roles', $roleData);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/roles', $roleData);
 
     $response->assertStatus(201);
 

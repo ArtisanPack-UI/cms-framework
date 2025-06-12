@@ -182,6 +182,121 @@ $settings = new Settings();
 $settings->deleteSetting('site_name');
 ```
 
+## API Endpoints
+
+The Settings module provides RESTful API endpoints for managing settings. These endpoints are protected by Laravel Sanctum authentication.
+
+### SettingController
+
+The `SettingController` provides endpoints for managing settings.
+
+#### Namespace
+```php
+namespace ArtisanPackUI\CMSFramework\Http\Controllers;
+```
+
+#### Methods
+
+##### index(): AnonymousResourceCollection
+Lists all settings.
+
+**@since** 1.0.0
+
+**@return** AnonymousResourceCollection A collection of setting resources.
+
+##### store(SettingRequest $request): SettingResource
+Creates a new setting.
+
+**@since** 1.0.0
+
+**@param** SettingRequest $request The validated request containing setting data.
+**@return** SettingResource The newly created setting resource.
+
+##### show(Setting $setting): SettingResource
+Shows a specific setting.
+
+**@since** 1.0.0
+
+**@param** Setting $setting The setting to display.
+**@return** SettingResource The specified setting resource.
+
+##### update(SettingRequest $request, Setting $setting): SettingResource
+Updates a setting.
+
+**@since** 1.0.0
+
+**@param** SettingRequest $request The validated request containing updated setting data.
+**@param** Setting $setting The setting to update.
+**@return** SettingResource The updated setting resource.
+
+##### destroy(Setting $setting): JsonResponse
+Deletes a setting.
+
+**@since** 1.0.0
+
+**@param** Setting $setting The setting to delete.
+**@return** JsonResponse A JSON response indicating success.
+
+### Authentication
+
+All API endpoints are protected by Laravel Sanctum authentication. To access these endpoints, you need to include a valid Sanctum token in the `Authorization` header of your HTTP request:
+
+```
+Authorization: Bearer {your-token}
+```
+
+The user associated with the token must have the appropriate role capabilities to perform the requested action. For more information about API authentication, see the [API Authentication](api-authentication.md) documentation.
+
+### Example Requests
+
+#### List all settings
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->get('https://your-app.com/api/cms/settings');
+```
+
+#### Create a new setting
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->post('https://your-app.com/api/cms/settings', [
+        'key' => 'site_name',
+        'value' => 'My Site',
+        'type' => 'string',
+    ]);
+```
+
+#### Get a specific setting
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->get('https://your-app.com/api/cms/settings/1');
+```
+
+#### Update a setting
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->put('https://your-app.com/api/cms/settings/1', [
+        'key' => 'site_name',
+        'value' => 'Updated Site Name',
+        'type' => 'string',
+    ]);
+```
+
+#### Delete a setting
+```php
+use Illuminate\Support\Facades\Http;
+
+$response = Http::withToken($token)
+    ->delete('https://your-app.com/api/cms/settings/1');
+```
+
 ## Hooks
 
 The Settings module provides the following hooks:
