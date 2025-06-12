@@ -21,6 +21,10 @@ Each module type has its own initialization method that is called at the appropr
 
 The framework uses the Eventy event system to provide hooks for extending functionality. This allows modules to register actions and filters that can be triggered at various points in the application lifecycle.
 
+### API Authentication
+
+The framework uses Laravel Sanctum for API authentication. Sanctum provides a simple way to authenticate single-page applications (SPAs), mobile applications, and simple token-based APIs. The framework includes pre-configured routes, controllers, and policies that work with Sanctum to provide secure API endpoints.
+
 ### Settings
 
 The framework includes a Settings module that provides a way to store and retrieve application settings. Settings can be categorized and are stored in the database.
@@ -46,3 +50,4 @@ To use the framework, you need to:
 Currently, the framework includes the following modules:
 
 - **Settings**: Provides functionality for managing application settings
+- **Audit Logging**: Provides functionality for logging authentication events and user activities

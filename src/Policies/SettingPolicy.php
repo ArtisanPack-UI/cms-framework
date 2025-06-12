@@ -13,7 +13,7 @@
 
 namespace ArtisanPackUI\CMSFramework\Policies;
 
-use App\Models\User;
+use ArtisanPackUI\CMSFramework\Models\User;
 use ArtisanPackUI\CMSFramework\Models\Setting;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
@@ -39,8 +39,8 @@ class SettingPolicy
      */
     public function viewAny( User $user ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('viewAny_settings', $user->role->capabilities ?? []);
     }
 
     /**
@@ -54,8 +54,8 @@ class SettingPolicy
      */
     public function view( User $user, Setting $setting ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('view_settings', $user->role->capabilities ?? []);
     }
 
     /**
@@ -68,8 +68,8 @@ class SettingPolicy
      */
     public function create( User $user ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('create_settings', $user->role->capabilities ?? []);
     }
 
     /**
@@ -83,8 +83,8 @@ class SettingPolicy
      */
     public function update( User $user, Setting $setting ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('update_settings', $user->role->capabilities ?? []);
     }
 
     /**
@@ -98,8 +98,8 @@ class SettingPolicy
      */
     public function delete( User $user, Setting $setting ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('delete_settings', $user->role->capabilities ?? []);
     }
 
     /**
@@ -113,8 +113,8 @@ class SettingPolicy
      */
     public function restore( User $user, Setting $setting ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('update_settings', $user->role->capabilities ?? []);
     }
 
     /**
@@ -128,7 +128,7 @@ class SettingPolicy
      */
     public function forceDelete( User $user, Setting $setting ): bool
     {
-        // Authorization logic to be implemented
-        return true;
+        // Check if the user has the required ability
+        return $user->tokenCan('cms:read') && $user->role && in_array('delete_settings', $user->role->capabilities ?? []);
     }
 }
