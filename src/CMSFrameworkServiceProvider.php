@@ -15,6 +15,7 @@
 namespace ArtisanPackUI\CMSFramework;
 
 use ArtisanPackUI\CMSFramework\Features\Audit\AuditLogServiceProvider;
+use ArtisanPackUI\CMSFramework\Features\Auth\TwoFactorAuthServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersServiceProvider;
 use Illuminate\Support\ServiceProvider;
@@ -53,6 +54,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		$this->app->register( UsersServiceProvider::class );
 		$this->app->register( AuthServiceProvider::class );
 		$this->app->register( AuditLogServiceProvider::class );
+		$this->app->register( TwoFactorAuthServiceProvider::class );
 		$this->app->singleton( CMSManager::class, function ( $app ) {
 			return new CMSManager();
 		} );
