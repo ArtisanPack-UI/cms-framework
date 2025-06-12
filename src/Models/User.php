@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 use TorMorten\Eventy\Facades\Eventy;
 
 /**
@@ -30,7 +31,7 @@ use TorMorten\Eventy\Facades\Eventy;
  */
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     /**
      * The factory that should be used to instantiate the model.
@@ -160,7 +161,7 @@ class User extends Authenticatable
         $filtered = Eventy::filter( 'ap.cms.users.user_setting.get', $value, $key, $this );
 
         // Ensure we return null if the setting doesn't exist and default is null
-        if ($value === null && $default === null && $filtered === '') {
+        if ( $value === null && $default === null && $filtered === '' ) {
             return null;
         }
 

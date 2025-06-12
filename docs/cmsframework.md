@@ -60,6 +60,39 @@ Returns the Functions utility instance, which includes an array of functions tha
 
 **@return** Functions The Functions utility instance.
 
+## CMSManager Class
+
+The `CMSManager` class acts as a dynamic dispatcher for feature-specific managers, providing a mechanism to handle method calls that are routed through either instance or static invocation.
+
+### Namespace
+```php
+namespace ArtisanPackUI\CMSFramework;
+```
+
+### Properties
+
+- `$featureManagers`: Registry of feature managers, mapping feature names to their respective manager classes.
+
+### Methods
+
+#### __CALLSTATIC(string $method, array $parameters): mixed
+Dynamically handles static method calls to the class.
+
+**@since** 1.0.0
+
+**@param** string $method The name of the method being called.
+**@param** array $parameters The parameters passed to the method.
+**@return** mixed The result from the resolved feature manager or delegated method.
+
+#### __CALL(string $method, array $parameters): mixed
+Dynamically handles method calls to the class. Attempts to resolve the method to a registered feature manager or delegates to a feature manager if a prefixed method is detected.
+
+**@since** 1.0.0
+
+**@param** string $method The name of the method being called.
+**@param** array $parameters The parameters passed to the method.
+**@return** mixed The result from the resolved feature manager or delegated method.
+
 ## CMSFrameworkServiceProvider Class
 
 The `CMSFrameworkServiceProvider` class handles the registration and bootstrapping of the framework within a Laravel application.
@@ -106,6 +139,28 @@ Returns an array of view directories to load, allowing for customization through
 **@since** 1.0.0
 
 **@return** array List of view directories.
+
+## AuthServiceProvider Class
+
+The `AuthServiceProvider` class handles the registration of policies for the CMS Framework's models, enabling Laravel's authorization features for the application.
+
+### Namespace
+```php
+namespace ArtisanPackUI\CMSFramework;
+```
+
+### Properties
+
+- `$policies`: The policy mappings for the application, mapping model classes to their corresponding policy classes.
+
+### Methods
+
+#### boot(): void
+Registers the policies defined in the $policies property with the Laravel authorization system.
+
+**@since** 1.0.0
+
+**@return** void
 
 ## Accessing the Framework
 

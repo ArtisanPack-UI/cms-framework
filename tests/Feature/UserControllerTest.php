@@ -29,7 +29,7 @@ it('can list all users', function () {
     User::factory()->count(3)->create();
 
     // Act as admin to pass authorization
-    $response = $this->actingAs($this->admin)->getJson('/api/users');
+    $response = $this->actingAs($this->admin)->getJson('/api/cms/users');
 
     // Assert response is successful
     $response->assertStatus(200);
@@ -52,7 +52,7 @@ it('can create a new user', function () {
         'last_name' => 'User',
     ];
 
-    $response = $this->actingAs($this->admin)->postJson('/api/users', $userData);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/users', $userData);
 
     $response->assertStatus(201);
     $response->assertJsonFragment([
@@ -70,7 +70,7 @@ it('can create a new user', function () {
 });
 
 it('can show a specific user', function () {
-    $response = $this->actingAs($this->admin)->getJson("/api/users/{$this->user->id}");
+    $response = $this->actingAs($this->admin)->getJson("/api/cms/users/{$this->user->id}");
 
     $response->assertStatus(200);
     $response->assertJsonFragment([
@@ -86,7 +86,7 @@ it('can update a user', function () {
         'last_name' => 'Name',
     ];
 
-    $response = $this->actingAs($this->admin)->putJson("/api/users/{$this->user->id}", $updateData);
+    $response = $this->actingAs($this->admin)->putJson("/api/cms/users/{$this->user->id}", $updateData);
 
     $response->assertStatus(200);
     $response->assertJsonFragment([
@@ -104,7 +104,7 @@ it('can update a user', function () {
 });
 
 it('can delete a user', function () {
-    $response = $this->actingAs($this->admin)->deleteJson("/api/users/{$this->user->id}");
+    $response = $this->actingAs($this->admin)->deleteJson("/api/cms/users/{$this->user->id}");
 
     $response->assertStatus(200);
 
@@ -115,7 +115,7 @@ it('can delete a user', function () {
 });
 
 it('validates required fields when creating a user', function () {
-    $response = $this->actingAs($this->admin)->postJson('/api/users', []);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/users', []);
 
     $response->assertStatus(422);
     $response->assertJsonValidationErrors(['username', 'email', 'password']);
@@ -129,7 +129,7 @@ it('validates email format when creating a user', function () {
         'password_confirmation' => 'password123',
     ];
 
-    $response = $this->actingAs($this->admin)->postJson('/api/users', $userData);
+    $response = $this->actingAs($this->admin)->postJson('/api/cms/users', $userData);
 
     $response->assertStatus(422);
     $response->assertJsonValidationErrors(['email']);
@@ -140,11 +140,11 @@ it('prevents unauthorized users from accessing user endpoints', function () {
     $regularUser = User::factory()->create();
 
     // Try to list all users
-    $response = $this->actingAs($regularUser)->getJson('/api/users');
+    $response = $this->actingAs($regularUser)->getJson('/api/cms/users');
     $response->assertStatus(403);
 
     // Try to create a user
-    $response = $this->actingAs($regularUser)->postJson('/api/users', [
+    $response = $this->actingAs($regularUser)->postJson('/api/cms/users', [
         'username' => 'newuser',
         'email' => 'newuser@example.com',
         'password' => 'password123',
@@ -152,16 +152,16 @@ it('prevents unauthorized users from accessing user endpoints', function () {
     $response->assertStatus(403);
 
     // Try to view a user
-    $response = $this->actingAs($regularUser)->getJson("/api/users/{$this->user->id}");
+    $response = $this->actingAs($regularUser)->getJson("/api/cms/users/{$this->user->id}");
     $response->assertStatus(403);
 
     // Try to update a user
-    $response = $this->actingAs($regularUser)->putJson("/api/users/{$this->user->id}", [
+    $response = $this->actingAs($regularUser)->putJson("/api/cms/users/{$this->user->id}", [
         'first_name' => 'Updated',
     ]);
     $response->assertStatus(403);
 
     // Try to delete a user
-    $response = $this->actingAs($regularUser)->deleteJson("/api/users/{$this->user->id}");
+    $response = $this->actingAs($regularUser)->deleteJson("/api/cms/users/{$this->user->id}");
     $response->assertStatus(403);
 });

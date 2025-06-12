@@ -29,9 +29,9 @@ class SettingRequest extends FormRequest
 	 * Get the validation rules that apply to the request.
 	 *
 	 * Defines the validation rules for setting attributes:
-	 * - name: required
+	 * - key: required
 	 * - value: optional
-	 * - category: optional
+	 * - type: optional
 	 *
 	 * @since 1.0.0
 	 *
@@ -40,9 +40,9 @@ class SettingRequest extends FormRequest
 	public function rules(): array
 	{
 		return [
-			'name'     => [ 'required' ],
-			'value'    => [ 'nullable' ],
-			'category' => [ 'nullable' ],
+			'key'   => [ 'required' ],
+			'value' => [ 'nullable' ],
+			'type'  => [ 'nullable' ],
 		];
 	}
 

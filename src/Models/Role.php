@@ -33,6 +33,7 @@ class Role extends Model
     /**
      * The factory that should be used to instantiate the model.
      *
+     * @since 1.0.0
      * @var string
      */
     protected static $factory = RoleFactory::class;
