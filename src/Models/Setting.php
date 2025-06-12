@@ -13,6 +13,7 @@
 
 namespace ArtisanPackUI\CMSFramework\Models;
 
+use ArtisanPackUI\Database\factories\SettingFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -42,7 +43,7 @@ class Setting extends Model
      * @since 1.0.0
      * @var string
      */
-    protected static $factory = \ArtisanPackUI\Database\Factories\SettingFactory::class;
+    protected static $factory = SettingFactory::class;
 
     /**
      * The attributes that are mass assignable
