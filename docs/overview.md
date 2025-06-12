@@ -50,3 +50,4 @@ To use the framework, you need to:
 Currently, the framework includes the following modules:
 
 - **Settings**: Provides functionality for managing application settings
+- **Audit Logging**: Provides functionality for logging authentication events and user activities
