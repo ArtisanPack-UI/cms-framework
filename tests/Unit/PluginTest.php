@@ -2,7 +2,6 @@
 
 use ArtisanPackUI\CMSFramework\Features\Plugins\Plugin;
 use Illuminate\Support\Str;
-use InvalidArgumentException;
 
 // Test that Plugin constructor requires name and slug
 it('throws exception when name or slug is not provided', function () {

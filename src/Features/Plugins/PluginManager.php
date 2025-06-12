@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Log;
+use Illuminate\Support\Facades\Log;
 use ReflectionClass;
 use ReflectionException;
 use RuntimeException;
