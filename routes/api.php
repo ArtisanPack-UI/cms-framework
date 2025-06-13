@@ -1,10 +1,14 @@
 <?php
 
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
+use ArtisanPackUI\CMSFramework\Http\Controllers\MediaCategoryController;
+use ArtisanPackUI\CMSFramework\Http\Controllers\MediaController;
+use ArtisanPackUI\CMSFramework\Http\Controllers\MediaTagController;
 use ArtisanPackUI\CMSFramework\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Http\Controllers\RoleController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\SettingController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\UserController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware( 'api' )->prefix( 'cms' )->group( function () {
@@ -14,12 +18,18 @@ Route::middleware( 'api' )->prefix( 'cms' )->group( function () {
 	// Role routes
 	Route::apiResource( 'roles', RoleController::class );
 
-	// Settings routs
+	// Settings routes
 	Route::apiResource( 'settings', SettingController::class );
 
-	Route::get( 'diagnostic-test', function () {
-		return response()->json( [ 'message' => 'Diagnostic Route Hit!' ] );
-	} );
+	// Settings routes
+	Route::apiResource( 'media', MediaController::class );
+
+	// Settings routes
+	Route::apiResource( 'media-categories', MediaCategoryController::class );
+
+	// Settings routes
+	Route::apiResource( 'media-tags', MediaTagController::class );
+
 	// --- Plugin Management Routes ---
 
 	// List all installed plugins

@@ -17,6 +17,7 @@ namespace ArtisanPackUI\CMSFramework;
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Features\Audit\AuditLogServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Auth\TwoFactorAuthServiceProvider;
+use ArtisanPackUI\CMSFramework\Features\Media\MediaServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersServiceProvider;
 use Illuminate\Support\ServiceProvider;
@@ -56,6 +57,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		$this->app->register( AuthServiceProvider::class );
 		$this->app->register( AuditLogServiceProvider::class );
 		$this->app->register( TwoFactorAuthServiceProvider::class );
+		$this->app->register( MediaServiceProvider::class );
 		$this->app->singleton( CMSManager::class, function ( $app ) {
 			return new CMSManager();
 		} );
@@ -81,6 +83,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	{
 		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
 		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
+		// Load the main API routes
 		$this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
 		$this->publishes( [
 			__DIR__ . '/../config/cms.php' => config_path( 'cms.php' ),
