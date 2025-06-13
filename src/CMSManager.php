@@ -17,6 +17,7 @@
 namespace ArtisanPackUI\CMSFramework;
 
 // phpcs:disable
+use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersManager;
 use BadMethodCallException;
@@ -45,6 +46,7 @@ class CMSManager
 	 */
 	protected array $featureManagers = [
 		'settings' => SettingsManager::class,
+		'plugins'  => PluginManager::class,
 		'users'    => UsersManager::class,
 	];
 

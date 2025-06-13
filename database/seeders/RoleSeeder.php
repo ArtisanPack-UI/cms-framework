@@ -11,10 +11,10 @@
  * @since      1.0.0
  */
 
-namespace Database\Seeders;
+namespace ArtisanPackUI\Database\seeders;
 
-use Illuminate\Database\Seeder;
 use ArtisanPackUI\CMSFramework\Models\Role;
+use Illuminate\Database\Seeder;
 
 /**
  * Class for seeding default roles.
@@ -134,12 +134,11 @@ class RoleSeeder extends Seeder
 					'edit_plugins',
 					'edit_themes',
 					'edit_files',
-					'edit_users',
-					'add_users',
-					'create_users',
-					'delete_users',
+					'manage_users',
 					'unfiltered_html',
 					'edit_roles',
+					'manage_plugins',
+					'manage_audit_logs',
 				],
 			],
 		];
@@ -152,7 +151,7 @@ class RoleSeeder extends Seeder
 				[
 					'name'         => $roleData['name'],
 					'description'  => $roleData['description'],
-					'capabilities' => $roleData['capabilities'],
+					'capabilities' => serialize( $roleData['capabilities'] ),
 				]
 			);
 		}
