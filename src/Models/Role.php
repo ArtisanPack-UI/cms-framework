@@ -105,7 +105,14 @@ class Role extends Model
      */
     public function hasCapability( string $capability ): bool
     {
-        return in_array( $capability, $this->capabilities ?? [], true );
+        $capabilities = $this->capabilities;
+
+        // Handle both serialized and unserialized capabilities
+        if (is_string($capabilities)) {
+            $capabilities = unserialize($capabilities);
+        }
+
+        return in_array( $capability, $capabilities ?? [], true );
     }
 
     /**
