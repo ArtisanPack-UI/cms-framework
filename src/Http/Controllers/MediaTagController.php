@@ -6,6 +6,8 @@ use ArtisanPackUI\CMSFramework\Http\Requests\MediaTagRequest;
 use ArtisanPackUI\CMSFramework\Http\Resources\MediaTagResource;
 use ArtisanPackUI\CMSFramework\Models\MediaTag;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Validation\Rule;
 
 class MediaTagController
 {
@@ -32,21 +34,40 @@ class MediaTagController
 		return new MediaTagResource( $mediaTag );
 	}
 
-	public function update( MediaTagRequest $request, MediaTag $mediaTag )
+	/**
+	 * Update the specified media tag in storage.
+	 *
+	 * @since 1.0.0
+	 * @param MediaTag        $mediaTag The MediaTag instance resolved by route model binding.
+	 * @param MediaTagRequest $request  The validated form request.
+	 * @return JsonResponse
+	 */
+	public function update( MediaTagRequest $request, MediaTag $mediaTag ): JsonResponse // Route Model Binding here
 	{
-		$this->authorize( 'update', $mediaTag );
+		// REMOVE: $request->setResolvedMediaTag( $mediaTag ); // THIS CALL IS NO LONGER VALID
 
-		$mediaTag->update( $request->validated() );
+		$validatedData = $request->validated();
+		$mediaTag->update( $validatedData );
 
-		return new MediaTagResource( $mediaTag );
+		return response()->json( [ 'message' => 'Media tag updated successfully.', 'data' => $mediaTag ] );
 	}
 
-	public function destroy( MediaTag $mediaTag )
+	/**
+	 * Remove the specified media tag from storage.
+	 *
+	 * @since 1.0.0
+	 * @param MediaTag        $mediaTag The MediaTag instance resolved by route model binding.
+	 * @param MediaTagRequest $request  The validated form request.
+	 * @return JsonResponse
+	 */
+	public function destroy( MediaTagRequest $request, MediaTag $mediaTag ): JsonResponse // Route Model Binding here
 	{
-		$this->authorize( 'delete', $mediaTag );
+		// REMOVE: $request->setResolvedMediaTag( $mediaTag ); // THIS CALL IS NO LONGER VALID
 
-		$mediaTag->delete();
+		if ( $mediaTag->delete() ) {
+			return response()->json( [ 'message' => 'Media tag deleted successfully.' ], 204 );
+		}
 
-		return response()->json();
+		return response()->json( [ 'message' => 'Media tag deletion failed.' ], 500 );
 	}
 }

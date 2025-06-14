@@ -22,13 +22,19 @@ Route::middleware( 'api' )->prefix( 'api/cms' )->group( function () {
 	Route::apiResource( 'settings', SettingController::class );
 
 	// Settings routes
-	Route::apiResource( 'media', MediaController::class );
+	Route::apiResource( 'media', MediaController::class )->parameters( [
+		'media' => 'media',
+	] );
 
 	// Settings routes
-	Route::apiResource( 'media-categories', MediaCategoryController::class );
+	Route::apiResource( 'media-categories', MediaCategoryController::class )->parameters( [
+		'media-categories' => 'media_category',
+	] );
 
 	// Settings routes
-	Route::apiResource( 'media-tags', MediaTagController::class );
+	Route::apiResource( 'media-tags', MediaTagController::class )->parameters( [
+		'media-tags' => 'media_tag',
+	] );
 
 	// --- Plugin Management Routes ---
 

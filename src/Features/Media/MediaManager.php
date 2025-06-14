@@ -182,8 +182,7 @@ class MediaManager
 	 * @type string $alt_text      Optional. The alternative text for the media.
 	 * @type bool   $is_decorative Optional. Whether the image is purely decorative.
 	 * @type array  $metadata      Optional. Additional metadata for the media.
-	 * @return Media|null The updated Media model instance on success, or null on failure.
-	 * @throws InvalidArgumentException If invalid data keys are provided.
+	 * @return Media|null The updated Media model instance on success, or null if not found.
 	 */
 	public function update( int $mediaId, array $data ): ?Media
 	{
@@ -207,21 +206,35 @@ class MediaManager
 		}
 
 		// Only set alt_text if it's provided AND the image isn't explicitly set as decorative in this update.
+		// OR if it's not set as decorative, it should take the value.
 		if ( isset( $data['alt_text'] ) && ( ! isset( $updateData['is_decorative'] ) || false === $updateData['is_decorative'] ) ) {
 			$updateData['alt_text'] = $security->sanitizeText( $data['alt_text'] );
+		} else if ( ! isset( $data['alt_text'] ) && isset( $updateData['is_decorative'] ) && false === $updateData['is_decorative'] ) {
+			// If alt_text is not provided but is_decorative is explicitly set to false,
+			// ensure the existing alt_text (if any) is retained and not cleared by the mutator.
+			// This case handles changing from decorative=true to decorative=false without providing new alt_text.
+			$updateData['alt_text'] = $media->alt_text;
 		}
+
 
 		if ( isset( $data['metadata'] ) ) {
 			$updateData['metadata'] = $security->sanitizeArray( $data['metadata'] );
 		}
 
-		if ( empty( $updateData ) ) {
-			throw new InvalidArgumentException( 'No valid update data provided for media item ' . $mediaId );
-		}
+		// Removed the check for empty($updateData) and throwing InvalidArgumentException here.
+		// The controller is responsible for handling relationship syncing,
+		// and it's valid to call update even if only relationships are changing.
+		// If $updateData is empty, Eloquent's update() will simply do nothing, which is fine.
 
 		try {
-			$media->update( $updateData );
-			$this->logger->info( 'Media updated successfully: ' . $media->id );
+			// Only attempt update if there are actual attributes to update on the model.
+			if ( ! empty( $updateData ) ) {
+				$media->update( $updateData );
+				$this->logger->info( 'Media attributes updated successfully: ' . $media->id );
+			} else {
+				$this->logger->info( 'No direct media attributes to update for ID: ' . $media->id . '. Only relationships might be changing.' );
+			}
+
 			return $media;
 		} catch ( Exception $e ) {
 			$this->logger->error( 'Error updating media: ' . $e->getMessage(), [ 'exception' => $e, 'media_id' => $mediaId ] );

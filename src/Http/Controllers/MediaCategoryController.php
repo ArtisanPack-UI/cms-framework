@@ -3,9 +3,12 @@
 namespace ArtisanPackUI\CMSFramework\Http\Controllers;
 
 use ArtisanPackUI\CMSFramework\Http\Requests\MediaCategoryRequest;
+use ArtisanPackUI\CMSFramework\Http\Requests\MediaTagRequest;
 use ArtisanPackUI\CMSFramework\Http\Resources\MediaCategoryResource;
 use ArtisanPackUI\CMSFramework\Models\MediaCategory;
+use ArtisanPackUI\CMSFramework\Models\MediaTag;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\JsonResponse;
 
 class MediaCategoryController
 {
@@ -32,21 +35,40 @@ class MediaCategoryController
 		return new MediaCategoryResource( $mediaCategory );
 	}
 
-	public function update( MediaCategoryRequest $request, MediaCategory $mediaCategory )
+	/**
+	 * Update the specified media category in storage.
+	 *
+	 * @since 1.0.0
+	 * @param MediaCategory        $mediaCategory The MediaCategory instance resolved by route model binding.
+	 * @param MediaCategoryRequest $request       The validated form request.
+	 * @return JsonResponse
+	 */
+	public function update( MediaCategoryRequest $request, MediaCategory $mediaCategory ): JsonResponse
 	{
-		$this->authorize( 'update', $mediaCategory );
+		// REMOVE: $request->setResolvedMediaCategory( $mediaCategory ); // THIS CALL IS NO LONGER VALID
 
-		$mediaCategory->update( $request->validated() );
+		$validatedData = $request->validated();
+		$mediaCategory->update( $validatedData );
 
-		return new MediaCategoryResource( $mediaCategory );
+		return response()->json( [ 'message' => 'Media category updated successfully.', 'data' => $mediaCategory ] );
 	}
 
-	public function destroy( MediaCategory $mediaCategory )
+	/**
+	 * Remove the specified media category from storage.
+	 *
+	 * @since 1.0.0
+	 * @param MediaCategory        $mediaCategory The MediaCategory instance resolved by route model binding.
+	 * @param MediaCategoryRequest $request       The validated form request.
+	 * @return JsonResponse
+	 */
+	public function destroy( MediaCategoryRequest $request, MediaCategory $mediaCategory ): JsonResponse
 	{
-		$this->authorize( 'delete', $mediaCategory );
+		// REMOVE: $request->setResolvedMediaCategory( $mediaCategory ); // THIS CALL IS NO LONGER VALID
 
-		$mediaCategory->delete();
+		if ( $mediaCategory->delete() ) {
+			return response()->json( [ 'message' => 'Media category deleted successfully.' ], 204 );
+		}
 
-		return response()->json();
+		return response()->json( [ 'message' => 'Media category deletion failed.' ], 500 );
 	}
 }
