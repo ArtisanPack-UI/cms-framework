@@ -47,10 +47,9 @@ tests:
   image: php:8.2
   before_script: # Add this section for setup before the main script
     - apt-get update -yqq
-      # Install GD extension and its dependencies
-      - apt-get install -yqq libpng-dev libjpeg-dev libfreetype6-dev
-      - docker-php-ext-configure gd --with-freetype --with-jpeg
-      - docker-php-ext-install gd pdo_sqlite
+    - apt-get install -yqq libpng-dev libjpeg-dev libfreetype6-dev
+    - docker-php-ext-configure gd --with-freetype --with-jpeg
+    - docker-php-ext-install gd pdo_sqlite
   script:
     - ./vendor/bin/pest --ci
 
