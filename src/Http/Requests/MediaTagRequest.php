@@ -10,7 +10,7 @@ class MediaTagRequest extends FormRequest
 	{
 		return [
 			'name' => [ 'required' ],
-			'slug' => [ 'required' ],
+			'slug' => [ 'required', 'unique:media_tags,slug' . ($this->mediaTag ? ',' . $this->mediaTag->id : '') ],
 		];
 	}
 

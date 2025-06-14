@@ -10,7 +10,7 @@ class MediaCategoryRequest extends FormRequest
 	{
 		return [
 			'name' => [ 'required' ],
-			'slug' => [ 'required' ],
+			'slug' => [ 'required', 'unique:media_categories,slug' . ($this->mediaCategory ? ',' . $this->mediaCategory->id : '') ],
 		];
 	}
 

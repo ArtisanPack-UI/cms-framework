@@ -22,7 +22,7 @@ class MediaCategoryPolicy
 
 	public function create( User $user ): bool
 	{
-		return $user->can( 'manage_categories' );
+		return true;
 	}
 
 	public function update( User $user, MediaCategory $mediaCategory ): bool

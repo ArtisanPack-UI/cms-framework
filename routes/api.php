@@ -11,7 +11,7 @@ use ArtisanPackUI\CMSFramework\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware( 'api' )->prefix( 'cms' )->group( function () {
+Route::middleware( 'api' )->prefix( 'api/cms' )->group( function () {
 	// User routes
 	Route::apiResource( 'users', UserController::class );
 
