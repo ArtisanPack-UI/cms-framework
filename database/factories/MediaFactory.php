@@ -14,10 +14,10 @@ class MediaFactory extends Factory
 	{
 		return [
 			'user_id'       => 1,
-			'file_name'     => $this->faker->name(),
-			'mime_type'     => $this->faker->word(),
-			'path'          => $this->faker->word(),
-			'size'          => $this->faker->randomNumber(),
+			'file_name'     => $this->faker->unique()->word() . '.jpg',
+			'mime_type'     => $this->faker->randomElement( [ 'image/jpeg', 'image/png', 'application/pdf' ] ),
+			'path'          => $this->faker->unique()->url() . '/' . $this->faker->unique()->sha1() . '.jpg',
+			'size'          => $this->faker->numberBetween( 1024, 1048576 ),
 			'alt_text'      => $this->faker->text(),
 			'is_decorative' => $this->faker->boolean(),
 			'metadata'      => $this->faker->word(),
