@@ -47,17 +47,10 @@ tests:
   image: php:8.2
   before_script: # Add this section for setup before the main script
     - apt-get update -yqq
-    # Install GD extension and its dependencies
-    - apt-get install -yqq libpng-dev libjpeg-dev libfreetype6-dev
-    - docker-php-ext-configure gd --with-freetype --with-jpeg
-    - docker-php-ext-install gd pdo_mysql # pdo_mysql is crucial for database tests.
-    # zip is typically not needed for tests unless specifically interacting with zip files.
-
-    # Ensure migrations and seeding are run for tests, if your tests require a database.
-    # Replace with your actual database setup if different (e.g., if using a services: db setup)
-    # This assumes your tests use an in-memory SQLite or similar, or your runner has access to a DB.
-    # If using a database service (like postgres or mysql in 'services:'), configure that here.
-    - php artisan migrate:fresh --env=testing
+      # Install GD extension and its dependencies
+      - apt-get install -yqq libpng-dev libjpeg-dev libfreetype6-dev
+      - docker-php-ext-configure gd --with-freetype --with-jpeg
+      - docker-php-ext-install gd pdo_sqlite
   script:
     - ./vendor/bin/pest --ci
 
