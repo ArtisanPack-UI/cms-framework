@@ -4,6 +4,7 @@ use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Http\Controllers\MediaCategoryController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\MediaController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\MediaTagController;
+use ArtisanPackUI\CMSFramework\Http\Controllers\PageController;
 use ArtisanPackUI\CMSFramework\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Http\Controllers\RoleController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\SettingController;
@@ -35,6 +36,9 @@ Route::middleware( 'api' )->prefix( 'api/cms' )->group( function () {
 	Route::apiResource( 'media-tags', MediaTagController::class )->parameters( [
 		'media-tags' => 'media_tag',
 	] );
+
+	// Settings routes
+	Route::apiResource( 'pages', PageController::class );
 
 	// --- Plugin Management Routes ---
 

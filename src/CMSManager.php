@@ -18,6 +18,7 @@ namespace ArtisanPackUI\CMSFramework;
 
 // phpcs:disable
 use ArtisanPackUI\CMSFramework\Features\Media\MediaManager;
+use ArtisanPackUI\CMSFramework\Features\Pages\PagesManager;
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersManager;
@@ -50,6 +51,7 @@ class CMSManager
 		'plugins'  => PluginManager::class,
 		'users'    => UsersManager::class,
 		'media'    => MediaManager::class,
+		'pages'    => PagesManager::class,
 	];
 
 	/**
