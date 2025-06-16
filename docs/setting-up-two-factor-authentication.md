@@ -1,3 +1,7 @@
+---
+title: Enabling Two-Factor Authentication (Email-Based)
+---
+
 # Enabling Two-Factor Authentication (Email-Based)
 
 This guide explains how to enable and integrate the email-based Two-Factor Authentication (2FA) feature provided by the ArtisanPack UI CMS Framework into your content management system. This feature enhances security by requiring users to verify their login with a temporary code sent to their email address.

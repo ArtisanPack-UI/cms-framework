@@ -1,3 +1,7 @@
+---
+title: API Authentication with Laravel Sanctum
+---
+
 # API Authentication with Laravel Sanctum
 
 The ArtisanPack UI CMS Framework uses Laravel Sanctum for API authentication. This document provides detailed information about how to authenticate with the API using Sanctum.

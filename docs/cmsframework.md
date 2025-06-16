@@ -1,3 +1,7 @@
+---
+title: CMS Framework Core Components
+---
+
 # CMS Framework Core Components
 
 This document provides detailed information about the core components of the ArtisanPack UI CMS Framework.

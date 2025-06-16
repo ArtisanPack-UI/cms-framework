@@ -1,3 +1,7 @@
+---
+title: Media Module
+---
+
 # Media Module
 
 The Media Module provides functionality for managing media items, including uploading, retrieving, updating, and deleting media files, as well as organizing them with tags and categories.

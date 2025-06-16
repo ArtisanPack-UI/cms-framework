@@ -1,3 +1,7 @@
+---
+title: Audit Logging Module
+---
+
 # Audit Logging Module
 
 The Audit Logging module provides functionality for logging authentication-related events and user activities within the ArtisanPack UI CMS Framework.
