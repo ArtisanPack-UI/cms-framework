@@ -1,3 +1,7 @@
+---
+title: Users and Roles Module
+---
+
 # Users and Roles Module
 
 The Users and Roles module provides functionality for managing users, roles, and permissions in the ArtisanPack UI CMS Framework.

@@ -1,3 +1,7 @@
+---
+title: Settings Module
+---
+
 # Settings Module
 
 The Settings module provides functionality for managing application settings in the ArtisanPack UI CMS Framework.

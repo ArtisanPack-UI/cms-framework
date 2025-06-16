@@ -1,3 +1,7 @@
+---
+title: ArtisanPack UI CMS Framework
+---
+
 # ArtisanPack UI CMS Framework
 
 ## Overview

@@ -1,3 +1,7 @@
+---
+title: Setting up API Authentication with Laravel Sanctum
+---
+
 # Setting up API Authentication with Laravel Sanctum
 
 This guide outlines the steps for developers to integrate and utilize Laravel Sanctum for API authentication within their applications when consuming the ArtisanPack UI CMS Framework.

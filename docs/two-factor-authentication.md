@@ -1,3 +1,7 @@
+---
+title: Two-Factor Authentication
+---
+
 # Two-Factor Authentication
 
 The ArtisanPack UI CMS Framework provides a robust email-based Two-Factor Authentication (2FA) system to enhance the security of your content management system. This document explains the feature, its components, and how it works.
