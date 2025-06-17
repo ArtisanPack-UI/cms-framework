@@ -22,7 +22,8 @@ class ContentPolicy
 
     public function create( User $user ): bool
     {
-        return $user->can( 'create_content' );
+        // Allow all authenticated users to create content
+        return true;
     }
 
     public function update( User $user, Content $content ): bool

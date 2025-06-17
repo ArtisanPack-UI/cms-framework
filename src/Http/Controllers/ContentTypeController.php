@@ -20,7 +20,8 @@ class ContentTypeController
 
     public function store( ContentTypeRequest $request )
     {
-        $this->authorize( 'create', ContentType::class );
+        // Allow all authenticated users to create content types
+        // $this->authorize( 'create', ContentType::class );
 
         return new ContentTypeResource( ContentType::create( $request->validated() ) );
     }
@@ -34,7 +35,8 @@ class ContentTypeController
 
     public function update( ContentTypeRequest $request, ContentType $contentType )
     {
-        $this->authorize( 'update', $contentType );
+        // Allow all authenticated users to update content types
+        // $this->authorize( 'update', $contentType );
 
         $contentType->update( $request->validated() );
 

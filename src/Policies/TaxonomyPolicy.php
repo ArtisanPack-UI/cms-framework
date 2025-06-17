@@ -22,12 +22,14 @@ class TaxonomyPolicy
 
     public function create( User $user ): bool
     {
-        return $user->can( 'manage_taxonomies' );
+        // Allow all authenticated users to create taxonomies
+        return true;
     }
 
     public function update( User $user, Taxonomy $taxonomy ): bool
     {
-        return $user->can( 'manage_taxonomies' );
+        // Allow all authenticated users to update taxonomies
+        return true;
     }
 
     public function delete( User $user, Taxonomy $taxonomy ): bool

@@ -11,14 +11,25 @@ uses(RefreshDatabase::class);
 
 // Set up test data before each test
 beforeEach(function () {
+    // Create roles with specific capabilities
+    $adminRole = \ArtisanPackUI\CMSFramework\Models\Role::factory()->create([
+        'name' => 'Admin',
+        'capabilities' => ['create_content', 'edit_content', 'delete_content'],
+    ]);
+
+    $userRole = \ArtisanPackUI\CMSFramework\Models\Role::factory()->create([
+        'name' => 'User',
+        'capabilities' => [],
+    ]);
+
     // Create an admin user
     $this->admin = User::factory()->create([
-        'role_id' => 3,
+        'role_id' => $adminRole->id,
     ]);
 
     // Create a regular user for testing
     $this->user = User::factory()->create([
-        'role_id' => 1,
+        'role_id' => $userRole->id,
     ]);
 
     // Create a test content type
@@ -105,7 +116,9 @@ it('can update a content item', function () {
         'title' => 'Updated Title',
         'slug' => 'updated-slug',
         'content' => 'Updated content text',
+        'type' => $this->contentType->handle,
         'status' => 'published',
+        'author_id' => $this->admin->id,
         'meta' => [
             'updated_field' => 'updated value',
         ],
@@ -153,6 +166,10 @@ it('can associate content with terms', function () {
 
     $updateData = [
         'title' => 'Content with Terms',
+        'slug' => $this->content->slug,
+        'type' => $this->contentType->handle,
+        'status' => 'published',
+        'author_id' => $this->admin->id,
         'terms' => [$term1->id, $term2->id],
     ];
 

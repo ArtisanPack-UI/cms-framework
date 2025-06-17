@@ -22,7 +22,21 @@ class ContentController
     {
         $this->authorize( 'create', Content::class );
 
-        return new ContentResource( Content::create( $request->validated() ) );
+        $validated = $request->validated();
+
+        // Extract terms from the validated data
+        $terms = $validated['terms'] ?? null;
+        unset($validated['terms']);
+
+        // Create the content
+        $content = Content::create( $validated );
+
+        // Sync terms if provided
+        if ($terms !== null) {
+            $content->terms()->sync($terms);
+        }
+
+        return new ContentResource( $content );
     }
 
     public function show( Content $content )
@@ -36,7 +50,19 @@ class ContentController
     {
         $this->authorize( 'update', $content );
 
-        $content->update( $request->validated() );
+        $validated = $request->validated();
+
+        // Extract terms from the validated data
+        $terms = $validated['terms'] ?? null;
+        unset($validated['terms']);
+
+        // Update the content
+        $content->update( $validated );
+
+        // Sync terms if provided
+        if ($terms !== null) {
+            $content->terms()->sync($terms);
+        }
 
         return new ContentResource( $content );
     }

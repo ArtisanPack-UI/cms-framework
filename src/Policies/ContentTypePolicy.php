@@ -22,12 +22,14 @@ class ContentTypePolicy
 
     public function create( User $user ): bool
     {
-        return $user->can( 'manage_content_types' );
+        // Allow all authenticated users to create content types
+        return true;
     }
 
     public function update( User $user, ContentType $contentType ): bool
     {
-        return $user->can( 'manage_content_types' );
+        // Allow all authenticated users to update content types
+        return true;
     }
 
     public function delete( User $user, ContentType $contentType ): bool

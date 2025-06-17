@@ -20,7 +20,8 @@ class TaxonomyController
 
     public function store( TaxonomyRequest $request )
     {
-        $this->authorize( 'create', Taxonomy::class );
+        // Allow all authenticated users to create taxonomies
+        // $this->authorize( 'create', Taxonomy::class );
 
         return new TaxonomyResource( Taxonomy::create( $request->validated() ) );
     }
@@ -34,7 +35,8 @@ class TaxonomyController
 
     public function update( TaxonomyRequest $request, Taxonomy $taxonomy )
     {
-        $this->authorize( 'update', $taxonomy );
+        // Allow all authenticated users to update taxonomies
+        // $this->authorize( 'update', $taxonomy );
 
         $taxonomy->update( $request->validated() );
 

@@ -5,163 +5,179 @@ use ArtisanPackUI\CMSFramework\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 
-uses(RefreshDatabase::class);
+uses( RefreshDatabase::class );
 
 // Set up test data before each test
-beforeEach(function () {
-    // Create an admin user
-    $this->admin = User::factory()->create([
-        'role_id' => 3,
-    ]);
+beforeEach( function () {
+	// Create roles with specific capabilities
+	$adminRole = \ArtisanPackUI\CMSFramework\Models\Role::factory()->create( [
+		'name' => 'Admin',
+		'capabilities' => ['manage_content_types'],
+	] );
 
-    // Create a regular user for testing
-    $this->user = User::factory()->create([
-        'role_id' => 1,
-    ]);
+	$userRole = \ArtisanPackUI\CMSFramework\Models\Role::factory()->create( [
+		'name' => 'User',
+		'capabilities' => [],
+	] );
 
-    // Create a test content type
-    $this->contentType = ContentType::factory()->create();
-});
+	// Create an admin user
+	$this->admin = User::factory()->create( [
+		'role_id' => $adminRole->id,
+	] );
 
-it('can list all content types', function () {
-    // Act as admin with Sanctum
-    Sanctum::actingAs($this->admin);
+	// Create a regular user for testing
+	$this->user = User::factory()->create( [
+		'role_id' => $userRole->id,
+	] );
 
-    // Create some additional content types
-    ContentType::factory()->count(3)->create();
+	// Create a test content type
+	$this->contentType = ContentType::factory()->create();
+} );
 
-    // Make request to list content types
-    $response = $this->getJson('/api/cms/content-types');
+it( 'can list all content types', function () {
+	// Act as admin with Sanctum
+	Sanctum::actingAs( $this->admin );
 
-    // Assert response is successful
-    $response->assertStatus(200);
+	// Create some additional content types
+	ContentType::factory()->count( 3 )->create();
 
-    // Assert that we have the expected number of content types
-    $responseData = $response->json();
-    $this->assertCount(4, $responseData['data']); // 3 created here + 1 from beforeEach
-});
+	// Make request to list content types
+	$response = $this->getJson( '/api/cms/content-types' );
 
-it('can create a new content type', function () {
-    Sanctum::actingAs($this->admin);
+	// Assert response is successful
+	$response->assertStatus( 200 );
 
-    $contentTypeData = [
-        'handle' => 'new_type',
-        'label' => 'New Type',
-        'label_plural' => 'New Types',
-        'slug' => 'new-type',
-        'definition' => [
-            'public' => true,
-            'hierarchical' => false,
-            'supports' => ['title', 'content', 'author'],
-            'fields' => []
-        ],
-    ];
+	// Assert that we have the expected number of content types
+	$responseData = $response->json();
+	$this->assertCount( 4, $responseData['data'] ); // 3 created here + 1 from beforeEach
+} );
 
-    $response = $this->postJson('/api/cms/content-types', $contentTypeData);
+it( 'can create a new content type', function () {
+	Sanctum::actingAs( $this->admin );
 
-    $response->assertStatus(201);
-    $response->assertJsonFragment([
-        'handle' => 'new_type',
-        'label' => 'New Type',
-        'label_plural' => 'New Types',
-    ]);
+	$contentTypeData = [
+		'handle'       => 'new_type',
+		'label'        => 'New Type',
+		'label_plural' => 'New Types',
+		'slug'         => 'new-type',
+		'definition'   => [
+			'public'       => true,
+			'hierarchical' => false,
+			'supports'     => [ 'title', 'content', 'author' ],
+			'fields'       => [],
+		],
+	];
 
-    // Verify the content type was created in the database
-    $this->assertDatabaseHas('content_types', [
-        'handle' => 'new_type',
-        'label' => 'New Type',
-        'label_plural' => 'New Types',
-    ]);
-});
+	$response = $this->postJson( '/api/cms/content-types', $contentTypeData );
 
-it('can show a specific content type', function () {
-    // Act as admin with Sanctum
-    Sanctum::actingAs($this->admin);
+	$response->assertStatus( 201 );
+	$response->assertJsonFragment( [
+		'handle'       => 'new_type',
+		'label'        => 'New Type',
+		'label_plural' => 'New Types',
+	] );
 
-    $response = $this->getJson("/api/cms/content-types/{$this->contentType->id}");
+	// Verify the content type was created in the database
+	$this->assertDatabaseHas( 'content_types', [
+		'handle'       => 'new_type',
+		'label'        => 'New Type',
+		'label_plural' => 'New Types',
+	] );
+} );
 
-    $response->assertStatus(200);
-    $response->assertJsonFragment([
-        'id' => $this->contentType->id,
-        'handle' => $this->contentType->handle,
-        'label' => $this->contentType->label,
-    ]);
-});
+it( 'can show a specific content type', function () {
+	// Act as admin with Sanctum
+	Sanctum::actingAs( $this->admin );
 
-it('can update a content type', function () {
-    // Act as admin with Sanctum
-    Sanctum::actingAs($this->admin);
+	$response = $this->getJson( "/api/cms/content-types/{$this->contentType->id}" );
 
-    $updateData = [
-        'label' => 'Updated Label',
-        'label_plural' => 'Updated Labels',
-        'definition' => [
-            'public' => false,
-            'hierarchical' => true,
-            'supports' => ['title', 'content'],
-            'fields' => []
-        ],
-    ];
+	$response->assertStatus( 200 );
+	$response->assertJsonFragment( [
+		'id'     => $this->contentType->id,
+		'handle' => $this->contentType->handle,
+		'label'  => $this->contentType->label,
+	] );
+} );
 
-    $response = $this->putJson("/api/cms/content-types/{$this->contentType->id}", $updateData);
+it( 'can update a content type', function () {
+	// Act as admin with Sanctum
+	Sanctum::actingAs( $this->admin );
 
-    $response->assertStatus(200);
-    $response->assertJsonFragment([
-        'id' => $this->contentType->id,
-        'label' => 'Updated Label',
-        'label_plural' => 'Updated Labels',
-    ]);
+	$updateData = [
+		'handle'       => $this->contentType->handle,
+		'label'        => 'Updated Label',
+		'label_plural' => 'Updated Labels',
+		'slug'         => 'updated-slug', // Use a short, fixed slug to avoid validation errors
+		'definition'   => [
+			'public'       => false,
+			'hierarchical' => true,
+			'supports'     => [ 'title', 'content' ],
+			'fields'       => [],
+		],
+	];
 
-    // Verify the content type was updated in the database
-    $this->assertDatabaseHas('content_types', [
-        'id' => $this->contentType->id,
-        'label' => 'Updated Label',
-        'label_plural' => 'Updated Labels',
-    ]);
-});
+	$response = $this->putJson( "/api/cms/content-types/{$this->contentType->id}", $updateData );
 
-it('can delete a content type', function () {
-    // Act as admin with Sanctum
-    Sanctum::actingAs($this->admin);
+	$response->assertStatus( 200 );
+	$response->assertJsonFragment( [
+		'id'           => $this->contentType->id,
+		'label'        => 'Updated Label',
+		'label_plural' => 'Updated Labels',
+	] );
 
-    $response = $this->deleteJson("/api/cms/content-types/{$this->contentType->id}");
+	// Verify the content type was updated in the database
+	$this->assertDatabaseHas( 'content_types', [
+		'id'           => $this->contentType->id,
+		'label'        => 'Updated Label',
+		'label_plural' => 'Updated Labels',
+	] );
+} );
 
-    $response->assertStatus(200);
+it( 'can delete a content type', function () {
+	// Act as admin with Sanctum
+	Sanctum::actingAs( $this->admin );
 
-    // Verify the content type was deleted from the database
-    $this->assertDatabaseMissing('content_types', [
-        'id' => $this->contentType->id,
-    ]);
-});
+	$response = $this->deleteJson( "/api/cms/content-types/{$this->contentType->id}" );
 
-it('prevents unauthorized users from managing content types', function () {
-    // Act as regular user with Sanctum
-    Sanctum::actingAs($this->user);
+	$response->assertStatus( 200 );
 
-    // Try to create a content type
-    $contentTypeData = [
-        'handle' => 'new_type',
-        'label' => 'New Type',
-        'label_plural' => 'New Types',
-        'slug' => 'new-type',
-        'definition' => [
-            'public' => true,
-            'hierarchical' => false,
-            'supports' => ['title', 'content', 'author'],
-            'fields' => []
-        ],
-    ];
+	// Verify the content type was deleted from the database
+	$this->assertDatabaseMissing( 'content_types', [
+		'id' => $this->contentType->id,
+	] );
+} );
 
-    $response = $this->postJson('/api/cms/content-types', $contentTypeData);
-    $response->assertStatus(403);
+it( 'prevents unauthorized users from managing content types', function () {
+	// Act as regular user with Sanctum
+	Sanctum::actingAs( $this->user );
 
-    // Try to update a content type
-    $response = $this->putJson("/api/cms/content-types/{$this->contentType->id}", [
-        'label' => 'Updated Label',
-    ]);
-    $response->assertStatus(403);
+	// Try to create a content type
+	$contentTypeData = [
+		'handle'       => 'new_type',
+		'label'        => 'New Type',
+		'label_plural' => 'New Types',
+		'slug'         => 'new-type',
+		'definition'   => [
+			'public'       => true,
+			'hierarchical' => false,
+			'supports'     => [ 'title', 'content', 'author' ],
+			'fields'       => [],
+		],
+	];
 
-    // Try to delete a content type
-    $response = $this->deleteJson("/api/cms/content-types/{$this->contentType->id}");
-    $response->assertStatus(403);
-});
+	$response = $this->postJson( '/api/cms/content-types', $contentTypeData );
+	$response->assertStatus( 403 );
+
+	// Try to update a content type
+	$response = $this->putJson( "/api/cms/content-types/{$this->contentType->id}", [
+		'label'        => 'Updated Label',
+		'label_plural' => 'Updated Labels',
+		'slug'         => $this->contentType->slug,
+		'definition'   => $this->contentType->definition,
+	] );
+	$response->assertStatus( 403 );
+
+	// Try to delete a content type
+	$response = $this->deleteJson( "/api/cms/content-types/{$this->contentType->id}" );
+	$response->assertStatus( 403 );
+} );
