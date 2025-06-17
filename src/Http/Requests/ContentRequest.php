@@ -4,8 +4,29 @@ namespace ArtisanPackUI\CMSFramework\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
+/**
+ * Content Request.
+ *
+ * Handles validation and authorization for content operations.
+ * Manages different validation rules for creation and update operations.
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Http\Requests
+ * @since      1.1.0
+ */
 class ContentRequest extends FormRequest
 {
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * Applies different validation rules based on whether this is a create
+     * or update request. For create requests, slug, type, status, and author_id
+     * are required. For update requests, these fields are optional.
+     *
+     * @since 1.1.0
+     *
+     * @return array<string, mixed> Array of validation rules.
+     */
     public function rules(): array
     {
         $rules = [
@@ -35,6 +56,17 @@ class ContentRequest extends FormRequest
         return $rules;
     }
 
+    /**
+     * Determine if the user is authorized to make this request.
+     *
+     * This method always returns true, allowing all authenticated users
+     * to perform content operations. Actual authorization is handled
+     * in the ContentController using policies.
+     *
+     * @since 1.1.0
+     *
+     * @return bool Always returns true.
+     */
     public function authorize(): bool
     {
         return true;

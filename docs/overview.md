@@ -55,3 +55,4 @@ Currently, the framework includes the following modules:
 
 - **Settings**: Provides functionality for managing application settings
 - **Audit Logging**: Provides functionality for logging authentication events and user activities
+- **Content Types**: Provides functionality for defining and managing different types of content within your CMS
