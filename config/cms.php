@@ -1,4 +1,17 @@
 <?php
+/**
+ * CMS Framework Configuration
+ *
+ * This file contains the default configuration settings for the CMS Framework.
+ * These settings can be overridden by the application or through the settings API.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Config
+ * @since      1.0.0
+ */
+
 return [
     'site'          => [
         'name'     => 'ArtisanPack UI CMS Framework',

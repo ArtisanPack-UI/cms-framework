@@ -1,4 +1,17 @@
 <?php
+/**
+ * Content Model
+ *
+ * Represents a generic content item in the CMS Framework, capable of representing
+ * various content types like posts, pages, videos, and custom user-defined content types
+ * via a 'type' column and 'meta' JSON field.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Models
+ * @since      1.0.0
+ */
 
 namespace ArtisanPackUI\CMSFramework\Models;
 
@@ -15,24 +28,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 
-//
-
-// Assuming a User model for author_id
-
-// Assuming Term model for taxonomies
-
 /**
- * Content Model.
+ * Content Model
  *
- * Represents a generic content item in the ArtisanPack UI CMS Framework,
+ * Represents a generic content item in the CMS Framework,
  * capable of representing various content types like posts, pages, videos,
  * and custom user-defined content types via a 'type' column and 'meta' JSON field.
  *
- * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework\Models
- * @since      1.1.0
+ * @since      1.0.0
  *
  * @property int         $id
  * @property string      $title
@@ -93,6 +96,7 @@ class Content extends Model
 	/**
 	 * Create a new factory instance for the model.
 	 *
+	 * @since 1.0.0
 	 * @return Factory
 	 */
 	protected static function newFactory(): Factory
