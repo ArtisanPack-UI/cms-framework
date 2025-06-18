@@ -110,6 +110,61 @@ class SettingsManager
     }
 
     /**
+     * Delete a setting
+     *
+     * Deletes a setting from the database and refreshes the cached settings.
+     *
+     * @since 1.0.0
+     * @param string $key The setting key to delete
+     * @return bool|null True if deleted, false if not found, null on error
+     */
+    public function delete( string $key ): ?bool
+    {
+        $deleted = Setting::where( 'key', sanitizeText( $key ) )->delete();
+        if ( $deleted ) {
+            $this->refreshSettingsCache();
+        }
+        return $deleted;
+    }
+
+    /**
+     * Refresh settings cache
+     *
+     * Clears the settings cache and forces a reload of the merged settings.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function refreshSettingsCache(): void
+    {
+        Cache::forget( $this->cacheKey );
+        $this->loadSettings(); // Reloads merged settings from fresh sources
+    }
+
+    /**
+     * Registers default PWA settings.
+     *
+     * This method should be called during the CMS Framework's boot process
+     * or when a new PWA feature is enabled.
+     *
+     * @since 1.1.0
+     *
+     * @return void
+     */
+    public function registerPwaDefaults(): void
+    {
+        $this->register( 'pwa.enabled', false, 'boolean', 'Enable Progressive Web App features.' );
+        $this->register( 'pwa.name', config( 'app.name' ), 'string', 'The full name of your Progressive Web App.' );
+        $this->register( 'pwa.short_name', config( 'app.name' ), 'string', 'A short name for your PWA, displayed on the user\'s home screen.' );
+        $this->register( 'pwa.description', null, 'string', 'A description of your PWA.' );
+        $this->register( 'pwa.start_url', '/', 'string', 'The URL that loads when your PWA is launched.' );
+        $this->register( 'pwa.display', 'standalone', 'string', 'The preferred display mode for your PWA (e.g., "standalone", "fullscreen").' );
+        $this->register( 'pwa.background_color', '#ffffff', 'string', 'The background color of the splash screen when your PWA is launched.' );
+        $this->register( 'pwa.theme_color', '#ffffff', 'string', 'The theme color for your PWA, affecting the browser\'s UI elements.' );
+        $this->register( 'pwa.icons', [], 'json', 'An array of icon definitions for your PWA.' );
+    }
+
+    /**
      * Register a default setting programmatically
      *
      * Registers a setting with a default value. If the setting already exists
@@ -188,37 +243,5 @@ class SettingsManager
         $this->refreshSettingsCache();
 
         return $setting;
-    }
-
-    /**
-     * Refresh settings cache
-     *
-     * Clears the settings cache and forces a reload of the merged settings.
-     *
-     * @since 1.0.0
-     * @return void
-     */
-    public function refreshSettingsCache(): void
-    {
-        Cache::forget( $this->cacheKey );
-        $this->loadSettings(); // Reloads merged settings from fresh sources
-    }
-
-    /**
-     * Delete a setting
-     *
-     * Deletes a setting from the database and refreshes the cached settings.
-     *
-     * @since 1.0.0
-     * @param string $key The setting key to delete
-     * @return bool|null True if deleted, false if not found, null on error
-     */
-    public function delete( string $key ): ?bool
-    {
-        $deleted = Setting::where( 'key', sanitizeText( $key ) )->delete();
-        if ( $deleted ) {
-            $this->refreshSettingsCache();
-        }
-        return $deleted;
     }
 }
