@@ -1,4 +1,16 @@
 <?php
+/**
+ * Taxonomy Model
+ *
+ * Represents a custom taxonomy (e.g., categories, tags) within the CMS Framework.
+ * This model defines the structure and properties of dynamically created taxonomies.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Models
+ * @since      1.0.0
+ */
 
 namespace ArtisanPackUI\CMSFramework\Models;
 
@@ -8,18 +20,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 
-// Assuming Content model for relationship
-
 /**
- * Taxonomy Model.
+ * Taxonomy Model
  *
- * Represents a custom taxonomy (e.g., categories, tags) within the ArtisanPack UI CMS Framework.
+ * Represents a custom taxonomy (e.g., categories, tags) within the CMS Framework.
  * This model defines the structure and properties of dynamically created taxonomies.
  *
- * @link    https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package ArtisanPackUI\CMSFramework\Models
- * @since   1.1.0
+ * @since   1.0.0
  *
  * @property int                        $id
  * @property string                     $handle         Unique identifier for the taxonomy (machine name).
@@ -82,6 +89,7 @@ class Taxonomy extends Model
     /**
      * Create a new factory instance for the model.
      *
+     * @since 1.0.0
      * @return \Illuminate\Database\Eloquent\Factories\Factory
      */
     protected static function newFactory(): Factory

@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Features\Auth\TwoFactorAuthServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\ContentTypes\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Features\ContentTypes\TaxonomyManager;
 use ArtisanPackUI\CMSFramework\Features\Media\MediaServiceProvider;
+use ArtisanPackUI\CMSFramework\Features\Notifications\NotificationServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Pages\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
@@ -61,6 +62,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->register( AuditLogServiceProvider::class );
         $this->app->register( TwoFactorAuthServiceProvider::class );
         $this->app->register( MediaServiceProvider::class );
+        $this->app->register( NotificationServiceProvider::class );
         $this->app->singleton( ContentTypeManager::class, function ( $app ) {
             return new ContentTypeManager();
         } );

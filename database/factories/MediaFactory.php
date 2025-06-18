@@ -1,4 +1,15 @@
 <?php
+/**
+ * Media Factory
+ *
+ * Factory for creating test instances of Media models.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Database\Factories
+ * @since      1.0.0
+ */
 
 namespace ArtisanPackUI\Database\factories;
 
@@ -6,10 +17,29 @@ use ArtisanPackUI\CMSFramework\Models\Media;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Carbon;
 
+/**
+ * Factory for Media model
+ *
+ * Provides a factory for creating test instances of Media models with fake data.
+ *
+ * @since 1.0.0
+ */
 class MediaFactory extends Factory
 {
+	/**
+	 * The name of the model that this factory creates.
+	 *
+	 * @since 1.0.0
+	 * @var string
+	 */
 	protected $model = Media::class;
 
+	/**
+	 * Define the model's default state.
+	 *
+	 * @since 1.0.0
+	 * @return array<string, mixed>
+	 */
 	public function definition(): array
 	{
 		return [

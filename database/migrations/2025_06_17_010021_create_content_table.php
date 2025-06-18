@@ -1,10 +1,36 @@
 <?php
+/**
+ * Create Content Table Migration
+ *
+ * Creates the content table for storing all content types in the CMS.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Database\Migrations
+ * @since      1.0.0
+ */
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
+/**
+ * Migration for creating the content table
+ *
+ * Creates the main content table that stores all content types in the CMS.
+ *
+ * @since 1.0.0
+ */
 return new class extends Migration {
+    /**
+     * Run the migrations
+     *
+     * Creates the content table with all necessary columns for storing content items.
+     *
+     * @since 1.0.0
+     * @return void
+     */
     public function up(): void
     {
         Schema::create( 'content', function ( Blueprint $table ) {
@@ -22,6 +48,14 @@ return new class extends Migration {
         } );
     }
 
+    /**
+     * Reverse the migrations
+     *
+     * Drops the content table if it exists.
+     *
+     * @since 1.0.0
+     * @return void
+     */
     public function down(): void
     {
         Schema::dropIfExists( 'contents' );

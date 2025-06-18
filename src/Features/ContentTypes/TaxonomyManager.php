@@ -1,25 +1,32 @@
 <?php
+/**
+ * Taxonomy Manager
+ *
+ * Manages the registration and retrieval of taxonomy definitions within the CMS Framework.
+ * This file contains the central registry for all taxonomies, including built-in taxonomies
+ * and dynamically created user-defined taxonomies.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Features\ContentTypes
+ * @since      1.0.0
+ */
 
 namespace ArtisanPackUI\CMSFramework\Features\ContentTypes;
 
 use ArtisanPackUI\CMSFramework\Models\Taxonomy;
 use Illuminate\Support\Facades\Cache;
 
-// Assuming Taxonomy model
-
 /**
  * Manages the registration and retrieval of taxonomy definitions.
  *
  * This class serves as the central registry for all taxonomies
- * within the ArtisanPack UI CMS Framework, including built-in and
+ * within the CMS Framework, including built-in and
  * dynamically created user-defined taxonomies. It caches loaded
  * definitions for performance.
  *
- * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework
- * @since      1.1.0
+ * @since      1.0.0
  */
 class TaxonomyManager
 {

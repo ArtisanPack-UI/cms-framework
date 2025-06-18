@@ -1,4 +1,17 @@
 <?php
+/**
+ * Content Type Manager
+ *
+ * Manages the registration and retrieval of content type definitions within the CMS Framework.
+ * This file contains the central registry for all content types, including built-in types
+ * and dynamically created user-defined content types.
+ *
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Features\ContentTypes
+ * @since      1.0.0
+ */
 
 namespace ArtisanPackUI\CMSFramework\Features\ContentTypes;
 
@@ -6,21 +19,15 @@ use ArtisanPackUI\CMSFramework\Models\Content;
 use ArtisanPackUI\CMSFramework\Models\ContentType;
 use Illuminate\Support\Facades\Cache;
 
-//
-
 /**
  * Manages the registration and retrieval of content type definitions.
  *
  * This class serves as the central registry for all content types
- * within the ArtisanPack UI CMS Framework, including built-in types
+ * within the CMS Framework, including built-in types
  * and dynamically created user-defined content types. It caches loaded
  * definitions for performance.
  *
- * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework
- * @since      1.1.0
+ * @since      1.0.0
  */
 class ContentTypeManager
 {
