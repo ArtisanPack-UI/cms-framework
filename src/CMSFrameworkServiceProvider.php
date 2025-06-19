@@ -23,12 +23,13 @@ use ArtisanPackUI\CMSFramework\Features\ContentTypes\TaxonomyManager;
 use ArtisanPackUI\CMSFramework\Features\DashboardWidgets\DashboardWidgetsServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Media\MediaServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Notifications\NotificationServiceProvider;
-use ArtisanPackUI\CMSFramework\Features\Pages\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
+use ArtisanPackUI\CMSFramework\Features\Themes\ThemeManager;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersServiceProvider;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use TorMorten\Eventy\Facades\Eventy;
 
 /**
@@ -43,187 +44,222 @@ use TorMorten\Eventy\Facades\Eventy;
 class CMSFrameworkServiceProvider extends ServiceProvider
 {
 
-	/**
-	 * Registers a singleton instance of the CMSFramework within the application container.
-	 *
-	 * This method is called by the Laravel framework during the bootstrapping process to run the CMS framework.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return void
-	 */
-	public function register(): void
-	{
-		$this->mergeConfigFrom(
-			__DIR__ . '/../config/cms.php', 'cms'
-		);
-		$this->app->register( SettingsServiceProvider::class );
-		$this->app->register( UsersServiceProvider::class );
-		$this->app->register( AuthServiceProvider::class );
-		$this->app->register( AuditLogServiceProvider::class );
-		$this->app->register( TwoFactorAuthServiceProvider::class );
-		$this->app->register( MediaServiceProvider::class );
-		$this->app->register( NotificationServiceProvider::class );
-		$this->app->register( AdminPagesServiceProvider::class );
-		$this->app->register( DashboardWidgetsServiceProvider::class );
-		$this->app->singleton( ContentTypeManager::class, function ( $app ) {
-			return new ContentTypeManager();
-		} );
-		$this->app->singleton( TaxonomyManager::class, function ( $app ) {
-			return new TaxonomyManager();
-		} );
-		$this->app->singleton( CMSManager::class, function ( $app ) {
-			return new CMSManager();
-		} );
-		$this->app->singleton( PluginManager::class, function ( $app ) {
-			return new PluginManager();
-		} );
-	}
+    /**
+     * Boots the CMS framework and loads database migration files.
+     *
+     * This method is triggered during the Laravel bootstrapping process to initialize
+     * the CMS framework and register migration paths for the system.
+     *
+     * @since 1.0.0
+     *
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     *
+     * @return void
+     */
+    public function boot(): void
+    {
+        $this->loadMigrationsFrom( $this->getMigrationDirectories() );
+        $this->loadViewsFromDirectories( $this->getViewsDirectories() );
+        // Load the main API routes
+        $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
+        $this->publishes( [
+                              __DIR__ . '/../config/cms.php' => config_path( 'cms.php' ),
+                          ], 'cms-config' );
+        // Publish Sanctum's configuration.
+        // This will allow the main application to publish them if needed.
+        $this->publishes( [
+                              __DIR__ . '/../../vendor/laravel/sanctum/config/sanctum.php' => config_path( 'sanctum.php' ),
+                          ], 'sanctum-config' );
 
-	/**
-	 * Boots the CMS framework and loads database migration files.
-	 *
-	 * This method is triggered during the Laravel bootstrapping process to initialize
-	 * the CMS framework and register migration paths for the system.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return void
-	 */
-	public function boot(): void
-	{
-		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
-		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
-		// Load the main API routes
-		$this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
-		$this->publishes( [
-			__DIR__ . '/../config/cms.php' => config_path( 'cms.php' ),
-		], 'cms-config' );
-		// Publish Sanctum's configuration.
-		// This will allow the main application to publish them if needed.
-		$this->publishes( [
-			__DIR__ . '/../../vendor/laravel/sanctum/config/sanctum.php' => config_path( 'sanctum.php' ),
-		], 'sanctum-config' );
+        // Register PWA routes and settings when the CMS Framework boots.
+        $this->registerPwaFeatures();
+        app( AdminPagesManager::class )->registerRoutes();
 
-		// Register PWA routes and settings when the CMS Framework boots.
-		$this->registerPwaFeatures();
-		app( AdminPagesManager::class )->registerRoutes();
-	}
+        // Load the active theme's service provider and its main class.
+        $this->loadActiveTheme();
+    }
 
-	/**
-	 * Returns an array of migration directories to load.
-	 *
-	 * This method is used to allow for customization of the migration directories
-	 * by other modules.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return array List of migration directories.
-	 */
-	public function getMigrationDirectories(): array
-	{
-		$defaultDirectories = [
-			__DIR__ . '/../database/migrations',
-			__DIR__ . '/../../vendor/laravel/sanctum/database/migrations',
-		];
+    /**
+     * Returns an array of migration directories to load.
+     *
+     * This method is used to allow for customization of the migration directories
+     * by other modules.
+     *
+     * @since 1.0.0
+     *
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     *
+     * @return array List of migration directories.
+     */
+    public function getMigrationDirectories(): array
+    {
+        $defaultDirectories = [
+            __DIR__ . '/../database/migrations',
+            __DIR__ . '/../../vendor/laravel/sanctum/database/migrations',
+        ];
 
-		/**
-		 * Loads the migration directories from the modules.
-		 *
-		 * Grabs the migration directories from the modules that have been registered and returns them as an array.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $directories List of directories to load migrations from.
-		 */
-		return Eventy::filter( 'ap.cms.migrations.directories', $defaultDirectories );
-	}
+        /**
+         * Loads the migration directories from the modules.
+         *
+         * Grabs the migration directories from the modules that have been registered and returns them as an array.
+         *
+         * @since 1.0.0
+         *
+         * @param array $directories List of directories to load migrations from.
+         */
+        return Eventy::filter( 'ap.cms.migrations.directories', $defaultDirectories );
+    }
 
-	/**
-	 * Loads views from the specified directories.
-	 *
-	 * This method is used to allow for customization of the view directories
-	 * by other modules.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param array $directories List of directories to load views from.
-	 *
-	 * @return void
-	 */
-	public function loadViewsFromDirectories( array $directories ): void
-	{
-		if ( $directories ) {
-			foreach ( $directories as $directory ) {
-				$this->loadViewsFrom( $directory['path'], $directory['namespace'] );
-			}
-		}
-	}
+    /**
+     * Loads views from the specified directories.
+     *
+     * This method is used to allow for customization of the view directories
+     * by other modules.
+     *
+     * @since 1.0.0
+     *
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     *
+     * @param array $directories List of directories to load views from.
+     *
+     * @return void
+     */
+    public function loadViewsFromDirectories( array $directories ): void
+    {
+        if ( $directories ) {
+            foreach ( $directories as $directory ) {
+                if ( isset( $directory['path'] ) && isset( $directory['namespace'] ) ) {
+                    $this->loadViewsFrom( $directory['path'], $directory['namespace'] );
+                }
+            }
+        }
+    }
 
-	/**
-	 * Returns an array of view directories to load.
-	 *
-	 * This method is used to allow for customization of the view directories
-	 * by other modules.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return array List of view directories.
-	 */
-	public function getViewsDirectories(): array
-	{
-		/**
-		 * Loads the view directories from the modules.
-		 *
-		 * Grabs the view directories from the modules that have been registered and returns them as an array.
-		 * The returned array includes the path and namespace for each view directory.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $directories List of directories to load views from.
-		 * @return array {
-		 *                           List of view directories.
-		 *
-		 * @type string $path        Path to the view directory.
-		 * @type string $namespace   Namespace for the view directory.
-		 *                           }
-		 */
-		return Eventy::filter( 'ap.cms.views.directories', [] );
-	}
+    /**
+     * Returns an array of view directories to load.
+     *
+     * This method is used to allow for customization of the view directories
+     * by other modules.
+     *
+     * @since 1.0.0
+     *
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     *
+     * @return array List of view directories.
+     */
+    public function getViewsDirectories(): array
+    {
+        /**
+         * Loads the view directories from the modules.
+         *
+         * Grabs the view directories from the modules that have been registered and returns them as an array.
+         * The returned array includes the path and namespace for each view directory.
+         *
+         * @since 1.0.0
+         *
+         * @param array $directories List of directories to load views from.
+         * @return array {
+         *                           List of view directories.
+         *
+         * @type string $path        Path to the view directory.
+         * @type string $namespace   Namespace for the view directory.
+         *                           }
+         */
+        return Eventy::filter( 'ap.cms.views.directories', [] );
+    }
 
-	/**
-	 * Registers PWA-related features.
-	 *
-	 * Includes PWA routes and registers default settings.
-	 *
-	 * @since 1.1.0
-	 *
-	 * @return void
-	 */
-	protected function registerPwaFeatures(): void
-	{
-		// Load PWA routes from a dedicated file.
-		$this->loadRoutesFrom( __DIR__ . '/Features/PWA/routes.php' );
+    /**
+     * Registers PWA-related features.
+     *
+     * Includes PWA routes and registers default settings.
+     *
+     * @since 1.1.0
+     *
+     * @return void
+     */
+    protected function registerPwaFeatures(): void
+    {
+        // Load PWA routes from a dedicated file.
+        $this->loadRoutesFrom( __DIR__ . '/Features/PWA/routes.php' );
 
-		// Register default PWA settings.
-		$this->app->make( SettingsManager::class )->registerPwaDefaults();
+        // Register default PWA settings.
+        $this->app->make( SettingsManager::class )->registerPwaDefaults();
 
-		// Load PWA views
-		$this->loadViewsFrom( __DIR__ . '/Features/PWA/resources/views', 'pwa' );
-	}
+        // Load PWA views
+        $this->loadViewsFrom( __DIR__ . '/Features/PWA/resources/views', 'pwa' );
+    }
+
+    /**
+     * Loads the currently active theme's service provider and main Themes class.
+     *
+     * This method attempts to get the active theme from the ThemeManager and
+     * then registers its service provider and instantiates its Themes class
+     * to ensure theme-specific hooks are registered.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    protected function loadActiveTheme(): void
+    {
+        $themeManager    = $this->app->make( ThemeManager::class );
+        $activeThemeName = $themeManager->getActiveTheme();
+
+        if ( null !== $activeThemeName ) {
+            $themeServiceProviderClass = 'App\\Themes\\' . Str::studly( $activeThemeName ) . '\\ThemeServiceProvider';
+            if ( class_exists( $themeServiceProviderClass ) ) {
+                $this->app->register( $themeServiceProviderClass );
+            }
+
+            // Instantiate the theme's main class to register its hooks.
+            $themeManager->loadActiveThemeClass();
+        }
+    }
+
+    /**
+     * Registers a singleton instance of the CMSFramework within the application container.
+     *
+     * This method is called by the Laravel framework during the bootstrapping process to run the CMS framework.
+     *
+     * @since 1.0.0
+     *
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     *
+     * @return void
+     */
+    public function register(): void
+    {
+        $this->mergeConfigFrom(
+            __DIR__ . '/../config/cms.php', 'cms'
+        );
+        $this->app->register( SettingsServiceProvider::class );
+        $this->app->register( UsersServiceProvider::class );
+        $this->app->register( AuthServiceProvider::class );
+        $this->app->register( AuditLogServiceProvider::class );
+        $this->app->register( TwoFactorAuthServiceProvider::class );
+        $this->app->register( MediaServiceProvider::class );
+        $this->app->register( NotificationServiceProvider::class );
+        $this->app->register( AdminPagesServiceProvider::class );
+        $this->app->register( DashboardWidgetsServiceProvider::class );
+        $this->app->singleton( ContentTypeManager::class, function ( $app ) {
+            return new ContentTypeManager();
+        } );
+        $this->app->singleton( TaxonomyManager::class, function ( $app ) {
+            return new TaxonomyManager();
+        } );
+        $this->app->singleton( CMSManager::class, function ( $app ) {
+            return new CMSManager();
+        } );
+        $this->app->singleton( PluginManager::class, function ( $app ) {
+            return new PluginManager();
+        } );
+        // Register the ThemeManager as a singleton.
+        $this->app->singleton( ThemeManager::class, function ( $app ) {
+            return new ThemeManager();
+        } );
+    }
 }
