@@ -22,6 +22,7 @@ use ArtisanPackUI\CMSFramework\Features\Media\MediaServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Notifications\NotificationServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Pages\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
+use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Features\Users\UsersServiceProvider;
 use Illuminate\Support\ServiceProvider;
@@ -104,6 +105,9 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->publishes( [
                               __DIR__ . '/../../vendor/laravel/sanctum/config/sanctum.php' => config_path( 'sanctum.php' ),
                           ], 'sanctum-config' );
+
+        // Register PWA routes and settings when the CMS Framework boots.
+        $this->registerPwaFeatures();
     }
 
     /**
@@ -194,5 +198,26 @@ class CMSFrameworkServiceProvider extends ServiceProvider
          *                           }
          */
         return Eventy::filter( 'ap.cms.views.directories', [] );
+    }
+
+    /**
+     * Registers PWA-related features.
+     *
+     * Includes PWA routes and registers default settings.
+     *
+     * @since 1.1.0
+     *
+     * @return void
+     */
+    protected function registerPwaFeatures(): void
+    {
+        // Load PWA routes from a dedicated file.
+        $this->loadRoutesFrom( __DIR__ . '/Features/PWA/routes.php' );
+
+        // Register default PWA settings.
+        $this->app->make( SettingsManager::class )->registerPwaDefaults();
+
+        // Load PWA views
+        $this->loadViewsFrom( __DIR__ . '/Features/PWA/resources/views', 'pwa' );
     }
 }

@@ -57,3 +57,4 @@ Currently, the framework includes the following modules:
 - **Audit Logging**: Provides functionality for logging authentication events and user activities
 - **Content Types**: Provides functionality for defining and managing different types of content within your CMS
 - **Notifications**: Provides functionality for sending notifications to users and other notifiable entities through various channels
+- **Progressive Web App (PWA)**: Provides functionality for transforming your web application into an app-like experience that can work offline, receive push notifications, and be installed on users' devices

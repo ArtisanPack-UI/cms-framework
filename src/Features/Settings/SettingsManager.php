@@ -74,10 +74,18 @@ class SettingsManager
      */
     protected function loadSettings(): void
     {
-        $configDefaults       = config( 'cms', [] );
-        $dbOverrides          = Cache::remember( $this->cacheKey, $this->cacheTtl, function () {
-            return Setting::all()->keyBy( 'key' )->map->value->toArray();
-        } );
+        $configDefaults = config( 'cms', [] );
+        $dbOverrides = [];
+
+        try {
+            $dbOverrides = Cache::remember( $this->cacheKey, $this->cacheTtl, function () {
+                return Setting::all()->keyBy( 'key' )->map->value->toArray();
+            } );
+        } catch (\Exception $e) {
+            // If the settings table doesn't exist yet, just use the default settings
+            // This can happen during migrations or when running tests
+        }
+
         $this->mergedSettings = array_replace_recursive( $configDefaults, Arr::undot( $dbOverrides ) );
     }
 
@@ -110,6 +118,72 @@ class SettingsManager
     }
 
     /**
+     * Delete a setting
+     *
+     * Deletes a setting from the database and refreshes the cached settings.
+     *
+     * @since 1.0.0
+     * @param string $key The setting key to delete
+     * @return bool|null True if deleted, false if not found, null on error
+     */
+    public function delete( string $key ): ?bool
+    {
+        try {
+            $deleted = Setting::where( 'key', sanitizeText( $key ) )->delete();
+            if ( $deleted ) {
+                $this->refreshSettingsCache();
+            }
+            return $deleted;
+        } catch (\Exception $e) {
+            // If the settings table doesn't exist yet, just return false
+            // This can happen during migrations or when running tests
+            return false;
+        }
+    }
+
+    /**
+     * Refresh settings cache
+     *
+     * Clears the settings cache and forces a reload of the merged settings.
+     *
+     * @since 1.0.0
+     * @return void
+     */
+    public function refreshSettingsCache(): void
+    {
+        try {
+            Cache::forget( $this->cacheKey );
+            $this->loadSettings(); // Reloads merged settings from fresh sources
+        } catch (\Exception $e) {
+            // If the settings table doesn't exist yet, just continue
+            // This can happen during migrations or when running tests
+        }
+    }
+
+    /**
+     * Registers default PWA settings.
+     *
+     * This method should be called during the CMS Framework's boot process
+     * or when a new PWA feature is enabled.
+     *
+     * @since 1.1.0
+     *
+     * @return void
+     */
+    public function registerPwaDefaults(): void
+    {
+        $this->register( 'pwa.enabled', false, 'boolean', 'Enable Progressive Web App features.' );
+        $this->register( 'pwa.name', config( 'app.name' ), 'string', 'The full name of your Progressive Web App.' );
+        $this->register( 'pwa.short_name', config( 'app.name' ), 'string', 'A short name for your PWA, displayed on the user\'s home screen.' );
+        $this->register( 'pwa.description', null, 'string', 'A description of your PWA.' );
+        $this->register( 'pwa.start_url', '/', 'string', 'The URL that loads when your PWA is launched.' );
+        $this->register( 'pwa.display', 'standalone', 'string', 'The preferred display mode for your PWA (e.g., "standalone", "fullscreen").' );
+        $this->register( 'pwa.background_color', '#ffffff', 'string', 'The background color of the splash screen when your PWA is launched.' );
+        $this->register( 'pwa.theme_color', '#ffffff', 'string', 'The theme color for your PWA, affecting the browser\'s UI elements.' );
+        $this->register( 'pwa.icons', [], 'json', 'An array of icon definitions for your PWA.' );
+    }
+
+    /**
      * Register a default setting programmatically
      *
      * Registers a setting with a default value. If the setting already exists
@@ -125,26 +199,36 @@ class SettingsManager
      */
     public function register( string $key, mixed $defaultValue, ?string $type = null, ?string $description = null ): ?Setting
     {
-        // Check if the setting already exists in the database
-        $existingSetting = Setting::where( 'key', sanitizeText( $key ) )->first();
+        try {
+            // Check if the setting already exists in the database
+            $existingSetting = Setting::where( 'key', sanitizeText( $key ) )->first();
 
-        if ( $existingSetting ) {
-            return $existingSetting; // Setting already exists in DB, do not overwrite
+            if ( $existingSetting ) {
+                return $existingSetting; // Setting already exists in DB, do not overwrite
+            }
+
+            // If it doesn't exist, use the set method to store it with the default value
+            // The set method will handle type detection if $type is null
+            $setting = $this->set( $key, $defaultValue, $type );
+
+            // Optionally, if you have a 'description' column in your settings table
+            // and it's not handled by the set() method, you'd add it here:
+            if ( null !== $description && $setting->description !== $description ) {
+                $setting->description = $description;
+                $setting->save();              // Save again if description was updated
+                $this->refreshSettingsCache(); // Re-refresh if description was changed
+            }
+
+            return $setting;
+        } catch (\Exception $e) {
+            // If the settings table doesn't exist yet, just store the setting in memory
+            // This can happen during migrations or when running tests
+            $this->mergedSettings = array_replace_recursive(
+                $this->mergedSettings,
+                Arr::undot([$key => $defaultValue])
+            );
+            return null;
         }
-
-        // If it doesn't exist, use the set method to store it with the default value
-        // The set method will handle type detection if $type is null
-        $setting = $this->set( $key, $defaultValue, $type );
-
-        // Optionally, if you have a 'description' column in your settings table
-        // and it's not handled by the set() method, you'd add it here:
-        if ( null !== $description && $setting->description !== $description ) {
-            $setting->description = $description;
-            $setting->save();              // Save again if description was updated
-            $this->refreshSettingsCache(); // Re-refresh if description was changed
-        }
-
-        return $setting;
     }
 
     /**
@@ -158,9 +242,9 @@ class SettingsManager
      * @param mixed       $value The value to store
      * @param string|null $type  Optional. Explicit type ('string', 'boolean', 'integer', 'json').
      *                           Auto-detected if null. Default null.
-     * @return Setting The setting model instance
+     * @return Setting|null The setting model instance or null if the settings table doesn't exist
      */
-    public function set( string $key, mixed $value, ?string $type = null ): Setting
+    public function set( string $key, mixed $value, ?string $type = null ): ?Setting
     {
         // Determine type if not explicitly provided (same logic as before)
         if ( null === $type ) {
@@ -175,50 +259,28 @@ class SettingsManager
             }
         }
 
-        $setting = Setting::updateOrCreate(
-            [
-                'key' => $key
-            ],
-            [
-                'value' => $value,
-                'type'  => $type,
-            ]
-        );
+        try {
+            $setting = Setting::updateOrCreate(
+                [
+                    'key' => $key
+                ],
+                [
+                    'value' => $value,
+                    'type'  => $type,
+                ]
+            );
 
-        $this->refreshSettingsCache();
-
-        return $setting;
-    }
-
-    /**
-     * Refresh settings cache
-     *
-     * Clears the settings cache and forces a reload of the merged settings.
-     *
-     * @since 1.0.0
-     * @return void
-     */
-    public function refreshSettingsCache(): void
-    {
-        Cache::forget( $this->cacheKey );
-        $this->loadSettings(); // Reloads merged settings from fresh sources
-    }
-
-    /**
-     * Delete a setting
-     *
-     * Deletes a setting from the database and refreshes the cached settings.
-     *
-     * @since 1.0.0
-     * @param string $key The setting key to delete
-     * @return bool|null True if deleted, false if not found, null on error
-     */
-    public function delete( string $key ): ?bool
-    {
-        $deleted = Setting::where( 'key', sanitizeText( $key ) )->delete();
-        if ( $deleted ) {
             $this->refreshSettingsCache();
+
+            return $setting;
+        } catch (\Exception $e) {
+            // If the settings table doesn't exist yet, just store the setting in memory
+            // This can happen during migrations or when running tests
+            $this->mergedSettings = array_replace_recursive(
+                $this->mergedSettings,
+                Arr::undot([$key => $value])
+            );
+            return null;
         }
-        return $deleted;
     }
 }
