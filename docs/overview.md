@@ -49,6 +49,13 @@ To use the framework, you need to:
 2. Register the service provider in your Laravel application
 3. Create and register your own modules
 
+## Implementation Guides
+
+For detailed implementation instructions, refer to the following guides:
+
+- [Custom CMS Implementation](custom-cms-implementation.md): Step-by-step guide on implementing admin pages and dashboard widgets in a custom CMS application
+- [Implementing Dashboard Widgets](implementing-dashboard-widgets.md): Detailed examples of implementing dashboard widgets in a custom CMS application
+
 ## Available Modules
 
 Currently, the framework includes the following modules:
@@ -57,3 +64,5 @@ Currently, the framework includes the following modules:
 - **Audit Logging**: Provides functionality for logging authentication events and user activities
 - **Content Types**: Provides functionality for defining and managing different types of content within your CMS
 - **Notifications**: Provides functionality for sending notifications to users and other notifiable entities through various channels
+- **Admin Menus**: Provides functionality for registering and managing administrative pages and menus within your CMS
+- **Dashboard Widgets**: Provides functionality for creating and managing customizable widgets that can be displayed on dashboard pages
