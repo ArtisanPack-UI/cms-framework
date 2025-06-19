@@ -17,8 +17,10 @@
 namespace ArtisanPackUI\CMSFramework;
 
 // phpcs:disable
+use ArtisanPackUI\CMSFramework\Features\AdminPages\AdminPagesManager;
 use ArtisanPackUI\CMSFramework\Features\ContentTypes\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Features\ContentTypes\TaxonomyManager;
+use ArtisanPackUI\CMSFramework\Features\DashboardWidgets\DashboardWidgetsManager;
 use ArtisanPackUI\CMSFramework\Features\Media\MediaManager;
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
@@ -48,12 +50,14 @@ class CMSManager
 	 * @var array
 	 */
 	protected array $featureManagers = [
-		'settings' => SettingsManager::class,
-		'plugins'  => PluginManager::class,
-		'users'    => UsersManager::class,
-		'media'    => MediaManager::class,
-		'content'  => ContentTypeManager::class,
-		'taxonomy' => TaxonomyManager::class,
+		'settings'         => SettingsManager::class,
+		'plugins'          => PluginManager::class,
+		'users'            => UsersManager::class,
+		'media'            => MediaManager::class,
+		'content'          => ContentTypeManager::class,
+		'taxonomy'         => TaxonomyManager::class,
+		'adminPages'       => AdminPagesManager::class,
+		'dashboardWidgets' => DashboardWidgetsManager::class,
 	];
 
 	/**
