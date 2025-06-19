@@ -4,9 +4,11 @@
  *
  * Handles caching of assets for offline use and other PWA functionalities.
  *
- * @package ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework\PWA
- * @since 1.1.0
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
+ * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Features\PWA
+ * @since      1.1.0
  */
 --}}
 self.addEventListener('install', (event) => {

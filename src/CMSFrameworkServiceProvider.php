@@ -212,12 +212,12 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     protected function registerPwaFeatures(): void
     {
         // Load PWA routes from a dedicated file.
-        $this->loadRoutesFrom( __DIR__ . '/PWA/routes.php' );
+        $this->loadRoutesFrom( __DIR__ . '/Features/PWA/routes.php' );
 
         // Register default PWA settings.
         $this->app->make( SettingsManager::class )->registerPwaDefaults();
 
         // Load PWA views
-        $this->loadViewsFrom( __DIR__ . '/PWA/resources/views', 'pwa' );
+        $this->loadViewsFrom( __DIR__ . '/Features/PWA/resources/views', 'pwa' );
     }
 }

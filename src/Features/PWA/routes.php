@@ -4,18 +4,26 @@
  *
  * This file registers the routes necessary for Progressive Web App features.
  *
- * @since      1.1.0
- * @subpackage ArtisanPackUI\CMSFramework\PWA
+ * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+ *
  * @package    ArtisanPackUI\CMSFramework
+ * @subpackage ArtisanPackUI\CMSFramework\Features\PWA
+ * @since      1.1.0
  */
 
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 use Illuminate\Support\Facades\Route;
 
-/*
+/**
  * Registers the route for the Web App Manifest.
  *
+ * This route returns a JSON response with the PWA manifest configuration.
+ * If the PWA feature is disabled, it returns a 404 response.
+ *
  * @since 1.1.0
+ *
+ * @param SettingsManager $settings The settings manager instance.
+ * @return \Illuminate\Http\JsonResponse The JSON response with the manifest data.
  */
 Route::get( '/manifest.json', function ( SettingsManager $settings ) {
     if ( ! $settings->get( 'pwa.enabled' ) ) {
@@ -36,10 +44,16 @@ Route::get( '/manifest.json', function ( SettingsManager $settings ) {
     return response()->json( $manifest );
 } )->name( 'pwa.manifest' );
 
-/*
+/**
  * Registers the route for the Service Worker.
  *
+ * This route returns the service worker JavaScript file with the appropriate content type.
+ * If the PWA feature is disabled, it returns a 404 response.
+ *
  * @since 1.1.0
+ *
+ * @param SettingsManager $settings The settings manager instance.
+ * @return \Illuminate\Http\Response The response with the service worker JavaScript.
  */
 Route::get( '/service-worker.js', function ( SettingsManager $settings ) {
     if ( ! $settings->get( 'pwa.enabled' ) ) {
