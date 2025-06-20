@@ -55,6 +55,7 @@ For detailed implementation instructions, refer to the following guides:
 
 - [Custom CMS Implementation](custom-cms-implementation.md): Step-by-step guide on implementing admin pages and dashboard widgets in a custom CMS application
 - [Implementing Dashboard Widgets](implementing-dashboard-widgets.md): Detailed examples of implementing dashboard widgets in a custom CMS application
+- [Implementing Themes](implementing-themes.md): Comprehensive guide on implementing and managing themes in your CMS application
 
 ## Available Modules
 
@@ -67,3 +68,5 @@ Currently, the framework includes the following modules:
 - **Progressive Web App (PWA)**: Provides functionality for transforming your web application into an app-like experience that can work offline, receive push notifications, and be installed on users' devices
 - **Admin Menus**: Provides functionality for registering and managing administrative pages and menus within your CMS
 - **Dashboard Widgets**: Provides functionality for creating and managing customizable widgets that can be displayed on dashboard pages
+- **Plugins**: Provides functionality for extending the CMS with additional features through installable plugins
+- **Themes**: Provides functionality for customizing the appearance and functionality of the CMS through installable themes

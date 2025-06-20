@@ -66,4 +66,7 @@ return [
             'content_types' => [ 'post' ], // Applies to 'post' content type by default
         ],
     ],
+    'theme'         => [
+        'active' => env( 'CMS_ACTIVE_THEME', 'default-artisanpack-theme' ), // Default theme name.
+    ],
 ];

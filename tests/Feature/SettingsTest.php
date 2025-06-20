@@ -1,8 +1,28 @@
 <?php
+/**
+ * Tests for the Settings functionality.
+ *
+ * This file contains tests for the SettingsManager class,
+ * verifying that settings can be properly registered, retrieved,
+ * updated, and deleted within the CMS framework.
+ *
+ * @package    ArtisanPackUI\CMSFramework\Tests\Feature
+ * @since      1.0.0
+ */
 
 use ArtisanPackUI\CMSFramework\Models\Setting;
 use ArtisanPackUI\CMSFramework\Features\Settings\SettingsManager;
 
+/**
+ * Tests registering settings.
+ *
+ * Verifies that the SettingsManager can properly register a new setting
+ * with a key, value, type, and description.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can register settings', function () {
     $settingsManager = app(SettingsManager::class);
     $settingsManager->register('test-setting', 'test-value', 'string', 'Test setting description');
@@ -10,6 +30,16 @@ it('can register settings', function () {
     $this->assertEquals('test-value', $settingsManager->get('test-setting'));
 });
 
+/**
+ * Tests setting values for existing settings.
+ *
+ * Verifies that the SettingsManager can properly update the value
+ * of an existing setting and return the Setting model instance.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can set settings', function () {
     $settingsManager = app(SettingsManager::class);
     $settingsManager->register('test-setting', 'test-value', 'string');
@@ -19,6 +49,16 @@ it('can set settings', function () {
     $this->assertEquals('test-value-2', $settingsManager->get('test-setting'));
 });
 
+/**
+ * Tests deleting settings.
+ *
+ * Verifies that the SettingsManager can properly delete an existing setting
+ * and return true on successful deletion.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can delete settings', function () {
     $settingsManager = app(SettingsManager::class);
     $settingsManager->register('test-setting', 'test-value', 'string');
@@ -28,6 +68,16 @@ it('can delete settings', function () {
     $this->assertNull($settingsManager->get('test-setting'));
 });
 
+/**
+ * Tests retrieving all settings.
+ *
+ * Verifies that the SettingsManager can properly retrieve all registered
+ * settings as an associative array keyed by setting key.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can get all settings', function () {
     $settingsManager = app(SettingsManager::class);
     // Create multiple settings
@@ -43,7 +93,16 @@ it('can get all settings', function () {
     $this->assertArrayHasKey('test-setting-2', $settings);
 });
 
-// Test for get method with default value
+/**
+ * Tests retrieving default value for non-existent settings.
+ *
+ * Verifies that the SettingsManager returns the provided default value
+ * when attempting to retrieve a setting that does not exist.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('returns default value when setting does not exist', function () {
     $settingsManager = app(SettingsManager::class);
 
@@ -54,7 +113,16 @@ it('returns default value when setting does not exist', function () {
     $this->assertEquals('default-value', $value);
 });
 
-// Test for set method directly
+/**
+ * Tests setting a value with an explicit type.
+ *
+ * Verifies that the SettingsManager can properly create a new setting
+ * with an explicitly specified type and return the Setting model instance.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can set setting with explicit type', function () {
     $settingsManager = app(SettingsManager::class);
 
@@ -69,7 +137,16 @@ it('can set setting with explicit type', function () {
     $this->assertEquals('string', $setting->type);
 });
 
-// Test for setting boolean values
+/**
+ * Tests setting and retrieving boolean values.
+ *
+ * Verifies that the SettingsManager can properly store boolean values
+ * and retrieve them with the correct type.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can set and retrieve boolean values', function () {
     $settingsManager = app(SettingsManager::class);
 
@@ -83,7 +160,16 @@ it('can set and retrieve boolean values', function () {
     $this->assertEquals('boolean', $setting->type);
 });
 
-// Test for setting integer values
+/**
+ * Tests setting and retrieving integer values.
+ *
+ * Verifies that the SettingsManager can properly store integer values
+ * and retrieve them with the correct type.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can set and retrieve integer values', function () {
     $settingsManager = app(SettingsManager::class);
 
@@ -97,7 +183,16 @@ it('can set and retrieve integer values', function () {
     $this->assertEquals('integer', $setting->type);
 });
 
-// Test for setting array/json values
+/**
+ * Tests setting and retrieving array values as JSON.
+ *
+ * Verifies that the SettingsManager can properly store array values as JSON
+ * and retrieve them as arrays with the correct structure.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('can set and retrieve array values as json', function () {
     $settingsManager = app(SettingsManager::class);
 
@@ -112,7 +207,17 @@ it('can set and retrieve array values as json', function () {
     $this->assertEquals('json', $setting->type);
 });
 
-// Test for registering a setting with the same key
+/**
+ * Tests registering settings with duplicate keys.
+ *
+ * Verifies that the SettingsManager does not create duplicate settings
+ * when registering a setting with a key that already exists, and that
+ * the original value is preserved.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('does not duplicate settings when registering with the same key', function () {
     $settingsManager = app(SettingsManager::class);
 
@@ -135,7 +240,17 @@ it('does not duplicate settings when registering with the same key', function ()
     $this->assertEquals(1, $count);
 });
 
-// Test for refreshing settings cache
+/**
+ * Tests refreshing the settings cache.
+ *
+ * Verifies that the SettingsManager properly refreshes its cache when
+ * the refreshSettingsCache method is called, ensuring that changes made
+ * directly to the database are reflected in subsequent get calls.
+ *
+ * @since 1.0.0
+ *
+ * @return void
+ */
 it('refreshes settings cache when updating settings', function () {
     $settingsManager = app(SettingsManager::class);
 
