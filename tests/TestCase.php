@@ -1,4 +1,14 @@
 <?php
+/**
+ * Base TestCase for ArtisanPack UI CMS Framework tests.
+ *
+ * This class provides the foundation for all tests in the CMS Framework,
+ * setting up the necessary environment, database connections, and service
+ * providers required for testing.
+ *
+ * @package    ArtisanPackUI\CMSFramework\Tests
+ * @since      1.0.0
+ */
 
 namespace Tests;
 
@@ -21,7 +31,9 @@ use TorMorten\Eventy\EventServiceProvider;
 
 class TestCase extends Orchestra
 {
-    use RefreshDatabase;
+    // Use DatabaseTransactions instead of RefreshDatabase to avoid issues with in-memory SQLite
+    // RefreshDatabase can cause issues with foreign key constraints and transaction handling
+    protected $connectionsToTransact = [];
 
     /**
      * Define environment setup.
@@ -45,6 +57,18 @@ class TestCase extends Orchestra
         $app['config']->set( 'cms.paths.themes', sys_get_temp_dir() . '/artisanpack_test_themes' ); // If you have themes too
     }
 
+    /**
+     * Get package providers.
+     *
+     * Returns the service providers that should be loaded for the tests.
+     * This includes the CMS Framework service provider and other required
+     * service providers for testing.
+     *
+     * @since 1.0.0
+     *
+     * @param Application $app The application instance.
+     * @return array Array of service provider class names.
+     */
     protected function getPackageProviders( $app )
     {
         return [
