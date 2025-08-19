@@ -17,14 +17,14 @@
 The current framework lacks proper interface definitions in the `src/Contracts/` directory, leading to tight coupling between components and reduced testability.
 
 **Acceptance Criteria:**
-- [ ] Create interfaces for all major managers and services (UserManager, MediaManager, ContentManager, etc.)
+- [ ] Create interfaces for all major managers and services (UserManager, ContentManager, etc.)
 - [ ] Implement proper dependency injection with contracts
 - [ ] Add interface segregation for better testability and modularity
 - [ ] Update service providers to bind interfaces to implementations
 - [ ] Ensure all major services implement their respective interfaces
 
 **Implementation Details:**
-- Create contracts in `src/Contracts/` for: UserManagerInterface, MediaManagerInterface, ContentManagerInterface, ThemeManagerInterface
+- Create contracts in `src/Contracts/` for: UserManagerInterface, ContentManagerInterface, ThemeManagerInterface
 - Update existing managers to implement these interfaces
 - Modify service providers to register interface bindings
 - Update all dependency injection to use interfaces instead of concrete classes
@@ -47,7 +47,6 @@ Multiple policies have critical security vulnerabilities with overly permissive 
 **Acceptance Criteria:**
 - [ ] Fix UserPolicy::viewAny() and view() methods to implement proper authorization
 - [ ] Fix ContentPolicy::viewAny() and view() methods with context-aware permissions
-- [ ] Fix MediaPolicy::viewAny() and view() methods with proper access control
 - [ ] Implement guest/public access handling for front-end visitors
 - [ ] Add Eventy hooks for customizable access control
 
@@ -77,7 +76,6 @@ public function view(User $user, Content $content): bool
 **Related Files:**
 - `src/Policies/UserPolicy.php`
 - `src/Policies/ContentPolicy.php`
-- `src/Policies/MediaPolicy.php`
 
 ---
 
