@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Media Controller
  *
@@ -7,16 +8,13 @@
  * to perform the core logic.
  *
  * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework\Http\Controllers
  * @since      1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Http\Controllers;
 
-use ArtisanPackUI\CMSFramework\Features\Media\MediaManager;
-use ArtisanPackUI\CMSFramework\Http\Requests\MediaRequest;
+use ArtisanPackUI\MediaLibrary\Features\Media\MediaManager;
+use ArtisanPackUI\MediaLibrary\Http\Requests\MediaRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -35,7 +33,6 @@ class MediaController extends Controller
      * The MediaManager instance.
      *
      * @since 1.0.0
-     * @var MediaManager
      */
     protected MediaManager $mediaManager;
 
@@ -43,9 +40,10 @@ class MediaController extends Controller
      * Constructor.
      *
      * @since 1.0.0
-     * @param MediaManager $mediaManager The media manager instance.
+     *
+     * @param  MediaManager  $mediaManager  The media manager instance.
      */
-    public function __construct( MediaManager $mediaManager )
+    public function __construct(MediaManager $mediaManager)
     {
         $this->mediaManager = $mediaManager;
     }
@@ -54,15 +52,15 @@ class MediaController extends Controller
      * Display a listing of the media.
      *
      * @since 1.0.0
-     * @param Request $request The incoming request.
-     * @return JsonResponse
+     *
+     * @param  Request  $request  The incoming request.
      */
-    public function index( Request $request ): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input( 'per_page', 15 );
-        $media   = $this->mediaManager->all( $perPage );
+        $perPage = $request->input('per_page', 15);
+        $media = $this->mediaManager->all($perPage);
 
-        return response()->json( [ 'data' => $media ] );
+        return response()->json(['data' => $media]);
     }
 
     /**
@@ -72,18 +70,18 @@ class MediaController extends Controller
      * file storage, database entry, and association with the authenticated user.
      *
      * @since 1.0.0
-     * @param MediaRequest $request The validated form request.
-     * @return JsonResponse
+     *
+     * @param  MediaRequest  $request  The validated form request.
      */
-    public function store( MediaRequest $request ): JsonResponse
+    public function store(MediaRequest $request): JsonResponse
     {
-        $file         = $request->file( 'file' );
-        $altText      = $request->input( 'alt_text' );
-        $caption      = $request->input( 'caption' ); // <-- Added caption
-        $isDecorative = $request->boolean( 'is_decorative' );
-        $metadata     = $request->input( 'metadata', [] );
-        $categories   = $request->input( 'media_categories', [] );
-        $tags         = $request->input( 'media_tags', [] );
+        $file = $request->file('file');
+        $altText = $request->input('alt_text');
+        $caption = $request->input('caption'); // <-- Added caption
+        $isDecorative = $request->boolean('is_decorative');
+        $metadata = $request->input('metadata', []);
+        $categories = $request->input('media_categories', []);
+        $tags = $request->input('media_tags', []);
 
         $media = $this->mediaManager->upload(
             $file,
@@ -93,36 +91,36 @@ class MediaController extends Controller
             $metadata
         );
 
-        if ( ! $media ) {
-            return response()->json( [ 'message' => 'Media upload failed.' ], 500 );
+        if (! $media) {
+            return response()->json(['message' => 'Media upload failed.'], 500);
         }
 
-        if ( ! empty( $categories ) ) {
-            $media->mediaCategories()->sync( $categories );
+        if (! empty($categories)) {
+            $media->mediaCategories()->sync($categories);
         }
-        if ( ! empty( $tags ) ) {
-            $media->mediaTags()->sync( $tags );
+        if (! empty($tags)) {
+            $media->mediaTags()->sync($tags);
         }
 
-        return response()->json( [ 'message' => 'Media uploaded successfully.', 'data' => $media ], 201 );
+        return response()->json(['message' => 'Media uploaded successfully.', 'data' => $media], 201);
     }
 
     /**
      * Display the specified media item.
      *
      * @since 1.0.0
-     * @param int $mediaId The ID of the media item.
-     * @return JsonResponse
+     *
+     * @param  int  $mediaId  The ID of the media item.
      */
-    public function show( int $mediaId ): JsonResponse
+    public function show(int $mediaId): JsonResponse
     {
-        $media = $this->mediaManager->get( $mediaId );
+        $media = $this->mediaManager->get($mediaId);
 
-        if ( ! $media ) {
-            return response()->json( [ 'message' => 'Media not found.' ], 404 );
+        if (! $media) {
+            return response()->json(['message' => 'Media not found.'], 404);
         }
 
-        return response()->json( [ 'data' => $media ] );
+        return response()->json(['data' => $media]);
     }
 
     /**
@@ -132,50 +130,50 @@ class MediaController extends Controller
      * updating media attributes and relationships.
      *
      * @since 1.0.0
-     * @param int          $mediaId The ID of the media item to update.
-     * @param MediaRequest $request The validated form request.
-     * @return JsonResponse
+     *
+     * @param  int  $mediaId  The ID of the media item to update.
+     * @param  MediaRequest  $request  The validated form request.
      */
-    public function update( MediaRequest $request, int $mediaId ): JsonResponse
+    public function update(MediaRequest $request, int $mediaId): JsonResponse
     {
         $updateData = $request->validated();
-        $categories = $request->input( 'media_categories', [] );
-        $tags       = $request->input( 'media_tags', [] );
+        $categories = $request->input('media_categories', []);
+        $tags = $request->input('media_tags', []);
 
-        $media = $this->mediaManager->update( $mediaId, $updateData );
+        $media = $this->mediaManager->update($mediaId, $updateData);
 
-        if ( ! $media ) {
-            return response()->json( [ 'message' => 'Media update failed or media not found.' ], 500 );
+        if (! $media) {
+            return response()->json(['message' => 'Media update failed or media not found.'], 500);
         }
 
-        if ( $request->has( 'media_categories' ) ) {
-            $media->mediaCategories()->sync( $categories );
+        if ($request->has('media_categories')) {
+            $media->mediaCategories()->sync($categories);
         }
-        if ( $request->has( 'media_tags' ) ) {
-            $media->mediaTags()->sync( $tags );
+        if ($request->has('media_tags')) {
+            $media->mediaTags()->sync($tags);
         }
 
-        return response()->json( [ 'message' => 'Media updated successfully.', 'data' => $media ] );
+        return response()->json(['message' => 'Media updated successfully.', 'data' => $media]);
     }
 
     /**
      * Remove the specified media item from storage.
      *
      * @since 1.0.0
-     * @param int $mediaId The ID of the media item to delete.
-     * @return JsonResponse
+     *
+     * @param  int  $mediaId  The ID of the media item to delete.
      */
-    public function destroy( int $mediaId ): JsonResponse
+    public function destroy(int $mediaId): JsonResponse
     {
-        $media = $this->mediaManager->get( $mediaId );
-        if ( ! $media || $media->user_id !== Auth::id() ) {
-            return response()->json( [ 'message' => 'Unauthorized to delete this media or media not found.' ], 403 );
+        $media = $this->mediaManager->get($mediaId);
+        if (! $media || $media->user_id !== Auth::id()) {
+            return response()->json(['message' => 'Unauthorized to delete this media or media not found.'], 403);
         }
 
-        if ( $this->mediaManager->delete( $mediaId ) ) {
-            return response()->json( [ 'message' => 'Media deleted successfully.' ], 204 );
+        if ($this->mediaManager->delete($mediaId)) {
+            return response()->json(['message' => 'Media deleted successfully.'], 204);
         }
 
-        return response()->json( [ 'message' => 'Media deletion failed.' ], 500 );
+        return response()->json(['message' => 'Media deletion failed.'], 500);
     }
 }
