@@ -290,14 +290,102 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->bind(UserManagerInterface::class, UsersManager::class);
         $this->app->bind(MediaManagerInterface::class, MediaManager::class);
 
-        // Register error handling commands
+        // Register configuration validation services
+        $this->registerConfigurationValidationServices();
+
+        // Register console commands
         if ($this->app->runningInConsole()) {
             $this->commands([
+                // Error handling and API documentation commands
                 \ArtisanPackUI\CMSFramework\Console\Commands\ErrorLogViewCommand::class,
                 \ArtisanPackUI\CMSFramework\Console\Commands\ErrorAnalysisCommand::class,
                 \ArtisanPackUI\CMSFramework\Console\Commands\ErrorLogCleanupCommand::class,
                 \ArtisanPackUI\CMSFramework\Console\Commands\ErrorTestingCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\GenerateApiDocsCommand::class,
+                
+                // User management commands
+                \ArtisanPackUI\CMSFramework\Console\Commands\UserCreateCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\UserRoleAssignCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\UserListCommand::class,
+                
+                // Content management commands
+                \ArtisanPackUI\CMSFramework\Console\Commands\ContentCreateCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\ContentPublishCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\ContentCleanupCommand::class,
+                
+                // Theme/Plugin scaffolding commands
+                \ArtisanPackUI\CMSFramework\Console\Commands\ThemeScaffoldCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\PluginScaffoldCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\ComponentScaffoldCommand::class,
+                
+                // Database seeding commands
+                \ArtisanPackUI\CMSFramework\Console\Commands\CmsSeedCommand::class,
+                
+                // Configuration validation commands
+                \ArtisanPackUI\CMSFramework\Features\Configuration\Commands\ConfigTestCommand::class,
+                
+                // Cache management commands (existing)
+                \ArtisanPackUI\CMSFramework\Console\Commands\CacheClearCommand::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\CacheWarmCommand::class,
+                
+                // Performance and security testing commands (existing)
+                \ArtisanPackUI\CMSFramework\Console\Commands\RunPerformanceTests::class,
+                \ArtisanPackUI\CMSFramework\Console\Commands\RunSecurityTests::class,
             ]);
         }
+    }
+    
+    /**
+     * Register configuration validation services
+     */
+    protected function registerConfigurationValidationServices(): void
+    {
+        // Register ConfigurationValidator as singleton
+        $this->app->singleton(
+            \ArtisanPackUI\CMSFramework\Features\Configuration\Validation\ConfigurationValidator::class,
+            function ($app) {
+                return new \ArtisanPackUI\CMSFramework\Features\Configuration\Validation\ConfigurationValidator();
+            }
+        );
+        
+        // Register RuntimeConfigurationValidator as singleton
+        $this->app->singleton(
+            \ArtisanPackUI\CMSFramework\Features\Configuration\Runtime\RuntimeConfigurationValidator::class,
+            function ($app) {
+                $validator = $app->make(\ArtisanPackUI\CMSFramework\Features\Configuration\Validation\ConfigurationValidator::class);
+                return new \ArtisanPackUI\CMSFramework\Features\Configuration\Runtime\RuntimeConfigurationValidator($validator);
+            }
+        );
+        
+        // Register ConfigurationMigrator as singleton
+        $this->app->singleton(
+            \ArtisanPackUI\CMSFramework\Features\Configuration\Migrations\ConfigurationMigrator::class,
+            function ($app) {
+                return new \ArtisanPackUI\CMSFramework\Features\Configuration\Migrations\ConfigurationMigrator();
+            }
+        );
+        
+        // Register ConfigurationDocumentationGenerator as singleton
+        $this->app->singleton(
+            \ArtisanPackUI\CMSFramework\Features\Configuration\Documentation\ConfigurationDocumentationGenerator::class,
+            function ($app) {
+                return new \ArtisanPackUI\CMSFramework\Features\Configuration\Documentation\ConfigurationDocumentationGenerator();
+            }
+        );
+        
+        // Set up runtime validation bootstrap hook
+        $this->app->afterResolving('config', function ($config, $app) {
+            if (config('cms.runtime_validation.bootstrap_validation', true)) {
+                try {
+                    $runtimeValidator = $app->make(\ArtisanPackUI\CMSFramework\Features\Configuration\Runtime\RuntimeConfigurationValidator::class);
+                    $runtimeValidator->validateOnBootstrap();
+                } catch (\Exception $e) {
+                    // Log the error but don't break the application
+                    if ($app->bound('log')) {
+                        $app->make('log')->error('Configuration validation bootstrap failed: ' . $e->getMessage());
+                    }
+                }
+            }
+        });
     }
 }
