@@ -47,7 +47,11 @@
     "artisanpack-ui/accessibility": "@dev",
     "artisanpack-ui/security": "@dev",
     "artisanpack-ui/code-style": "^1.0.3",
-    "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+    "darkaonline/l5-swagger": "^9.0",
+    "phpbench/phpbench": "^1.3",
+    "spatie/laravel-ray": "^1.36",
+    "symfony/stopwatch": "^7.0"
   },
   "config": {
     "allow-plugins": {
