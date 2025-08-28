@@ -1,6 +1,11 @@
 # ArtisanPack UI CMS Framework
 
-A Laravel package that adds back end support for building a CMS with any front end framework. This package provides a comprehensive set of features for content management, user management, authentication, and more.
+[![Latest Version on Packagist](https://img.shields.io/packagist/v/artisanpack-ui/cms-framework.svg?style=flat-square)](https://packagist.org/packages/artisanpack-ui/cms-framework)
+[![GitHub Tests Action Status](https://img.shields.io/github/workflow/status/artisanpack-ui/cms-framework/run-tests?label=tests)](https://github.com/artisanpack-ui/cms-framework/actions?query=workflow%3Arun-tests+branch%3Amain)
+[![GitHub Code Style Action Status](https://img.shields.io/github/workflow/status/artisanpack-ui/cms-framework/Check%20&%20fix%20styling?label=code%20style)](https://github.com/artisanpack-ui/cms-framework/actions?query=workflow%3A"Check+%26+fix+styling"+branch%3Amain)
+[![Total Downloads](https://img.shields.io/packagist/dt/artisanpack-ui/cms-framework.svg?style=flat-square)](https://packagist.org/packages/artisanpack-ui/cms-framework)
+
+A comprehensive Laravel package that provides back-end support for building a CMS with any front-end framework. This package offers a complete set of features for content management, user management, authentication, and more.
 
 ## Features
 
@@ -13,7 +18,13 @@ A Laravel package that adds back end support for building a CMS with any front e
 - **PWA Support**: Progressive Web App features
 - **Audit Logging**: Track changes and user actions
 
-## Installation
+## Requirements
+
+- PHP 8.2 or higher
+- Laravel 12.0 or higher
+- Laravel Sanctum 4.1 or higher
+
+## Quick Installation
 
 You can install the CMS Framework package by running the following composer command:
 
@@ -33,7 +44,20 @@ Run the migrations to set up the database tables:
 php artisan migrate
 ```
 
-## Usage
+## Documentation
+
+📚 **[Complete Documentation](docs/)**
+
+- **[Installation Guide](docs/installation.md)** - Detailed installation and setup instructions
+- **[Configuration](docs/configuration.md)** - Configuration options and environment setup
+- **[Usage Guide](docs/usage.md)** - Comprehensive usage examples and tutorials
+- **[API Documentation](docs/api.md)** - Complete REST API reference
+- **[Migration Guide](docs/migration.md)** - Migrating from other CMS frameworks
+- **[Testing](docs/testing.md)** - Testing strategies and examples
+- **[Performance & Troubleshooting](docs/performance.md)** - Optimization and common issues
+- **[Contributing](docs/contributing.md)** - Development and contribution guidelines
+
+## Quick Start
 
 ### Content Types
 
@@ -101,5 +125,26 @@ Eventy::addAction('ap.cms.after_content_save', function($content) {
 
 ## Contributing
 
-As an open source project, this package is open to contributions from anyone. Please [read through the contributing
-guidelines](CONTRIBUTING.md) to learn more about how you can contribute to this project.
+We welcome contributions! Please see **[Contributing Guide](docs/contributing.md)** for details on:
+
+- Development setup
+- Code style guidelines
+- Testing requirements
+- Submission process
+
+## Security
+
+If you discover a security vulnerability, please send an email to security@artisanpack.com. All security vulnerabilities will be promptly addressed.
+
+## Credits
+
+- [Jacob Martella](https://github.com/jacobmartella)
+- [All Contributors](../../contributors)
+
+## License
+
+The MIT License (MIT). Please see [License File](LICENSE.md) for more information.
+
+## Changelog
+
+Please see **[CHANGELOG.md](CHANGELOG.md)** for more information on what has changed recently.
