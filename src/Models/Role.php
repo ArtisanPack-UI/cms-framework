@@ -16,6 +16,7 @@ use ArtisanPackUI\Database\factories\RoleFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use TorMorten\Eventy\Facades\Eventy;
 
 /**
  * Class for the Role model.
@@ -92,6 +93,19 @@ class Role extends Model
      */
     public function addCapability(string $capability): bool
     {
+        /**
+         * Filters a capability before it's added to a role.
+         *
+         * This hook allows for modification or validation of the capability
+         * before it's added to the role's capabilities array.
+         *
+         * @since 1.0.0
+         *
+         * @param  string  $capability  The capability being added.
+         * @param  Role  $role  The role model instance.
+         */
+        $capability = Eventy::filter('ap.cms.roles.capability_adding', $capability, $this);
+
         $capabilities = $this->capabilities ?? [];
         if (! $this->hasCapability($capability)) {
             $capabilities[] = $capability;
@@ -101,6 +115,16 @@ class Role extends Model
             if ($saved) {
                 // Invalidate all cached capabilities for this role
                 $this->getCacheService()->flushByTags(['roles', 'permissions']);
+
+                /**
+                 * Fires after a capability has been successfully added to a role.
+                 *
+                 * @since 1.0.0
+                 *
+                 * @param  string  $capability  The capability that was added.
+                 * @param  Role  $role  The role model instance.
+                 */
+                Eventy::action('ap.cms.roles.capability_added', $capability, $this);
             }
 
             return $saved;
@@ -141,7 +165,21 @@ class Role extends Model
                     $capabilities = unserialize($capabilities);
                 }
 
-                return in_array($capability, $capabilities ?? [], true);
+                $hasCapability = in_array($capability, $capabilities ?? [], true);
+
+                /**
+                 * Filters whether a role has a specific capability.
+                 *
+                 * This hook allows for custom logic to determine if a role has a capability,
+                 * bypassing or modifying the default capability check if necessary.
+                 *
+                 * @since 1.0.0
+                 *
+                 * @param  bool  $hasCapability  Whether the role has the capability.
+                 * @param  string  $capability  The capability being checked.
+                 * @param  Role  $role  The role model instance.
+                 */
+                return Eventy::filter('ap.cms.roles.has_capability', $hasCapability, $capability, $this);
             },
             $cacheParams
         );
@@ -157,6 +195,27 @@ class Role extends Model
      */
     public function removeCapability(string $capability): bool
     {
+        /**
+         * Filters a capability before it's removed from a role.
+         *
+         * This hook allows for prevention of capability removal or modification
+         * of the capability being removed. Return false to prevent removal.
+         *
+         * @since 1.0.0
+         *
+         * @param  string|false  $capability  The capability being removed, or false to prevent removal.
+         * @param  Role  $role  The role model instance.
+         */
+        $filteredCapability = Eventy::filter('ap.cms.roles.capability_removing', $capability, $this);
+
+        // If filter returns false, prevent removal
+        if ($filteredCapability === false) {
+            return false;
+        }
+
+        // Use the filtered capability (in case it was modified)
+        $capability = $filteredCapability;
+
         $capabilities = $this->capabilities ?? [];
         if ($this->hasCapability($capability)) {
             $this->capabilities = array_values(array_diff($capabilities, [$capability]));
@@ -165,6 +224,16 @@ class Role extends Model
             if ($saved) {
                 // Invalidate all cached capabilities for this role
                 $this->getCacheService()->flushByTags(['roles', 'permissions']);
+
+                /**
+                 * Fires after a capability has been successfully removed from a role.
+                 *
+                 * @since 1.0.0
+                 *
+                 * @param  string  $capability  The capability that was removed.
+                 * @param  Role  $role  The role model instance.
+                 */
+                Eventy::action('ap.cms.roles.capability_removed', $capability, $this);
             }
 
             return $saved;

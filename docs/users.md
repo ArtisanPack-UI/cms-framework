@@ -790,6 +790,14 @@ $usersManager->deleteUserSetting($user, 'theme');
   - **@param** string $key The setting key that was deleted.
   - **@param** User $user The user model instance.
 
+- `ap.cms.roles.capability_added`: Fires after a capability has been successfully added to a role.
+  - **@param** string $capability The capability that was added.
+  - **@param** Role $role The role model instance.
+
+- `ap.cms.roles.capability_removed`: Fires after a capability has been successfully removed from a role.
+  - **@param** string $capability The capability that was removed.
+  - **@param** Role $role The role model instance.
+
 ### Filters
 
 - `ap.cms.users.all`: Filters the collection of all users.
@@ -815,3 +823,16 @@ $usersManager->deleteUserSetting($user, 'theme');
   - **@param** mixed $value The setting value.
   - **@param** string $key The setting key.
   - **@param** User $user The user model instance.
+
+- `ap.cms.roles.capability_adding`: Filters a capability before it's added to a role.
+  - **@param** string $capability The capability being added.
+  - **@param** Role $role The role model instance.
+
+- `ap.cms.roles.has_capability`: Filters whether a role has a specific capability.
+  - **@param** bool $hasCapability Whether the role has the capability.
+  - **@param** string $capability The capability being checked.
+  - **@param** Role $role The role model instance.
+
+- `ap.cms.roles.capability_removing`: Filters a capability before it's removed from a role.
+  - **@param** string|false $capability The capability being removed, or false to prevent removal.
+  - **@param** Role $role The role model instance.

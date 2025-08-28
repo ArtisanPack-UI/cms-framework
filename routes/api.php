@@ -11,6 +11,7 @@ use ArtisanPackUI\CMSFramework\Http\Controllers\SettingController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\TaxonomyController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\TermController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\UserController;
+use ArtisanPackUI\CMSFramework\Http\Controllers\SearchController;
 use ArtisanPackUI\CMSFramework\Models\Plugin;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -35,6 +36,14 @@ Route::middleware(['api', 'cms.rate_limit.general'])->prefix('api/cms')->group(f
     Route::get('plugins', function () {
         return response()->json(Plugin::all());
     });
+
+    // Search endpoints
+    Route::prefix('search')->controller(SearchController::class)->group(function () {
+        Route::get('/', 'search')->name('search');
+        Route::get('/facets', 'facets')->name('search.facets');
+        Route::get('/suggestions', 'suggestions')->name('search.suggestions');
+        Route::get('/status', 'status')->name('search.status');
+    });
 });
 
 // Administrative endpoints with admin rate limiting (30 req/min)
@@ -48,6 +57,9 @@ Route::middleware(['api', 'cms.rate_limit.admin'])->prefix('api/cms')->group(fun
 
     // Content type management
     Route::apiResource('content-types', ContentTypeController::class);
+
+    // Search analytics (admin only)
+    Route::get('search/analytics', [SearchController::class, 'analytics'])->name('search.analytics');
 
     // Plugin management (non-upload operations)
     Route::post('plugins/install-from-url', function (Request $request, PluginManager $pluginManager) {
