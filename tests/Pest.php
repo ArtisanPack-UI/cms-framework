@@ -12,7 +12,7 @@
 */
 
 pest()->extend( Tests\TestCase::class )
-      ->in( 'Unit', 'Feature' );
+      ->in( 'Unit', 'Feature', 'Security' );
 
 /*
 |--------------------------------------------------------------------------

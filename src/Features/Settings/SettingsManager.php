@@ -1,19 +1,17 @@
 <?php
+
 /**
  * Settings Manager
  *
  * Manages CRUD operations and event filters for application settings.
  *
  * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework\Features\Settings
  * @since      1.0.0
- *
  */
 
 namespace ArtisanPackUI\CMSFramework\Features\Settings;
 
+use ArtisanPackUI\CMSFramework\Contracts\SettingsManagerInterface;
 use ArtisanPackUI\CMSFramework\Models\Setting;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
@@ -26,13 +24,12 @@ use Illuminate\Support\Facades\Cache;
  *
  * @since 1.0.0
  */
-class SettingsManager
+class SettingsManager implements SettingsManagerInterface
 {
     /**
      * Merged settings from config and database
      *
      * @since 1.0.0
-     * @var array
      */
     protected array $mergedSettings = [];
 
@@ -40,7 +37,6 @@ class SettingsManager
      * Cache key for storing settings
      *
      * @since 1.0.0
-     * @var string
      */
     protected string $cacheKey = 'cms.settings.resolved';
 
@@ -48,7 +44,6 @@ class SettingsManager
      * Cache time-to-live in minutes (60 * 24 = 1 day)
      *
      * @since 1.0.0
-     * @var int
      */
     protected int $cacheTtl = 60 * 24;
 
@@ -59,7 +54,7 @@ class SettingsManager
      *
      * @since 1.0.0
      */
-    public function __CONSTRUCT()
+    public function __construct()
     {
         $this->loadSettings();
     }
@@ -70,23 +65,22 @@ class SettingsManager
      * Merges default settings from config with overrides from database.
      *
      * @since 1.0.0
-     * @return void
      */
-    protected function loadSettings(): void
+    public function loadSettings(): void
     {
-        $configDefaults = config( 'cms', [] );
+        $configDefaults = config('cms', []);
         $dbOverrides = [];
 
         try {
-            $dbOverrides = Cache::remember( $this->cacheKey, $this->cacheTtl, function () {
-                return Setting::all()->keyBy( 'key' )->map->value->toArray();
-            } );
+            $dbOverrides = Cache::remember($this->cacheKey, $this->cacheTtl, function () {
+                return Setting::all()->keyBy('key')->map->value->toArray();
+            });
         } catch (\Exception $e) {
             // If the settings table doesn't exist yet, just use the default settings
             // This can happen during migrations or when running tests
         }
 
-        $this->mergedSettings = array_replace_recursive( $configDefaults, Arr::undot( $dbOverrides ) );
+        $this->mergedSettings = array_replace_recursive($configDefaults, Arr::undot($dbOverrides));
     }
 
     /**
@@ -95,6 +89,7 @@ class SettingsManager
      * Returns all settings merged from config and database.
      *
      * @since 1.0.0
+     *
      * @return array Array of all settings
      */
     public function all(): array
@@ -108,13 +103,14 @@ class SettingsManager
      * Retrieves a setting value from the resolved configuration.
      *
      * @since 1.0.0
-     * @param string $key     The setting key to retrieve
-     * @param mixed  $default Default value if setting doesn't exist
+     *
+     * @param  string  $key  The setting key to retrieve
+     * @param  mixed  $default  Default value if setting doesn't exist
      * @return mixed The setting value or default if not found
      */
-    public function get( string $key, mixed $default = null ): mixed
+    public function get(string $key, mixed $default = null): mixed
     {
-        return Arr::get( $this->mergedSettings, $key, $default );
+        return Arr::get($this->mergedSettings, $key, $default);
     }
 
     /**
@@ -123,16 +119,18 @@ class SettingsManager
      * Deletes a setting from the database and refreshes the cached settings.
      *
      * @since 1.0.0
-     * @param string $key The setting key to delete
+     *
+     * @param  string  $key  The setting key to delete
      * @return bool|null True if deleted, false if not found, null on error
      */
-    public function delete( string $key ): ?bool
+    public function delete(string $key): ?bool
     {
         try {
-            $deleted = Setting::where( 'key', sanitizeText( $key ) )->delete();
-            if ( $deleted ) {
+            $deleted = Setting::where('key', sanitizeText($key))->delete();
+            if ($deleted) {
                 $this->refreshSettingsCache();
             }
+
             return $deleted;
         } catch (\Exception $e) {
             // If the settings table doesn't exist yet, just return false
@@ -147,12 +145,11 @@ class SettingsManager
      * Clears the settings cache and forces a reload of the merged settings.
      *
      * @since 1.0.0
-     * @return void
      */
     public function refreshSettingsCache(): void
     {
         try {
-            Cache::forget( $this->cacheKey );
+            Cache::forget($this->cacheKey);
             $this->loadSettings(); // Reloads merged settings from fresh sources
         } catch (\Exception $e) {
             // If the settings table doesn't exist yet, just continue
@@ -167,20 +164,18 @@ class SettingsManager
      * or when a new PWA feature is enabled.
      *
      * @since 1.1.0
-     *
-     * @return void
      */
     public function registerPwaDefaults(): void
     {
-        $this->register( 'pwa.enabled', false, 'boolean', 'Enable Progressive Web App features.' );
-        $this->register( 'pwa.name', config( 'app.name' ), 'string', 'The full name of your Progressive Web App.' );
-        $this->register( 'pwa.short_name', config( 'app.name' ), 'string', 'A short name for your PWA, displayed on the user\'s home screen.' );
-        $this->register( 'pwa.description', null, 'string', 'A description of your PWA.' );
-        $this->register( 'pwa.start_url', '/', 'string', 'The URL that loads when your PWA is launched.' );
-        $this->register( 'pwa.display', 'standalone', 'string', 'The preferred display mode for your PWA (e.g., "standalone", "fullscreen").' );
-        $this->register( 'pwa.background_color', '#ffffff', 'string', 'The background color of the splash screen when your PWA is launched.' );
-        $this->register( 'pwa.theme_color', '#ffffff', 'string', 'The theme color for your PWA, affecting the browser\'s UI elements.' );
-        $this->register( 'pwa.icons', [], 'json', 'An array of icon definitions for your PWA.' );
+        $this->register('pwa.enabled', false, 'boolean', 'Enable Progressive Web App features.');
+        $this->register('pwa.name', config('app.name'), 'string', 'The full name of your Progressive Web App.');
+        $this->register('pwa.short_name', config('app.name'), 'string', 'A short name for your PWA, displayed on the user\'s home screen.');
+        $this->register('pwa.description', null, 'string', 'A description of your PWA.');
+        $this->register('pwa.start_url', '/', 'string', 'The URL that loads when your PWA is launched.');
+        $this->register('pwa.display', 'standalone', 'string', 'The preferred display mode for your PWA (e.g., "standalone", "fullscreen").');
+        $this->register('pwa.background_color', '#ffffff', 'string', 'The background color of the splash screen when your PWA is launched.');
+        $this->register('pwa.theme_color', '#ffffff', 'string', 'The theme color for your PWA, affecting the browser\'s UI elements.');
+        $this->register('pwa.icons', [], 'json', 'An array of icon definitions for your PWA.');
     }
 
     /**
@@ -191,29 +186,30 @@ class SettingsManager
      * modules/plugins to set their initial defaults.
      *
      * @since 1.0.0
-     * @param string      $key          The setting key
-     * @param mixed       $defaultValue The default value for the setting
-     * @param string|null $type         Optional. Explicit type of the setting. Default null.
-     * @param string|null $description  Optional. A description for the setting (useful for UI). Default null.
+     *
+     * @param  string  $key  The setting key
+     * @param  mixed  $defaultValue  The default value for the setting
+     * @param  string|null  $type  Optional. Explicit type of the setting. Default null.
+     * @param  string|null  $description  Optional. A description for the setting (useful for UI). Default null.
      * @return Setting|null The created setting model or null if already exists
      */
-    public function register( string $key, mixed $defaultValue, ?string $type = null, ?string $description = null ): ?Setting
+    public function register(string $key, mixed $defaultValue, ?string $type = null, ?string $description = null): ?Setting
     {
         try {
             // Check if the setting already exists in the database
-            $existingSetting = Setting::where( 'key', sanitizeText( $key ) )->first();
+            $existingSetting = Setting::where('key', sanitizeText($key))->first();
 
-            if ( $existingSetting ) {
+            if ($existingSetting) {
                 return $existingSetting; // Setting already exists in DB, do not overwrite
             }
 
             // If it doesn't exist, use the set method to store it with the default value
             // The set method will handle type detection if $type is null
-            $setting = $this->set( $key, $defaultValue, $type );
+            $setting = $this->set($key, $defaultValue, $type);
 
             // Optionally, if you have a 'description' column in your settings table
             // and it's not handled by the set() method, you'd add it here:
-            if ( null !== $description && $setting->description !== $description ) {
+            if ($description !== null && $setting->description !== $description) {
                 $setting->description = $description;
                 $setting->save();              // Save again if description was updated
                 $this->refreshSettingsCache(); // Re-refresh if description was changed
@@ -227,6 +223,7 @@ class SettingsManager
                 $this->mergedSettings,
                 Arr::undot([$key => $defaultValue])
             );
+
             return null;
         }
     }
@@ -238,21 +235,22 @@ class SettingsManager
      * This method is used for user-initiated changes, always writing to DB.
      *
      * @since 1.0.0
-     * @param string      $key   The setting key (dot-notation supported)
-     * @param mixed       $value The value to store
-     * @param string|null $type  Optional. Explicit type ('string', 'boolean', 'integer', 'json').
-     *                           Auto-detected if null. Default null.
+     *
+     * @param  string  $key  The setting key (dot-notation supported)
+     * @param  mixed  $value  The value to store
+     * @param  string|null  $type  Optional. Explicit type ('string', 'boolean', 'integer', 'json').
+     *                             Auto-detected if null. Default null.
      * @return Setting|null The setting model instance or null if the settings table doesn't exist
      */
-    public function set( string $key, mixed $value, ?string $type = null ): ?Setting
+    public function set(string $key, mixed $value, ?string $type = null): ?Setting
     {
         // Determine type if not explicitly provided (same logic as before)
-        if ( null === $type ) {
-            if ( is_bool( $value ) ) {
+        if ($type === null) {
+            if (is_bool($value)) {
                 $type = 'boolean';
-            } else if ( is_int( $value ) ) {
+            } elseif (is_int($value)) {
                 $type = 'integer';
-            } else if ( is_array( $value ) || is_object( $value ) ) {
+            } elseif (is_array($value) || is_object($value)) {
                 $type = 'json';
             } else {
                 $type = 'string';
@@ -262,11 +260,11 @@ class SettingsManager
         try {
             $setting = Setting::updateOrCreate(
                 [
-                    'key' => $key
+                    'key' => $key,
                 ],
                 [
                     'value' => $value,
-                    'type'  => $type,
+                    'type' => $type,
                 ]
             );
 
@@ -280,6 +278,7 @@ class SettingsManager
                 $this->mergedSettings,
                 Arr::undot([$key => $value])
             );
+
             return null;
         }
     }

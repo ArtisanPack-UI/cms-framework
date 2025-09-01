@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Taxonomy Manager
  *
@@ -7,14 +8,12 @@
  * and dynamically created user-defined taxonomies.
  *
  * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework\Features\ContentTypes
  * @since      1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Features\ContentTypes;
 
+use ArtisanPackUI\CMSFramework\Contracts\TaxonomyManagerInterface;
 use ArtisanPackUI\CMSFramework\Models\Taxonomy;
 use Illuminate\Support\Facades\Cache;
 
@@ -28,13 +27,12 @@ use Illuminate\Support\Facades\Cache;
  *
  * @since      1.0.0
  */
-class TaxonomyManager
+class TaxonomyManager implements TaxonomyManagerInterface
 {
     /**
      * Array to hold merged taxonomy definitions from config and database.
      *
      * @since 1.1.0
-     * @var array
      */
     protected array $taxonomies = [];
 
@@ -42,7 +40,6 @@ class TaxonomyManager
      * Cache key for storing taxonomy definitions.
      *
      * @since 1.1.0
-     * @var string
      */
     protected string $cacheKey = 'cms.taxonomies.resolved';
 
@@ -50,7 +47,6 @@ class TaxonomyManager
      * Cache time-to-live in minutes (60 * 24 = 1 day).
      *
      * @since 1.1.0
-     * @var int
      */
     protected int $cacheTtl = 60 * 24;
 
@@ -74,34 +70,32 @@ class TaxonomyManager
      * with user-defined taxonomy definitions stored in the database.
      *
      * @since 1.1.0
-     *
-     * @return void
      */
-    protected function loadTaxonomies(): void
+    public function loadTaxonomies(): void
     {
-        $builtInTaxonomies = config( 'cms.taxonomies', [] ); // Load from cms config file
-        foreach ( $builtInTaxonomies as $handle => $definition ) {
-            $this->registerTaxonomy( $handle, $definition );
+        $builtInTaxonomies = config('cms.taxonomies', []); // Load from cms config file
+        foreach ($builtInTaxonomies as $handle => $definition) {
+            $this->registerTaxonomy($handle, $definition);
         }
 
         // Load user-defined taxonomies from the database and merge/override
-        $dbDefinedTaxonomies = Cache::remember( $this->cacheKey, $this->cacheTtl, function () {
-            return Taxonomy::all()->keyBy( 'handle' )->map( function ( $taxonomy ) {
+        $dbDefinedTaxonomies = Cache::remember($this->cacheKey, $this->cacheTtl, function () {
+            return Taxonomy::all()->keyBy('handle')->map(function ($taxonomy) {
                 // Combine direct model attributes with any 'definition' JSON if you had one for taxonomies
                 return [
-                    'label'         => $taxonomy->label,
-                    'label_plural'  => $taxonomy->label_plural,
+                    'label' => $taxonomy->label,
+                    'label_plural' => $taxonomy->label_plural,
                     'content_types' => $taxonomy->content_types,
-                    'hierarchical'  => $taxonomy->hierarchical,
+                    'hierarchical' => $taxonomy->hierarchical,
                     // Add any other attributes from the taxonomy table or a definition JSON if applicable
                 ];
-            } )->toArray();
-        } );
+            })->toArray();
+        });
 
         // Merge user-defined taxonomies (from DB) into existing built-in taxonomies
         // DB definitions will overwrite built-in if handles conflict.
-        foreach ( $dbDefinedTaxonomies as $handle => $definition ) {
-            $this->taxonomies[ $handle ] = array_replace_recursive( $this->taxonomies[ $handle ] ?? [], $definition );
+        foreach ($dbDefinedTaxonomies as $handle => $definition) {
+            $this->taxonomies[$handle] = array_replace_recursive($this->taxonomies[$handle] ?? [], $definition);
         }
     }
 
@@ -113,28 +107,25 @@ class TaxonomyManager
      *
      * @since 1.1.0
      *
-     * @param string $handle     A unique identifier for the taxonomy (e.g., 'category', 'tag').
-     * @param array  $definition An associative array defining the taxonomy's properties.
-     * @return void
+     * @param  string  $handle  A unique identifier for the taxonomy (e.g., 'category', 'tag').
+     * @param  array  $definition  An associative array defining the taxonomy's properties.
      */
-    public function registerTaxonomy( string $handle, array $definition ): void
+    public function registerTaxonomy(string $handle, array $definition): void
     {
-        $this->taxonomies[ $handle ] = $definition;
+        $this->taxonomies[$handle] = $definition;
     }
 
     /**
      * Provides access to the TaxonomyManager instance.
      *
-     * This static method allows for convenient access to the singleton
+     * This method allows for convenient access to the singleton
      * instance of the TaxonomyManager from anywhere in the application.
      *
      * @since 1.1.0
-     *
-     * @return self
      */
-    public static function instance(): self
+    public function instance(): self
     {
-        return app( static::class );
+        return app(static::class);
     }
 
     /**
@@ -142,12 +133,12 @@ class TaxonomyManager
      *
      * @since 1.1.0
      *
-     * @param string $handle The unique handle of the taxonomy.
+     * @param  string  $handle  The unique handle of the taxonomy.
      * @return array|null The taxonomy definition, or null if not found.
      */
-    public function getTaxonomy( string $handle ): ?array
+    public function getTaxonomy(string $handle): ?array
     {
-        return $this->taxonomies[ $handle ] ?? null;
+        return $this->taxonomies[$handle] ?? null;
     }
 
     /**
@@ -171,25 +162,26 @@ class TaxonomyManager
      *
      * @since 1.1.0
      *
-     * @param string $handle       The unique handle for the taxonomy.
-     * @param string $label        The singular human-readable label.
-     * @param string $labelPlural  The plural human-readable label.
-     * @param array  $contentTypes Array of content type handles this taxonomy applies to.
-     * @param bool   $hierarchical Whether terms in this taxonomy can have parents.
-     * @return Taxonomy             The created or updated Taxonomy model instance.
+     * @param  string  $handle  The unique handle for the taxonomy.
+     * @param  string  $label  The singular human-readable label.
+     * @param  string  $labelPlural  The plural human-readable label.
+     * @param  array  $contentTypes  Array of content type handles this taxonomy applies to.
+     * @param  bool  $hierarchical  Whether terms in this taxonomy can have parents.
+     * @return Taxonomy The created or updated Taxonomy model instance.
      */
-    public function saveUserTaxonomy( string $handle, string $label, string $labelPlural, array $contentTypes, bool $hierarchical ): Taxonomy
+    public function saveUserTaxonomy(string $handle, string $label, string $labelPlural, array $contentTypes, bool $hierarchical): Taxonomy
     {
         $taxonomy = Taxonomy::updateOrCreate(
-            [ 'handle' => $handle ],
+            ['handle' => $handle],
             [
-                'label'         => $label,
-                'label_plural'  => $labelPlural,
+                'label' => $label,
+                'label_plural' => $labelPlural,
                 'content_types' => $contentTypes,
-                'hierarchical'  => $hierarchical,
+                'hierarchical' => $hierarchical,
             ]
         );
         $this->refreshTaxonomiesCache();
+
         return $taxonomy;
     }
 
@@ -200,12 +192,10 @@ class TaxonomyManager
      * from the latest sources (config and database).
      *
      * @since 1.1.0
-     *
-     * @return void
      */
     public function refreshTaxonomiesCache(): void
     {
-        Cache::forget( $this->cacheKey );
+        Cache::forget($this->cacheKey);
         $this->taxonomies = [];  // Clear current in-memory taxonomies
         $this->loadTaxonomies(); // Reloads merged taxonomies from fresh sources
     }
@@ -217,15 +207,16 @@ class TaxonomyManager
      *
      * @since 1.1.0
      *
-     * @param string $handle The handle of the taxonomy to delete.
+     * @param  string  $handle  The handle of the taxonomy to delete.
      * @return bool True if deleted, false if not found or on error.
      */
-    public function deleteUserTaxonomy( string $handle ): bool
+    public function deleteUserTaxonomy(string $handle): bool
     {
-        $deleted = Taxonomy::where( 'handle', $handle )->delete();
-        if ( $deleted ) {
+        $deleted = Taxonomy::where('handle', $handle)->delete();
+        if ($deleted) {
             $this->refreshTaxonomiesCache();
         }
-        return (bool)$deleted;
+
+        return (bool) $deleted;
     }
 }
