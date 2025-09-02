@@ -16,7 +16,6 @@ namespace ArtisanPackUI\CMSFramework;
 
 // phpcs:disable
 use ArtisanPackUI\CMSFramework\Contracts\ContentManagerInterface;
-use ArtisanPackUI\CMSFramework\Contracts\MediaManagerInterface;
 use ArtisanPackUI\CMSFramework\Contracts\PluginManagerInterface;
 use ArtisanPackUI\CMSFramework\Contracts\SettingsManagerInterface;
 use ArtisanPackUI\CMSFramework\Contracts\TaxonomyManagerInterface;
@@ -50,7 +49,6 @@ class CMSManager
         'settings' => SettingsManagerInterface::class,
         'plugins' => PluginManagerInterface::class,
         'users' => UserManagerInterface::class,
-        'media' => MediaManagerInterface::class,
         'content' => ContentManagerInterface::class,
         'taxonomy' => TaxonomyManagerInterface::class,
         'adminPages' => AdminPagesManager::class,

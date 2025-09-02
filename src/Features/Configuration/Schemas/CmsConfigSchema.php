@@ -39,15 +39,6 @@ class CmsConfigSchema
                 'description' => 'File system paths for plugins and themes'
             ],
             
-            'media' => [
-                'type' => 'array',
-                'required' => true,
-                'rules' => [
-                    'media.disk' => 'required|string|in:public,local,s3',
-                    'media.directory' => 'required|string|max:100',
-                ],
-                'description' => 'Media storage configuration'
-            ],
             
             'content_types' => [
                 'type' => 'array',
@@ -155,10 +146,6 @@ class CmsConfigSchema
             'paths.plugins.required' => 'Plugins path is required',
             'paths.themes.required' => 'Themes path is required',
             
-            'media.disk.required' => 'Media disk is required',
-            'media.disk.in' => 'Media disk must be one of: public, local, s3',
-            'media.directory.required' => 'Media directory is required',
-            
             'content_types.required' => 'At least one content type must be defined',
             'content_types.min' => 'At least one content type must be defined',
             'content_types.*.label.required' => 'Content type label is required',
@@ -200,10 +187,6 @@ class CmsConfigSchema
                     'url' => 'https://example.com',
                     'timezone' => 'UTC',
                     'locale' => 'en',
-                ],
-                'media' => [
-                    'disk' => 'public',
-                    'directory' => 'media',
                 ],
             ],
         ];
