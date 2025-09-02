@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.2.4] - 2025-09-02
+
+### Added
+
+- Enhanced user migration with password reset tokens and sessions table support
+- Password reset tokens table with email primary key, token storage, and timestamp tracking
+- Sessions table with comprehensive session management including user ID foreign key, IP address tracking, user agent storage, and activity indexing
+- Table existence checks to prevent conflicts during migration execution
+
 ## [0.2.3] - 2025-09-02
 
 ### Removed
