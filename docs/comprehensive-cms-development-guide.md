@@ -219,13 +219,6 @@ app(AdminPagesManager::class)->registerSubPage(
     component: \App\Http\Livewire\Admin\Content\Pages\Index::class
 );
 
-// Media Library
-app(AdminPagesManager::class)->registerPage(
-    'Media',
-    'media',
-    'photo',
-    component: \App\Http\Livewire\Admin\Media\MediaLibrary::class
-);
 
 // Settings
 app(AdminPagesManager::class)->registerPage(
@@ -930,50 +923,8 @@ composer require artisanpack-ui/livewire-ui-components
 </x-artisanpack-form>
 ```
 
-#### 2. **artisanpack-ui/media-library**
 
-Advanced media management for your CMS with image processing and file organization.
-
-```bash
-composer require artisanpack-ui/media-library
-```
-
-**Key Features:**
-- File upload and organization
-- Image processing and thumbnails
-- Media collections and galleries
-- CDN integration support
-- SEO-friendly media URLs
-
-**Integration Example:**
-```php
-use ArtisanPackUI\MediaLibrary\HasMedia;
-use ArtisanPackUI\MediaLibrary\MediaCollections\Models\Media;
-
-class Post extends Model implements HasMedia
-{
-    use InteractsWithMedia;
-    
-    public function registerMediaCollections(): void
-    {
-        $this->addMediaCollection('featured')
-            ->singleFile()
-            ->acceptsMimeTypes(['image/jpeg', 'image/png']);
-            
-        $this->addMediaCollection('gallery');
-    }
-    
-    public function registerMediaConversions(Media $media = null): void
-    {
-        $this->addMediaConversion('thumb')
-            ->width(300)
-            ->height(200)
-            ->sharpen(10);
-    }
-}
-```
-
-#### 3. **artisanpack-ui/icons**
+#### 2. **artisanpack-ui/icons**
 
 Comprehensive icon library with easy integration.
 
@@ -988,7 +939,7 @@ composer require artisanpack-ui/icons
 <x-artisanpack-icon name="settings" variant="outline" />
 ```
 
-#### 4. **artisanpack-ui/security**
+#### 3. **artisanpack-ui/security**
 
 Enhanced security features for production applications.
 
@@ -1003,7 +954,7 @@ composer require artisanpack-ui/security
 - Vulnerability scanning
 - Automated security monitoring
 
-#### 5. **artisanpack-ui/accessibility**
+#### 4. **artisanpack-ui/accessibility**
 
 Ensure your CMS meets accessibility standards.
 

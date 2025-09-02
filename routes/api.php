@@ -3,9 +3,6 @@
 use ArtisanPackUI\CMSFramework\Features\Plugins\PluginManager;
 use ArtisanPackUI\CMSFramework\Http\Controllers\ContentController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\ContentTypeController;
-use ArtisanPackUI\CMSFramework\Http\Controllers\MediaCategoryController;
-use ArtisanPackUI\CMSFramework\Http\Controllers\MediaController;
-use ArtisanPackUI\CMSFramework\Http\Controllers\MediaTagController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\RoleController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\SettingController;
 use ArtisanPackUI\CMSFramework\Http\Controllers\TaxonomyController;
@@ -18,17 +15,8 @@ use Illuminate\Support\Facades\Route;
 
 // General API endpoints with standard rate limiting (60 req/min)
 Route::middleware(['api', 'cms.rate_limit.general'])->prefix('api/cms')->group(function () {
-    // Content and media CRUD operations
+    // Content CRUD operations
     Route::apiResource('content', ContentController::class);
-    Route::apiResource('media', MediaController::class)->parameters([
-        'media' => 'media',
-    ]);
-    Route::apiResource('media-categories', MediaCategoryController::class)->parameters([
-        'media-categories' => 'media_category',
-    ]);
-    Route::apiResource('media-tags', MediaTagController::class)->parameters([
-        'media-tags' => 'media_tag',
-    ]);
     Route::apiResource('taxonomies', TaxonomyController::class);
     Route::apiResource('terms', TermController::class);
 

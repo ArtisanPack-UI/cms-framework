@@ -23,7 +23,7 @@ abstract class TestCase extends BaseTestCase
     public function ignorePackageDiscoveriesFrom(): array
     {
         return [
-            'artisanpack-ui/media-library',
+            // No packages to ignore currently
         ];
     }
 

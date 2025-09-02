@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.2.3] - 2025-09-02
+
+### Removed
+
+- Complete removal of all media library references from CMS framework core
+- Removed media-related API routes and controller imports from api.php
+- Removed MediaLibraryServiceProvider registration from CMSFrameworkServiceProvider
+- Removed media library integration documentation
+- Removed media-related admin page references from development guide
+- Cleaned up media library package discovery ignoring in test configuration
+
+### Changed
+
+- Updated comprehensive CMS development guide to remove media library integration examples
+- Restructured package ecosystem documentation to reflect media library as separate package
+
+## [0.2.2] - 2025-09-02
+
+### Added
+
+- Complete media library decoupling and cleanup functionality
+
 ## [0.2.1] - 2025-09-02
 
 ### Added
