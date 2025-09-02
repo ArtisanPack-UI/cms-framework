@@ -16,14 +16,8 @@ namespace ArtisanPackUI\CMSFramework;
 
 use ArtisanPackUI\CMSFramework\Models\User;
 use ArtisanPackUI\CMSFramework\Models\Role;
-use ArtisanPackUI\CMSFramework\Models\Media;
-use ArtisanPackUI\CMSFramework\Models\MediaTag;
-use ArtisanPackUI\CMSFramework\Models\MediaCategory;
 use ArtisanPackUI\CMSFramework\Policies\UserPolicy;
 use ArtisanPackUI\CMSFramework\Policies\RolePolicy;
-use ArtisanPackUI\CMSFramework\Policies\MediaPolicy;
-use ArtisanPackUI\CMSFramework\Policies\MediaTagPolicy;
-use ArtisanPackUI\CMSFramework\Policies\MediaCategoryPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 
 /**
@@ -47,9 +41,6 @@ class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         User::class => UserPolicy::class,
         Role::class => RolePolicy::class,
-        Media::class => MediaPolicy::class,
-        MediaTag::class => MediaTagPolicy::class,
-        MediaCategory::class => MediaCategoryPolicy::class,
     ];
 
     /**
