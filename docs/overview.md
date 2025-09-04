@@ -53,9 +53,9 @@ To use the framework, you need to:
 
 For detailed implementation instructions, refer to the following guides:
 
-- [Custom CMS Implementation](custom-cms-implementation.md): Step-by-step guide on implementing admin pages and dashboard widgets in a custom CMS application
-- [Implementing Dashboard Widgets](implementing-dashboard-widgets.md): Detailed examples of implementing dashboard widgets in a custom CMS application
-- [Implementing Themes](implementing-themes.md): Comprehensive guide on implementing and managing themes in your CMS application
+- [Custom CMS Implementation](development/custom-cms-implementation): Step-by-step guide on implementing admin pages and dashboard widgets in a custom CMS application
+- [Implementing Dashboard Widgets](core-features/administration/implementing-dashboard-widgets): Detailed examples of implementing dashboard widgets in a custom CMS application
+- [Implementing Themes](development/implementing-themes): Comprehensive guide on implementing and managing themes in your CMS application
 
 ## Available Modules
 

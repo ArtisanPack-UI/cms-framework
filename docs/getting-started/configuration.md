@@ -1,3 +1,7 @@
+---
+title: Configuration
+---
+
 # Configuration Guide
 
 This guide covers all configuration options and environment setup for the ArtisanPack UI CMS Framework.

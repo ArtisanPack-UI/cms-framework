@@ -1,3 +1,7 @@
+---
+title: Performance Testing Guide
+---
+
 # Performance Testing Guide for CMS Framework
 
 This guide provides comprehensive instructions for using the CMS Framework performance testing suite, interpreting results, and integrating performance monitoring into your development workflow.

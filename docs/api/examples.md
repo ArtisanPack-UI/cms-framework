@@ -1,3 +1,7 @@
+---
+title: API Examples
+---
+
 # ArtisanPack UI CMS Framework - API Examples
 
 This document provides comprehensive examples for using the CMS Framework API with authentication, error handling, and common use cases.

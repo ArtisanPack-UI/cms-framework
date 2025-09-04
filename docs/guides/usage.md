@@ -1,3 +1,7 @@
+---
+title: Usage Guide
+---
+
 # Usage Guide
 
 This comprehensive guide covers how to use all features of the ArtisanPack UI CMS Framework.

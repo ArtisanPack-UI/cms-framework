@@ -1,3 +1,7 @@
+---
+title: Installation
+---
+
 # Installation Guide
 
 This guide provides detailed installation and setup instructions for the ArtisanPack UI CMS Framework.

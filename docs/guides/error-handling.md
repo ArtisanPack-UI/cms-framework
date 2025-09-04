@@ -1,3 +1,7 @@
+---
+title: Error Handling Strategy
+---
+
 # CMS Framework - Comprehensive Error Handling & Logging Strategy
 
 ## Table of Contents

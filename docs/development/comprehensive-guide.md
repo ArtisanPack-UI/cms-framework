@@ -1,3 +1,7 @@
+---
+title: Comprehensive Development Guide
+---
+
 # Comprehensive CMS Development Guide
 
 **Building Production-Ready Content Management Systems with ArtisanPack UI CMS Framework**

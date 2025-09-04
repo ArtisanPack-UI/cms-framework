@@ -1,3 +1,7 @@
+---
+title: Contributing Guide
+---
+
 # Contributing Guide
 
 Thank you for considering contributing to the ArtisanPack UI CMS Framework! This guide will help you get started with contributing to the project.

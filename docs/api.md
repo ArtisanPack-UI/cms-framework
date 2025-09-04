@@ -1,3 +1,7 @@
+---
+title: API Documentation
+---
+
 # API Documentation
 
 The ArtisanPack UI CMS Framework provides a comprehensive REST API for managing content, users, media, and other CMS functionality.

@@ -8,36 +8,50 @@ Welcome to the ArtisanPack UI CMS Framework documentation. This comprehensive gu
 
 ## Getting Started
 
-- [Overview](overview.md): General overview of the CMS Framework and its core concepts
-- [AI Guidelines](ai-guidelines.md): Development guidelines for AI-assisted feature development
+Start your journey with the CMS Framework:
+
+- **[Overview](overview)** - General overview of the CMS Framework and its core concepts
+- **[Getting Started](getting-started)** - Installation, configuration, and initial setup
+  - [Installation](getting-started/installation) - Install and set up the framework
+  - [Configuration](getting-started/configuration) - Configure your CMS settings
+  - [AI Guidelines](getting-started/ai-guidelines) - Development guidelines for AI-assisted development
 
 ## Core Features
 
-### Administration
-- [Admin Menus](admin-menus.md): Register and manage administrative pages and menus
-- [Dashboard Widgets](dashboard-widgets.md): Create and manage customizable dashboard widgets
+Explore the framework's comprehensive feature set:
 
-### User Management & Security
-- [Users](users.md): User management and permissions
-- [API Authentication](api-authentication.md): API authentication using Laravel Sanctum
-- [Setting Up Sanctum](SettingUpSanctum.md): Detailed Sanctum configuration guide
-- [Audit Logging](audit-logging.md): Authentication events and user activity logging
+- **[Core Features](core-features)** - Complete overview of all framework features
+  - **[Administration](core-features/administration)** - Admin interface and dashboard management
+  - **[Security](core-features/security)** - User management, authentication, and security
+  - **[Content Management](core-features/content)** - Content types, settings, and notifications  
+  - **[Progressive Web App](core-features/pwa)** - PWA functionality and integration
 
-### Content & Customization
-- [Settings](settings.md): Application settings management
-- [Notifications](notifications.md): User notifications and messaging system
-- [PWA](pwa.md): Progressive Web App functionality
-- [PWA Integration Guide](pwa-integration-guide.md): Detailed PWA implementation guide
+## API Documentation
 
-### Development & Integration
-- [API](api.md): API endpoints and usage
-- [CMS Framework](cmsframework.md): Framework implementation details
+- **[API Documentation](api)** - Complete REST API reference
+  - [API Examples](api/examples) - Practical API usage examples
 
-## Implementation Guides
+## Development Resources
 
-- [Custom CMS Implementation](custom-cms-implementation.md): Step-by-step guide for building custom CMS applications
-- [Implementing Dashboard Widgets](implementing-dashboard-widgets.md): Detailed widget implementation examples
-- [Implementing Themes](implementing-themes.md): Theme development and management guide
+For developers building with the framework:
+
+- **[Development Guides](development)** - Comprehensive development resources
+  - [Framework Core](development/framework-core) - Core architecture and components
+  - [Comprehensive Development Guide](development/comprehensive-guide) - Complete development tutorial
+  - [Custom CMS Implementation](development/custom-cms-implementation) - Building custom CMS solutions
+  - [Implementing Themes](development/implementing-themes) - Theme development guide
+  - [Themes](development/themes) - Theme system overview
+  - [Plugins](development/plugins) - Plugin development and management
+  - [Contributing Guide](development/contributing-guide) - Contribution guidelines
+
+## Usage Guides
+
+Practical guides for using the framework:
+
+- **[Guides](guides)** - Practical tutorials and reference materials
+  - [Usage Guide](guides/usage) - Comprehensive feature usage guide
+  - [Performance Testing](guides/performance-testing) - Performance optimization guide
+  - [Error Handling](guides/error-handling) - Error handling and debugging strategies
 
 ## Quick Links
 
