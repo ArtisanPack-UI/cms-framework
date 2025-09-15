@@ -2,28 +2,28 @@
 
 namespace Tests;
 
-use Orchestra\Testbench\TestCase as BaseTestCase;
+use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
+use Orchestra\Testbench\TestCase as Orchestra;
 
-abstract class TestCase extends BaseTestCase
+class TestCase extends Orchestra
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Additional setup if needed
+    }
+
     /**
      * Get package providers.
      *
      * @param  \Illuminate\Foundation\Application  $app
-     * @return array<int, class-string>
+     * @return array<int, class-string<\Illuminate\Support\ServiceProvider>>
      */
-    protected function getPackageProviders($app): array
+    protected function getPackageProviders($app)
     {
         return [
-            \TorMorten\Eventy\EventServiceProvider::class,
-            \ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider::class,
-        ];
-    }
-
-    public function ignorePackageDiscoveriesFrom(): array
-    {
-        return [
-            // No packages to ignore currently
+            CMSFrameworkServiceProvider::class,
         ];
     }
 
@@ -33,18 +33,15 @@ abstract class TestCase extends BaseTestCase
      * @param  \Illuminate\Foundation\Application  $app
      * @return void
      */
-    protected function defineEnvironment($app): void
+    protected function defineEnvironment($app)
     {
+        // Define environment configuration
+        $app['config']->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
         $app['config']->set('database.default', 'testing');
         $app['config']->set('database.connections.testing', [
-            'driver'   => 'sqlite',
+            'driver' => 'sqlite',
             'database' => ':memory:',
-            'prefix'   => '',
+            'prefix' => '',
         ]);
-    }
-
-    protected function defineDatabaseMigrations(): void
-    {
-        $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');
     }
 }

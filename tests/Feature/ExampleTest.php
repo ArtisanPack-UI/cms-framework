@@ -1,7 +1,16 @@
 <?php
 
-it( 'returns a successful response', function () {
-	$status = true;
+test('example feature test', function () {
+    expect(true)->toBe(true);
+});
 
-	$this->assertTrue( $status );
-} );
+test('service provider is loaded', function () {
+    $providers = app()->getLoadedProviders();
+    
+    expect($providers)->toHaveKey('ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider');
+});
+
+test('application has basic configuration', function () {
+    expect(config('app.key'))->not()->toBeNull();
+    expect(config('database.default'))->toBe('testing');
+});
