@@ -54,7 +54,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function register(): void
 	{
-
+		$this->app->register(\ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider::class);
 	}
 
 }
