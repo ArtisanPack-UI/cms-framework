@@ -12,10 +12,7 @@
 
 namespace ArtisanPackUI\CMSFramework;
 
-use Exception;
 use Illuminate\Support\ServiceProvider;
-use Illuminate\Support\Str;
-use TorMorten\Eventy\Facades\Eventy;
 
 /**
  * Registers and bootstraps the CMS Framework within the application.
@@ -28,33 +25,35 @@ use TorMorten\Eventy\Facades\Eventy;
  */
 class CMSFrameworkServiceProvider extends ServiceProvider
 {
-	/**
-	 * Boots the CMS framework and loads database migration files.
-	 *
-	 * This method is triggered during the Laravel bootstrapping process to initialize
-	 * the CMS framework and register migration paths for the system.
-	 *
-	 * @since 1.0.0
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 */
-	public function boot(): void
-	{
+    /**
+     * Boots the CMS framework and loads database migration files.
+     *
+     * This method is triggered during the Laravel bootstrapping process to initialize
+     * the CMS framework and register migration paths for the system.
+     *
+     * @since 1.0.0
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     */
+    public function boot(): void
+    {
+        $this->publishes( [
+                              __DIR__ . '/../../../../config/cms-framework.php' => config_path( 'cms-framework.php' ),
+                          ], 'config' );
+    }
 
-	}
-
-	/**
-	 * Registers a singleton instance of the CMSFramework within the application container.
-	 *
-	 * This method is called by the Laravel framework during the bootstrapping process to run the CMS framework.
-	 *
-	 * @since 1.0.0
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 */
-	public function register(): void
-	{
-		$this->app->register(\ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider::class);
-	}
+    /**
+     * Registers a singleton instance of the CMSFramework within the application container.
+     *
+     * This method is called by the Laravel framework during the bootstrapping process to run the CMS framework.
+     *
+     * @since 1.0.0
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     */
+    public function register(): void
+    {
+        $this->app->register( \ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider::class );
+    }
 
 }

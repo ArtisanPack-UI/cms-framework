@@ -11,12 +11,25 @@
 |
 */
 
-uses(
-    Tests\TestCase::class,
-    // Illuminate\Foundation\Testing\RefreshDatabase::class,
-)->in('Feature');
+/*
+|--------------------------------------------------------------------------
+| Test Case & Traits
+|--------------------------------------------------------------------------
+|
+| This is where you can bind your base TestCase and any traits you want
+| to apply to groups of tests.
+|
+*/
 
-uses(Tests\TestCase::class)->in('Unit');
+// This tells Pest that all tests in the 'Feature' directory
+// should use your custom TestCase as their foundation.
+uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Feature');
+
+// This tells Pest to apply the RefreshDatabase trait to all
+// tests in the 'Feature' directory, resetting the database for each test.
+uses(Illuminate\Foundation\Testing\RefreshDatabase::class)->in('Feature');
+
+uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Unit');
 
 /*
 |--------------------------------------------------------------------------

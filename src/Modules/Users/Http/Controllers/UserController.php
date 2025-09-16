@@ -3,81 +3,89 @@
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
 use App\Models\User;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Routing\Controller;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Routing\Controller;
 
 class UserController extends Controller
 {
-	/**
-	 * Display a listing of the resource.
-	 */
-	public function index(): AnonymousResourceCollection
-	{
-		$users = User::with('roles')->paginate(15);
-		
-		return UserResource::collection($users);
-	}
+    /**
+     * Display a listing of the resource.
+     */
+    public function index(): AnonymousResourceCollection
+    {
+        $userModel = config( 'cms-framework.user_model' );
+        $users     = $userModel::with( 'roles' )->paginate( 15 );
 
-	/**
-	 * Store a newly created resource in storage.
-	 */
-	public function store(Request $request): UserResource
-	{
-		$validated = $request->validate([
-			'name' => 'required|string|max:255',
-			'email' => 'required|string|email|max:255|unique:users',
-			'password' => 'required|string|min:8',
-		]);
+        return UserResource::collection( $users );
+    }
 
-		$validated['password'] = bcrypt($validated['password']);
+    /**
+     * Store a newly created resource in storage.
+     */
+    public function store( Request $request ): UserResource
+    {
+        $userModel = config( 'cms-framework.user_model' );
 
-		$user = User::create($validated);
-		$user->load('roles');
+        $validated = $request->validate( [
+                                             'name'     => 'required|string|max:255',
+                                             'email'    => 'required|string|email|max:255|unique:users',
+                                             'password' => 'required|string|min:8',
+                                         ] );
 
-		return new UserResource($user);
-	}
+        $validated['password'] = bcrypt( $validated['password'] );
 
-	/**
-	 * Display the specified resource.
-	 */
-	public function show(User $user): UserResource
-	{
-		$user->load('roles');
-		
-		return new UserResource($user);
-	}
+        $user = $userModel::create( $validated );
+        $user->load( 'roles' );
 
-	/**
-	 * Update the specified resource in storage.
-	 */
-	public function update(Request $request, User $user): UserResource
-	{
-		$validated = $request->validate([
-			'name' => 'sometimes|required|string|max:255',
-			'email' => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
-			'password' => 'sometimes|required|string|min:8',
-		]);
+        return new UserResource( $user );
+    }
 
-		if (isset($validated['password'])) {
-			$validated['password'] = bcrypt($validated['password']);
-		}
+    /**
+     * Display the specified resource.
+     */
+    public function show( string | int $id ): UserResource
+    {
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::with( 'roles' )->findOrFail( $id );
 
-		$user->update($validated);
-		$user->load('roles');
+        return new UserResource( $user );
+    }
 
-		return new UserResource($user);
-	}
+    /**
+     * Update the specified resource in storage.
+     */
+    public function update( Request $request, string | int $id ): UserResource
+    {
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
+        $validated = $request->validate( [
+                                             'name'     => 'sometimes|required|string|max:255',
+                                             'email'    => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
+                                             'password' => 'sometimes|required|string|min:8',
+                                         ] );
 
-	/**
-	 * Remove the specified resource from storage.
-	 */
-	public function destroy(User $user): JsonResponse
-	{
-		$user->delete();
+        if ( isset( $validated['password'] ) ) {
+            $validated['password'] = bcrypt( $validated['password'] );
+        }
 
-		return response()->json(['message' => 'User deleted successfully'], 204);
-	}
+        $user->update( $validated );
+        $user->load( 'roles' );
+
+        return new UserResource( $user );
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy( string | int $id ): JsonResponse
+    {
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
+        $user->delete();
+
+        return response()->json( [], 204 );
+    }
 }

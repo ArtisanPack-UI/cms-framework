@@ -1,2 +1,6 @@
 vendor/
 .idea/
+
+# Test coverage reports
+tests/coverage/
+.phpunit.cache/

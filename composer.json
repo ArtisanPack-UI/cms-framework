@@ -15,7 +15,8 @@
   },
   "autoload-dev": {
     "psr-4": {
-      "Tests\\": "tests/"
+      "Tests\\": "tests/",
+      "ArtisanPackUI\\CMSFramework\\Tests\\": "tests/"
     }
   },
   "authors": [
@@ -64,6 +65,10 @@
     }
   },
   "scripts": {
-    "test": "vendor/bin/pest"
+    "test": "vendor/bin/pest",
+    "test:coverage": "vendor/bin/pest --coverage",
+    "test:coverage-min": "vendor/bin/pest --coverage --min=80",
+    "test:unit": "vendor/bin/pest tests/Unit",
+    "test:feature": "vendor/bin/pest tests/Feature"
   }
 }
