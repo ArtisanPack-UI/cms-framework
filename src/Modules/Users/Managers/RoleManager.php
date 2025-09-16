@@ -6,8 +6,8 @@
  * This class provides functionality for managing user roles including registration
  * of new roles and assignment of permissions to roles.
  *
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Managers
  * @since   1.0.0
+ * @package ArtisanPackUI\CMSFramework\Modules\Users\Managers
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Managers;
@@ -40,10 +40,10 @@ class RoleManager
 	 *
 	 * @return Role The created or existing role instance.
 	 */
-	public function register(string $slug, string $name): Role
+	public function register( string $slug, string $name ): Role
 	{
-		$role = Role::firstOrCreate(['slug' => $slug], ['name' => $name]);
-		Eventy::action('ap_role_registered', $role);
+		$role = Role::firstOrCreate( [ 'slug' => $slug ], [ 'name' => $name ] );
+		Eventy::action( 'ap.roleRegistered', $role );
 		return $role;
 	}
 
@@ -60,10 +60,10 @@ class RoleManager
 	 *
 	 * @return void
 	 */
-	public function addPermissionToRole(string $roleSlug, string $permissionSlug): void
+	public function addPermissionToRole( string $roleSlug, string $permissionSlug ): void
 	{
-		$role = Role::where('slug', $roleSlug)->firstOrFail();
-		$permission = Permission::where('slug', $permissionSlug)->firstOrFail();
-		$role->permissions()->syncWithoutDetaching($permission->id);
+		$role       = Role::where( 'slug', $roleSlug )->firstOrFail();
+		$permission = Permission::where( 'slug', $permissionSlug )->firstOrFail();
+		$role->permissions()->syncWithoutDetaching( $permission->id );
 	}
 }

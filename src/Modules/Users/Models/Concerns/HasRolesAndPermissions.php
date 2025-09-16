@@ -6,8 +6,8 @@
  * This trait provides role and permission functionality that can be added
  * to user models to enable role-based access control within the CMS framework.
  *
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns
  * @since   1.0.0
+ * @package ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns;
@@ -26,6 +26,22 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 trait HasRolesAndPermissions
 {
 	/**
+	 * Check if the user has a specific role.
+	 *
+	 * Determines whether the user is assigned to a role with the given slug.
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param string $roleSlug The slug of the role to check for.
+	 *
+	 * @return bool True if the user has the role, false otherwise.
+	 */
+	public function hasRole( string $roleSlug ): bool
+	{
+		return $this->roles()->where( 'slug', $roleSlug )->exists();
+	}
+
+	/**
 	 * Get the roles that belong to the user.
 	 *
 	 * Defines a many-to-many relationship between users and roles using
@@ -37,23 +53,21 @@ trait HasRolesAndPermissions
 	 */
 	public function roles(): BelongsToMany
 	{
-		return $this->belongsToMany(Role::class, 'role_user', 'user_id', 'role_id');
+		return $this->belongsToMany( Role::class, 'role_user', 'user_id', 'role_id' );
 	}
 
 	/**
-	 * Check if the user has a specific role.
+	 * Alias for the hasPermissionTo() method.
 	 *
-	 * Determines whether the user is assigned to a role with the given slug.
+	 * This method provides a more fluent and Laravel-conventional way to check for a permission.
 	 *
-	 * @since 1.0.0
-	 *
-	 * @param string $roleSlug The slug of the role to check for.
-	 *
-	 * @return bool True if the user has the role, false otherwise.
+	 * @since  1.0.0
+	 * @param string $permissionSlug The slug of the permission to check for.
+	 * @return bool
 	 */
-	public function hasRole(string $roleSlug): bool
+	public function can( string $permissionSlug ): bool
 	{
-		return $this->roles()->where('slug', $roleSlug)->exists();
+		return $this->hasPermissionTo( $permissionSlug );
 	}
 
 	/**
@@ -67,12 +81,12 @@ trait HasRolesAndPermissions
 	 *
 	 * @return bool True if the user has the permission, false otherwise.
 	 */
-	public function hasPermissionTo(string $permissionSlug): bool
+	public function hasPermissionTo( string $permissionSlug ): bool
 	{
 		return $this->roles()
-			->whereHas('permissions', function ($query) use ($permissionSlug) {
-				$query->where('slug', $permissionSlug);
-			})
-			->exists();
+					->whereHas( 'permissions', function ( $query ) use ( $permissionSlug ) {
+						$query->where( 'slug', $permissionSlug );
+					} )
+					->exists();
 	}
 }

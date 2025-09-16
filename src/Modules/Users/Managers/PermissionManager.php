@@ -6,8 +6,8 @@
  * This class provides functionality for managing user permissions including
  * registration of new permissions within the system.
  *
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Managers
  * @since   1.0.0
+ * @package ArtisanPackUI\CMSFramework\Modules\Users\Managers
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Managers;
@@ -39,10 +39,10 @@ class PermissionManager
 	 *
 	 * @return Permission The created or existing permission instance.
 	 */
-	public function register(string $slug, string $name): Permission
+	public function register( string $slug, string $name ): Permission
 	{
-		$permission = Permission::firstOrCreate(['slug' => $slug], ['name' => $name]);
-		Eventy::action('ap_permission_registered', $permission);
+		$permission = Permission::firstOrCreate( [ 'slug' => $slug ], [ 'name' => $name ] );
+		Eventy::action( 'ap.permissionRegistered', $permission );
 		return $permission;
 	}
 }
