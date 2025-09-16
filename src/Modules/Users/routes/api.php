@@ -12,5 +12,9 @@
 
 use Illuminate\Support\Facades\Route;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers\UserController;
+use ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers\RoleController;
+use ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers\PermissionController;
 
 Route::apiResource('users', UserController::class);
+Route::apiResource('roles', RoleController::class);
+Route::apiResource('permissions', PermissionController::class);

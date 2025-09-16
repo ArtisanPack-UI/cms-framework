@@ -69,6 +69,8 @@
     "test:coverage": "vendor/bin/pest --coverage",
     "test:coverage-min": "vendor/bin/pest --coverage --min=80",
     "test:unit": "vendor/bin/pest tests/Unit",
-    "test:feature": "vendor/bin/pest tests/Feature"
+    "test:feature": "vendor/bin/pest tests/Feature",
+    "phpcs": "vendor/bin/phpcs",
+    "phpcs:fix": "vendor/bin/phpcbf"
   }
 }
