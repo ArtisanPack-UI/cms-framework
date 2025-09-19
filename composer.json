@@ -10,7 +10,8 @@
       "ArtisanPackUI\\Database\\": "database/"
     },
     "files": [
-      "src/Modules/Users/helpers.php"
+      "src/Modules/Users/helpers.php",
+      "src/Modules/Admin/helpers.php"
     ]
   },
   "autoload-dev": {

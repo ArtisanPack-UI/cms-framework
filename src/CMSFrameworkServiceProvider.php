@@ -12,6 +12,7 @@
 
 namespace ArtisanPackUI\CMSFramework;
 
+use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use Illuminate\Support\ServiceProvider;
 
@@ -39,8 +40,8 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	public function boot(): void
 	{
 		$this->publishes( [
-			__DIR__ . '/../config/cms-framework.php' => config_path( 'cms-framework.php' ),
-		], 'config' );
+							  __DIR__ . '/../config/cms-framework.php' => config_path( 'cms-framework.php' ),
+						  ], 'config' );
 	}
 
 	/**
@@ -55,6 +56,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	public function register(): void
 	{
 		$this->app->register( UserServiceProvider::class );
+		$this->app->register( AdminServiceProvider::class );
 	}
 
 }

@@ -1,0 +1,58 @@
+<?php
+/**
+ * Manages the registration and routing of admin pages.
+ *
+ * @since      2.0.0
+ * @package    ArtisanPackUI\CMSFramework\Modules\Admin\Managers
+ */
+
+namespace ArtisanPackUI\CMSFramework\Modules\Admin\Managers;
+
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
+
+class AdminPageManager
+{
+	protected array $pages = [];
+
+	/**
+	 * Stores the details of a page to be registered.
+	 *
+	 * @since 2.0.0
+	 * @param mixed  $view       The view, closure, or controller action.
+	 * @param string $capability The permission required to view the page.
+	 * @param string $slug       The slug for the page route.
+	 */
+	public function register( string $slug, mixed $view, string $capability ): void
+	{
+		$this->pages[ $slug ] = [ 'view' => $view, 'capability' => $capability ];
+	}
+
+	/**
+	 * Creates all the registered admin page routes with security middleware.
+	 *
+	 * @since 2.0.0
+	 */
+	public function registerRoutes(): void
+	{
+		Route::middleware( [ 'web', 'auth' ] )
+			 ->prefix( 'admin' )
+			 ->name( 'admin.' )
+			 ->group( function () {
+				 foreach ( $this->pages as $slug => $details ) {
+					 $routeName = str_replace( '/', '.', $slug );
+					 $route     = null;
+					 // Check if the 'view' is a simple string.
+					 if ( is_string( $details['view'] ) ) {
+						 // If it's a string, use the efficient Route::view().
+						 $route = Route::view( $slug, $details['view'] );
+					 } else {
+						 // Otherwise, use the more flexible Route::get() for Closures, controllers, etc.
+						 $route = Route::get( $slug, $details['view'] );
+					 }
+					 // Apply the name and security middleware to the created route.
+					 $route->name( $routeName )->middleware( 'admin.can:' . $details['capability'] );
+				 }
+			 } );
+	}
+}
