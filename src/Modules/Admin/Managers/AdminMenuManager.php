@@ -39,7 +39,7 @@ class AdminMenuManager
 	 */
 	public function addPage( string $title, string $slug, ?string $sectionSlug, array $options = [] ): void
 	{
-		$defaults = [ 'view' => '', 'icon' => 'heroicon-o-document', 'capability' => 'access_admin_dashboard', 'order' => 99 ];
+		$defaults = [ 'view' => '', 'icon' => 'fas.users', 'capability' => 'access_admin_dashboard', 'order' => 99 ];
 		$options  = array_merge( $defaults, $options );
 
 		$this->items[ $slug ] = [
@@ -88,17 +88,26 @@ class AdminMenuManager
 
 		// 1. Filter all items based on the current user's capabilities.
 		$authorizedItems = array_filter( $items, function ( $item ) {
-			return isset( $item['capability'] ) ? Gate::allows( $item['capability'] ) : true;
+			// Only check the gate if a capability is set and not empty.
+			return ! empty( $item['capability'] ) ? Gate::allows( $item['capability'] ) : true;
 		} );
 
 		// 2. Structure the menu (top-level, sections, and sub-items).
 		foreach ( $authorizedItems as $slug => $item ) {
 			if ( $item['parent'] && isset( $authorizedItems[ $item['parent'] ] ) ) {
 				$authorizedItems[ $item['parent'] ]['subItems'][ $slug ] = $item;
+			}
+		}
+		
+		// Now add items to their final destinations, using the updated items with subItems
+		foreach ( $authorizedItems as $slug => $item ) {
+			if ( $item['parent'] && isset( $authorizedItems[ $item['parent'] ] ) ) {
+				// This item is a child, it was already added to its parent's subItems above
+				continue;
 			} else if ( $item['section'] && isset( $menu[ $item['section'] ] ) ) {
-				$menu[ $item['section'] ]['items'][ $slug ] = $item;
+				$menu[ $item['section'] ]['items'][ $slug ] = $authorizedItems[ $slug ];
 			} else if ( is_null( $item['section'] ) ) {
-				$topLevelItems[ $slug ] = $item;
+				$topLevelItems[ $slug ] = $authorizedItems[ $slug ];
 			}
 		}
 
@@ -111,6 +120,18 @@ class AdminMenuManager
 		foreach ( $menu as &$section ) {
 			if ( ! empty( $section['items'] ) ) {
 				uasort( $section['items'], fn( $a, $b ) => $a['order'] <=> $b['order'] );
+				// Also sort subItems for each menu item in the section
+				foreach ( $section['items'] as &$item ) {
+					if ( ! empty( $item['subItems'] ) ) {
+						uasort( $item['subItems'], fn( $a, $b ) => $a['order'] <=> $b['order'] );
+					}
+				}
+			}
+		}
+		// Sort subItems for top-level items as well
+		foreach ( $topLevelItems as &$item ) {
+			if ( ! empty( $item['subItems'] ) ) {
+				uasort( $item['subItems'], fn( $a, $b ) => $a['order'] <=> $b['order'] );
 			}
 		}
 

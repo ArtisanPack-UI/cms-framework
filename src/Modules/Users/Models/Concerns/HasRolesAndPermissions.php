@@ -65,9 +65,13 @@ trait HasRolesAndPermissions
 	 * @param string $permissionSlug The slug of the permission to check for.
 	 * @return bool
 	 */
-	public function can( string $permissionSlug ): bool
+	public function can( $ability, $arguments = [] ): bool
 	{
-		return $this->hasPermissionTo( $permissionSlug );
+		if ( empty( $arguments ) && is_string( $ability ) && $this->hasPermissionTo( $ability ) ) {
+			return true;
+		}
+
+		return parent::can( $ability, $arguments );
 	}
 
 	/**
