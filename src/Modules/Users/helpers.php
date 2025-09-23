@@ -14,6 +14,7 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Managers\RoleManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
+use TorMorten\Eventy\Facades\Eventy;
 
 if ( ! function_exists( 'ap_register_role' ) ) {
 	/**
@@ -72,5 +73,22 @@ if ( ! function_exists( 'ap_add_permission_to_role' ) ) {
 	function ap_add_permission_to_role( string $roleSlug, string $permissionSlug ): void
 	{
 		app( RoleManager::class )->addPermissionToRole( $roleSlug, $permissionSlug );
+	}
+}
+
+if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
+	/**
+	 * Helper to register a new section (tab) on the User Edit page.
+	 *
+	 * @param string $key   A unique machine-readable key (e.g., 'business_hours').
+	 * @param string $label The human-readable label for the tab (e.g., 'Business Hours').
+	 * @param int    $order The display order for the tab.
+	 */
+	function apRegisterUserSettingsSection( string $key, string $label, int $order = 50 ): void
+	{
+		Eventy::addFilter( 'ap.users.settings.sections', function ( array $sections ) use ( $key, $label, $order ) {
+			$sections[ $key ] = compact( 'label', 'order' );
+			return $sections;
+		} );
 	}
 }
