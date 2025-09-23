@@ -12,6 +12,7 @@
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Policies;
 
+use Illuminate\Contracts\Auth\Authenticatable;
 use TorMorten\Eventy\Facades\Eventy;
 
 /**
@@ -33,12 +34,9 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can view roles, false otherwise.
 	 */
-	public function viewAny( string|int $id ): bool
+	public function viewAny( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.viewAny', 'role.viewAny' ) );
+		return $user->can( Eventy::filter( 'role.viewAny', 'roles.manage' ) );
 	}
 
 	/**
@@ -50,12 +48,9 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can view the role, false otherwise.
 	 */
-	public function view( string|int $id ): bool
+	public function view( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.view', 'role.view' ) );
+		return $user->can( Eventy::filter( 'role.view', 'roles.manage' ) );
 	}
 
 	/**
@@ -67,12 +62,9 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can create roles, false otherwise.
 	 */
-	public function create( string|int $id ): bool
+	public function create( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.create', 'role.create' ) );
+		return $user->can( Eventy::filter( 'role.create', 'roles.manage' ) );
 	}
 
 	/**
@@ -84,12 +76,9 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can update the role, false otherwise.
 	 */
-	public function update( string|int $id ): bool
+	public function update( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.update', 'role.update' ) );
+		return $user->can( Eventy::filter( 'role.update', 'roles.manage' ) );
 	}
 
 	/**
@@ -101,12 +90,9 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can delete the role, false otherwise.
 	 */
-	public function delete( string|int $id ): bool
+	public function delete( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.delete', 'role.delete' ) );
+		return $user->can( Eventy::filter( 'role.delete', 'roles.delete' ) );
 	}
 
 	/**
@@ -118,12 +104,9 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can restore the role, false otherwise.
 	 */
-	public function restore( string|int $id ): bool
+	public function restore( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.restore', 'role.restore' ) );
+		return $user->can( Eventy::filter( 'role.restore', 'roles.manage' ) );
 	}
 
 	/**
@@ -135,11 +118,8 @@ class RolePolicy
 	 *
 	 * @return bool True if the user can force delete the role, false otherwise.
 	 */
-	public function forceDelete( string|int $id ): bool
+	public function forceDelete( Authenticatable $user ): bool
 	{
-		$userModel = config( 'cms-framework.user_model' );
-		$user      = $userModel::findOrFail( $id );
-
-		return $user->can( Eventy::filter( 'role.forceDelete', 'role.forceDelete' ) );
+		return $user->can( Eventy::filter( 'role.forceDelete', 'roles.delete' ) );
 	}
 }
