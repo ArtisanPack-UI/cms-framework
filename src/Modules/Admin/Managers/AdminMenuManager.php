@@ -39,7 +39,7 @@ class AdminMenuManager
 	 */
 	public function addPage( string $title, string $slug, ?string $sectionSlug, array $options = [] ): void
 	{
-		$defaults = [ 'view' => '', 'icon' => 'fas.users', 'capability' => 'access_admin_dashboard', 'order' => 99 ];
+		$defaults = [ 'action' => '', 'icon' => 'fas.users', 'capability' => 'access_admin_dashboard', 'order' => 99 ];
 		$options  = array_merge( $defaults, $options );
 
 		$this->items[ $slug ] = [
@@ -48,7 +48,7 @@ class AdminMenuManager
 			'route' => 'admin.' . $slug,
 		];
 
-		app( AdminPageManager::class )->register( $slug, $options['view'], $options['capability'] );
+		app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
 	}
 
 	/**
@@ -62,7 +62,7 @@ class AdminMenuManager
 	 */
 	public function addSubPage( string $title, string $slug, string $parentSlug, array $options = [] ): void
 	{
-		$defaults = [ 'view' => '', 'capability' => 'access_admin_dashboard', 'order' => 99, 'showInMenu' => true ];
+		$defaults = [ 'action' => '', 'capability' => 'access_admin_dashboard', 'order' => 99, 'showInMenu' => true ];
 		$options  = array_merge( $defaults, $options );
 
 		$this->items[ $slug ] = [
@@ -71,7 +71,7 @@ class AdminMenuManager
 			'route'      => 'admin.' . str_replace( '/', '.', $slug ),
 		];
 
-		app( AdminPageManager::class )->register( $slug, $options['view'], $options['capability'] );
+		app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
 	}
 
 	/**
@@ -98,7 +98,7 @@ class AdminMenuManager
 				$authorizedItems[ $item['parent'] ]['subItems'][ $slug ] = $item;
 			}
 		}
-		
+
 		// Now add items to their final destinations, using the updated items with subItems
 		foreach ( $authorizedItems as $slug => $item ) {
 			if ( $item['parent'] && isset( $authorizedItems[ $item['parent'] ] ) ) {

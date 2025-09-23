@@ -12,6 +12,7 @@
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -25,6 +26,29 @@ use Illuminate\Validation\Rule;
  */
 class RoleRequest extends FormRequest
 {
+	/**
+	 * The role instance.
+	 * @var Role|null
+	 */
+	protected ?Role $role = null;
+
+	/**
+	 * Sets the role for the request.
+	 *
+	 * This method allows the role model to be passed in from contexts
+	 * like a Livewire component where route model binding isn't automatic.
+	 *
+	 * @since 1.0.0
+	 * @param Role $role The role instance.
+	 * @return self
+	 */
+	public function setRole( Role $role ): self
+	{
+		$this->role = $role;
+
+		return $this;
+	}
+
 	/**
 	 * Determine if the user is authorized to make this request.
 	 *
@@ -47,22 +71,24 @@ class RoleRequest extends FormRequest
 	 */
 	public function rules(): array
 	{
-		$roleId = $this->route('role') ?? $this->route('id');
-		
+		$roleId = $this->role ? $this->role->id : null;
+
 		return [
-			'name' => [
+			'name'          => [
 				'required',
 				'string',
 				'max:255',
-				Rule::unique('roles', 'name')->ignore($roleId),
+				Rule::unique( 'roles', 'name' )->ignore( $roleId ),
 			],
-			'slug' => [
+			'slug'          => [
 				'required',
 				'string',
 				'max:255',
 				'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-				Rule::unique('roles', 'slug')->ignore($roleId),
+				Rule::unique( 'roles', 'slug' )->ignore( $roleId ),
 			],
+			'permissions'   => 'nullable|array',
+			'permissions.*' => 'exists:permissions,id',
 		];
 	}
 
@@ -77,10 +103,10 @@ class RoleRequest extends FormRequest
 	{
 		return [
 			'name.required' => 'The role name is required.',
-			'name.unique' => 'A role with this name already exists.',
+			'name.unique'   => 'A role with this name already exists.',
 			'slug.required' => 'The role slug is required.',
-			'slug.regex' => 'The role slug must be lowercase letters, numbers, and hyphens only.',
-			'slug.unique' => 'A role with this slug already exists.',
+			'slug.regex'    => 'The role slug must be lowercase letters, numbers, and hyphens only.',
+			'slug.unique'   => 'A role with this slug already exists.',
 		];
 	}
 

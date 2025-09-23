@@ -22,9 +22,9 @@ class AdminPageManager
 	 * @param string|null $capability The permission required to view the page.
 	 * @param string      $slug       The slug for the page route.
 	 */
-	public function register( string $slug, mixed $view, ?string $capability ): void
+	public function register( string $slug, mixed $action, ?string $capability ): void
 	{
-		$this->pages[ $slug ] = [ 'view' => $view, 'capability' => $capability ];
+		$this->pages[ $slug ] = [ 'action' => $action, 'capability' => $capability ];
 	}
 
 	/**
@@ -39,33 +39,14 @@ class AdminPageManager
 			 ->name( 'admin.' )
 			 ->group( function () {
 				 foreach ( $this->pages as $slug => $details ) {
-					 // **THE FIX IS HERE:**
-					 // 1. First, remove the dynamic parameter part from the slug.
+					 // Clean the slug to create a predictable route name.
 					 $cleanedSlug = preg_replace( '/\/\{.*?\}/', '', $slug );
+					 $routeName   = str_replace( '/', '.', $cleanedSlug );
 
-					 // 2. Now, create the route name from the cleaned slug.
-					 $routeName = str_replace( '/', '.', $cleanedSlug );
+					 // Create the route directly. Laravel handles the rest.
+					 $route = Route::get( $slug, $details['action'] )->name( $routeName );
 
-					 $route = null;
-
-					 // Check if the original slug contains a dynamic parameter.
-					 if ( str_contains( $slug, '{' ) ) {
-						 // For dynamic routes, we MUST use Route::get with a closure.
-						 $route = Route::get( $slug, function () use ( $details ) {
-							 return view( $details['view'], request()->route()->parameters() );
-						 } );
-					 } else if ( is_string( $details['view'] ) ) {
-						 // For simple, static routes, Route::view is the most efficient.
-						 $route = Route::view( $slug, $details['view'] );
-					 } else {
-						 // For other cases, like a closure passed as a view, use Route::get.
-						 $route = Route::get( $slug, $details['view'] );
-					 }
-
-					 // Name the route with the correctly generated name.
-					 $route->name( $routeName );
-
-					 // Use Laravel's built-in 'can:' middleware for reliability.
+					 // Apply capability middleware if it exists.
 					 if ( ! empty( $details['capability'] ) ) {
 						 $route->middleware( 'can:' . $details['capability'] );
 					 }
