@@ -39,9 +39,38 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function boot(): void
 	{
-		$this->publishes( [
-							  __DIR__ . '/../config/cms-framework.php' => config_path( 'cms-framework.php' ),
-						  ], 'config' );
+		$this->mergeConfiguration();
+
+		if ( $this->app->runningInConsole() ) {
+			$this->publishes( [
+								  __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
+							  ], 'artisanpack-package-config' );
+		}
+
+	}
+
+	/**
+	 * Merges the package's default configuration with the user's customizations.
+	 *
+	 * This method ensures that the user's settings in `config/artisanpack.php`
+	 * take precedence over the package's default values.
+	 *
+	 * @since 2.0.0
+	 * @return void
+	 */
+	protected function mergeConfiguration(): void
+	{
+		// Get the package's default configuration.
+		$packageDefaults = config( 'artisanpack-cms-framework-temp', [] );
+
+		// Get the user's custom configuration from config/artisanpack.php.
+		$userConfig = config( 'artisanpack.cms-framework', [] );
+
+		// Merge them, with the user's config overwriting the defaults.
+		$mergedConfig = array_replace_recursive( $packageDefaults, $userConfig );
+
+		// Set the final, correctly merged configuration.
+		config( [ 'artisanpack.cms-framework' => $mergedConfig ] );
 	}
 
 	/**
@@ -55,8 +84,13 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 	 */
 	public function register(): void
 	{
+		$this->mergeConfigFrom(
+			__DIR__ . '/../config/cms-framework.php', 'artisanpack-cms-framework-temp'
+		);
+
 		$this->app->register( UserServiceProvider::class );
 		$this->app->register( AdminServiceProvider::class );
 	}
+
 
 }

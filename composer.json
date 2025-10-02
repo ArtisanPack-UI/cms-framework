@@ -33,7 +33,8 @@
     "laravel/tinker": "^2.10.1",
     "tormjens/eventy": "^0.9.4",
     "artisanpack-ui/accessibility": "@dev",
-    "artisanpack-ui/security": "@dev"
+    "artisanpack-ui/security": "@dev",
+    "artisanpack-ui/core": "^1.0"
   },
   "require-dev": {
     "pestphp/pest": "^4.0",
