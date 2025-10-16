@@ -37,8 +37,8 @@
     "artisanpack-ui/core": "^1.0"
   },
   "require-dev": {
-    "pestphp/pest": "^4.0",
-    "pestphp/pest-plugin-laravel": "^4.0",
+    "pestphp/pest": "^3.8",
+    "pestphp/pest-plugin-laravel": "^3.2",
     "fakerphp/faker": "^1.23",
     "laravel/pail": "^1.2.2",
     "laravel/pint": "^1.18",
