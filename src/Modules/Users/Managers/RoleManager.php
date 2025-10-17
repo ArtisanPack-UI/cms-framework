@@ -43,7 +43,7 @@ class RoleManager
 	public function register( string $slug, string $name ): Role
 	{
 		$role = Role::firstOrCreate( [ 'slug' => $slug ], [ 'name' => $name ] );
-		Eventy::action( 'ap.roleRegistered', $role );
+		doAction( 'ap.roleRegistered', $role );
 		return $role;
 	}
 

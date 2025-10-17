@@ -86,7 +86,7 @@ if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
 	 */
 	function apRegisterUserSettingsSection( string $key, string $label, int $order = 50 ): void
 	{
-		Eventy::addFilter( 'ap.users.settings.sections', function ( array $sections ) use ( $key, $label, $order ) {
+		addFilter( 'ap.users.settings.sections', function ( array $sections ) use ( $key, $label, $order ) {
 			$sections[ $key ] = compact( 'label', 'order' );
 			return $sections;
 		} );

@@ -38,7 +38,7 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.viewAny', 'permissions.viewAny' ) );
+		return $user->can( applyFiltersfilter( 'permissions.viewAny', 'permissions.viewAny' ) );
 	}
 
 	/**
@@ -55,7 +55,7 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.view', 'permissions.view' ) );
+		return $user->can( applyFiltersfilter( 'permissions.view', 'permissions.view' ) );
 	}
 
 	/**
@@ -72,7 +72,7 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.create', 'permissions.create' ) );
+		return $user->can( applyFiltersfilter( 'permissions.create', 'permissions.create' ) );
 	}
 
 	/**
@@ -89,7 +89,7 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.update', 'permissions.update' ) );
+		return $user->can( applyFiltersfilter( 'permissions.update', 'permissions.update' ) );
 	}
 
 	/**
@@ -106,7 +106,7 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.delete', 'permissions.delete' ) );
+		return $user->can( applyFiltersfilter( 'permissions.delete', 'permissions.delete' ) );
 	}
 
 	/**
@@ -123,7 +123,7 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.restore', 'permissions.restore' ) );
+		return $user->can( applyFiltersfilter( 'permissions.restore', 'permissions.restore' ) );
 	}
 
 	/**
@@ -140,6 +140,6 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( Eventy::filter( 'permissions.forceDelete', 'permissions.forceDelete' ) );
+		return $user->can( applyFiltersfilter( 'permissions.forceDelete', 'permissions.forceDelete' ) );
 	}
 }

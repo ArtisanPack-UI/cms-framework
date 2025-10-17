@@ -31,10 +31,10 @@
     "illuminate/support": "^12.17.0",
     "laravel/framework": "^12.0",
     "laravel/tinker": "^2.10.1",
-    "tormjens/eventy": "^0.9.4",
     "artisanpack-ui/accessibility": "@dev",
     "artisanpack-ui/security": "@dev",
-    "artisanpack-ui/core": "^1.0"
+    "artisanpack-ui/core": "^1.0",
+    "artisanpack-ui/hooks": "^1.0"
   },
   "require-dev": {
     "pestphp/pest": "^3.8",

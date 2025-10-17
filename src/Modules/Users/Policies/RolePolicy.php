@@ -36,7 +36,7 @@ class RolePolicy
 	 */
 	public function viewAny( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.viewAny', 'roles.manage' ) );
+		return $user->can( applyFiltersfilter( 'role.viewAny', 'roles.manage' ) );
 	}
 
 	/**
@@ -50,7 +50,7 @@ class RolePolicy
 	 */
 	public function view( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.view', 'roles.manage' ) );
+		return $user->can( applyFiltersfilter( 'role.view', 'roles.manage' ) );
 	}
 
 	/**
@@ -64,7 +64,7 @@ class RolePolicy
 	 */
 	public function create( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.create', 'roles.manage' ) );
+		return $user->can( applyFiltersfilter( 'role.create', 'roles.manage' ) );
 	}
 
 	/**
@@ -78,7 +78,7 @@ class RolePolicy
 	 */
 	public function update( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.update', 'roles.manage' ) );
+		return $user->can( applyFiltersfilter( 'role.update', 'roles.manage' ) );
 	}
 
 	/**
@@ -92,7 +92,7 @@ class RolePolicy
 	 */
 	public function delete( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.delete', 'roles.delete' ) );
+		return $user->can( applyFiltersfilter( 'role.delete', 'roles.delete' ) );
 	}
 
 	/**
@@ -106,7 +106,7 @@ class RolePolicy
 	 */
 	public function restore( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.restore', 'roles.manage' ) );
+		return $user->can( applyFiltersfilter( 'role.restore', 'roles.manage' ) );
 	}
 
 	/**
@@ -120,6 +120,6 @@ class RolePolicy
 	 */
 	public function forceDelete( Authenticatable $user ): bool
 	{
-		return $user->can( Eventy::filter( 'role.forceDelete', 'roles.delete' ) );
+		return $user->can( applyFiltersfilter( 'role.forceDelete', 'roles.delete' ) );
 	}
 }

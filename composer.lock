@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8f33bcc52efec339118c3a9d9013b803",
+    "content-hash": "c2d89ce950781b14e654c623d2ac4cd2",
     "packages": [
         {
             "name": "artisanpack-ui/accessibility",
@@ -124,6 +124,70 @@
                 "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-core/-/tree/v1.0"
             },
             "time": "2025-10-02T15:05:04+00:00"
+        },
+        {
+            "name": "artisanpack-ui/hooks",
+            "version": "1.0.0",
+            "source": {
+                "type": "git",
+                "url": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-hooks.git",
+                "reference": "92ded133eebc7b983a012259920a5d2dbaacefb7"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://gitlab.com/api/v4/projects/jacob-martella-web-design%2Fartisanpack-ui%2Fartisanpack-ui-hooks/repository/archive.zip?sha=92ded133eebc7b983a012259920a5d2dbaacefb7",
+                "reference": "92ded133eebc7b983a012259920a5d2dbaacefb7",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/support": ">=5.3",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "artisanpack-ui/code-style": "^1.0",
+                "dealerdirect/phpcodesniffer-composer-installer": "^1.1",
+                "orchestra/testbench": "^10.6",
+                "pestphp/pest": "^3.8",
+                "pestphp/pest-plugin-laravel": "^3.1",
+                "squizlabs/php_codesniffer": "^3.13"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "Action": "ArtisanPackUI\\Hooks\\Facades\\Action",
+                        "Filter": "ArtisanPackUI\\Hooks\\Facades\\Filter"
+                    },
+                    "providers": [
+                        "ArtisanPackUI\\Hooks\\Providers\\HooksServiceProvider",
+                        "ArtisanPackUI\\Hooks\\Providers\\BladeDirectiveServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "files": [
+                    "src/helpers.php"
+                ],
+                "psr-4": {
+                    "ArtisanPackUI\\Hooks\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Jacob Martella",
+                    "email": "me@jacobmartella.com"
+                }
+            ],
+            "description": "WordPress-style actions and filters for Laravel, with Blade directives and helper functions.",
+            "support": {
+                "issues": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-hooks/-/issues",
+                "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-hooks/-/tree/v1.0.0"
+            },
+            "time": "2025-10-16T14:15:21+00:00"
         },
         {
             "name": "artisanpack-ui/security",
@@ -6049,79 +6113,6 @@
                 "source": "https://github.com/tijsverkoyen/CssToInlineStyles/tree/v2.3.0"
             },
             "time": "2024-12-21T16:25:41+00:00"
-        },
-        {
-            "name": "tormjens/eventy",
-            "version": "0.9.4",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/tormjens/eventy.git",
-                "reference": "6e3e6ca413e665703b6a7252145f8e051a3ef206"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/tormjens/eventy/zipball/6e3e6ca413e665703b6a7252145f8e051a3ef206",
-                "reference": "6e3e6ca413e665703b6a7252145f8e051a3ef206",
-                "shasum": ""
-            },
-            "require": {
-                "illuminate/support": ">=5.3",
-                "laravel/serializable-closure": "^1.3",
-                "php": ">=7.0"
-            },
-            "require-dev": {
-                "php-coveralls/php-coveralls": "^2.1",
-                "phpunit/phpunit": "^10.3"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "aliases": {
-                        "Eventy": "TorMorten\\Eventy\\Facades\\Events"
-                    },
-                    "providers": [
-                        "TorMorten\\Eventy\\EventServiceProvider",
-                        "TorMorten\\Eventy\\EventBladeServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "files": [
-                    "src/helpers.php"
-                ],
-                "psr-4": {
-                    "TorMorten\\Eventy\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Tor Morten Jensen",
-                    "homepage": "https://tormorten.no"
-                }
-            ],
-            "description": "The WordPress filter/action system in Laravel",
-            "homepage": "https://github.com/tormjens/eventy",
-            "keywords": [
-                "HOOK",
-                "action",
-                "actions",
-                "event",
-                "events",
-                "filter",
-                "filters",
-                "hooks",
-                "laravel",
-                "wordpress"
-            ],
-            "support": {
-                "issues": "https://github.com/tormjens/eventy/issues",
-                "source": "https://github.com/tormjens/eventy/tree/0.9.4"
-            },
-            "time": "2024-04-01T17:09:07+00:00"
         },
         {
             "name": "vlucas/phpdotenv",

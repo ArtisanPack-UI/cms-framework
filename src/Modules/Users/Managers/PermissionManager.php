@@ -42,7 +42,7 @@ class PermissionManager
 	public function register( string $slug, string $name ): Permission
 	{
 		$permission = Permission::firstOrCreate( [ 'slug' => $slug ], [ 'name' => $name ] );
-		Eventy::action( 'ap.permissionRegistered', $permission );
+		doAction( 'ap.permissionRegistered', $permission );
 		return $permission;
 	}
 }

@@ -112,13 +112,13 @@ The CMS Framework uses the Eventy system for hooks and filters, allowing for ext
 use TorMorten\Eventy\Facades\Eventy;
 
 // Add a filter
-Eventy::addFilter('ap.cms.migrations.directories', function($directories) {
+addFilter('ap.cms.migrations.directories', function($directories) {
     $directories[] = __DIR__ . '/database/migrations';
     return $directories;
 });
 
 // Add an action
-Eventy::addAction('ap.cms.after_content_save', function($content) {
+addAction('ap.cms.after_content_save', function($content) {
     // Do something after content is saved
 });
 ```
