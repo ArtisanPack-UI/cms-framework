@@ -14,14 +14,17 @@ class AdminPageManager
 {
 	protected array $pages = [];
 
-	/**
-	 * Stores the details of a page to be registered.
-	 *
-	 * @since 2.0.0
-	 * @param mixed       $view       The view, closure, or controller action.
-	 * @param string|null $capability The permission required to view the page.
-	 * @param string      $slug       The slug for the page route.
-	 */
+ /**
+     * Stores the details of a page to be registered.
+     *
+     * @since 2.0.0
+     *
+     * @param string      $slug       The slug for the page route.
+     * @param mixed       $action     The view, closure, or controller action.
+     * @param string|null $capability The permission required to view the page.
+     *
+     * @return void
+     */
 	public function register( string $slug, mixed $action, ?string $capability ): void
 	{
 		$this->pages[ $slug ] = [ 'action' => $action, 'capability' => $capability ];

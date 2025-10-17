@@ -14,6 +14,11 @@ use Illuminate\Support\ServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminPageManager;
 
+/**
+ * Registers admin module services and bootstraps admin routing/middleware.
+ *
+ * @since 2.0.0
+ */
 class AdminServiceProvider extends ServiceProvider
 {
 	/**

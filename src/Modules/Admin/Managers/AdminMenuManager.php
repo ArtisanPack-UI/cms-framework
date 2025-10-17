@@ -10,9 +10,29 @@ namespace ArtisanPackUI\CMSFramework\Modules\Admin\Managers;
 
 use Illuminate\Support\Facades\Gate;
 
+/**
+ * Manages the registration and structure of the admin navigation menu.
+ *
+ * Stores sections and items, and builds a user-capability-filtered menu structure.
+ *
+ * @since 2.0.0
+ */
 class AdminMenuManager
 {
+    /**
+     * Registered menu sections keyed by slug.
+     *
+     * @since 2.0.0
+     * @var array<string,array{title:string,order:int,items:array<string,mixed>}> $sections
+     */
     protected array $sections = [];
+
+    /**
+     * Registered menu items keyed by slug.
+     *
+     * @since 2.0.0
+     * @var array<string,array{title:string,slug:string,parent:?string,section:?string,icon?:string,capability?:string,order:int,route:string,showInMenu?:bool,subItems?:array<string,mixed>}> $items
+     */
     protected array $items = [];
 
     /**

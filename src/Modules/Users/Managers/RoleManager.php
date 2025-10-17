@@ -43,7 +43,22 @@ class RoleManager
 	public function register( string $slug, string $name ): Role
 	{
 		$role = Role::firstOrCreate( [ 'slug' => $slug ], [ 'name' => $name ] );
+
+		/**
+		 * Fires after a role has been registered.
+		 *
+		 * This action allows other parts of the system to react to a new role being
+		 * created or retrieved during registration.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook ap.roleRegistered
+		 *
+		 * @param Role $role The role instance that was registered.
+		 * @return void
+		 */
 		doAction( 'ap.roleRegistered', $role );
+
 		return $role;
 	}
 

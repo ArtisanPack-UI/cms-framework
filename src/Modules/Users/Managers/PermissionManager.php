@@ -42,7 +42,22 @@ class PermissionManager
 	public function register( string $slug, string $name ): Permission
 	{
 		$permission = Permission::firstOrCreate( [ 'slug' => $slug ], [ 'name' => $name ] );
+
+		/**
+		 * Fires after a permission has been registered.
+		 *
+		 * This action allows other parts of the system to react to a new permission being
+		 * created or retrieved during registration.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook ap.permissionRegistered
+		 *
+		 * @param Permission $permission The permission instance that was registered.
+		 * @return void
+		 */
 		doAction( 'ap.permissionRegistered', $permission );
+
 		return $permission;
 	}
 }

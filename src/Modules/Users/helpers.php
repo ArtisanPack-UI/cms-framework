@@ -78,14 +78,34 @@ if ( ! function_exists( 'ap_add_permission_to_role' ) ) {
 
 if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
 	/**
-	 * Helper to register a new section (tab) on the User Edit page.
+	 * Register a new section (tab) on the User Edit page.
+	 *
+	 * Adds a keyed section with a label and order that consumers can use to
+	 * render additional settings on user profile screens.
+	 *
+	 * @since 2.0.0
 	 *
 	 * @param string $key   A unique machine-readable key (e.g., 'business_hours').
 	 * @param string $label The human-readable label for the tab (e.g., 'Business Hours').
 	 * @param int    $order The display order for the tab.
+	 *
+	 * @return void
 	 */
 	function apRegisterUserSettingsSection( string $key, string $label, int $order = 50 ): void
 	{
+		/**
+		 * Filters the available sections on the User Settings page.
+		 *
+		 * Allows plugins and modules to add, remove, or reorder sections (tabs)
+		 * that appear on user profile edit screens.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @hook ap.users.settings.sections
+		 *
+		 * @param array<string,array{label:string,order:int}> $sections Associative array of section definitions keyed by section key.
+		 * @return array<string,array{label:string,order:int}> Modified sections array.
+		 */
 		addFilter( 'ap.users.settings.sections', function ( array $sections ) use ( $key, $label, $order ) {
 			$sections[ $key ] = compact( 'label', 'order' );
 			return $sections;

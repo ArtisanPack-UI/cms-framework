@@ -33,6 +33,7 @@ The CMS Framework is designed to help developers quickly build content managemen
 - [[Developer Guide]] - Extending and customizing the framework
 - [[API Authentication]] - Securing your API endpoints
 - [[Testing]] - Testing your CMS implementation
+- [[Hooks and Events]] - Filters and actions you can use to extend functionality
 
 ## Core Components
 
@@ -42,6 +43,22 @@ The Users module provides comprehensive user management functionality including:
 - Role assignment and management
 - Permission-based access control
 - Configurable user model support
+
+### Admin Module
+Provides the building blocks for your admin area:
+- Menu sections, pages, and subpages
+- Automatic route registration under /admin with auth middleware
+- Capability-based authorization
+- Dashboard widgets
+
+See [[Admin]] for details.
+
+### Core Module
+Provides cross-cutting services:
+- Asset registration and retrieval for admin/public/auth contexts
+- Filter hooks to modify asset collections
+
+See [[Core]] for details.
 
 ### Models
 - **User Model**: Uses your application's User model with HasRolesAndPermissions trait

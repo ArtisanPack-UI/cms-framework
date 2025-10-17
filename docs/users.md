@@ -1,3 +1,7 @@
+---
+title: Users
+---
+
 # User Documentation
 
 Welcome to the user documentation section. This section contains comprehensive guides and references for users of the CMS Framework.

@@ -13,6 +13,11 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
+/**
+ * Middleware that authorizes requests against a given admin capability.
+ *
+ * @since 2.0.0
+ */
 class CheckAdminCapability
 {
 	/**
