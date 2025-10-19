@@ -13,7 +13,6 @@
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Policies;
 
 use Illuminate\Contracts\Auth\Authenticatable;
-use TorMorten\Eventy\Facades\Eventy;
 
 /**
  * Policy for managing role permissions.
@@ -23,7 +22,7 @@ use TorMorten\Eventy\Facades\Eventy;
  *
  * @since 1.0.0
  */
-class RolePolicy
+class SettingPolicy
 {
 	/**
 	 * Determine whether the user can view any roles.
@@ -36,7 +35,7 @@ class RolePolicy
 	 */
 	public function viewAny( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.viewAny', 'roles.manage' ) );
+		return $user->can( applyFilters( 'settings.viewAny', 'settings.manage' ) );
 	}
 
 	/**
@@ -50,7 +49,7 @@ class RolePolicy
 	 */
 	public function view( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.view', 'roles.manage' ) );
+		return $user->can( applyFilters( 'settings.view', 'settings.manage' ) );
 	}
 
 	/**
@@ -64,7 +63,7 @@ class RolePolicy
 	 */
 	public function create( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.create', 'roles.manage' ) );
+		return $user->can( applyFilters( 'settings.create', 'settings.manage' ) );
 	}
 
 	/**
@@ -78,7 +77,7 @@ class RolePolicy
 	 */
 	public function update( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.update', 'roles.manage' ) );
+		return $user->can( applyFilters( 'settings.update', 'settings.manage' ) );
 	}
 
 	/**
@@ -92,7 +91,7 @@ class RolePolicy
 	 */
 	public function delete( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.delete', 'roles.delete' ) );
+		return $user->can( applyFilters( 'settings.delete', 'settings.delete' ) );
 	}
 
 	/**
@@ -106,7 +105,7 @@ class RolePolicy
 	 */
 	public function restore( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.restore', 'roles.manage' ) );
+		return $user->can( applyFilters( 'settings.restore', 'settings.manage' ) );
 	}
 
 	/**
@@ -120,6 +119,6 @@ class RolePolicy
 	 */
 	public function forceDelete( Authenticatable $user ): bool
 	{
-		return $user->can( applyFilters( 'role.forceDelete', 'roles.delete' ) );
+		return $user->can( applyFilters( 'settings.forceDelete', 'settings.delete' ) );
 	}
 }
