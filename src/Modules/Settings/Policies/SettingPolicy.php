@@ -1,37 +1,37 @@
 <?php
 
 /**
- * Role Policy for the CMS Framework Users Module.
+ * Role Policy for the CMS Framework Settings Module.
  *
- * This policy handles authorization for role-related operations using
- * the Eventy filter system for extensible permission checking.
+ * This policy handles authorization for setting-related operations using
+ * the artisanpack-ui/hooks filter system for extensible permission checking.
  *
  * @since   1.0.0
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Policies
+ * @package ArtisanPackUI\CMSFramework\Modules\Settings\Policies
  */
 
-namespace ArtisanPackUI\CMSFramework\Modules\Users\Policies;
+namespace ArtisanPackUI\CMSFramework\Modules\Settings\Policies;
 
 use Illuminate\Contracts\Auth\Authenticatable;
 
 /**
- * Policy for managing role permissions.
+ * Policy for managing setting permissions.
  *
- * Provides authorization methods for role-related operations using
- * the configurable user model and Eventy filter system for extensibility.
+ * Provides authorization methods for settings-related operations using
+ * the configurable setting model and artisanpack-ui/hooks system for extensibility.
  *
  * @since 1.0.0
  */
 class SettingPolicy
 {
 	/**
-	 * Determine whether the user can view any roles.
+	 * Determine whether the user can view any settings.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can view roles, false otherwise.
+	 * @return bool True if the user can view settings, false otherwise.
 	 */
 	public function viewAny( Authenticatable $user ): bool
 	{
@@ -39,13 +39,13 @@ class SettingPolicy
 	}
 
 	/**
-	 * Determine whether the user can view the role.
+	 * Determine whether the user can view the setting.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can view the role, false otherwise.
+	 * @return bool True if the user can view the setting, false otherwise.
 	 */
 	public function view( Authenticatable $user ): bool
 	{
@@ -53,13 +53,13 @@ class SettingPolicy
 	}
 
 	/**
-	 * Determine whether the user can create roles.
+	 * Determine whether the user can create settings.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can create roles, false otherwise.
+	 * @return bool True if the user can create settings, false otherwise.
 	 */
 	public function create( Authenticatable $user ): bool
 	{
@@ -67,13 +67,13 @@ class SettingPolicy
 	}
 
 	/**
-	 * Determine whether the user can update the role.
+	 * Determine whether the user can update the setting.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can update the role, false otherwise.
+	 * @return bool True if the user can update the setting, false otherwise.
 	 */
 	public function update( Authenticatable $user ): bool
 	{
@@ -81,13 +81,13 @@ class SettingPolicy
 	}
 
 	/**
-	 * Determine whether the user can delete the role.
+	 * Determine whether the user can delete the setting.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can delete the role, false otherwise.
+	 * @return bool True if the user can delete the setting, false otherwise.
 	 */
 	public function delete( Authenticatable $user ): bool
 	{
@@ -95,13 +95,13 @@ class SettingPolicy
 	}
 
 	/**
-	 * Determine whether the user can restore the role.
+	 * Determine whether the user can restore the setting.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can restore the role, false otherwise.
+	 * @return bool True if the user can restore the setting, false otherwise.
 	 */
 	public function restore( Authenticatable $user ): bool
 	{
@@ -109,13 +109,13 @@ class SettingPolicy
 	}
 
 	/**
-	 * Determine whether the user can permanently delete the role.
+	 * Determine whether the user can permanently delete the setting.
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param string|int $id The ID of the user to check permissions for.
 	 *
-	 * @return bool True if the user can force delete the role, false otherwise.
+	 * @return bool True if the user can force delete the setting, false otherwise.
 	 */
 	public function forceDelete( Authenticatable $user ): bool
 	{

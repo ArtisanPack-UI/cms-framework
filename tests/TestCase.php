@@ -10,9 +10,11 @@ namespace ArtisanPackUI\CMSFramework\Tests;
 
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use CreateUsersTable;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Application;
-use TorMorten\Eventy\EventServiceProvider;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Provides the base application for all package tests.
@@ -31,6 +33,15 @@ class TestCase extends \Orchestra\Testbench\TestCase
 		// 2. Load the temporary 'users' table migration for testing.
 		include_once __DIR__ . '/Support/Migrations/2025_01_01_000000_create_users_table.php';
 		( new CreateUsersTable() )->up();
+
+		if ( ! Schema::hasTable( 'settings' ) ) {
+			Schema::create( 'settings', function ( Blueprint $table ) {
+				$table->string( 'key' )->primary();
+				$table->text( 'value' )->nullable();
+				$table->string( 'type' )->default( 'string' );
+				$table->timestamps();
+			} );
+		}
 	}
 
 	/**
@@ -43,6 +54,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
 	{
 		return [
 			CMSFrameworkServiceProvider::class,
+			HooksServiceProvider::class,
 		];
 	}
 

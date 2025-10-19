@@ -5,14 +5,14 @@ use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 if ( ! function_exists( 'apGetSetting' ) ) {
 	function apGetSetting( string $key, mixed $default = null ): mixed
 	{
-		app( SettingsManager::class )->getSetting( $key, $default );
+		return app( SettingsManager::class )->getSetting( $key, $default );
 	}
 }
 
 if ( ! function_exists( 'apRegisterSetting' ) ) {
-	function apRegisterSetting( string $key, mixed $defaulValue, string $type = 'string', callable $callback ): void
+	function apRegisterSetting( string $key, mixed $defaultValue, callable $callback, string $type = 'string' ): void
 	{
-		app( SettingsManager::class )->registerSetting( $key, $defaulValue, $type, $callback );
+		app( SettingsManager::class )->registerSetting( $key, $defaultValue, $callback, $type );
 	}
 }
 

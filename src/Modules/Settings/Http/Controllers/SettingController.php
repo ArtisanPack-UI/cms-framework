@@ -1,19 +1,19 @@
 <?php
 
 /**
- * Setting Controller for the CMS Framework Users Module.
+ * Setting Controller for the CMS Framework Settings Module.
  *
  * This controller handles CRUD operations for setting including listing,
  * creating, showing, updating, and deleting setting records through API endpoints.
  *
  * @since   1.0.0
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers
+ * @package ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources\SettingResource;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
-use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\SettingResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -41,7 +41,7 @@ class SettingController extends Controller
 	 */
 	public function index(): AnonymousResourceCollection
 	{
-		$settings = Setting::with( 'permissions' )->paginate( 15 );
+		$settings = Setting::paginate( 15 );
 
 		return SettingResource::collection( $settings );
 	}
@@ -86,7 +86,7 @@ class SettingController extends Controller
 	 */
 	public function show( string|int $id ): SettingResource
 	{
-		$setting = Setting::with( 'permissions' )->findOrFail( $id );
+		$setting = Setting::findOrFail( $id );
 
 		return new SettingResource( $setting );
 	}
@@ -114,7 +114,6 @@ class SettingController extends Controller
 										 ] );
 
 		$setting->update( $validated );
-		$setting->load( 'permissions' );
 
 		return new SettingResource( $setting );
 	}

@@ -6,11 +6,11 @@ use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 
 class SettingsManager
 {
-	public function registerSetting( string $key, mixed $defaulValue, string $type = 'string', callable $callback ): void
+	public function registerSetting( string $key, mixed $defaultValue, callable $callback, string $type = 'string' ): void
 	{
-		addFilter( 'ap.settings.registeredSettings', function ( $settings ) use ( $key, $defaulValue, $type, $callback ) {
+		addFilter( 'ap.settings.registeredSettings', function ( $settings ) use ( $key, $defaultValue, $type, $callback ) {
 			$settings[ $key ] = [
-				'default'  => $defaulValue,
+				'default'  => $defaultValue,
 				'type'     => $type,
 				'callback' => $callback,
 			];
@@ -27,12 +27,10 @@ class SettingsManager
 			return $setting->value;
 		}
 
-		if ( null !== $default ) {
-			return $default;
-		}
+		$settings          = applyFilters( 'ap.settings.registeredSettings', [] );
+		$registeredDefault = $settings[ $key ]['default'] ?? null;
 
-		$settings = applyFilters( 'ap.settings.registeredSettings', [] );
-		return $settings[ $key ]['default'] ?? null;
+		return $default ?? $registeredDefault;
 	}
 
 	public function updateSetting( string $key, mixed $value ): void

@@ -1,13 +1,13 @@
 <?php
 
 /**
- * Setting Request for the CMS Framework Users Module.
+ * Setting Request for the CMS Framework Settings Module.
  *
  * This form request handles validation and authorization for setting-related
  * HTTP requests, ensuring data integrity and security.
  *
  * @since   1.0.0
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Http\Requests
+ * @package ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests;

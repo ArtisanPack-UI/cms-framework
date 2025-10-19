@@ -1,13 +1,13 @@
 <?php
 
 /**
- * Setting Resource for the CMS Framework Users Module.
+ * Setting Resource for the CMS Framework Settings Module.
  *
  * This resource class transforms setting model instances into JSON API responses,
- * including setting data and optionally loaded relationships such as permissions.
+ * including setting data and optionally loaded relationships.
  *
  * @since   1.0.0
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources
+ * @package ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources;
