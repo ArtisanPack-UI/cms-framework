@@ -6,8 +6,8 @@
  * This service provider handles the registration and bootstrapping of user-related
  * services including role management, permission management, migrations, and API routes.
  *
- * @package ArtisanPackUI\CMSFramework\Modules\Users\Providers
  * @since   1.0.0
+ * @package ArtisanPackUI\CMSFramework\Modules\Users\Providers
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Providers;
@@ -39,8 +39,8 @@ class UserServiceProvider extends ServiceProvider
 	 */
 	public function register(): void
 	{
-		$this->app->singleton(RoleManager::class, fn() => new RoleManager());
-		$this->app->singleton(PermissionManager::class, fn() => new PermissionManager());
+		$this->app->singleton( RoleManager::class, fn() => new RoleManager() );
+		$this->app->singleton( PermissionManager::class, fn() => new PermissionManager() );
 	}
 
 	/**
@@ -55,10 +55,8 @@ class UserServiceProvider extends ServiceProvider
 	 */
 	public function boot(): void
 	{
-		$this->loadMigrationsFrom(__DIR__ . '/../../../../database/migrations');
-
-		Route::prefix('api/v1')
-			->middleware('api')
-			->group(__DIR__ . '/../routes/api.php');
+		Route::prefix( 'api/v1' )
+			 ->middleware( 'api' )
+			 ->group( __DIR__ . '/../routes/api.php' );
 	}
 }

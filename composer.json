@@ -12,7 +12,8 @@
     "files": [
       "src/Modules/Users/helpers.php",
       "src/Modules/Admin/helpers.php",
-      "src/Modules/Core/helpers.php"
+      "src/Modules/Core/helpers.php",
+      "src/Modules/Settings/helpers.php"
     ]
   },
   "autoload-dev": {

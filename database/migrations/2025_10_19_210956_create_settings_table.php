@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
 	public function up(): void
 	{
-		Schema::table( 'settings', function ( Blueprint $table ) {
+		Schema::create( 'settings', function ( Blueprint $table ) {
 			$table->string( 'key' )->primary();
 			$table->text( 'value' )->nullable();
 			$table->string( 'type' )->default( 'string' );
@@ -17,8 +17,6 @@ return new class extends Migration {
 
 	public function down(): void
 	{
-		Schema::table( 'settings', function ( Blueprint $table ) {
-			Schema::dropIfExists( 'settings' );
-		} );
+		Schema::dropIfExists( 'settings' );
 	}
 };
