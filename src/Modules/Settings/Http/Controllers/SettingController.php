@@ -12,10 +12,11 @@
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests\SettingRequest;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources\SettingResource;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
 
@@ -29,112 +30,122 @@ use Illuminate\Routing\Controller;
  */
 class SettingController extends Controller
 {
-	/**
-	 * Display a listing of settings.
-	 *
-	 * Retrieves a paginated list of settings with their associated permissions
-	 * and returns them as a JSON resource collection.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return AnonymousResourceCollection The paginated collection of setting resources.
-	 */
-	public function index(): AnonymousResourceCollection
-	{
-		$settings = Setting::paginate( 15 );
+    use AuthorizesRequests;
 
-		return SettingResource::collection( $settings );
-	}
+    /**
+     * Display a listing of settings.
+     *
+     * Retrieves a paginated list of settings with their associated permissions
+     * and returns them as a JSON resource collection.
+     *
+     * @since 1.0.0
+     *
+     * @return AnonymousResourceCollection The paginated collection of setting resources.
+     */
+    public function index(): AnonymousResourceCollection
+    {
+        $this->authorize( 'viewAny', Setting::class );
 
-	/**
-	 * Store a newly created setting.
-	 *
-	 * Validates the incoming request data and creates a new setting with the
-	 * provided information.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param Request $request The HTTP request containing setting data.
-	 *
-	 * @return SettingResource The created setting resource with loaded permissions.
-	 */
-	public function store( Request $request ): SettingResource
-	{
-		$validated = $request->validate( [
-											 'key'   => 'required|string|max:255|unique:settings',
-											 'value' => 'required|string',
-											 'type'  => 'required|string|max:255',
-										 ] );
+        $settings = Setting::paginate( 15 );
 
-		$setting = Setting::create( $validated );
-		$setting->load( 'permissions' );
+        return SettingResource::collection( $settings );
+    }
 
-		return new SettingResource( $setting );
-	}
+    /**
+     * Store a newly created setting.
+     *
+     * Validates the incoming request data and creates a new setting with the
+     * provided information.
+     *
+     * @since 1.0.0
+     *
+     * @param SettingRequest $request The HTTP request containing setting data.
+     *
+     * @return SettingResource The created setting resource with loaded permissions.
+     */
+    public function store( SettingRequest $request ): SettingResource
+    {
+        $this->authorize( 'create', Setting::class );
 
-	/**
-	 * Display the specified setting.
-	 *
-	 * Retrieves a single setting by ID with their associated permissions
-	 * and returns it as a JSON resource.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param string|int $id The ID of the setting to retrieve.
-	 *
-	 * @return SettingResource The setting resource with loaded permissions.
-	 */
-	public function show( string|int $id ): SettingResource
-	{
-		$setting = Setting::findOrFail( $id );
+        $validated = $request->validate( [
+                                             'key'   => 'required|string|max:255|unique:settings',
+                                             'value' => 'required|string',
+                                             'type'  => 'required|string|max:255',
+                                         ] );
 
-		return new SettingResource( $setting );
-	}
+        $setting = Setting::create( $validated );
 
-	/**
-	 * Update the specified setting.
-	 *
-	 * Validates the incoming request data and updates the setting with the
-	 * provided information. Only provided fields are updated (partial updates).
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param Request    $request The HTTP request containing updated setting data.
-	 * @param string|int $id      The ID of the setting to update.
-	 *
-	 * @return SettingResource The updated setting resource with loaded permissions.
-	 */
-	public function update( Request $request, string|int $id ): SettingResource
-	{
-		$setting   = Setting::findOrFail( $id );
-		$validated = $request->validate( [
-											 'key'   => 'required|string|max:255|unique:settings,slug,' . $setting->id,
-											 'value' => 'required|string',
-											 'type'  => 'required|string|max:255',
-										 ] );
+        return new SettingResource( $setting );
+    }
 
-		$setting->update( $validated );
+    /**
+     * Display the specified setting.
+     *
+     * Retrieves a single setting by ID with their associated permissions
+     * and returns it as a JSON resource.
+     *
+     * @since 1.0.0
+     *
+     * @param string|int $id The ID of the setting to retrieve.
+     *
+     * @return SettingResource The setting resource with loaded permissions.
+     */
+    public function show( string | int $id ): SettingResource
+    {
+        $this->authorize( 'view', Setting::class );
 
-		return new SettingResource( $setting );
-	}
+        $setting = Setting::findOrFail( $id );
 
-	/**
-	 * Remove the specified setting.
-	 *
-	 * Deletes a setting from the database and returns a successful response
-	 * with no content.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @param string|int $id The ID of the setting to delete.
-	 *
-	 * @return JsonResponse A JSON response with 204 status code.
-	 */
-	public function destroy( string|int $id ): JsonResponse
-	{
-		$setting = Setting::findOrFail( $id );
-		$setting->delete();
+        return new SettingResource( $setting );
+    }
 
-		return response()->json( [], 204 );
-	}
+    /**
+     * Update the specified setting.
+     *
+     * Validates the incoming request data and updates the setting with the
+     * provided information. Only provided fields are updated (partial updates).
+     *
+     * @since 1.0.0
+     *
+     * @param SettingRequest $request The HTTP request containing updated setting data.
+     * @param string|int     $id      The ID of the setting to update.
+     *
+     * @return SettingResource The updated setting resource with loaded permissions.
+     */
+    public function update( SettingRequest $request, string | int $id ): SettingResource
+    {
+        $this->authorize( 'update', Setting::class );
+
+        $setting   = Setting::findOrFail( $id );
+        $validated = $request->validate( [
+                                             'key'   => 'required|string|max:255|unique:settings,slug,' . $setting->id,
+                                             'value' => 'required|string',
+                                             'type'  => 'required|string|max:255',
+                                         ] );
+
+        $setting->update( $validated );
+
+        return new SettingResource( $setting );
+    }
+
+    /**
+     * Remove the specified setting.
+     *
+     * Deletes a setting from the database and returns a successful response
+     * with no content.
+     *
+     * @since 1.0.0
+     *
+     * @param string|int $id The ID of the setting to delete.
+     *
+     * @return JsonResponse A JSON response with 204 status code.
+     */
+    public function destroy( string | int $id ): JsonResponse
+    {
+        $this->authorize( 'delete', Setting::class );
+        $setting = Setting::findOrFail( $id );
+        $setting->delete();
+
+        return response()->json( [], 204 );
+    }
 }

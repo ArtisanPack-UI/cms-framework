@@ -13,4 +13,6 @@
 use Illuminate\Support\Facades\Route;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers\SettingController;
 
-Route::apiResource( 'settings', SettingController::class );
+Route::middleware('auth')->group(function () {
+    Route::apiResource( 'settings', SettingController::class );
+});

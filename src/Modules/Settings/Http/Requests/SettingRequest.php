@@ -26,102 +26,102 @@ use Illuminate\Validation\Rule;
  */
 class SettingRequest extends FormRequest
 {
-	/**
-	 * The setting instance.
-	 * @var Setting|null
-	 */
-	protected ?Setting $setting = null;
+    /**
+     * The setting instance.
+     * @var Setting|null
+     */
+    protected ?Setting $setting = null;
 
-	/**
-	 * Sets the setting for the request.
-	 *
-	 * This method allows the setting model to be passed in from contexts
-	 * like a Livewire component where route model binding isn't automatic.
-	 *
-	 * @since 1.0.0
-	 * @param Setting $setting The setting instance.
-	 * @return self
-	 */
-	public function setSetting( Setting $setting ): self
-	{
-		$this->setting = $setting;
+    /**
+     * Sets the setting for the request.
+     *
+     * This method allows the setting model to be passed in from contexts
+     * like a Livewire component where route model binding isn't automatic.
+     *
+     * @since 1.0.0
+     * @param Setting $setting The setting instance.
+     * @return self
+     */
+    public function setSetting( Setting $setting ): self
+    {
+        $this->setting = $setting;
 
-		return $this;
-	}
+        return $this;
+    }
 
-	/**
-	 * Determine if the user is authorized to make this request.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return bool True if the user is authorized, false otherwise.
-	 */
-	public function authorize(): bool
-	{
-		// Authorization is handled by policies, so we return true here
-		return true;
-	}
+    /**
+     * Determine if the user is authorized to make this request.
+     *
+     * @since 1.0.0
+     *
+     * @return bool True if the user is authorized, false otherwise.
+     */
+    public function authorize(): bool
+    {
+        // Authorization is handled by policies, so we return true here
+        return true;
+    }
 
-	/**
-	 * Get the validation rules that apply to the request.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return array<string, mixed> The validation rules.
-	 */
-	public function rules(): array
-	{
-		$settingId = $this->setting ? $this->setting->id : null;
+    /**
+     * Get the validation rules that apply to the request.
+     *
+     * @since 1.0.0
+     *
+     * @return array<string, mixed> The validation rules.
+     */
+    public function rules(): array
+    {
+        $settingId = $this->setting ? $this->setting->id : null;
 
-		return [
-			'key'   => [
-				'required',
-				'string',
-				'max:255',
-				'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-				Rule::unique( 'settings', 'key' )->ignore( $settingId ),
-			],
-			'value' => [
-				'required',
-				'string',
-			],
-			'type'  => [
-				'string',
-				'max:255',
-			],
-		];
-	}
+        return [
+            'key'   => [
+                'required',
+                'string',
+                'max:255',
+                'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+                Rule::unique( 'settings', 'key' )->ignore( $this->route( 'setting' ), 'key' ),
+            ],
+            'value' => [
+                'required',
+                'string',
+            ],
+            'type'  => [
+                'string',
+                'max:255',
+            ],
+        ];
+    }
 
-	/**
-	 * Get custom messages for validator errors.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return array<string, string> The custom error messages.
-	 */
-	public function messages(): array
-	{
-		return [
-			'key.required'   => __( 'The setting key is required.' ),
-			'key.regex'      => __( 'The setting key must be lowercase letters, numbers, and hyphens only.' ),
-			'key.unique'     => __( 'A setting with this key already exists.' ),
-			'value.required' => __( 'The setting value is required.' ),
-		];
-	}
+    /**
+     * Get custom messages for validator errors.
+     *
+     * @since 1.0.0
+     *
+     * @return array<string, string> The custom error messages.
+     */
+    public function messages(): array
+    {
+        return [
+            'key.required'   => __( 'The setting key is required.' ),
+            'key.regex'      => __( 'The setting key must be lowercase letters, numbers, and hyphens only.' ),
+            'key.unique'     => __( 'A setting with this key already exists.' ),
+            'value.required' => __( 'The setting value is required.' ),
+        ];
+    }
 
-	/**
-	 * Get custom attributes for validator errors.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @return array<string, string> The custom attribute names.
-	 */
-	public function attributes(): array
-	{
-		return [
-			'key'   => __( 'setting key' ),
-			'value' => __( 'setting value' ),
-			'type'  => __( 'setting type' ),
-		];
-	}
+    /**
+     * Get custom attributes for validator errors.
+     *
+     * @since 1.0.0
+     *
+     * @return array<string, string> The custom attribute names.
+     */
+    public function attributes(): array
+    {
+        return [
+            'key'   => __( 'setting key' ),
+            'value' => __( 'setting value' ),
+            'type'  => __( 'setting type' ),
+        ];
+    }
 }
