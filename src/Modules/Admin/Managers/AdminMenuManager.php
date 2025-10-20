@@ -31,7 +31,8 @@ class AdminMenuManager
      * Registered menu items keyed by slug.
      *
      * @since 2.0.0
-     * @var array<string,array{title:string,slug:string,parent:?string,section:?string,icon?:string,capability?:string,order:int,route:string,showInMenu?:bool,subItems?:array<string,mixed>}> $items
+     * @var array<string,array{title:string,slug:string,parent:?string,section:?string,icon?:string,capability?:string,order:int,route:string,showInMenu?:bool,subItems?:array<string,mixed>}>
+     *      $items
      */
     protected array $items = [];
 
@@ -59,13 +60,25 @@ class AdminMenuManager
      */
     public function addPage( string $title, string $slug, ?string $sectionSlug, array $options = [] ): void
     {
-        $defaults = [ 'action' => '', 'icon' => 'fas.users', 'capability' => 'access_admin_dashboard', 'order' => 99 ];
+        $defaults = [
+            'action'     => '',
+            'icon'       => 'fas.users',
+            'capability' => 'access_admin_dashboard',
+            'order'      => 99,
+            'menuTitle'  => $title,
+        ];
         $options  = array_merge( $defaults, $options );
 
         $this->items[ $slug ] = [
-            'title' => $title, 'slug' => $slug, 'parent' => null, 'section' => $sectionSlug,
-            'icon'  => $options['icon'], 'capability' => $options['capability'], 'order' => $options['order'],
-            'route' => 'admin.' . $slug,
+            'title'      => $title,
+            'slug'       => $slug,
+            'parent'     => null,
+            'section'    => $sectionSlug,
+            'icon'       => $options['icon'],
+            'capability' => $options['capability'],
+            'order'      => $options['order'],
+            'route'      => 'admin.' . $slug,
+            'menuTitle'  => $options['menuTitle'],
         ];
 
         app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
@@ -82,13 +95,25 @@ class AdminMenuManager
      */
     public function addSubPage( string $title, string $slug, string $parentSlug, array $options = [] ): void
     {
-        $defaults = [ 'action' => '', 'capability' => 'access_admin_dashboard', 'order' => 99, 'showInMenu' => true ];
+        $defaults = [
+            'action'     => '',
+            'capability' => 'access_admin_dashboard',
+            'order'      => 99,
+            'showInMenu' => true,
+            'menuTitle'  => $title,
+        ];
         $options  = array_merge( $defaults, $options );
 
         $this->items[ $slug ] = [
-            'title'      => $title, 'slug' => $slug, 'parent' => $parentSlug, 'section' => null,
-            'capability' => $options['capability'], 'order' => $options['order'], 'showInMenu' => $options['showInMenu'],
+            'title'      => $title,
+            'slug'       => $slug,
+            'parent'     => $parentSlug,
+            'section'    => null,
+            'capability' => $options['capability'],
+            'order'      => $options['order'],
+            'showInMenu' => $options['showInMenu'],
             'route'      => 'admin.' . str_replace( '/', '.', $slug ),
+            'menuTitle'  => $options['menuTitle'],
         ];
 
         app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
