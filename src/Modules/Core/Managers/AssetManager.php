@@ -59,6 +59,16 @@ class AssetManager
 	 */
 	public function adminDequeueAsset( string $handle ): void
 	{
+		/**
+		 * Filters the collection of enqueued admin assets to remove an asset.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @hook ap.admin.enqueuedAssets
+		 *
+		 * @param array<string,array{path:string,inFooter:bool}> $scripts Current assets array.
+		 * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
+		 */
 		addFilter( 'ap.admin.enqueuedAssets', function ( $scripts ) use ( $handle ) {
 			unset( $scripts[ $handle ] );
 			return $scripts;
@@ -130,6 +140,16 @@ class AssetManager
 	 */
 	public function publicDequeueAsset( string $handle ): void
 	{
+		/**
+		 * Filters the collection of enqueued public assets to remove an asset.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @hook ap.public.enqueuedAssets
+		 *
+		 * @param array<string,array{path:string,inFooter:bool}> $scripts Current assets array.
+		 * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
+		 */
 		addFilter( 'ap.public.enqueuedAssets', function ( $scripts ) use ( $handle ) {
 			unset( $scripts[ $handle ] );
 			return $scripts;
@@ -201,6 +221,16 @@ class AssetManager
 	 */
 	public function authDequeueAsset( string $handle ): void
 	{
+		/**
+		 * Filters the collection of enqueued authenticated-area assets to remove an asset.
+		 *
+		 * @since 2.0.0
+		 *
+		 * @hook ap.auth.enqueuedAssets
+		 *
+		 * @param array<string,array{path:string,inFooter:bool}> $scripts Current assets array.
+		 * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
+		 */
 		addFilter( 'ap.auth.enqueuedAssets', function ( $scripts ) use ( $handle ) {
 			unset( $scripts[ $handle ] );
 			return $scripts;

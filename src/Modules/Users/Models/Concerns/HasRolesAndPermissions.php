@@ -57,13 +57,18 @@ trait HasRolesAndPermissions
 	}
 
 	/**
-	 * Alias for the hasPermissionTo() method.
+	 * Determine if the user has a given ability.
 	 *
-	 * This method provides a more fluent and Laravel-conventional way to check for a permission.
+	 * If $arguments is empty and $ability is a permission slug string, this method
+	 * delegates to hasPermissionTo() for role/permission checks; otherwise it defers
+	 * to the parent implementation.
 	 *
-	 * @since  1.0.0
-	 * @param string $permissionSlug The slug of the permission to check for.
-	 * @return bool
+	 * @since 1.0.0
+	 *
+	 * @param string $ability   Ability name or permission slug.
+	 * @param array  $arguments Optional arguments forwarded to the parent gate check.
+	 *
+	 * @return bool True if the ability is granted, false otherwise.
 	 */
 	public function can( $ability, $arguments = [] ): bool
 	{

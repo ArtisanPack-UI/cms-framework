@@ -10,21 +10,35 @@ namespace ArtisanPackUI\CMSFramework\Modules\Admin\Managers;
 
 use Illuminate\Support\Facades\Route;
 
+/**
+ * Registers admin pages and creates their routes with appropriate middleware.
+ *
+ * Provides an API to register page slugs with actions and optional capabilities,
+ * then materializes them into HTTP routes under the /admin prefix.
+ *
+ * @since 2.0.0
+ */
 class AdminPageManager
 {
+	/**
+	 * Registered pages keyed by slug.
+	 *
+	 * @since 2.0.0
+	 * @var array<string,array{action:mixed,capability:?string}>
+	 */
 	protected array $pages = [];
 
- /**
-     * Stores the details of a page to be registered.
-     *
-     * @since 2.0.0
-     *
-     * @param string      $slug       The slug for the page route.
-     * @param mixed       $action     The view, closure, or controller action.
-     * @param string|null $capability The permission required to view the page.
-     *
-     * @return void
-     */
+	/**
+	 * Stores the details of a page to be registered.
+	 *
+	 * @since 2.0.0
+	 *
+	 * @param string      $slug       The slug for the page route.
+	 * @param mixed       $action     The view, closure, or controller action.
+	 * @param string|null $capability The permission required to view the page.
+	 *
+	 * @return void
+	 */
 	public function register( string $slug, mixed $action, ?string $capability ): void
 	{
 		$this->pages[ $slug ] = [ 'action' => $action, 'capability' => $capability ];
@@ -34,6 +48,8 @@ class AdminPageManager
 	 * Creates all the registered admin page routes with security middleware.
 	 *
 	 * @since 2.0.0
+	 *
+	 * @return void
 	 */
 	public function registerRoutes(): void
 	{

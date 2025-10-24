@@ -60,6 +60,14 @@ Provides cross-cutting services:
 
 See [[Core]] for details.
 
+### Settings Module
+Provides application-wide configuration storage:
+- Register keys with defaults, types, and sanitizers
+- Retrieve and update values via helpers
+- Backed by a database table with automatic casting
+
+See [[Settings]] for details.
+
 ### Models
 - **User Model**: Uses your application's User model with HasRolesAndPermissions trait
 - **Role Model**: Manages user roles with name and slug fields
