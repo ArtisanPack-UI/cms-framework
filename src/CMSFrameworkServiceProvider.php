@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use Illuminate\Support\ServiceProvider;
 
@@ -49,6 +50,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 							  ], 'artisanpack-package-config' );
 		}
 
+		$this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
 	}
 
 	/**
@@ -94,6 +96,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		$this->app->register( AdminServiceProvider::class );
 		$this->app->register( AdminWidgetServiceProvider::class );
 		$this->app->register( CoreServiceProvider::class );
+		$this->app->register( SettingsServiceProvider::class );
 	}
 
 

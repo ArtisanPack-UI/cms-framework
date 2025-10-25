@@ -31,7 +31,8 @@ class AdminMenuManager
      * Registered menu items keyed by slug.
      *
      * @since 2.0.0
-     * @var array<string,array{title:string,slug:string,parent:?string,section:?string,icon?:string,capability?:string,order:int,route:string,showInMenu?:bool,subItems?:array<string,mixed>}> $items
+     * @var array<string,array{title:string,slug:string,parent:?string,section:?string,icon?:string,capability?:string,order:int,route:string,showInMenu?:bool,subItems?:array<string,mixed>}>
+     *      $items
      */
     protected array $items = [];
 
@@ -39,9 +40,9 @@ class AdminMenuManager
      * Registers a new section for the admin menu.
      *
      * @since 2.0.0
+     * @param string $slug  The unique identifier for the section.
      * @param string $title The display title for the section.
      * @param int    $order The display order for the section.
-     * @param string $slug  The unique identifier for the section.
      */
     public function addSection( string $slug, string $title, int $order = 99 ): void
     {
@@ -52,20 +53,32 @@ class AdminMenuManager
      * Registers a top-level or sectioned admin page and its menu item.
      *
      * @since 2.0.0
+     * @param string      $title       The page and menu item title.
      * @param string      $slug        The unique slug for the page and route.
      * @param string|null $sectionSlug The slug of the menu section, or null for a top-level item.
      * @param array       $options     An array of options (view, icon, capability, etc.).
-     * @param string      $title       The page and menu item title.
      */
     public function addPage( string $title, string $slug, ?string $sectionSlug, array $options = [] ): void
     {
-        $defaults = [ 'action' => '', 'icon' => 'fas.users', 'capability' => 'access_admin_dashboard', 'order' => 99 ];
+        $defaults = [
+            'action'     => '',
+            'icon'       => 'fas.users',
+            'capability' => 'access_admin_dashboard',
+            'order'      => 99,
+            'menuTitle'  => $title,
+        ];
         $options  = array_merge( $defaults, $options );
 
         $this->items[ $slug ] = [
-            'title' => $title, 'slug' => $slug, 'parent' => null, 'section' => $sectionSlug,
-            'icon'  => $options['icon'], 'capability' => $options['capability'], 'order' => $options['order'],
-            'route' => 'admin.' . $slug,
+            'title'      => $title,
+            'slug'       => $slug,
+            'parent'     => null,
+            'section'    => $sectionSlug,
+            'icon'       => $options['icon'],
+            'capability' => $options['capability'],
+            'order'      => $options['order'],
+            'route'      => 'admin.' . $slug,
+            'menuTitle'  => $options['menuTitle'],
         ];
 
         app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
@@ -75,20 +88,32 @@ class AdminMenuManager
      * Registers a sub-level admin page and its menu item.
      *
      * @since 2.0.0
+     * @param string $title      The page and menu item title.
      * @param string $slug       The unique slug for the page and route.
      * @param string $parentSlug The slug of the parent menu item.
      * @param array  $options    An array of options (view, capability, showInMenu, etc.).
-     * @param string $title      The page and menu item title.
      */
     public function addSubPage( string $title, string $slug, string $parentSlug, array $options = [] ): void
     {
-        $defaults = [ 'action' => '', 'capability' => 'access_admin_dashboard', 'order' => 99, 'showInMenu' => true ];
+        $defaults = [
+            'action'     => '',
+            'capability' => 'access_admin_dashboard',
+            'order'      => 99,
+            'showInMenu' => true,
+            'menuTitle'  => $title,
+        ];
         $options  = array_merge( $defaults, $options );
 
         $this->items[ $slug ] = [
-            'title'      => $title, 'slug' => $slug, 'parent' => $parentSlug, 'section' => null,
-            'capability' => $options['capability'], 'order' => $options['order'], 'showInMenu' => $options['showInMenu'],
+            'title'      => $title,
+            'slug'       => $slug,
+            'parent'     => $parentSlug,
+            'section'    => null,
+            'capability' => $options['capability'],
+            'order'      => $options['order'],
+            'showInMenu' => $options['showInMenu'],
             'route'      => 'admin.' . str_replace( '/', '.', $slug ),
+            'menuTitle'  => $options['menuTitle'],
         ];
 
         app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );

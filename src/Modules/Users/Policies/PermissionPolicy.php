@@ -38,7 +38,17 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.viewAny', 'permissions.viewAny' ) );
+		/**
+		 * Filters the capability used to determine whether a user can view any permissions.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook permissions.viewAny
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.viewAny', 'permissions.viewAny' ) );
 	}
 
 	/**
@@ -55,7 +65,17 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.view', 'permissions.view' ) );
+		/**
+		 * Filters the capability used to determine whether a user can view a permission.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook permissions.view
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.view', 'permissions.view' ) );
 	}
 
 	/**
@@ -72,7 +92,17 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.create', 'permissions.create' ) );
+		/**
+		 * Filters the capability used to determine whether a user can create permissions.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook permissions.create
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.create', 'permissions.create' ) );
 	}
 
 	/**
@@ -89,7 +119,17 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.update', 'permissions.update' ) );
+		/**
+		 * Filters the capability used to determine whether a user can update permissions.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook permissions.update
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.update', 'permissions.update' ) );
 	}
 
 	/**
@@ -106,7 +146,15 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.delete', 'permissions.delete' ) );
+		/**
+		 * Filters the capability used to determine whether a user can delete permissions.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.delete', 'permissions.delete' ) );
 	}
 
 	/**
@@ -123,7 +171,17 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.restore', 'permissions.restore' ) );
+		/**
+		 * Filters the capability used to determine whether a user can restore permissions.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook permissions.restore
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.restore', 'permissions.restore' ) );
 	}
 
 	/**
@@ -140,6 +198,16 @@ class PermissionPolicy
 		$userModel = config( 'cms-framework.user_model' );
 		$user      = $userModel::findOrFail( $id );
 
-		return $user->can( applyFiltersfilter( 'permissions.forceDelete', 'permissions.forceDelete' ) );
+		/**
+		 * Filters the capability used to determine whether a user can permanently delete permissions.
+		 *
+		 * @since 1.0.0
+		 *
+		 * @hook permissions.forceDelete
+		 *
+		 * @param string $capability Default capability slug to check.
+		 * @return string Filtered capability slug.
+		 */
+		return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete' ) );
 	}
 }

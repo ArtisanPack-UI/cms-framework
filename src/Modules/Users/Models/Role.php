@@ -53,6 +53,18 @@ class Role extends Model
 		return $this->belongsToMany( config( 'cms-framework.user_model' ), 'role_user', 'role_id', 'user_id' );
 	}
 
+	/**
+	 * Synchronize the role's permissions with the provided list.
+	 *
+	 * Replaces existing permissions with the provided set. Accepts an array or
+	 * collection of Permission models or permission names.
+	 *
+	 * @since 2.0.0
+	 *
+	 * @param \Illuminate\Database\Eloquent\Collection|array $permissions Collection of Permission models or array of permission names.
+	 *
+	 * @return self
+	 */
 	public function syncPermissions( Collection|array $permissions ): self
 	{
 		// If the items are Permission models, pluck their names.
@@ -89,10 +101,12 @@ class Role extends Model
 	 *
 	 * This will not remove any existing permissions.
 	 *
-	 * @since  2.0.0
-	 * @param \Illuminate\Support\Collection|array $permissions A collection of Permission models or an array of
-	 *                                                          permission names.
-	 * @return $this
+	 * @since 2.0.0
+	 *
+	 * @param \Illuminate\Database\Eloquent\Collection|array $permissions A collection of Permission models or an array of
+	 *                                                                       permission names.
+	 *
+	 * @return self
 	 */
 	public function givePermissionTo( Collection|array $permissions ): self
 	{

@@ -1,0 +1,141 @@
+<?php
+
+/**
+ * Setting Controller for the CMS Framework Settings Module.
+ *
+ * This controller handles CRUD operations for setting including listing,
+ * creating, showing, updating, and deleting setting records through API endpoints.
+ *
+ * @since   1.0.0
+ * @package ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers
+ */
+
+namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
+
+use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests\SettingRequest;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources\SettingResource;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
+use Illuminate\Routing\Controller;
+
+/**
+ * API controller for managing setting.
+ *
+ * Provides RESTful API endpoints for setting management operations
+ * with proper validation, authorization, and resource transformation.
+ *
+ * @since 1.0.0
+ */
+class SettingController extends Controller
+{
+    use AuthorizesRequests;
+
+    /**
+     * Display a listing of settings.
+     *
+     * Retrieves a paginated list of settings with their associated permissions
+     * and returns them as a JSON resource collection.
+     *
+     * @since 1.0.0
+     *
+     * @return AnonymousResourceCollection The paginated collection of setting resources.
+     */
+    public function index(): AnonymousResourceCollection
+    {
+        $this->authorize( 'viewAny', Setting::class );
+
+        $settings = Setting::paginate( 15 );
+
+        return SettingResource::collection( $settings );
+    }
+
+    /**
+     * Store a newly created setting.
+     *
+     * Validates the incoming request data and creates a new setting with the
+     * provided information. Returns the created resource with a 201 status code.
+     *
+     * @since 1.0.0
+     * @since 2.0.1 Adjusted return type to JsonResponse to match implementation.
+     *
+     * @param SettingRequest $request The HTTP request containing setting data.
+     * @return JsonResponse The JSON response containing the created setting resource.
+     */
+    public function store( SettingRequest $request ): JsonResponse // Correct return type hint
+    {
+        $this->authorize( 'create', Setting::class );
+
+        $validated = $request->validated();
+        $setting   = Setting::create( $validated );
+
+        // Return JsonResponse explicitly with 201 status
+        return response()->json( new SettingResource( $setting ), 201 );
+    }
+
+    /**
+     * Display the specified setting.
+     *
+     * Retrieves a single setting by ID with their associated permissions
+     * and returns it as a JSON resource.
+     *
+     * @since 1.0.0
+     *
+     * @param string|int $id The ID of the setting to retrieve.
+     *
+     * @return SettingResource The setting resource with loaded permissions.
+     */
+    public function show( string | int $id ): SettingResource
+    {
+        $this->authorize( 'view', Setting::class );
+
+        $setting = Setting::findOrFail( $id );
+
+        return new SettingResource( $setting );
+    }
+
+    /**
+     * Update the specified setting.
+     *
+     * Validates the incoming request data and updates the setting with the
+     * provided information. Only provided fields are updated (partial updates).
+     *
+     * @since 1.0.0
+     *
+     * @param SettingRequest $request The HTTP request containing updated setting data.
+     * @param string|int     $id      The ID of the setting to update.
+     *
+     * @return SettingResource The updated setting resource with loaded permissions.
+     */
+    public function update( SettingRequest $request, string | int $id ): SettingResource
+    {
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'update', $setting );
+        $validated = $request->validated();
+        $setting->update( $validated );
+        return new SettingResource( $setting );
+    }
+
+    /**
+     * Remove the specified setting.
+     *
+     * Deletes a setting from the database and returns a successful response
+     * with no content.
+     *
+     * @since 1.0.0
+     * @since 2.0.1 Corrected return type hint to Response.
+     *
+     * @param string|int $id The ID (key) of the setting to delete.
+     * @return Response A response with 204 status code.
+     */
+    public function destroy( string | int $id ): Response // Correct return type hint
+    {
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'delete', $setting );
+        $setting->delete();
+
+        return response()->noContent();
+    }
+}

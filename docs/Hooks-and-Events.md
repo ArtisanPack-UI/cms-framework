@@ -75,3 +75,24 @@ The examples above assume the presence of the following global helpers (provided
 - applyFilters(string $hook, mixed $value): mixed
 - addAction(string $hook, callable $callback)
 - doAction(string $hook, ...$args): void
+
+
+## Settings: Registered Settings
+
+- ap.settings.registeredSettings (filter)
+
+Provide settings definitions from anywhere. Each item should include:
+
+```php
+addFilter('ap.settings.registeredSettings', function (array $settings) {
+    $settings['site.title'] = [
+        'default'  => 'My Site',
+        'type'     => 'string',
+        'callback' => fn ($value) => trim((string) $value),
+    ];
+
+    return $settings;
+});
+```
+
+See the Settings module docs for details: [Settings Hooks and Events](settings/Hooks-and-Events.md).
