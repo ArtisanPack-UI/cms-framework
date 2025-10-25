@@ -1,0 +1,201 @@
+<?php
+/**
+ * HasNotifications Trait
+ *
+ * Provides notification-related methods for User models.
+ *
+ * @since 2.0.0
+ * @package ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Concerns
+ */
+
+namespace ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Concerns;
+
+use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
+use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+/**
+ * HasNotifications Trait
+ *
+ * @since 2.0.0
+ */
+trait HasNotifications
+{
+    /**
+     * Get all system notifications for the user.
+     *
+     * @since 2.0.0
+     *
+     * @return BelongsToMany
+     */
+    public function systemNotifications(): BelongsToMany
+    {
+        return $this->belongsToMany(Notification::class, 'notification_user')
+            ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
+            ->withTimestamps()
+            ->orderByDesc('created_at');
+    }
+
+    /**
+     * Get unread system notifications for the user.
+     *
+     * @since 2.0.0
+     *
+     * @return BelongsToMany
+     */
+    public function unreadSystemNotifications(): BelongsToMany
+    {
+        return $this->systemNotifications()
+            ->wherePivot('is_read', false)
+            ->wherePivot('is_dismissed', false);
+    }
+
+    /**
+     * Get notification preferences for the user.
+     *
+     * @since 2.0.0
+     *
+     * @return HasMany
+     */
+    public function notificationPreferences(): HasMany
+    {
+        return $this->hasMany(NotificationPreference::class);
+    }
+
+    /**
+     * Check if the user has a preference for a notification type.
+     *
+     * @since 2.0.0
+     *
+     * @param string $notificationType The notification type key.
+     *
+     * @return NotificationPreference|null
+     */
+    public function getNotificationPreference(string $notificationType): ?NotificationPreference
+    {
+        return $this->notificationPreferences()
+            ->where('notification_type', $notificationType)
+            ->first();
+    }
+
+    /**
+     * Check if the user should receive a notification type.
+     *
+     * @since 2.0.0
+     *
+     * @param string $notificationType The notification type key.
+     *
+     * @return bool
+     */
+    public function shouldReceiveNotification(string $notificationType): bool
+    {
+        $preference = $this->getNotificationPreference($notificationType);
+
+        // If no preference exists, default to enabled
+        if (! $preference) {
+            return true;
+        }
+
+        return $preference->is_enabled;
+    }
+
+    /**
+     * Check if the user should receive email for a notification type.
+     *
+     * @since 2.0.0
+     *
+     * @param string $notificationType The notification type key.
+     *
+     * @return bool
+     */
+    public function shouldReceiveNotificationEmail(string $notificationType): bool
+    {
+        $preference = $this->getNotificationPreference($notificationType);
+
+        // If no preference exists, default to enabled
+        if (! $preference) {
+            return true;
+        }
+
+        return $preference->email_enabled;
+    }
+
+    /**
+     * Mark a notification as read for this user.
+     *
+     * @since 2.0.0
+     *
+     * @param int $notificationId The notification ID.
+     *
+     * @return bool
+     */
+    public function markNotificationAsRead(int $notificationId): bool
+    {
+        return $this->systemNotifications()->updateExistingPivot($notificationId, [
+            'is_read' => true,
+            'read_at' => now(),
+        ]) > 0;
+    }
+
+    /**
+     * Dismiss a notification for this user.
+     *
+     * @since 2.0.0
+     *
+     * @param int $notificationId The notification ID.
+     *
+     * @return bool
+     */
+    public function dismissNotification(int $notificationId): bool
+    {
+        return $this->systemNotifications()->updateExistingPivot($notificationId, [
+            'is_dismissed' => true,
+            'dismissed_at' => now(),
+        ]) > 0;
+    }
+
+    /**
+     * Mark all system notifications as read for this user.
+     *
+     * @since 2.0.0
+     *
+     * @return int The number of notifications marked as read.
+     */
+    public function markAllNotificationsAsRead(): int
+    {
+        return $this->unreadSystemNotifications()->update([
+            'notification_user.is_read' => true,
+            'notification_user.read_at' => now(),
+        ]);
+    }
+
+    /**
+     * Dismiss all notifications for this user.
+     *
+     * @since 2.0.0
+     *
+     * @return int The number of notifications dismissed.
+     */
+    public function dismissAllNotifications(): int
+    {
+        return $this->systemNotifications()
+            ->wherePivot('is_dismissed', false)
+            ->update([
+                'notification_user.is_dismissed' => true,
+                'notification_user.dismissed_at' => now(),
+            ]);
+    }
+
+    /**
+     * Get the count of unread system notifications for this user.
+     *
+     * @since 2.0.0
+     *
+     * @return int
+     */
+    public function unreadSystemNotificationsCount(): int
+    {
+        return $this->unreadSystemNotifications()->count();
+    }
+}
