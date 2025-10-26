@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mv:*)",
+      "Bash(composer dump-autoload:*)",
+      "Bash(vendor/bin/pest:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

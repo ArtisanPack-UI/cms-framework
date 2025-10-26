@@ -29,7 +29,14 @@ test('user can access unread system notifications', function () {
 
 test('user can access notification preferences', function () {
     $user = User::factory()->create();
-    NotificationPreference::factory()->count(2)->create(['user_id' => $user->id]);
+    NotificationPreference::factory()->create([
+        'user_id' => $user->id,
+        'notification_type' => 'user.registered',
+    ]);
+    NotificationPreference::factory()->create([
+        'user_id' => $user->id,
+        'notification_type' => 'user.login.failed',
+    ]);
 
     expect($user->notificationPreferences)->toHaveCount(2);
 });
