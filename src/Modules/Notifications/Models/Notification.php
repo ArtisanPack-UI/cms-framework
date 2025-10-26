@@ -48,6 +48,16 @@ class Notification extends Model
     ];
 
     /**
+     * Create a new factory instance for the model.
+     *
+     * @since 2.0.0
+     */
+    protected static function newFactory()
+    {
+        return \ArtisanPackUI\Database\Factories\NotificationFactory::new();
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @since 2.0.0
@@ -64,6 +74,23 @@ class Notification extends Model
     }
 
     /**
+     * Get the pivot data for the current user.
+     * This provides a convenient way to access pivot data in views.
+     *
+     * @since 2.0.0
+     *
+     * @return mixed
+     */
+    public function getPivotAttribute()
+    {
+        if ($this->relationLoaded('users') && $this->users->isNotEmpty()) {
+            return $this->users->first()->pivot;
+        }
+
+        return null;
+    }
+
+    /**
      * Get the users that this notification belongs to.
      *
      * @since 2.0.0
@@ -74,7 +101,9 @@ class Notification extends Model
     {
         return $this->belongsToMany(
             config('auth.providers.users.model'),
-            'notification_user'
+            'notification_user',
+            'notification_id',
+            'user_id'
         )
             ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
             ->withTimestamps();

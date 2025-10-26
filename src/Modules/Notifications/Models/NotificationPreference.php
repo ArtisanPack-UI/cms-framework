@@ -45,6 +45,16 @@ class NotificationPreference extends Model
     ];
 
     /**
+     * Create a new factory instance for the model.
+     *
+     * @since 2.0.0
+     */
+    protected static function newFactory()
+    {
+        return \ArtisanPackUI\Database\Factories\NotificationPreferenceFactory::new();
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @since 2.0.0

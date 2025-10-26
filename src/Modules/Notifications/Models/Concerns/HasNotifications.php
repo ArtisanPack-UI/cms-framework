@@ -31,7 +31,12 @@ trait HasNotifications
      */
     public function systemNotifications(): BelongsToMany
     {
-        return $this->belongsToMany(Notification::class, 'notification_user')
+        return $this->belongsToMany(
+            Notification::class,
+            'notification_user',
+            'user_id',
+            'notification_id'
+        )
             ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
             ->withTimestamps()
             ->orderByDesc('created_at');
@@ -60,7 +65,7 @@ trait HasNotifications
      */
     public function notificationPreferences(): HasMany
     {
-        return $this->hasMany(NotificationPreference::class);
+        return $this->hasMany(NotificationPreference::class, 'user_id');
     }
 
     /**
@@ -164,10 +169,15 @@ trait HasNotifications
      */
     public function markAllNotificationsAsRead(): int
     {
-        return $this->unreadSystemNotifications()->update([
-            'notification_user.is_read' => true,
-            'notification_user.read_at' => now(),
-        ]);
+        return \Illuminate\Support\Facades\DB::table('notification_user')
+            ->where('user_id', $this->id)
+            ->where('is_read', false)
+            ->where('is_dismissed', false)
+            ->update([
+                'is_read' => true,
+                'read_at' => now(),
+                'updated_at' => now(),
+            ]);
     }
 
     /**
@@ -179,11 +189,13 @@ trait HasNotifications
      */
     public function dismissAllNotifications(): int
     {
-        return $this->systemNotifications()
-            ->wherePivot('is_dismissed', false)
+        return \Illuminate\Support\Facades\DB::table('notification_user')
+            ->where('user_id', $this->id)
+            ->where('is_dismissed', false)
             ->update([
-                'notification_user.is_dismissed' => true,
-                'notification_user.dismissed_at' => now(),
+                'is_dismissed' => true,
+                'dismissed_at' => now(),
+                'updated_at' => now(),
             ]);
     }
 
