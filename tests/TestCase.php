@@ -68,6 +68,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
 	{
 		// 1. Set the configurable user model to our test user model.
 		$app['config']->set( 'cms-framework.user_model', TestUser::class );
+		$app['config']->set( 'auth.providers.users.model', TestUser::class );
 
 		// 2. Set up database configuration
 		$app['config']->set( 'app.key', 'base64:' . base64_encode( random_bytes( 32 ) ) );
