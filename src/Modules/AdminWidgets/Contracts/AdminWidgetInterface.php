@@ -34,6 +34,7 @@ interface AdminWidgetInterface
 	 * @return array{
 	 * title: string,
 	 * description: string,
+	 * capability?: string,
 	 * default_options?: array<string, mixed>
 	 * } The widget information.
 	 */
