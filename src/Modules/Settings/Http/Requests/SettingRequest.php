@@ -71,16 +71,16 @@ class SettingRequest extends FormRequest
      */
     public function rules(): array
     {
-        $settingId = $this->setting ? $this->setting->id : null;
 
         return [
-            'key'   => [
+            'key' => [
                 'required',
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
                 Rule::unique( 'settings', 'key' )->ignore( $this->route( 'setting' ), 'key' ),
             ],
+
             'value' => [
                 'required',
                 'string',

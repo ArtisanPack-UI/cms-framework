@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 
 /**
@@ -55,27 +56,23 @@ class SettingController extends Controller
      * Store a newly created setting.
      *
      * Validates the incoming request data and creates a new setting with the
-     * provided information.
+     * provided information. Returns the created resource with a 201 status code.
      *
      * @since 1.0.0
+     * @since 2.0.1 Adjusted return type to JsonResponse to match implementation.
      *
      * @param SettingRequest $request The HTTP request containing setting data.
-     *
-     * @return SettingResource The created setting resource with loaded permissions.
+     * @return JsonResponse The JSON response containing the created setting resource.
      */
-    public function store( SettingRequest $request ): SettingResource
+    public function store( SettingRequest $request ): JsonResponse // Correct return type hint
     {
         $this->authorize( 'create', Setting::class );
 
-        $validated = $request->validate( [
-                                             'key'   => 'required|string|max:255|unique:settings',
-                                             'value' => 'required|string',
-                                             'type'  => 'required|string|max:255',
-                                         ] );
+        $validated = $request->validated();
+        $setting   = Setting::create( $validated );
 
-        $setting = Setting::create( $validated );
-
-        return new SettingResource( $setting );
+        // Return JsonResponse explicitly with 201 status
+        return response()->json( new SettingResource( $setting ), 201 );
     }
 
     /**
@@ -114,17 +111,10 @@ class SettingController extends Controller
      */
     public function update( SettingRequest $request, string | int $id ): SettingResource
     {
-        $this->authorize( 'update', Setting::class );
-
-        $setting   = Setting::findOrFail( $id );
-        $validated = $request->validate( [
-                                             'key'   => 'required|string|max:255|unique:settings,slug,' . $setting->id,
-                                             'value' => 'required|string',
-                                             'type'  => 'required|string|max:255',
-                                         ] );
-
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'update', $setting );
+        $validated = $request->validated();
         $setting->update( $validated );
-
         return new SettingResource( $setting );
     }
 
@@ -135,17 +125,17 @@ class SettingController extends Controller
      * with no content.
      *
      * @since 1.0.0
+     * @since 2.0.1 Corrected return type hint to Response.
      *
-     * @param string|int $id The ID of the setting to delete.
-     *
-     * @return JsonResponse A JSON response with 204 status code.
+     * @param string|int $id The ID (key) of the setting to delete.
+     * @return Response A response with 204 status code.
      */
-    public function destroy( string | int $id ): JsonResponse
+    public function destroy( string | int $id ): Response // Correct return type hint
     {
-        $this->authorize( 'delete', Setting::class );
         $setting = Setting::findOrFail( $id );
+        $this->authorize( 'delete', $setting );
         $setting->delete();
 
-        return response()->json( [], 204 );
+        return response()->noContent();
     }
 }

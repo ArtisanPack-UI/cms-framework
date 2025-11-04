@@ -14,31 +14,31 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Registers admin module services and bootstraps admin routing/middleware.
+ * Registers Settings module services and bootstraps Settings routing/middleware.
  *
  * @since 2.0.0
  */
 class SettingsServiceProvider extends ServiceProvider
 {
-	/**
-	 * Register any application services.
-	 *
-	 * @since 2.0.0
-	 */
-	public function register(): void
-	{
-		$this->app->singleton( SettingsManager::class, fn() => new SettingsManager() );
-	}
+    /**
+     * Register any application services.
+     *
+     * @since 2.0.0
+     */
+    public function register(): void
+    {
+        $this->app->singleton( SettingsManager::class, fn() => new SettingsManager() );
+    }
 
-	/**
-	 * Bootstrap any application services.
-	 *
-	 * @since 2.0.0
-	 */
-	public function boot( Router $router ): void
-	{
-		Route::prefix( 'api/v1' )
-			 ->middleware( 'api' )
-			 ->group( __DIR__ . '/../routes/api.php' );
-	}
+    /**
+     * Bootstrap any application services.
+     *
+     * @since 2.0.0
+     */
+    public function boot( Router $router ): void
+    {
+        Route::prefix( 'api/v1' )
+             ->middleware( 'api' )
+             ->group( __DIR__ . '/../routes/api.php' );
+    }
 }

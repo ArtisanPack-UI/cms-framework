@@ -65,32 +65,32 @@ class Setting extends Model
     protected function value(): Attribute
     {
         return Attribute::make(
-            get: function ($value) {
+            get: function ( $value ) {
                 // Getter: cast stored value using the saved type (default to string)
                 $type = $this->attributes['type'] ?? 'string';
-                return $this->castValue($value, $type);
+                return $this->castValue( $value, $type );
             },
-            set: function ($value) {
+            set: function ( $value ) {
                 // Determine type based on PHP value
-                $type = match (true) {
-                    is_bool($value) => 'boolean',
-                    is_int($value) => 'integer',
-                    is_float($value) => 'float',
-                    is_array($value), is_object($value) => 'json',
+                $type = match ( true ) {
+                    is_bool( $value ) => 'boolean',
+                    is_int( $value ) => 'integer',
+                    is_float( $value ) => 'float',
+                    is_array( $value ), is_object( $value ) => 'json',
                     default => 'string', // Includes null
                 };
 
                 // Prepare the value for storage based on determined type
-                $stored = match ($type) {
+                $stored = match ( $type ) {
                     'boolean' => $value ? '1' : '0',
-                    'integer', 'float' => (string) $value, // Store numerics as strings
-                    'json' => json_encode($value),
-                    default => is_null($value) ? '' : (string) $value, // Store null as empty string for string type
+                    'integer', 'float' => (string)$value, // Store numerics as strings
+                    'json' => json_encode( $value ),
+                    default => is_null( $value ) ? '' : (string)$value, // Store null as empty string for string type
                 };
 
                 // IMPORTANT: Return an attribute array so both fields are persisted
                 return [
-                    'type' => $type,
+                    'type'  => $type,
                     'value' => $stored,
                 ];
             }
@@ -105,7 +105,7 @@ class Setting extends Model
         // Handle actual NULL from DB first
         if ( is_null( $value ) ) {
             // Return null for non-string types if DB was NULL
-            return ( $type === 'string' ) ? '' : null;
+            return ( 'string' === $type ) ? '' : null;
         }
 
         // --- Simplified Casting ---
