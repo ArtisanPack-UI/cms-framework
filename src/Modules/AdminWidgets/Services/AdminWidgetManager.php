@@ -50,22 +50,6 @@ class AdminWidgetManager
     }
 
     /**
-     * Retrieves information about all registered admin widgets.
-     *
-     * @since 1.0.0
-     *
-     * @return array An associative array of widget information.
-     */
-    public function getAvailableWidgets(): array
-    {
-        $available = [];
-        foreach ( $this->widgets as $type => $class ) {
-            $available[ $type ] = $class::getWidgetInfo();
-        }
-        return $available;
-    }
-
-    /**
      * Creates a new widget instance with default data.
      *
      * @since 1.0.0
@@ -88,6 +72,7 @@ class AdminWidgetManager
             'type'            => $type,
             'component_class' => $class, // ADDED THIS LINE
             'title'           => $info['title'] ?? 'New Widget',
+            'capability'      => $info['capability'] ?? null,
             'order'           => 0,
             'color_scheme'    => 'base-100',
             'grid_config'     => [
@@ -112,5 +97,52 @@ class AdminWidgetManager
             'created_at'      => now()->toISOString(),
             'updated_at'      => now()->toISOString(),
         ];
+    }
+
+    /**
+     * Get available widgets filtered by user capabilities.
+     *
+     * @since 1.0.0
+     *
+     * @param \Modules\Users\Models\User|null $user The user to check capabilities for.
+     * @return array Available widgets for the user.
+     */
+    public function getAvailableWidgetsForUser( $user = null ): array
+    {
+        $available = $this->getAvailableWidgets();
+
+        if ( ! $user ) {
+            return $available;
+        }
+
+        // Get admin-configured capability overrides
+        $widgetCapabilities = apGetSetting( 'admin.dashboardWidgets', [] );
+
+        return array_filter( $available, function ( $widgetInfo, $type ) use ( $user, $widgetCapabilities ) {
+            // Check if admin has overridden the capability
+            $capability = $widgetCapabilities[ $type ] ?? $widgetInfo['capability'] ?? null;
+
+            if ( ! $capability ) {
+                return true; // No capability required
+            }
+
+            return $user->hasPermissionTo( $capability );
+        },                   ARRAY_FILTER_USE_BOTH );
+    }
+
+    /**
+     * Retrieves information about all registered admin widgets.
+     *
+     * @since 1.0.0
+     *
+     * @return array An associative array of widget information.
+     */
+    public function getAvailableWidgets(): array
+    {
+        $available = [];
+        foreach ( $this->widgets as $type => $class ) {
+            $available[ $type ] = $class::getWidgetInfo();
+        }
+        return $available;
     }
 }
