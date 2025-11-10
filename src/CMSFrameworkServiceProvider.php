@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
@@ -99,6 +100,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		$this->app->register( CoreServiceProvider::class );
 		$this->app->register( SettingsServiceProvider::class );
 		$this->app->register( NotificationServiceProvider::class );
+		$this->app->register( ContentTypesServiceProvider::class );
 	}
 
 
