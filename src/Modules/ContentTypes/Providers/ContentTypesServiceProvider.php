@@ -14,10 +14,13 @@ namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\TaxonomyManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Taxonomy;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Policies\ContentTypePolicy;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Policies\CustomFieldPolicy;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Policies\TaxonomyPolicy;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -43,6 +46,9 @@ class ContentTypesServiceProvider extends ServiceProvider
         // Register CustomFieldManager as singleton
         $this->app->singleton(CustomFieldManager::class, fn () => new CustomFieldManager);
 
+        // Register TaxonomyManager as singleton
+        $this->app->singleton(TaxonomyManager::class, fn () => new TaxonomyManager);
+
         // Load helpers
         $this->loadHelpers();
     }
@@ -65,6 +71,7 @@ class ContentTypesServiceProvider extends ServiceProvider
         // Register policies
         Gate::policy(ContentType::class, ContentTypePolicy::class);
         Gate::policy(CustomField::class, CustomFieldPolicy::class);
+        Gate::policy(Taxonomy::class, TaxonomyPolicy::class);
     }
 
     /**

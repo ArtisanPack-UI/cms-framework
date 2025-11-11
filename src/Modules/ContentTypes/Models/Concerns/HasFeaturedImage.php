@@ -1,10 +1,12 @@
 <?php
+
 /**
  * HasFeaturedImage Trait
  *
  * Provides featured image functionality for content types.
  *
  * @since 2.0.0
+ *
  * @package ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns
  */
 
@@ -24,8 +26,6 @@ trait HasFeaturedImage
      * Get the featured image for the model.
      *
      * @since 2.0.0
-     *
-     * @return MorphOne
      */
     public function featuredImage(): MorphOne
     {
@@ -38,9 +38,7 @@ trait HasFeaturedImage
      *
      * @since 2.0.0
      *
-     * @param int $mediaId The ID of the media to set as featured image.
-     *
-     * @return void
+     * @param  int  $mediaId  The ID of the media to set as featured image.
      */
     public function setFeaturedImage(int $mediaId): void
     {
@@ -58,8 +56,6 @@ trait HasFeaturedImage
      * Remove the featured image from the model.
      *
      * @since 2.0.0
-     *
-     * @return void
      */
     public function removeFeaturedImage(): void
     {
@@ -76,9 +72,7 @@ trait HasFeaturedImage
      *
      * @since 2.0.0
      *
-     * @param string $size The size of the image (full, thumbnail, medium, large).
-     *
-     * @return string|null
+     * @param  string  $size  The size of the image (full, thumbnail, medium, large).
      */
     public function getFeaturedImageUrl(string $size = 'full'): ?string
     {

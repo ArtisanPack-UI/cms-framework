@@ -1,10 +1,12 @@
 <?php
+
 /**
  * HasCustomFields Trait
  *
  * Provides custom fields functionality for content types.
  *
  * @since 2.0.0
+ *
  * @package ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns
  */
 
@@ -24,8 +26,6 @@ trait HasCustomFields
      * Get the custom fields for the content type.
      *
      * @since 2.0.0
-     *
-     * @return Collection
      */
     public function getCustomFieldsForType(): Collection
     {
@@ -39,8 +39,7 @@ trait HasCustomFields
      *
      * @since 2.0.0
      *
-     * @param string $key
-     *
+     * @param  string  $key
      * @return mixed
      */
     public function __get($key)
@@ -68,9 +67,8 @@ trait HasCustomFields
      *
      * @since 2.0.0
      *
-     * @param string $key
-     * @param mixed  $value
-     *
+     * @param  string  $key
+     * @param  mixed  $value
      * @return void
      */
     public function __set($key, $value)
