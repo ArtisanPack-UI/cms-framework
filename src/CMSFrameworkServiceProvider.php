@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Providers\BlogServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Providers\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use Illuminate\Support\ServiceProvider;
@@ -103,6 +104,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
 		$this->app->register( NotificationServiceProvider::class );
 		$this->app->register( ContentTypesServiceProvider::class );
 		$this->app->register( BlogServiceProvider::class );
+		$this->app->register( PagesServiceProvider::class );
 	}
 
 
