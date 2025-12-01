@@ -3,7 +3,8 @@
     "allow": [
       "Bash(mv:*)",
       "Bash(composer dump-autoload:*)",
-      "Bash(vendor/bin/pest:*)"
+      "Bash(vendor/bin/pest:*)",
+      "Bash(php:*)"
     ],
     "deny": [],
     "ask": []
