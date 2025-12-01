@@ -1,19 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Post Model
  *
  * Represents a blog post in the system.
  *
  * @since 2.0.0
- *
- * @package ArtisanPackUI\CMSFramework\Modules\Blog\Models
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Models;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
+use ArtisanPackUI\MediaLibrary\Models\Media;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -41,7 +42,10 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Post extends Model
 {
-    use HasCustomFields, HasFactory, HasFeaturedImage, SoftDeletes;
+    use HasCustomFields;
+    use HasFactory;
+    use HasFeaturedImage;
+    use SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -55,26 +59,12 @@ class Post extends Model
         'slug',
         'content',
         'excerpt',
+        'featured_image_id',
         'author_id',
         'status',
         'published_at',
         'metadata',
     ];
-
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @since 2.0.0
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'published_at' => 'datetime',
-            'metadata' => 'array',
-        ];
-    }
 
     /**
      * Get the author of the post.
@@ -84,6 +74,16 @@ class Post extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(config('auth.providers.users.model'), 'author_id');
+    }
+
+    /**
+     * Get the featured image for the post.
+     *
+     * @since 2.0.0
+     */
+    public function featuredImageMedia(): BelongsTo
+    {
+        return $this->belongsTo(Media::class, 'featured_image_id');
     }
 
     /**
@@ -112,12 +112,13 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopePublished($query)
     {
         return $query->where('status', 'published')
-            ->where(function ($q) {
+            ->where(function ($q): void {
                 $q->whereNull('published_at')
                     ->orWhere('published_at', '<=', now());
             });
@@ -129,6 +130,7 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeDraft($query)
@@ -142,6 +144,7 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByAuthor($query, int $authorId)
@@ -155,11 +158,12 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByCategory($query, int $categoryId)
     {
-        return $query->whereHas('categories', function ($q) use ($categoryId) {
+        return $query->whereHas('categories', function ($q) use ($categoryId): void {
             $q->where('post_categories.id', $categoryId);
         });
     }
@@ -170,11 +174,12 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByTag($query, int $tagId)
     {
-        return $query->whereHas('tags', function ($q) use ($tagId) {
+        return $query->whereHas('tags', function ($q) use ($tagId): void {
             $q->where('post_tags.id', $tagId);
         });
     }
@@ -185,6 +190,7 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByYear($query, int $year)
@@ -198,6 +204,7 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByMonth($query, int $year, int $month)
@@ -212,6 +219,7 @@ class Post extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByDate($query, Carbon $date)
@@ -226,8 +234,8 @@ class Post extends Model
      */
     public function isPublished(): bool
     {
-        return $this->status === 'published' &&
-            ($this->published_at === null || $this->published_at->isPast());
+        return 'published' === $this->status &&
+            (null === $this->published_at || $this->published_at->isPast());
     }
 
     /**
@@ -238,5 +246,20 @@ class Post extends Model
     public function getPermalinkAttribute(): string
     {
         return url("/blog/{$this->slug}");
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @since 2.0.0
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'published_at' => 'datetime',
+            'metadata'     => 'array',
+        ];
     }
 }

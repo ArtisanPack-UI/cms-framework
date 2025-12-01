@@ -1,19 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 /**
  * Page Model
  *
  * Represents a page in the system with hierarchical structure.
  *
  * @since 2.0.0
- *
- * @package ArtisanPackUI\CMSFramework\Modules\Pages\Models
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Models;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
+use ArtisanPackUI\MediaLibrary\Models\Media;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -46,7 +47,10 @@ use Illuminate\Support\Collection;
  */
 class Page extends Model
 {
-    use HasCustomFields, HasFactory, HasFeaturedImage, SoftDeletes;
+    use HasCustomFields;
+    use HasFactory;
+    use HasFeaturedImage;
+    use SoftDeletes;
 
     /**
      * The attributes that are mass assignable.
@@ -60,6 +64,7 @@ class Page extends Model
         'slug',
         'content',
         'excerpt',
+        'featured_image_id',
         'author_id',
         'parent_id',
         'order',
@@ -70,22 +75,6 @@ class Page extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @since 2.0.0
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'published_at' => 'datetime',
-            'metadata' => 'array',
-            'order' => 'integer',
-        ];
-    }
-
-    /**
      * Get the author of the page.
      *
      * @since 2.0.0
@@ -93,6 +82,16 @@ class Page extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(config('auth.providers.users.model'), 'author_id');
+    }
+
+    /**
+     * Get the featured image for the page.
+     *
+     * @since 2.0.0
+     */
+    public function featuredImageMedia(): BelongsTo
+    {
+        return $this->belongsTo(Media::class, 'featured_image_id');
     }
 
     /**
@@ -155,7 +154,7 @@ class Page extends Model
     public function ancestors(): Collection
     {
         $ancestors = collect();
-        $parent = $this->parent;
+        $parent    = $this->parent;
 
         while ($parent) {
             $ancestors->prepend($parent);
@@ -188,12 +187,13 @@ class Page extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopePublished($query)
     {
         return $query->where('status', 'published')
-            ->where(function ($q) {
+            ->where(function ($q): void {
                 $q->whereNull('published_at')
                     ->orWhere('published_at', '<=', now());
             });
@@ -205,6 +205,7 @@ class Page extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeDraft($query)
@@ -218,6 +219,7 @@ class Page extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByAuthor($query, int $authorId)
@@ -231,6 +233,7 @@ class Page extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeTopLevel($query)
@@ -244,6 +247,7 @@ class Page extends Model
      * @since 2.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
     public function scopeByTemplate($query, string $template)
@@ -258,8 +262,8 @@ class Page extends Model
      */
     public function isPublished(): bool
     {
-        return $this->status === 'published' &&
-            ($this->published_at === null || $this->published_at->isPast());
+        return 'published' === $this->status &&
+            (null === $this->published_at || $this->published_at->isPast());
     }
 
     /**
@@ -274,13 +278,13 @@ class Page extends Model
         foreach ($this->ancestors() as $ancestor) {
             $breadcrumb[] = [
                 'title' => $ancestor->title,
-                'url' => $ancestor->permalink,
+                'url'   => $ancestor->permalink,
             ];
         }
 
         $breadcrumb[] = [
             'title' => $this->title,
-            'url' => $this->permalink,
+            'url'   => $this->permalink,
         ];
 
         return $breadcrumb;
@@ -312,5 +316,21 @@ class Page extends Model
         $path = $ancestors->pluck('slug')->implode('/').'/'.$this->slug;
 
         return url("/{$path}");
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @since 2.0.0
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'published_at' => 'datetime',
+            'metadata'     => 'array',
+            'order'        => 'integer',
+        ];
     }
 }
