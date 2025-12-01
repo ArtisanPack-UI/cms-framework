@@ -31,7 +31,7 @@ build:vendors:
   image: php:8.4
   before_script:
     - apt-get update -yqq
-    - apt-get install -yqq git unzip
+    - apt-get install -yqq git unzip libzip-dev
     - docker-php-ext-install zip
     - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
   script:
