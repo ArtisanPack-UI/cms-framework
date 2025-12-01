@@ -28,7 +28,9 @@ build:vendors:
       files:
         - composer.lock
     policy: pull-push
-  image: composer:2
+  image: php:8.2
+  before_script:
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
   script:
     - composer install --no-interaction --prefer-dist --optimize-autoloader
 
