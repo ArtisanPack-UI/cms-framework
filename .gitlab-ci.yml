@@ -30,6 +30,9 @@ build:vendors:
     policy: pull-push
   image: php:8.4
   before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq git unzip
+    - docker-php-ext-install zip
     - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
   script:
     - composer install --no-interaction --prefer-dist --optimize-autoloader
