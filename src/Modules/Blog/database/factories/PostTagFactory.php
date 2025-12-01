@@ -53,6 +53,7 @@ class PostTagFactory extends Factory
             'name' => ucfirst($name),
             'slug' => Str::slug($name),
             'description' => fake()->sentence(),
+            'order' => 0,
             'metadata' => [
                 'seo_title' => ucfirst($name),
                 'seo_description' => fake()->sentence(),

@@ -65,7 +65,13 @@ class ContentTypeController extends Controller
     {
         $this->authorize('viewAny', ContentType::class);
 
-        $contentTypes = ContentType::paginate(15);
+        $contentTypes = ContentType::select('content_types.*')
+            ->selectSub(
+                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw('count(*)')
+                    ->whereRaw("JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))"),
+                'custom_fields_count'
+            )
+            ->paginate(15);
 
         return ContentTypeResource::collection($contentTypes);
     }
@@ -103,9 +109,15 @@ class ContentTypeController extends Controller
      */
     public function show(string $slug): ContentTypeResource
     {
-        $this->authorize('view', ContentType::class);
-
-        $contentType = ContentType::where('slug', $slug)->firstOrFail();
+        $contentType = ContentType::select('content_types.*')
+            ->selectSub(
+                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw('count(*)')
+                    ->whereRaw("JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))"),
+                'custom_fields_count'
+            )
+            ->where('slug', $slug)
+            ->firstOrFail();
+        $this->authorize('view', $contentType);
 
         return new ContentTypeResource($contentType);
     }
@@ -164,9 +176,9 @@ class ContentTypeController extends Controller
      */
     public function customFields(string $slug): JsonResponse
     {
-        $this->authorize('view', ContentType::class);
-
         $contentType = ContentType::where('slug', $slug)->firstOrFail();
+        $this->authorize('view', $contentType);
+
         $customFields = $contentType->getCustomFields();
 
         return response()->json($customFields);

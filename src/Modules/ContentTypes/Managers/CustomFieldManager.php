@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -76,15 +77,19 @@ class CustomFieldManager
      */
     public function createField(array $data): CustomField
     {
-        $field = CustomField::create($data);
+        $field = DB::transaction(function () use ($data) {
+            $field = CustomField::create($data);
 
-        // Add columns to content type tables
-        foreach ($field->content_types as $contentTypeSlug) {
-            $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
-            if ($contentType) {
-                $this->addColumnToTable($field, $contentType->table_name);
+            // Add columns to content type tables
+            foreach ($field->content_types as $contentTypeSlug) {
+                $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
+                if ($contentType) {
+                    $this->addColumnToTable($field, $contentType->table_name);
+                }
             }
-        }
+
+            return $field;
+        });
 
         /**
          * Fires after a custom field has been created.
@@ -110,33 +115,37 @@ class CustomFieldManager
      */
     public function updateField(int $id, array $data): CustomField
     {
-        $field = CustomField::findOrFail($id);
-        $oldContentTypes = $field->content_types;
+        $field = DB::transaction(function () use ($id, $data) {
+            $field = CustomField::findOrFail($id);
+            $oldContentTypes = $field->content_types;
 
-        $field->update($data);
+            $field->update($data);
 
-        // Handle content type changes
-        if (isset($data['content_types'])) {
-            $newContentTypes = $data['content_types'];
-            $addedTypes = array_diff($newContentTypes, $oldContentTypes);
-            $removedTypes = array_diff($oldContentTypes, $newContentTypes);
+            // Handle content type changes
+            if (isset($data['content_types'])) {
+                $newContentTypes = $data['content_types'];
+                $addedTypes = array_diff($newContentTypes, $oldContentTypes);
+                $removedTypes = array_diff($oldContentTypes, $newContentTypes);
 
-            // Add columns to new content types
-            foreach ($addedTypes as $contentTypeSlug) {
-                $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
-                if ($contentType) {
-                    $this->addColumnToTable($field, $contentType->table_name);
+                // Add columns to new content types
+                foreach ($addedTypes as $contentTypeSlug) {
+                    $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
+                    if ($contentType) {
+                        $this->addColumnToTable($field, $contentType->table_name);
+                    }
+                }
+
+                // Remove columns from removed content types
+                foreach ($removedTypes as $contentTypeSlug) {
+                    $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
+                    if ($contentType) {
+                        $this->removeColumnFromTable($field, $contentType->table_name);
+                    }
                 }
             }
 
-            // Remove columns from removed content types
-            foreach ($removedTypes as $contentTypeSlug) {
-                $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
-                if ($contentType) {
-                    $this->removeColumnFromTable($field, $contentType->table_name);
-                }
-            }
-        }
+            return $field;
+        });
 
         /**
          * Fires after a custom field has been updated.
@@ -161,43 +170,45 @@ class CustomFieldManager
      */
     public function deleteField(int $id): bool
     {
-        $field = CustomField::findOrFail($id);
+        return DB::transaction(function () use ($id) {
+            $field = CustomField::findOrFail($id);
 
-        // Remove columns from content type tables
-        foreach ($field->content_types as $contentTypeSlug) {
-            $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
-            if ($contentType) {
-                $this->removeColumnFromTable($field, $contentType->table_name);
-            }
-        }
-
-        /**
-         * Fires before a custom field is deleted.
-         *
-         * @since 2.0.0
-         *
-         * @hook ap.contentTypes.customFieldDeleting
-         *
-         * @param  CustomField  $field  The custom field being deleted.
-         */
-        doAction('ap.contentTypes.customFieldDeleting', $field);
-
-        $deleted = $field->delete();
-
-        if ($deleted) {
             /**
-             * Fires after a custom field has been deleted.
+             * Fires before a custom field is deleted.
              *
              * @since 2.0.0
              *
-             * @hook ap.contentTypes.customFieldDeleted
+             * @hook ap.contentTypes.customFieldDeleting
              *
-             * @param  string  $key  The key of the deleted custom field.
+             * @param  CustomField  $field  The custom field being deleted.
              */
-            doAction('ap.contentTypes.customFieldDeleted', $field->key);
-        }
+            doAction('ap.contentTypes.customFieldDeleting', $field);
 
-        return $deleted;
+            $deleted = $field->delete();
+
+            if ($deleted) {
+                // Remove columns from content type tables
+                foreach ($field->content_types as $contentTypeSlug) {
+                    $contentType = app(ContentTypeManager::class)->getContentType($contentTypeSlug);
+                    if ($contentType) {
+                        $this->removeColumnFromTable($field, $contentType->table_name);
+                    }
+                }
+
+                /**
+                 * Fires after a custom field has been deleted.
+                 *
+                 * @since 2.0.0
+                 *
+                 * @hook ap.contentTypes.customFieldDeleted
+                 *
+                 * @param  string  $key  The key of the deleted custom field.
+                 */
+                doAction('ap.contentTypes.customFieldDeleted', $field->key);
+            }
+
+            return $deleted;
+        });
     }
 
     /**

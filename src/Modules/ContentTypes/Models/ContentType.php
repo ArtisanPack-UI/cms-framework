@@ -123,4 +123,21 @@ class ContentType extends Model
     {
         return CustomField::whereJsonContains('content_types', $this->slug)->get();
     }
+
+    /**
+     * Scope a query to include custom fields count.
+     *
+     * @since 2.0.0
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeWithCustomFieldsCount($query)
+    {
+        return $query->selectSub(
+            CustomField::selectRaw('count(*)')
+                ->whereRaw("JSON_CONTAINS(content_types, CONCAT('\"', content_types.slug, '\"'))"),
+            'custom_fields_count'
+        );
+    }
 }

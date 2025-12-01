@@ -55,7 +55,7 @@ class ContentTypeResource extends JsonResource
             'show_in_admin' => $this->show_in_admin,
             'icon' => $this->icon,
             'menu_position' => $this->menu_position,
-            'custom_fields_count' => $this->getCustomFields()->count(),
+            'custom_fields_count' => $this->custom_fields_count ?? $this->getCustomFields()->count(),
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
         ];

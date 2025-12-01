@@ -103,9 +103,8 @@ class TaxonomyController extends Controller
      */
     public function show(string $slug): TaxonomyResource
     {
-        $this->authorize('view', Taxonomy::class);
-
         $taxonomy = Taxonomy::where('slug', $slug)->firstOrFail();
+        $this->authorize('view', $taxonomy);
 
         return new TaxonomyResource($taxonomy);
     }

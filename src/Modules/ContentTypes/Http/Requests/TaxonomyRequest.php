@@ -50,19 +50,26 @@ class TaxonomyRequest extends FormRequest
     {
         $slug = $this->route('slug');
 
+        $slugRules = [
+            'required',
+            'string',
+            'max:255',
+            'regex:/^[a-z0-9_]+$/',
+        ];
+
+        $uniqueRule = Rule::unique('taxonomies', 'slug');
+        if ($slug) {
+            $uniqueRule->ignore($slug, 'slug');
+        }
+        $slugRules[] = $uniqueRule;
+
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
             ],
-            'slug' => [
-                'required',
-                'string',
-                'max:255',
-                'regex:/^[a-z0-9_]+$/',
-                Rule::unique('taxonomies', 'slug')->ignore($slug, 'slug'),
-            ],
+            'slug' => $slugRules,
             'content_type_slug' => [
                 'required',
                 'string',

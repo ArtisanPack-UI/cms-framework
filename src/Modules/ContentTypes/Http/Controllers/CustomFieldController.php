@@ -104,9 +104,8 @@ class CustomFieldController extends Controller
      */
     public function show(int $id): CustomFieldResource
     {
-        $this->authorize('view', CustomField::class);
-
         $customField = CustomField::findOrFail($id);
+        $this->authorize('view', $customField);
 
         return new CustomFieldResource($customField);
     }

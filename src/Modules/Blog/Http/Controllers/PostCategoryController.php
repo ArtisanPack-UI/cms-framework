@@ -86,9 +86,8 @@ class PostCategoryController extends Controller
      */
     public function show(int $id): PostCategoryResource
     {
-        $this->authorize('view', PostCategory::class);
-
         $category = PostCategory::with(['parent', 'children'])->findOrFail($id);
+        $this->authorize('view', $category);
 
         return new PostCategoryResource($category);
     }

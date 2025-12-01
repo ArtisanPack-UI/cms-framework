@@ -85,9 +85,8 @@ class PostTagController extends Controller
      */
     public function show(int $id): PostTagResource
     {
-        $this->authorize('view', PostTag::class);
-
         $tag = PostTag::findOrFail($id);
+        $this->authorize('view', $tag);
 
         return new PostTagResource($tag);
     }

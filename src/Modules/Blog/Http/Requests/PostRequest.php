@@ -50,7 +50,11 @@ class PostRequest extends FormRequest
         $id = $this->route('id');
 
         return [
-            'title' => ['required', 'string', 'max:255'],
+            'title' => [
+                'required',
+                'string',
+                'max:255',
+            ],
             'slug' => [
                 'required',
                 'string',

@@ -64,6 +64,9 @@ class BlogManager
         if (isset($filters['year'])) {
             if (isset($filters['month'])) {
                 $query->byMonth($filters['year'], $filters['month']);
+                if (isset($filters['day'])) {
+                    $query->whereDay('published_at', $filters['day']);
+                }
             } else {
                 $query->byYear($filters['year']);
             }
@@ -100,6 +103,10 @@ class BlogManager
 
         if ($month !== null) {
             $filters['month'] = $month;
+        }
+
+        if ($day !== null) {
+            $filters['day'] = $day;
         }
 
         return $this->getArchiveQuery($filters)->get();
@@ -167,12 +174,17 @@ class BlogManager
      * @since 2.0.0
      *
      * @param  int  $limit  Number of posts to retrieve.
+     * @param  array|string  $with  Optional relationships to eager load.
      */
-    public function getRecentPosts(int $limit = 10): Collection
+    public function getRecentPosts(int $limit = 10, array|string $with = []): Collection
     {
-        return $this->getArchiveQuery()
-            ->limit($limit)
-            ->get();
+        $query = $this->getArchiveQuery();
+
+        if (! empty($with)) {
+            $query->with((array) $with);
+        }
+
+        return $query->limit($limit)->get();
     }
 
     /**

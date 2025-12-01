@@ -49,6 +49,12 @@ class PostCategoryRequest extends FormRequest
     {
         $id = $this->route('id');
 
+        $parentIdRules = ['nullable', 'integer', 'exists:post_categories,id'];
+
+        if ($id) {
+            $parentIdRules[] = Rule::notIn([$id]);
+        }
+
         return [
             'name' => ['required', 'string', 'max:255'],
             'slug' => [
@@ -59,7 +65,7 @@ class PostCategoryRequest extends FormRequest
                 Rule::unique('post_categories', 'slug')->ignore($id),
             ],
             'description' => ['nullable', 'string'],
-            'parent_id' => ['nullable', 'integer', 'exists:post_categories,id'],
+            'parent_id' => $parentIdRules,
             'order' => ['integer', 'min:0'],
             'metadata' => ['nullable', 'array'],
         ];
