@@ -55,15 +55,22 @@ class PostCategoryRequest extends FormRequest
             $parentIdRules[] = Rule::notIn([$id]);
         }
 
+        $slugRules = [
+            'required',
+            'string',
+            'max:255',
+            'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
+        ];
+
+        $uniqueRule = Rule::unique('post_categories', 'slug');
+        if ($id) {
+            $uniqueRule->ignore($id);
+        }
+        $slugRules[] = $uniqueRule;
+
         return [
             'name' => ['required', 'string', 'max:255'],
-            'slug' => [
-                'required',
-                'string',
-                'max:255',
-                'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('post_categories', 'slug')->ignore($id),
-            ],
+            'slug' => $slugRules,
             'description' => ['nullable', 'string'],
             'parent_id' => $parentIdRules,
             'order' => ['integer', 'min:0'],
