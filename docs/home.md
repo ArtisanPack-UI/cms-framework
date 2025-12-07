@@ -68,6 +68,16 @@ Provides application-wide configuration storage:
 
 See [[Settings]] for details.
 
+### Themes Module
+Provides a flexible theme management system:
+- Automatic theme discovery from configured directory
+- Theme activation with cache management
+- WordPress-style template hierarchy for content types
+- View path registration for Laravel's Blade engine
+- RESTful API endpoints for theme operations
+
+See [[Themes]] for details.
+
 ### Models
 - **User Model**: Uses your application's User model with HasRolesAndPermissions trait
 - **Role Model**: Manages user roles with name and slug fields
