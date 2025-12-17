@@ -104,21 +104,21 @@ app(SettingsManager::class)->register('site_name', 'My Awesome Site');
 $siteName = app(SettingsManager::class)->get('site_name');
 ```
 
-### Customization with Eventy
+### Customization with Hooks
 
-The CMS Framework uses the Eventy system for hooks and filters, allowing for extensive customization:
+The CMS Framework uses hooks and filters for extensive customization:
 
 ```php
-use TorMorten\Eventy\Facades\Eventy;
+// addFilter and addAction are global helper functions provided by the framework
 
 // Add a filter
-Eventy::addFilter('ap.cms.migrations.directories', function($directories) {
+addFilter('ap.cms.migrations.directories', function($directories) {
     $directories[] = __DIR__ . '/database/migrations';
     return $directories;
 });
 
 // Add an action
-Eventy::addAction('ap.cms.after_content_save', function($content) {
+addAction('ap.cms.after_content_save', function($content) {
     // Do something after content is saved
 });
 ```

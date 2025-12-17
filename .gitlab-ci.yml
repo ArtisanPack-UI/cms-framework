@@ -28,7 +28,12 @@ build:vendors:
       files:
         - composer.lock
     policy: pull-push
-  image: composer:2
+  image: php:8.4
+  before_script:
+    - apt-get update -yqq
+    - apt-get install -yqq git unzip libzip-dev
+    - docker-php-ext-install zip
+    - curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
   script:
     - composer install --no-interaction --prefer-dist --optimize-autoloader
 
@@ -45,13 +50,13 @@ tests:
       files:
         - composer.lock
     policy: pull
-  image: php:8.2
+  image: php:8.4
   before_script:
     - apt-get update -yqq
     - apt-get install -yqq libpng-dev libjpeg-dev libfreetype6-dev
-    - apt-get install -yqq libsqlite3-dev
+    - apt-get install -yqq libsqlite3-dev libzip-dev
     - docker-php-ext-configure gd --with-freetype --with-jpeg
-    - docker-php-ext-install gd pdo_sqlite
+    - docker-php-ext-install gd pdo_sqlite zip
   script:
     - ./vendor/bin/pest --ci
 
@@ -68,7 +73,7 @@ code-style:
       files:
         - composer.lock
     policy: pull
-  image: php:8.2
+  image: php:8.4
   allow_failure: true
   script:
     - ./vendor/bin/phpcs --standard=ArtisanPackUIStandard src

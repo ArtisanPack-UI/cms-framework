@@ -1,0 +1,13 @@
+{
+  "slug": "plugin-with-migrations",
+  "name": "Plugin With Migrations",
+  "version": "1.0.0",
+  "description": "Test plugin with database migrations",
+  "author": "Test Author",
+  "migrations_path": "database/migrations",
+  "autoload": {
+    "psr-4": {
+      "PluginWithMigrations\\": "src/"
+    }
+  }
+}
