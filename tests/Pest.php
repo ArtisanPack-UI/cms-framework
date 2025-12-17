@@ -7,12 +7,29 @@
 |
 | The closure you provide to your test functions is always bound to a specific PHPUnit test
 | case class. By default, that class is "PHPUnit\Framework\TestCase". Of course, you may
-| need to change it using the "pest()" function to bind a different classes or traits.
+| need to change it using the "uses()" function to bind a different classes or traits.
 |
 */
 
-pest()->extend( Tests\TestCase::class )
-      ->in( 'Unit', 'Feature', 'Security' );
+/*
+|--------------------------------------------------------------------------
+| Test Case & Traits
+|--------------------------------------------------------------------------
+|
+| This is where you can bind your base TestCase and any traits you want
+| to apply to groups of tests.
+|
+*/
+
+// This tells Pest that all tests in the 'Feature' directory
+// should use your custom TestCase as their foundation.
+uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Feature');
+
+// This tells Pest to apply the RefreshDatabase trait to all
+// tests in the 'Feature' directory, resetting the database for each test.
+uses(Illuminate\Foundation\Testing\RefreshDatabase::class)->in('Feature');
+
+uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Unit');
 
 /*
 |--------------------------------------------------------------------------
@@ -25,9 +42,9 @@ pest()->extend( Tests\TestCase::class )
 |
 */
 
-expect()->extend( 'toBeOne', function () {
-    return $this->toBe( 1 );
-} );
+expect()->extend('toBeOne', function () {
+    return $this->toBe(1);
+});
 
 /*
 |--------------------------------------------------------------------------
@@ -39,6 +56,9 @@ expect()->extend( 'toBeOne', function () {
 | global functions to help you to reduce the number of lines of code in your test files.
 |
 */
+
+// Load test helpers
+require_once __DIR__.'/Helpers/TestHelpers.php';
 
 function something()
 {

@@ -1,62 +1,105 @@
 ---
-title: Home
+title: CMS Framework Documentation
 ---
 
-# ArtisanPack UI CMS Framework Documentation
+# CMS Framework Documentation
 
-Welcome to the ArtisanPack UI CMS Framework documentation. This comprehensive guide will help you understand and implement the framework's features in your Laravel applications.
+Welcome to the CMS Framework documentation! This Laravel package provides a comprehensive content management system foundation with built-in user management, role-based access control, and extensible architecture.
+
+## Overview
+
+The CMS Framework is designed to help developers quickly build content management systems with robust user management and permission systems. It provides:
+
+- **User Management System**: Complete CRUD operations for users
+- **Role-Based Access Control (RBAC)**: Flexible roles and permissions system
+- **RESTful API**: Clean API endpoints for all operations
+- **Configurable User Model**: Use your existing User model
+- **Laravel Integration**: Seamless integration with Laravel applications
 
 ## Getting Started
 
-Start your journey with the CMS Framework:
+- [[Installation Guide]] - Setup and configuration instructions
+- [[Configuration]] - Configuring the CMS Framework for your application
+- [[Quick Start]] - Get up and running quickly
 
-- **[Overview](overview)** - General overview of the CMS Framework and its core concepts
-- **[Getting Started](getting-started)** - Installation, configuration, and initial setup
-  - [Installation](getting-started/installation) - Install and set up the framework
-  - [Configuration](getting-started/configuration) - Configure your CMS settings
-  - [AI Guidelines](getting-started/ai-guidelines) - Development guidelines for AI-assisted development
+## User Management
 
-## Core Features
+- [[User Management]] - Managing users in your CMS
+- [[Roles and Permissions]] - Understanding the RBAC system
+- [[User API Reference]] - Complete API documentation
 
-Explore the framework's comprehensive feature set:
+## Developer Resources
 
-- **[Core Features](core-features)** - Complete overview of all framework features
-  - **[Administration](core-features/administration)** - Admin interface and dashboard management
-  - **[Security](core-features/security)** - User management, authentication, and security
-  - **[Content Management](core-features/content)** - Content types, settings, and notifications  
-  - **[Progressive Web App](core-features/pwa)** - PWA functionality and integration
+- [[Developer Guide]] - Extending and customizing the framework
+- [[API Authentication]] - Securing your API endpoints
+- [[Testing]] - Testing your CMS implementation
+- [[Hooks and Events]] - Filters and actions you can use to extend functionality
 
-## API Documentation
+## Core Components
 
-- **[API Documentation](api)** - Complete REST API reference
-  - [API Examples](api/examples) - Practical API usage examples
+### Users Module
+The Users module provides comprehensive user management functionality including:
+- User CRUD operations
+- Role assignment and management
+- Permission-based access control
+- Configurable user model support
 
-## Development Resources
+### Admin Module
+Provides the building blocks for your admin area:
+- Menu sections, pages, and subpages
+- Automatic route registration under /admin with auth middleware
+- Capability-based authorization
+- Dashboard widgets
 
-For developers building with the framework:
+See [[Admin]] for details.
 
-- **[Development Guides](development)** - Comprehensive development resources
-  - [Framework Core](development/framework-core) - Core architecture and components
-  - [Comprehensive Development Guide](development/comprehensive-guide) - Complete development tutorial
-  - [Custom CMS Implementation](development/custom-cms-implementation) - Building custom CMS solutions
-  - [Implementing Themes](development/implementing-themes) - Theme development guide
-  - [Themes](development/themes) - Theme system overview
-  - [Plugins](development/plugins) - Plugin development and management
-  - [Contributing Guide](development/contributing-guide) - Contribution guidelines
+### Core Module
+Provides cross-cutting services:
+- Asset registration and retrieval for admin/public/auth contexts
+- Filter hooks to modify asset collections
 
-## Usage Guides
+See [[Core]] for details.
 
-Practical guides for using the framework:
+### Settings Module
+Provides application-wide configuration storage:
+- Register keys with defaults, types, and sanitizers
+- Retrieve and update values via helpers
+- Backed by a database table with automatic casting
 
-- **[Guides](guides)** - Practical tutorials and reference materials
-  - [Usage Guide](guides/usage) - Comprehensive feature usage guide
-  - [Performance Testing](guides/performance-testing) - Performance optimization guide
-  - [Error Handling](guides/error-handling) - Error handling and debugging strategies
+See [[Settings]] for details.
 
-## Quick Links
+### Themes Module
+Provides a flexible theme management system:
+- Automatic theme discovery from configured directory
+- Theme activation with cache management
+- WordPress-style template hierarchy for content types
+- View path registration for Laravel's Blade engine
+- RESTful API endpoints for theme operations
 
-- [GitHub Repository](https://github.com/artisanpack/ui-cms-framework)
-- [Composer Package](https://packagist.org/packages/artisanpack/ui-cms-framework)
-- [License](../LICENSE)
-- [Contributing Guidelines](../CONTRIBUTING.md)
-- [Changelog](../CHANGELOG.md)
+See [[Themes]] for details.
+
+### Models
+- **User Model**: Uses your application's User model with HasRolesAndPermissions trait
+- **Role Model**: Manages user roles with name and slug fields
+- **Permission Model**: Manages individual permissions with name and slug fields
+
+### API Endpoints
+All user management operations are available through RESTful API endpoints:
+- `GET /api/v1/users` - List users with pagination
+- `POST /api/v1/users` - Create new user
+- `GET /api/v1/users/{id}` - Get specific user
+- `PUT/PATCH /api/v1/users/{id}` - Update user
+- `DELETE /api/v1/users/{id}` - Delete user
+
+## Configuration
+
+The framework uses a simple configuration file to customize behavior:
+- `user_model` - Specify your application's User model class
+
+## Support
+
+For issues, feature requests, and contributions, please refer to the project repository.
+
+---
+
+*This documentation covers CMS Framework v2.0.0+*
