@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
@@ -15,14 +15,14 @@ use Illuminate\Support\Facades\Http;
  *
  * Fetches updates from custom JSON endpoints.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class CustomJsonUpdateSource implements UpdateSourceInterface
 {
     /**
      * Query parameters for authentication or other purposes.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<string, mixed>
      */
@@ -31,7 +31,7 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
     /**
      * Create a new CustomJsonUpdateSource instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $url  JSON endpoint URL
      * @param  string  $currentVersion  Current version
@@ -39,20 +39,21 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
     public function __construct(
         protected string $url,
         protected string $currentVersion,
-    ) {}
+    ) {
+    }
 
     /**
      * Check if this source supports the given URL.
      *
      * This is the fallback source - supports any URL.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $url  URL to check
      *
      * @return bool Always returns true (fallback source)
      */
-    public function supports(string $url): bool
+    public function supports( string $url ): bool
     {
         return true;
     }
@@ -60,7 +61,7 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
     /**
      * Check for available updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @throws UpdateException
      *
@@ -71,21 +72,21 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
         $data = $this->fetchJson();
 
         // Validate required fields
-        if (! isset($data['version'])) {
-            throw UpdateException::missingRequiredField('version');
+        if ( ! isset( $data['version'] ) ) {
+            throw UpdateException::missingRequiredField( 'version' );
         }
 
-        if (! isset($data['download_url'])) {
-            throw UpdateException::missingRequiredField('download_url');
+        if ( ! isset( $data['download_url'] ) ) {
+            throw UpdateException::missingRequiredField( 'download_url' );
         }
 
-        return UpdateInfo::fromArray($data, $this->currentVersion);
+        return UpdateInfo::fromArray( $data, $this->currentVersion );
     }
 
     /**
      * Download the specified version.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $version  Version to download
      *
@@ -93,11 +94,11 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
      *
      * @return string Path to downloaded ZIP file
      */
-    public function downloadUpdate(string $version): string
+    public function downloadUpdate( string $version ): string
     {
         // Fetch update info - for custom JSON, check if version parameter is supported
         // If version is 'latest' or null, use checkForUpdate()
-        if ('latest' === $version || empty($version)) {
+        if ( 'latest' === $version || empty( $version ) ) {
             $data = $this->fetchJson();
         } else {
             // Try to fetch specific version by passing version as query param
@@ -107,26 +108,26 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
             $this->queryParams            = $originalParams;
         }
 
-        if (! isset($data['download_url'])) {
-            throw UpdateException::missingRequiredField('download_url');
+        if ( ! isset( $data['download_url'] ) ) {
+            throw UpdateException::missingRequiredField( 'download_url' );
         }
 
         $downloadUrl = $data['download_url'];
 
-        $tempPath = storage_path('app/temp/update-'.time().'.zip');
+        $tempPath = storage_path( 'app/temp/update-' . time() . '.zip' );
 
-        if (! File::exists(dirname($tempPath))) {
-            File::makeDirectory(dirname($tempPath), 0755, true);
+        if ( ! File::exists( dirname( $tempPath ) ) ) {
+            File::makeDirectory( dirname( $tempPath ), 0755, true );
         }
 
-        $response = Http::timeout(config('cms.updates.download_timeout', 300))
-            ->get($downloadUrl);
+        $response = Http::timeout( config( 'cms.updates.download_timeout', 300 ) )
+            ->get( $downloadUrl );
 
-        if (! $response->successful()) {
-            throw UpdateException::downloadFailed($downloadUrl);
+        if ( ! $response->successful() ) {
+            throw UpdateException::downloadFailed( $downloadUrl );
         }
 
-        File::put($tempPath, $response->body());
+        File::put( $tempPath, $response->body() );
 
         return $tempPath;
     }
@@ -134,14 +135,14 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
     /**
      * Set authentication credentials.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  array|string  $credentials  Credentials (token, query params, etc.)
      */
-    public function setAuthentication(string|array $credentials): void
+    public function setAuthentication( string|array $credentials ): void
     {
         // For custom JSON, credentials can be query params or headers
-        if (is_array($credentials)) {
+        if ( is_array( $credentials ) ) {
             $this->queryParams = $credentials;
         } else {
             // Assume it's a token to be passed as query param
@@ -152,7 +153,7 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
     /**
      * Get the source name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return string Source name
      */
@@ -164,7 +165,7 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
     /**
      * Fetch and parse JSON from the update URL.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @throws UpdateException If request fails or JSON is invalid
      *
@@ -175,22 +176,22 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
         $url = $this->url;
 
         // Add query parameters if set
-        if (! empty($this->queryParams)) {
-            $url .= (str_contains($url, '?') ? '&' : '?').http_build_query($this->queryParams);
+        if ( ! empty( $this->queryParams ) ) {
+            $url .= ( str_contains( $url, '?' ) ? '&' : '?' ) . http_build_query( $this->queryParams );
         }
 
-        $response = Http::timeout(config('cms.updates.http_timeout', 15))
-            ->retry(config('cms.updates.http_retries', 3), 100, throw: false)
-            ->get($url);
+        $response = Http::timeout( config( 'cms.updates.http_timeout', 15 ) )
+            ->retry( config( 'cms.updates.http_retries', 3 ), 100, throw: false )
+            ->get( $url );
 
-        if (! $response->successful()) {
-            throw UpdateException::versionCheckFailed("HTTP {$response->status()}: {$response->body()}");
+        if ( ! $response->successful() ) {
+            throw UpdateException::versionCheckFailed( "HTTP {$response->status()}: {$response->body()}" );
         }
 
         $data = $response->json();
 
-        if (! is_array($data)) {
-            throw UpdateException::invalidJsonResponse($url);
+        if ( ! is_array( $data ) ) {
+            throw UpdateException::invalidJsonResponse( $url );
         }
 
         return $data;

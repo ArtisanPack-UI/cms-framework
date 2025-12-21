@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostCategory Factory for the CMS Framework Blog Module.
  *
  * This factory generates fake post category data for testing purposes,
  * including support for hierarchical parent-child relationships.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Database\Factories;
@@ -20,7 +22,7 @@ use Illuminate\Support\Str;
  *
  * Supports creating hierarchical categories with parent-child relationships.
  *
- * @since 2.0.0
+ * @since 1.0.0
  *
  * @extends Factory<PostCategory>
  */
@@ -29,7 +31,7 @@ class PostCategoryFactory extends Factory
     /**
      * The name of the factory's corresponding model.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var class-string<PostCategory>
      */
@@ -40,22 +42,22 @@ class PostCategoryFactory extends Factory
      *
      * Generates a category with random name, description, and metadata.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, mixed> The default category attributes.
      */
     public function definition(): array
     {
-        $name = fake()->words(rand(1, 3), true);
+        $name = fake()->words( rand( 1, 3 ), true );
 
         return [
-            'name' => ucwords($name),
-            'slug' => Str::slug($name),
+            'name'        => ucwords( $name ),
+            'slug'        => Str::slug( $name ),
             'description' => fake()->sentence(),
-            'parent_id' => null,
-            'order' => 0,
-            'metadata' => [
-                'seo_title' => ucwords($name),
+            'parent_id'   => null,
+            'order'       => 0,
+            'metadata'    => [
+                'seo_title'       => ucwords( $name ),
                 'seo_description' => fake()->sentence(),
             ],
         ];
@@ -64,16 +66,17 @@ class PostCategoryFactory extends Factory
     /**
      * Indicate that the category has a parent category.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $parentId  The parent category ID.
+     *
      * @return static The factory instance for method chaining.
      */
-    public function withParent(int $parentId): static
+    public function withParent( int $parentId ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'parent_id' => $parentId,
-        ]);
+        ] );
     }
 
     /**
@@ -81,29 +84,30 @@ class PostCategoryFactory extends Factory
      *
      * This will create a parent category and set it as the parent.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return static The factory instance for method chaining.
      */
     public function asChild(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'parent_id' => PostCategory::factory(),
-        ]);
+        ] );
     }
 
     /**
      * Set the order for the category.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $order  The category order.
+     *
      * @return static The factory instance for method chaining.
      */
-    public function withOrder(int $order): static
+    public function withOrder( int $order ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'order' => $order,
-        ]);
+        ] );
     }
 }

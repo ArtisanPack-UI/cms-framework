@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 return [
     /*
@@ -16,7 +16,7 @@ return [
     | This URL will be overridden by the application's config.
     |
     */
-    'update_source_url' => env('UPDATE_SOURCE_URL', null),
+    'update_source_url' => env( 'UPDATE_SOURCE_URL', null ),
 
     /*
     |--------------------------------------------------------------------------
@@ -36,9 +36,9 @@ return [
     | Settings for the update download and installation process.
     |
     */
-    'download_timeout' => 300, // 5 minutes for large ZIPs
+    'download_timeout'         => 300, // 5 minutes for large ZIPs
     'composer_install_command' => 'composer install --no-dev --no-interaction --optimize-autoloader',
-    'composer_timeout' => 600, // 10 minutes
+    'composer_timeout'         => 600, // 10 minutes
 
     /*
     |--------------------------------------------------------------------------
@@ -48,9 +48,9 @@ return [
     | Configure automatic backups before updates.
     |
     */
-    'backup_enabled' => true,
-    'backup_path' => 'backups/application', // Relative to storage_path()
-    'backup_retention_days' => env('BACKUP_RETENTION_DAYS', 30),
+    'backup_enabled'        => true,
+    'backup_path'           => 'backups/application', // Relative to storage_path()
+    'backup_retention_days' => env( 'BACKUP_RETENTION_DAYS', 30 ),
 
     /*
     |--------------------------------------------------------------------------
@@ -82,8 +82,8 @@ return [
     | Configure caching for update checks.
     |
     */
-    'cache_enabled' => env('UPDATE_CACHE_ENABLED', true),
-    'cache_ttl' => 43200, // 12 hours in seconds
+    'cache_enabled' => env( 'UPDATE_CACHE_ENABLED', true ),
+    'cache_ttl'     => 43200, // 12 hours in seconds
 
     /*
     |--------------------------------------------------------------------------
@@ -105,7 +105,7 @@ return [
     | Values: 'daily', 'twice_daily', 'weekly', 'disabled'
     |
     */
-    'check_frequency' => env('UPDATE_CHECK_FREQUENCY', 'daily'),
+    'check_frequency' => env( 'UPDATE_CHECK_FREQUENCY', 'daily' ),
 
     /*
     |--------------------------------------------------------------------------
@@ -116,7 +116,7 @@ return [
     | CAUTION: Only enable if you trust the update source completely.
     |
     */
-    'auto_update_enabled' => env('AUTO_UPDATE_ENABLED', false),
+    'auto_update_enabled' => env( 'AUTO_UPDATE_ENABLED', false ),
 
     /*
     |--------------------------------------------------------------------------

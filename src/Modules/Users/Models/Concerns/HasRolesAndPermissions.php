@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Roles and Permissions Trait for User Models.
  *
@@ -32,11 +34,12 @@ trait HasRolesAndPermissions
      * @since 1.0.0
      *
      * @param  string  $roleSlug  The slug of the role to check for.
+     *
      * @return bool True if the user has the role, false otherwise.
      */
-    public function hasRole(string $roleSlug): bool
+    public function hasRole( string $roleSlug ): bool
     {
-        return $this->roles()->where('slug', $roleSlug)->exists();
+        return $this->roles()->where( 'slug', sanitizeText( $roleSlug ) )->exists();
     }
 
     /**
@@ -51,7 +54,7 @@ trait HasRolesAndPermissions
      */
     public function roles(): BelongsToMany
     {
-        return $this->belongsToMany(Role::class, 'role_user', 'user_id', 'role_id');
+        return $this->belongsToMany( Role::class, 'role_user', 'user_id', 'role_id' );
     }
 
     /**
@@ -65,15 +68,16 @@ trait HasRolesAndPermissions
      *
      * @param  string  $ability  Ability name or permission slug.
      * @param  array  $arguments  Optional arguments forwarded to the parent gate check.
+     *
      * @return bool True if the ability is granted, false otherwise.
      */
-    public function can($ability, $arguments = []): bool
+    public function can( $ability, $arguments = [] ): bool
     {
-        if (empty($arguments) && is_string($ability) && $this->hasPermissionTo($ability)) {
+        if ( empty( $arguments ) && is_string( $ability ) && $this->hasPermissionTo( $ability ) ) {
             return true;
         }
 
-        return parent::can($ability, $arguments);
+        return parent::can( $ability, $arguments );
     }
 
     /**
@@ -84,14 +88,15 @@ trait HasRolesAndPermissions
      * @since 1.0.0
      *
      * @param  string  $permissionSlug  The slug of the permission to check for.
+     *
      * @return bool True if the user has the permission, false otherwise.
      */
-    public function hasPermissionTo(string $permissionSlug): bool
+    public function hasPermissionTo( string $permissionSlug ): bool
     {
         return $this->roles()
-            ->whereHas('permissions', function ($query) use ($permissionSlug) {
-                $query->where('slug', $permissionSlug);
-            })
+            ->whereHas( 'permissions', function ( $query ) use ( $permissionSlug ): void {
+                $query->where( 'slug', sanitizeText( $permissionSlug ) );
+            } )
             ->exists();
     }
 }

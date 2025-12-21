@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * CustomField Model
  *
  * Represents a custom field in the system.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models;
@@ -31,7 +33,7 @@ use Illuminate\Support\Collection;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class CustomField extends Model
 {
@@ -40,7 +42,7 @@ class CustomField extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -58,38 +60,22 @@ class CustomField extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @since 2.0.0
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'content_types' => 'array',
-            'options' => 'array',
-            'required' => 'boolean',
-        ];
-    }
-
-    /**
      * Get the migration column definition for this field.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function getMigrationColumnDefinition(): string
     {
         $definition = "\$table->{$this->column_type}('{$this->key}')";
 
         // Add nullable if not required
-        if (! $this->required) {
+        if ( ! $this->required ) {
             $definition .= '->nullable()';
         }
 
         // Add default value if specified
-        if ($this->default_value !== null) {
-            $default = is_numeric($this->default_value) ? $this->default_value : "'{$this->default_value}'";
+        if ( null !== $this->default_value ) {
+            $default = is_numeric( $this->default_value ) ? $this->default_value : "'{$this->default_value}'";
             $definition .= "->default({$default})";
         }
 
@@ -101,10 +87,26 @@ class CustomField extends Model
     /**
      * Get the content types this field belongs to.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function getContentTypes(): Collection
     {
-        return ContentType::whereIn('slug', $this->content_types)->get();
+        return ContentType::whereIn( 'slug', $this->content_types )->get();
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @since 1.0.0
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'content_types' => 'array',
+            'options'       => 'array',
+            'required'      => 'boolean',
+        ];
     }
 }

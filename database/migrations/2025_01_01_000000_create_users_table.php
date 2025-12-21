@@ -11,7 +11,7 @@ return new class extends Migration {
 	{
 		// Only create if it doesn't exist (consuming application may already have users table)
 		if ( ! Schema::hasTable( 'users' ) ) {
-			Schema::create( 'users', function ( Blueprint $table ) {
+			Schema::create( 'users', function ( Blueprint $table ): void {
 				$table->id();
 				$table->string( 'name' );
 				$table->string( 'email' )->unique();

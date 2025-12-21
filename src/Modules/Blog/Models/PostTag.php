@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostTag Model
  *
  * Represents a post tag in the system.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Models;
@@ -26,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PostTag extends Model
 {
@@ -35,7 +37,7 @@ class PostTag extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -48,9 +50,29 @@ class PostTag extends Model
     ];
 
     /**
+     * Get the posts with this tag.
+     *
+     * @since 1.0.0
+     */
+    public function posts(): BelongsToMany
+    {
+        return $this->belongsToMany( Post::class, 'post_tag_pivots', 'post_tag_id', 'post_id' );
+    }
+
+    /**
+     * Get the permalink for the tag archive.
+     *
+     * @since 1.0.0
+     */
+    public function getPermalinkAttribute(): string
+    {
+        return url( "/blog/tag/{$this->slug}" );
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string>
      */
@@ -59,25 +81,5 @@ class PostTag extends Model
         return [
             'metadata' => 'array',
         ];
-    }
-
-    /**
-     * Get the posts with this tag.
-     *
-     * @since 2.0.0
-     */
-    public function posts(): BelongsToMany
-    {
-        return $this->belongsToMany(Post::class, 'post_tag_pivots', 'post_tag_id', 'post_id');
-    }
-
-    /**
-     * Get the permalink for the tag archive.
-     *
-     * @since 2.0.0
-     */
-    public function getPermalinkAttribute(): string
-    {
-        return url("/blog/tag/{$this->slug}");
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Role Controller for the CMS Framework Users Module.
  *
@@ -40,9 +42,9 @@ class RoleController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $roles = Role::with('permissions')->paginate(15);
+        $roles = Role::with( 'permissions' )->paginate( 15 );
 
-        return RoleResource::collection($roles);
+        return RoleResource::collection( $roles );
     }
 
     /**
@@ -54,19 +56,20 @@ class RoleController extends Controller
      * @since 1.0.0
      *
      * @param  Request  $request  The HTTP request containing role data.
+     *
      * @return RoleResource The created role resource with loaded permissions.
      */
-    public function store(Request $request): RoleResource
+    public function store( Request $request ): RoleResource
     {
-        $validated = $request->validate([
+        $validated = $request->validate( [
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:roles',
-        ]);
+        ] );
 
-        $role = Role::create($validated);
-        $role->load('permissions');
+        $role = Role::create( $validated );
+        $role->load( 'permissions' );
 
-        return new RoleResource($role);
+        return new RoleResource( $role );
     }
 
     /**
@@ -77,14 +80,15 @@ class RoleController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the role to retrieve.
+     * @param  int|string  $id  The ID of the role to retrieve.
+     *
      * @return RoleResource The role resource with loaded permissions.
      */
-    public function show(string|int $id): RoleResource
+    public function show( string|int $id ): RoleResource
     {
-        $role = Role::with('permissions')->findOrFail($id);
+        $role = Role::with( 'permissions' )->findOrFail( $id );
 
-        return new RoleResource($role);
+        return new RoleResource( $role );
     }
 
     /**
@@ -96,21 +100,22 @@ class RoleController extends Controller
      * @since 1.0.0
      *
      * @param  Request  $request  The HTTP request containing updated role data.
-     * @param  string|int  $id  The ID of the role to update.
+     * @param  int|string  $id  The ID of the role to update.
+     *
      * @return RoleResource The updated role resource with loaded permissions.
      */
-    public function update(Request $request, string|int $id): RoleResource
+    public function update( Request $request, string|int $id ): RoleResource
     {
-        $role = Role::findOrFail($id);
-        $validated = $request->validate([
+        $role      = Role::findOrFail( $id );
+        $validated = $request->validate( [
             'name' => 'sometimes|required|string|max:255',
-            'slug' => 'sometimes|required|string|max:255|unique:roles,slug,'.$role->id,
-        ]);
+            'slug' => 'sometimes|required|string|max:255|unique:roles,slug,' . $role->id,
+        ] );
 
-        $role->update($validated);
-        $role->load('permissions');
+        $role->update( $validated );
+        $role->load( 'permissions' );
 
-        return new RoleResource($role);
+        return new RoleResource( $role );
     }
 
     /**
@@ -121,14 +126,15 @@ class RoleController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the role to delete.
+     * @param  int|string  $id  The ID of the role to delete.
+     *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy(string|int $id): JsonResponse
+    public function destroy( string|int $id ): JsonResponse
     {
-        $role = Role::findOrFail($id);
+        $role = Role::findOrFail( $id );
         $role->delete();
 
-        return response()->json([], 204);
+        return response()->json( [], 204 );
     }
 }

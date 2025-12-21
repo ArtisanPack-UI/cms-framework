@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Role Policy for the CMS Framework Users Module.
  *
@@ -30,9 +32,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can view roles, false otherwise.
      */
-    public function viewAny(Authenticatable $user): bool
+    public function viewAny( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any roles.
@@ -42,9 +45,10 @@ class RolePolicy
          * @hook role.viewAny
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.viewAny', 'roles.manage'));
+        return $user->can( applyFilters( 'role.viewAny', 'roles.manage' ) );
     }
 
     /**
@@ -53,9 +57,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can view the role, false otherwise.
      */
-    public function view(Authenticatable $user): bool
+    public function view( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view roles.
@@ -65,9 +70,10 @@ class RolePolicy
          * @hook role.view
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.view', 'roles.manage'));
+        return $user->can( applyFilters( 'role.view', 'roles.manage' ) );
     }
 
     /**
@@ -76,9 +82,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can create roles, false otherwise.
      */
-    public function create(Authenticatable $user): bool
+    public function create( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can create roles.
@@ -88,9 +95,10 @@ class RolePolicy
          * @hook role.create
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.create', 'roles.manage'));
+        return $user->can( applyFilters( 'role.create', 'roles.manage' ) );
     }
 
     /**
@@ -99,9 +107,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can update the role, false otherwise.
      */
-    public function update(Authenticatable $user): bool
+    public function update( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can update roles.
@@ -111,9 +120,10 @@ class RolePolicy
          * @hook role.update
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.update', 'roles.manage'));
+        return $user->can( applyFilters( 'role.update', 'roles.manage' ) );
     }
 
     /**
@@ -122,9 +132,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can delete the role, false otherwise.
      */
-    public function delete(Authenticatable $user): bool
+    public function delete( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete roles.
@@ -134,9 +145,10 @@ class RolePolicy
          * @hook role.delete
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.delete', 'roles.delete'));
+        return $user->can( applyFilters( 'role.delete', 'roles.delete' ) );
     }
 
     /**
@@ -145,9 +157,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can restore the role, false otherwise.
      */
-    public function restore(Authenticatable $user): bool
+    public function restore( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can restore roles.
@@ -157,9 +170,10 @@ class RolePolicy
          * @hook role.restore
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.restore', 'roles.manage'));
+        return $user->can( applyFilters( 'role.restore', 'roles.manage' ) );
     }
 
     /**
@@ -168,9 +182,10 @@ class RolePolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can force delete the role, false otherwise.
      */
-    public function forceDelete(Authenticatable $user): bool
+    public function forceDelete( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can permanently delete roles.
@@ -180,8 +195,9 @@ class RolePolicy
          * @hook role.forceDelete
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('role.forceDelete', 'roles.delete'));
+        return $user->can( applyFilters( 'role.forceDelete', 'roles.delete' ));
     }
 }

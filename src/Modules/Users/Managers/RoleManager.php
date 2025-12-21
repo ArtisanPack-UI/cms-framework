@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Role Manager for the CMS Framework Users Module.
  *
@@ -35,11 +37,12 @@ class RoleManager
      *
      * @param  string  $slug  The unique slug identifier for the role.
      * @param  string  $name  The human-readable name for the role.
+     *
      * @return Role The created or existing role instance.
      */
-    public function register(string $slug, string $name): Role
+    public function register( string $slug, string $name ): Role
     {
-        $role = Role::firstOrCreate(['slug' => $slug], ['name' => $name]);
+        $role = Role::firstOrCreate( ['slug' => $slug], ['name' => $name] );
 
         /**
          * Fires after a role has been registered.
@@ -52,9 +55,10 @@ class RoleManager
          * @hook ap.roleRegistered
          *
          * @param  Role  $role  The role instance that was registered.
+         *
          * @return void
          */
-        doAction('ap.roleRegistered', $role);
+        doAction( 'ap.roleRegistered', $role );
 
         return $role;
     }
@@ -70,10 +74,10 @@ class RoleManager
      * @param  string  $roleSlug  The slug of the role to add permission to.
      * @param  string  $permissionSlug  The slug of the permission to add.
      */
-    public function addPermissionToRole(string $roleSlug, string $permissionSlug): void
+    public function addPermissionToRole( string $roleSlug, string $permissionSlug ): void
     {
-        $role = Role::where('slug', $roleSlug)->firstOrFail();
-        $permission = Permission::where('slug', $permissionSlug)->firstOrFail();
-        $role->permissions()->syncWithoutDetaching($permission->id);
+        $role       = Role::where( 'slug', sanitizeText( $roleSlug ) )->firstOrFail();
+        $permission = Permission::where( 'slug', sanitizeText( $permissionSlug ) )->firstOrFail();
+        $role->permissions()->syncWithoutDetaching( $permission->id );
     }
 }

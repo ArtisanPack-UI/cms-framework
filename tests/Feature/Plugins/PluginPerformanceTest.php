@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
@@ -8,27 +8,27 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
-beforeEach(function () {
-    $this->manager = app(PluginManager::class);
-    $this->pluginsPath = base_path('plugins');
+beforeEach( function (): void {
+    $this->manager     = app( PluginManager::class );
+    $this->pluginsPath = base_path( 'plugins' );
 
-    File::ensureDirectoryExists($this->pluginsPath);
-});
+    File::ensureDirectoryExists( $this->pluginsPath );
+} );
 
-afterEach(function () {
+afterEach( function (): void {
     // Cleanup
     Cache::flush();
-});
+} );
 
-describe('Plugin Discovery Performance', function () {
-    it('caches discovered plugins for performance', function () {
+describe( 'Plugin Discovery Performance', function (): void {
+    it( 'caches discovered plugins for performance', function (): void {
         // Create multiple test plugins
-        for ($i = 1; $i <= 10; $i++) {
-            Plugin::create([
-                'slug' => "test-plugin-{$i}",
-                'name' => "Test Plugin {$i}",
+        for ( $i = 1; $i <= 10; $i++ ) {
+            Plugin::create( [
+                'slug'    => "test-plugin-{$i}",
+                'name'    => "Test Plugin {$i}",
                 'version' => '1.0.0',
-            ]);
+            ] );
         }
 
         // First call should cache the results
@@ -37,82 +37,82 @@ describe('Plugin Discovery Performance', function () {
         // Second call should return same results from cache
         $pluginsCached = $this->manager->discoverPlugins();
 
-        expect($pluginsCached)->toEqual($plugins);
+        expect( $pluginsCached )->toEqual( $plugins );
 
         // Verify cache is being used
-        expect(Cache::has(config('cms.plugins.cacheKey')))->toBeTrue();
-    });
+        expect( Cache::has( config( 'cms.plugins.cacheKey' ) ) )->toBeTrue();
+    } );
 
-    it('clears cache when plugins are modified', function () {
-        $cacheKey = config('cms.plugins.cacheKey');
+    it( 'clears cache when plugins are modified', function (): void {
+        $cacheKey = config( 'cms.plugins.cacheKey' );
 
         // Discover plugins (populates cache)
         $this->manager->discoverPlugins();
-        expect(Cache::has($cacheKey))->toBeTrue();
+        expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         // Install a new plugin (should clear cache)
-        Plugin::create([
-            'slug' => 'new-plugin',
-            'name' => 'New Plugin',
+        Plugin::create( [
+            'slug'    => 'new-plugin',
+            'name'    => 'New Plugin',
             'version' => '1.0.0',
-        ]);
+        ] );
 
         // Simulate cache clearing that happens in PluginManager
-        Cache::forget($cacheKey);
-        expect(Cache::has($cacheKey))->toBeFalse();
-    });
+        Cache::forget( $cacheKey );
+        expect( Cache::has( $cacheKey ) )->toBeFalse();
+    } );
 
-    it('handles large number of plugins efficiently', function () {
+    it( 'handles large number of plugins efficiently', function (): void {
         // Create 10 plugins with actual directories for realistic testing
         // Creating 100 plugin directories would be too slow for tests
-        for ($i = 1; $i <= 10; $i++) {
-            $pluginPath = $this->pluginsPath."/plugin-{$i}";
-            File::ensureDirectoryExists($pluginPath);
+        for ( $i = 1; $i <= 10; $i++ ) {
+            $pluginPath = $this->pluginsPath . "/plugin-{$i}";
+            File::ensureDirectoryExists( $pluginPath );
 
-            File::put($pluginPath.'/plugin.json', json_encode([
-                'slug' => "plugin-{$i}",
-                'name' => "Plugin {$i}",
-                'version' => '1.0.0',
+            File::put( $pluginPath . '/plugin.json', json_encode( [
+                'slug'        => "plugin-{$i}",
+                'name'        => "Plugin {$i}",
+                'version'     => '1.0.0',
                 'description' => 'Test plugin for performance testing',
-            ]));
+            ] ) );
 
-            Plugin::create([
-                'slug' => "plugin-{$i}",
-                'name' => "Plugin {$i}",
+            Plugin::create( [
+                'slug'    => "plugin-{$i}",
+                'name'    => "Plugin {$i}",
                 'version' => '1.0.0',
-            ]);
+            ] );
         }
 
         // Discovery should complete in reasonable time
-        $start = microtime(true);
+        $start   = microtime( true );
         $plugins = $this->manager->discoverPlugins();
-        $time = microtime(true) - $start;
+        $time    = microtime( true ) - $start;
 
-        expect(count($plugins))->toBeGreaterThanOrEqual(10);
+        expect( count( $plugins ) )->toBeGreaterThanOrEqual( 10 );
 
         // Should complete within 1 second for 10 plugins
-        expect($time)->toBeLessThan(1.0);
+        expect( $time )->toBeLessThan( 1.0 );
 
         // Cleanup
-        for ($i = 1; $i <= 10; $i++) {
-            $pluginPath = $this->pluginsPath."/plugin-{$i}";
-            if (File::exists($pluginPath)) {
-                File::deleteDirectory($pluginPath);
+        for ( $i = 1; $i <= 10; $i++ ) {
+            $pluginPath = $this->pluginsPath . "/plugin-{$i}";
+            if ( File::exists( $pluginPath ) ) {
+                File::deleteDirectory( $pluginPath );
             }
         }
-    });
-});
+    } );
+} );
 
-describe('Database Query Optimization', function () {
-    it('uses efficient queries for active plugins', function () {
+describe( 'Database Query Optimization', function (): void {
+    it( 'uses efficient queries for active plugins', function (): void {
         // Create active and inactive plugins
-        for ($i = 1; $i <= 50; $i++) {
-            Plugin::create([
-                'slug' => "plugin-{$i}",
-                'name' => "Plugin {$i}",
-                'version' => '1.0.0',
-                'is_active' => $i % 2 === 0, // Half active, half inactive
-            ]);
+        for ( $i = 1; $i <= 50; $i++ ) {
+            Plugin::create( [
+                'slug'      => "plugin-{$i}",
+                'name'      => "Plugin {$i}",
+                'version'   => '1.0.0',
+                'is_active' => 0 === $i % 2, // Half active, half inactive
+            ] );
         }
 
         // Count queries
@@ -122,16 +122,16 @@ describe('Database Query Optimization', function () {
         DB::disableQueryLog();
 
         // Should use a single query with WHERE clause
-        expect(count($queries))->toBe(1);
-        expect($plugins->count())->toBe(25); // Half of 50
-    });
+        expect( count( $queries ) )->toBe( 1 );
+        expect( $plugins->count() )->toBe( 25 ); // Half of 50
+    } );
 
-    it('eager loads relationships efficiently', function () {
-        Plugin::create([
-            'slug' => 'test-plugin',
-            'name' => 'Test Plugin',
+    it( 'eager loads relationships efficiently', function (): void {
+        Plugin::create( [
+            'slug'    => 'test-plugin',
+            'name'    => 'Test Plugin',
             'version' => '1.0.0',
-        ]);
+        ] );
 
         // Query with all data in one go
         DB::enableQueryLog();
@@ -140,197 +140,197 @@ describe('Database Query Optimization', function () {
         DB::disableQueryLog();
 
         // Should not have N+1 queries
-        expect(count($queries))->toBe(1);
-    });
-});
+        expect( count( $queries ) )->toBe( 1 );
+    } );
+} );
 
-describe('Autoload Registration Performance', function () {
-    it('registers multiple plugin autoloaders efficiently', function () {
+describe( 'Autoload Registration Performance', function (): void {
+    it( 'registers multiple plugin autoloaders efficiently', function (): void {
         // Create plugins with autoload config
         $pluginCount = 20;
-        for ($i = 1; $i <= $pluginCount; $i++) {
-            Plugin::create([
-                'slug' => "autoload-plugin-{$i}",
-                'name' => "Autoload Plugin {$i}",
-                'version' => '1.0.0',
+        for ( $i = 1; $i <= $pluginCount; $i++ ) {
+            Plugin::create( [
+                'slug'      => "autoload-plugin-{$i}",
+                'name'      => "Autoload Plugin {$i}",
+                'version'   => '1.0.0',
                 'is_active' => true,
-                'meta' => [
+                'meta'      => [
                     'autoload' => [
                         'psr-4' => [
                             "TestPlugin{$i}\\" => 'src/',
                         ],
                     ],
                 ],
-            ]);
+            ] );
         }
 
         // Loading active plugins should complete quickly
-        $start = microtime(true);
+        $start = microtime( true );
         $this->manager->loadActivePlugins();
-        $time = microtime(true) - $start;
+        $time = microtime( true ) - $start;
 
         // Should complete within 1 second for 20 plugins
-        expect($time)->toBeLessThan(1.0);
-    });
-});
+        expect( $time )->toBeLessThan( 1.0 );
+    } );
+} );
 
-describe('Memory Usage', function () {
-    it('manages memory efficiently when loading many plugins', function () {
+describe( 'Memory Usage', function (): void {
+    it( 'manages memory efficiently when loading many plugins', function (): void {
         $memoryBefore = memory_get_usage();
 
         // Create and load 50 plugins
-        for ($i = 1; $i <= 50; $i++) {
-            Plugin::create([
-                'slug' => "memory-test-{$i}",
-                'name' => "Memory Test Plugin {$i}",
-                'version' => '1.0.0',
+        for ( $i = 1; $i <= 50; $i++ ) {
+            Plugin::create( [
+                'slug'      => "memory-test-{$i}",
+                'name'      => "Memory Test Plugin {$i}",
+                'version'   => '1.0.0',
                 'is_active' => true,
-                'meta' => [
-                    'description' => str_repeat('Test description ', 100),
+                'meta'      => [
+                    'description' => str_repeat( 'Test description ', 100 ),
                 ],
-            ]);
+            ] );
         }
 
         $this->manager->loadActivePlugins();
 
         $memoryAfter = memory_get_usage();
-        $memoryUsed = ($memoryAfter - $memoryBefore) / 1024 / 1024; // Convert to MB
+        $memoryUsed  = ( $memoryAfter - $memoryBefore ) / 1024 / 1024; // Convert to MB
 
         // Should use less than 10MB for 50 plugins
-        expect($memoryUsed)->toBeLessThan(10);
-    });
-});
+        expect( $memoryUsed )->toBeLessThan( 10 );
+    } );
+} );
 
-describe('Cache Efficiency', function () {
-    it('respects cache TTL configuration', function () {
-        $cacheKey = config('cms.plugins.cacheKey');
+describe( 'Cache Efficiency', function (): void {
+    it( 'respects cache TTL configuration', function (): void {
+        $cacheKey = config( 'cms.plugins.cacheKey' );
 
         // Discover plugins
         $this->manager->discoverPlugins();
-        expect(Cache::has($cacheKey))->toBeTrue();
+        expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         // Cache should persist
-        sleep(1);
-        expect(Cache::has($cacheKey))->toBeTrue();
-    });
+        sleep( 1 );
+        expect( Cache::has( $cacheKey ) )->toBeTrue();
+    } );
 
-    it('uses separate cache keys for different contexts', function () {
-        $discoveryCache = config('cms.plugins.cacheKey');
+    it( 'uses separate cache keys for different contexts', function (): void {
+        $discoveryCache = config( 'cms.plugins.cacheKey' );
 
         // Different operations should use different cache keys
-        expect($discoveryCache)->toBe('cms.plugins.discovered');
+        expect( $discoveryCache )->toBe( 'cms.plugins.discovered' );
 
         // Update cache would use different keys
         $updateCachePrefix = 'plugin.update.';
-        expect($updateCachePrefix)->not->toBe($discoveryCache);
-    });
-});
+        expect( $updateCachePrefix )->not->toBe( $discoveryCache );
+    } );
+} );
 
-describe('File System Operations Performance', function () {
-    it('scans plugin directory efficiently', function () {
+describe( 'File System Operations Performance', function (): void {
+    it( 'scans plugin directory efficiently', function (): void {
         // Create multiple plugin directories
-        for ($i = 1; $i <= 20; $i++) {
-            $pluginPath = $this->pluginsPath."/fs-test-{$i}";
-            File::ensureDirectoryExists($pluginPath);
-            File::put($pluginPath.'/plugin.json', json_encode([
-                'slug' => "fs-test-{$i}",
-                'name' => "FS Test {$i}",
+        for ( $i = 1; $i <= 20; $i++ ) {
+            $pluginPath = $this->pluginsPath . "/fs-test-{$i}";
+            File::ensureDirectoryExists( $pluginPath );
+            File::put( $pluginPath . '/plugin.json', json_encode( [
+                'slug'    => "fs-test-{$i}",
+                'name'    => "FS Test {$i}",
                 'version' => '1.0.0',
-            ]));
+            ] ) );
         }
 
-        $start = microtime(true);
+        $start = microtime( true );
         $this->manager->discoverPlugins();
-        $time = microtime(true) - $start;
+        $time = microtime( true ) - $start;
 
         // Should scan 20 directories within 500ms
-        expect($time)->toBeLessThan(0.5);
+        expect( $time )->toBeLessThan( 0.5 );
 
         // Cleanup
-        for ($i = 1; $i <= 20; $i++) {
-            File::deleteDirectory($this->pluginsPath."/fs-test-{$i}");
+        for ( $i = 1; $i <= 20; $i++ ) {
+            File::deleteDirectory( $this->pluginsPath . "/fs-test-{$i}" );
         }
-    });
+    } );
 
-    it('parses JSON manifests efficiently', function () {
+    it( 'parses JSON manifests efficiently', function (): void {
         $manifests = [];
 
         // Create 50 test manifests
-        for ($i = 1; $i <= 50; $i++) {
-            $manifests[$i] = [
-                'slug' => "json-test-{$i}",
-                'name' => "JSON Test {$i}",
-                'version' => '1.0.0',
-                'description' => str_repeat('Description ', 50),
-                'author' => "Author {$i}",
+        for ( $i = 1; $i <= 50; $i++ ) {
+            $manifests[ $i ] = [
+                'slug'        => "json-test-{$i}",
+                'name'        => "JSON Test {$i}",
+                'version'     => '1.0.0',
+                'description' => str_repeat( 'Description ', 50 ),
+                'author'      => "Author {$i}",
             ];
         }
 
-        $start = microtime(true);
-        foreach ($manifests as $manifest) {
-            json_encode($manifest);
-            json_decode(json_encode($manifest), true);
+        $start = microtime( true );
+        foreach ( $manifests as $manifest ) {
+            json_encode( $manifest );
+            json_decode( json_encode( $manifest ), true );
         }
-        $time = microtime(true) - $start;
+        $time = microtime( true ) - $start;
 
         // Should parse 50 manifests within 50ms
-        expect($time)->toBeLessThan(0.05);
-    });
-});
+        expect( $time )->toBeLessThan( 0.05 );
+    } );
+} );
 
-describe('Concurrent Operations', function () {
-    it('handles concurrent plugin discoveries safely', function () {
+describe( 'Concurrent Operations', function (): void {
+    it( 'handles concurrent plugin discoveries safely', function (): void {
         // Create test plugins
-        for ($i = 1; $i <= 10; $i++) {
-            Plugin::create([
-                'slug' => "concurrent-{$i}",
-                'name' => "Concurrent Test {$i}",
+        for ( $i = 1; $i <= 10; $i++ ) {
+            Plugin::create( [
+                'slug'    => "concurrent-{$i}",
+                'name'    => "Concurrent Test {$i}",
                 'version' => '1.0.0',
-            ]);
+            ] );
         }
 
         // Simulate concurrent discoveries
         $results = [];
-        for ($i = 0; $i < 5; $i++) {
+        for ( $i = 0; $i < 5; $i++ ) {
             $results[] = $this->manager->discoverPlugins();
         }
 
         // All results should be identical
-        foreach ($results as $result) {
-            expect($result)->toEqual($results[0]);
+        foreach ( $results as $result ) {
+            expect( $result )->toEqual( $results[0] );
         }
-    });
-});
+    } );
+} );
 
-describe('Scalability Tests', function () {
-    it('maintains performance with increasing plugin metadata size', function () {
+describe( 'Scalability Tests', function (): void {
+    it( 'maintains performance with increasing plugin metadata size', function (): void {
         // Create plugins with varying metadata sizes
         $times = [];
 
-        for ($size = 100; $size <= 1000; $size += 300) {
+        for ( $size = 100; $size <= 1000; $size += 300 ) {
             $manifest = [
-                'slug' => "metadata-test-{$size}",
-                'name' => 'Metadata Test',
+                'slug'    => "metadata-test-{$size}",
+                'name'    => 'Metadata Test',
                 'version' => '1.0.0',
-                'meta' => str_repeat('X', $size),
+                'meta'    => str_repeat( 'X', $size ),
             ];
 
-            $start = microtime(true);
-            Plugin::create([
-                'slug' => $manifest['slug'],
-                'name' => $manifest['name'],
+            $start = microtime( true );
+            Plugin::create( [
+                'slug'    => $manifest['slug'],
+                'name'    => $manifest['name'],
                 'version' => $manifest['version'],
-                'meta' => $manifest,
-            ]);
-            $times[$size] = microtime(true) - $start;
+                'meta'    => $manifest,
+            ] );
+            $times[ $size ] = microtime( true ) - $start;
         }
 
         // Performance should scale linearly, not exponentially
         // Later insertions shouldn't be significantly slower
-        $firstTime = reset($times);
-        $lastTime = end($times);
+        $firstTime = reset( $times );
+        $lastTime  = end( $times );
 
         // Last insertion should not be more than 5x slower than first
-        expect($lastTime)->toBeLessThan($firstTime * 5);
-    });
+        expect( $lastTime )->toBeLessThan( $firstTime * 5 );
+    } );
 });

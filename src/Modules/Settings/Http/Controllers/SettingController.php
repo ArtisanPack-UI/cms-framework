@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Setting Controller for the CMS Framework Settings Module.
  *
@@ -44,11 +46,11 @@ class SettingController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', Setting::class);
+        $this->authorize( 'viewAny', Setting::class );
 
-        $settings = Setting::paginate(15);
+        $settings = Setting::paginate( 15 );
 
-        return SettingResource::collection($settings);
+        return SettingResource::collection( $settings );
     }
 
     /**
@@ -58,20 +60,21 @@ class SettingController extends Controller
      * provided information. Returns the created resource with a 201 status code.
      *
      * @since 1.0.0
-     * @since 2.0.1 Adjusted return type to JsonResponse to match implementation.
+     * @since 1.0.0 Adjusted return type to JsonResponse to match implementation.
      *
      * @param  SettingRequest  $request  The HTTP request containing setting data.
+     *
      * @return JsonResponse The JSON response containing the created setting resource.
      */
-    public function store(SettingRequest $request): JsonResponse // Correct return type hint
+    public function store( SettingRequest $request ): JsonResponse // Correct return type hint
     {
-        $this->authorize('create', Setting::class);
+        $this->authorize( 'create', Setting::class );
 
         $validated = $request->validated();
-        $setting = Setting::create($validated);
+        $setting   = Setting::create( $validated );
 
         // Return JsonResponse explicitly with 201 status
-        return response()->json(new SettingResource($setting), 201);
+        return response()->json( new SettingResource( $setting ), 201 );
     }
 
     /**
@@ -82,16 +85,17 @@ class SettingController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the setting to retrieve.
+     * @param  int|string  $id  The ID of the setting to retrieve.
+     *
      * @return SettingResource The setting resource with loaded permissions.
      */
-    public function show(string|int $id): SettingResource
+    public function show( string|int $id ): SettingResource
     {
-        $this->authorize('view', Setting::class);
+        $this->authorize( 'view', Setting::class );
 
-        $setting = Setting::findOrFail($id);
+        $setting = Setting::findOrFail( $id );
 
-        return new SettingResource($setting);
+        return new SettingResource( $setting );
     }
 
     /**
@@ -103,17 +107,18 @@ class SettingController extends Controller
      * @since 1.0.0
      *
      * @param  SettingRequest  $request  The HTTP request containing updated setting data.
-     * @param  string|int  $id  The ID of the setting to update.
+     * @param  int|string  $id  The ID of the setting to update.
+     *
      * @return SettingResource The updated setting resource with loaded permissions.
      */
-    public function update(SettingRequest $request, string|int $id): SettingResource
+    public function update( SettingRequest $request, string|int $id ): SettingResource
     {
-        $setting = Setting::findOrFail($id);
-        $this->authorize('update', $setting);
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'update', $setting );
         $validated = $request->validated();
-        $setting->update($validated);
+        $setting->update( $validated );
 
-        return new SettingResource($setting);
+        return new SettingResource( $setting );
     }
 
     /**
@@ -123,15 +128,16 @@ class SettingController extends Controller
      * with no content.
      *
      * @since 1.0.0
-     * @since 2.0.1 Corrected return type hint to Response.
+     * @since 1.0.0 Corrected return type hint to Response.
      *
-     * @param  string|int  $id  The ID (key) of the setting to delete.
+     * @param  int|string  $id  The ID (key) of the setting to delete.
+     *
      * @return Response A response with 204 status code.
      */
-    public function destroy(string|int $id): Response // Correct return type hint
+    public function destroy( string|int $id ): Response // Correct return type hint
     {
-        $setting = Setting::findOrFail($id);
-        $this->authorize('delete', $setting);
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'delete', $setting );
         $setting->delete();
 
         return response()->noContent();

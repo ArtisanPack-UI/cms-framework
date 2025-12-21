@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
@@ -17,28 +17,28 @@ use InvalidArgumentException;
  *
  * Fetches updates from GitLab releases.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class GitLabUpdateSource implements UpdateSourceInterface
 {
     /**
      * GitLab access token.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected ?string $accessToken = null;
 
     /**
      * GitLab project ID (URL-encoded path).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected string $projectId;
 
     /**
      * Create a new GitLabUpdateSource instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $url  GitLab repository URL
      * @param  string  $currentVersion  Current version
@@ -47,27 +47,27 @@ class GitLabUpdateSource implements UpdateSourceInterface
         protected string $url,
         protected string $currentVersion,
     ) {
-        $this->parseUrl($url);
+        $this->parseUrl( $url );
     }
 
     /**
      * Check if this source supports the given URL.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $url  URL to check
      *
      * @return bool True if URL is a GitLab repository
      */
-    public function supports(string $url): bool
+    public function supports( string $url ): bool
     {
-        return Str::contains($url, 'gitlab.com');
+        return Str::contains( $url, 'gitlab.com' );
     }
 
     /**
      * Check for available updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @throws UpdateException
      *
@@ -77,17 +77,17 @@ class GitLabUpdateSource implements UpdateSourceInterface
     {
         $releases = $this->fetchReleases();
 
-        if (empty($releases)) {
-            throw UpdateException::versionCheckFailed('No releases found on GitLab');
+        if ( empty( $releases ) ) {
+            throw UpdateException::versionCheckFailed( 'No releases found on GitLab' );
         }
 
         // Filter out prereleases and get latest stable
-        $latest = collect($releases)
-            ->filter(fn ($release) => empty($release['upcoming_release']))
+        $latest = collect( $releases )
+            ->filter( fn ( $release ) => empty( $release['upcoming_release'] ) )
             ->first();
 
-        if (! $latest) {
-            throw UpdateException::versionCheckFailed('No stable releases found');
+        if ( ! $latest ) {
+            throw UpdateException::versionCheckFailed( 'No stable releases found' );
         }
 
         // Get download link for source code
@@ -95,8 +95,8 @@ class GitLabUpdateSource implements UpdateSourceInterface
 
         return new UpdateInfo(
             currentVersion: $this->currentVersion,
-            latestVersion: ltrim($latest['tag_name'], 'v'),
-            hasUpdate: version_compare(ltrim($latest['tag_name'], 'v'), $this->currentVersion, '>'),
+            latestVersion: ltrim( $latest['tag_name'], 'v' ),
+            hasUpdate: version_compare( ltrim( $latest['tag_name'], 'v' ), $this->currentVersion, '>' ),
             downloadUrl: $downloadUrl,
             changelog: $latest['description'] ?? null,
             releaseDate: $latest['created_at'] ?? null,
@@ -110,7 +110,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
     /**
      * Download the specified version.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $version  Version to download
      *
@@ -118,37 +118,37 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string Path to downloaded ZIP file
      */
-    public function downloadUpdate(string $version): string
+    public function downloadUpdate( string $version ): string
     {
         // Get release info for the specified version
-        if ('latest' === $version || empty($version)) {
+        if ( 'latest' === $version || empty( $version ) ) {
             $updateInfo  = $this->checkForUpdate();
             $downloadUrl = $updateInfo->downloadUrl;
         } else {
-            $release     = $this->getReleaseByVersion($version);
-            $downloadUrl = $this->extractDownloadUrl($release);
+            $release     = $this->getReleaseByVersion( $version );
+            $downloadUrl = $this->extractDownloadUrl( $release );
         }
 
-        $tempPath = storage_path('app/temp/update-'.time().'.zip');
+        $tempPath = storage_path( 'app/temp/update-' . time() . '.zip' );
 
-        if (! File::exists(dirname($tempPath))) {
-            File::makeDirectory(dirname($tempPath), 0755, true);
+        if ( ! File::exists( dirname( $tempPath ) ) ) {
+            File::makeDirectory( dirname( $tempPath ), 0755, true );
         }
 
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders($headers)
-            ->timeout(config('cms.updates.download_timeout', 300))
-            ->get($downloadUrl);
+        $response = Http::withHeaders( $headers )
+            ->timeout( config( 'cms.updates.download_timeout', 300 ) )
+            ->get( $downloadUrl );
 
-        if (! $response->successful()) {
-            throw UpdateException::downloadFailed($downloadUrl);
+        if ( ! $response->successful() ) {
+            throw UpdateException::downloadFailed( $downloadUrl );
         }
 
-        File::put($tempPath, $response->body());
+        File::put( $tempPath, $response->body() );
 
         return $tempPath;
     }
@@ -156,19 +156,19 @@ class GitLabUpdateSource implements UpdateSourceInterface
     /**
      * Set authentication credentials.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  array|string  $credentials  GitLab token or credentials array
      */
-    public function setAuthentication(string|array $credentials): void
+    public function setAuthentication( string|array $credentials ): void
     {
-        $this->accessToken = is_string($credentials) ? $credentials : $credentials['token'] ?? null;
+        $this->accessToken = is_string( $credentials ) ? $credentials : $credentials['token'] ?? null;
     }
 
     /**
      * Get the source name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return string Source name
      */
@@ -180,28 +180,28 @@ class GitLabUpdateSource implements UpdateSourceInterface
     /**
      * Parse GitLab URL to extract project ID.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $url  GitLab repository URL
      *
      * @throws InvalidArgumentException If URL is invalid
      */
-    protected function parseUrl(string $url): void
+    protected function parseUrl( string $url ): void
     {
         // Extract project path and convert to project ID
         // Supports: https://gitlab.com/group/subgroup/project
-        if (preg_match('#gitlab\.com/(.+)$#', $url, $matches)) {
+        if ( preg_match( '#gitlab\.com/(.+)$#', $url, $matches ) ) {
             // URL-encode the project path for API
-            $this->projectId = urlencode(trim($matches[1], '/'));
+            $this->projectId = urlencode( trim( $matches[1], '/' ) );
         } else {
-            throw new InvalidArgumentException('Invalid GitLab URL');
+            throw new InvalidArgumentException( 'Invalid GitLab URL' );
         }
     }
 
     /**
      * Fetch releases from GitLab API.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @throws UpdateException If API request fails
      *
@@ -212,16 +212,16 @@ class GitLabUpdateSource implements UpdateSourceInterface
         $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases";
 
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders($headers)
-            ->timeout(config('cms.updates.http_timeout', 15))
-            ->get($apiUrl);
+        $response = Http::withHeaders( $headers )
+            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+            ->get( $apiUrl );
 
-        if (! $response->successful()) {
-            throw UpdateException::versionCheckFailed("GitLab API error: {$response->status()}");
+        if ( ! $response->successful() ) {
+            throw UpdateException::versionCheckFailed( "GitLab API error: {$response->status()}" );
         }
 
         return $response->json();
@@ -230,7 +230,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
     /**
      * Get a specific release by version/tag name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $version  Version to fetch (without 'v' prefix)
      *
@@ -238,33 +238,33 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return array Release data
      */
-    protected function getReleaseByVersion(string $version): array
+    protected function getReleaseByVersion( string $version ): array
     {
         // Try with 'v' prefix first (common convention)
-        $tag = str_starts_with($version, 'v') ? $version : "v{$version}";
+        $tag = str_starts_with( $version, 'v' ) ? $version : "v{$version}";
 
         $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases/{$tag}";
 
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders($headers)
-            ->timeout(config('cms.updates.http_timeout', 15))
-            ->get($apiUrl);
+        $response = Http::withHeaders( $headers )
+            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+            ->get( $apiUrl );
 
-        if (! $response->successful()) {
+        if ( ! $response->successful() ) {
             // Try without 'v' prefix
-            $tag    = ltrim($version, 'v');
+            $tag    = ltrim( $version, 'v' );
             $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases/{$tag}";
 
-            $response = Http::withHeaders($headers)
-                ->timeout(config('cms.updates.http_timeout', 15))
-                ->get($apiUrl);
+            $response = Http::withHeaders( $headers )
+                ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+                ->get( $apiUrl );
 
-            if (! $response->successful()) {
-                throw UpdateException::downloadFailed("Release not found for version: {$version}");
+            if ( ! $response->successful() ) {
+                throw UpdateException::downloadFailed( "Release not found for version: {$version}" );
             }
         }
 
@@ -274,17 +274,17 @@ class GitLabUpdateSource implements UpdateSourceInterface
     /**
      * Extract download URL from release data.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  array  $release  Release data from GitLab API
      *
      * @return string Download URL
      */
-    protected function extractDownloadUrl(array $release): string
+    protected function extractDownloadUrl( array $release ): string
     {
         // Get download link for source code
-        if (! isset($release['tag_name'])) {
-            throw UpdateException::downloadFailed('No tag_name found in release');
+        if ( ! isset( $release['tag_name'] ) ) {
+            throw UpdateException::downloadFailed( 'No tag_name found in release' );
         }
 
         return "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$release['tag_name']}";

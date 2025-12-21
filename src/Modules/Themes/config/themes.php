@@ -8,7 +8,7 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 return [
     /*
@@ -51,7 +51,7 @@ return [
     | Whether to cache theme discovery results.
     |
     */
-    'cacheEnabled' => env('THEMES_CACHE_ENABLED', true),
-    'cacheKey' => 'cms.themes.discovered',
-    'cacheTtl' => 3600, // 1 hour
+    'cacheEnabled' => env( 'THEMES_CACHE_ENABLED', true ),
+    'cacheKey'     => 'cms.themes.discovered',
+    'cacheTtl'     => 3600, // 1 hour
 ];

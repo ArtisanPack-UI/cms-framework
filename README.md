@@ -14,7 +14,8 @@ A comprehensive Laravel package that provides back-end support for building a CM
 - **User Management**: User roles, permissions, and profiles
 - **Authentication**: Two-factor authentication with Laravel Sanctum integration
 - **Notifications**: Comprehensive notification system
-- **Themes & Plugins**: Support for themes and plugins
+- **Themes & Plugins**: Support for themes and plugins ⚠️ **Experimental in Beta**
+- **Core Updates**: Automatic update checking and management with rollback support
 - **PWA Support**: Progressive Web App features
 - **Audit Logging**: Track changes and user actions
 
@@ -35,7 +36,7 @@ composer require artisanpack-ui/cms-framework
 After installation, publish the configuration file:
 
 ```bash
-php artisan vendor:publish --tag=cms-config
+php artisan vendor:publish --tag=cms-framework-config
 ```
 
 Run the migrations to set up the database tables:
@@ -122,6 +123,50 @@ addAction('ap.cms.after_content_save', function($content) {
     // Do something after content is saved
 });
 ```
+
+## Experimental Features (Beta)
+
+The following features are **experimental** in the 1.0.0-beta1 release and should be used with caution in production environments:
+
+### Plugin System
+
+The plugin system provides a foundation for extending the CMS with custom functionality.
+
+**What Works:**
+- Plugin model with activation/deactivation tracking
+- Plugin manager for lifecycle management
+- Plugin installation and validation
+- Plugin update manager integration
+
+**Known Limitations:**
+- Plugin lifecycle hooks not fully implemented
+- No plugin dependency management
+- Limited plugin configuration API
+- No plugin marketplace integration
+
+**Recommendation:** Use for testing and development. Not recommended for production until full lifecycle support is added in a future release.
+
+### Theme System
+
+The theme system allows customization of the CMS appearance.
+
+**What Works:**
+- Theme manager with theme discovery
+- Theme activation mechanism
+- JSON manifest validation
+- Basic theme structure
+
+**Known Limitations:**
+- Asset compilation not implemented
+- No child theme support
+- Limited theme customization API
+- No theme preview functionality
+
+**Recommendation:** Use for testing and development. Full theme support including asset compilation and child themes will be added in a future release.
+
+### Reporting Issues
+
+If you encounter issues with experimental features, please report them on our [issue tracker](https://gitlab.com/artisanpack-ui/cms-framework/-/issues) with the `experimental` label.
 
 ## Contributing
 

@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Role Request for the CMS Framework Users Module.
  *
@@ -40,7 +42,7 @@ class RoleRequest extends FormRequest
      *
      * @param  Role  $role  The role instance.
      */
-    public function setRole(Role $role): self
+    public function setRole( Role $role ): self
     {
         $this->role = $role;
 
@@ -76,16 +78,16 @@ class RoleRequest extends FormRequest
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('roles', 'name')->ignore($roleId),
+                Rule::unique( 'roles', 'name' )->ignore( $roleId ),
             ],
             'slug' => [
                 'required',
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('roles', 'slug')->ignore($roleId),
+                Rule::unique( 'roles', 'slug' )->ignore( $roleId ),
             ],
-            'permissions' => 'nullable|array',
+            'permissions'   => 'nullable|array',
             'permissions.*' => 'exists:permissions,id',
         ];
     }
@@ -101,10 +103,10 @@ class RoleRequest extends FormRequest
     {
         return [
             'name.required' => 'The role name is required.',
-            'name.unique' => 'A role with this name already exists.',
+            'name.unique'   => 'A role with this name already exists.',
             'slug.required' => 'The role slug is required.',
-            'slug.regex' => 'The role slug must be lowercase letters, numbers, and hyphens only.',
-            'slug.unique' => 'A role with this slug already exists.',
+            'slug.regex'    => 'The role slug must be lowercase letters, numbers, and hyphens only.',
+            'slug.unique'   => 'A role with this slug already exists.',
         ];
     }
 

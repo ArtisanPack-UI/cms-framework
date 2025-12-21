@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Permission Policy for the CMS Framework Users Module.
  *
@@ -28,13 +30,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can view permissions, false otherwise.
      */
-    public function viewAny(string|int $id): bool
+    public function viewAny( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can view any permissions.
@@ -44,9 +47,10 @@ class PermissionPolicy
          * @hook permissions.viewAny
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.viewAny', 'permissions.viewAny'));
+        return $user->can( applyFilters( 'permissions.viewAny', 'permissions.viewAny' ) );
     }
 
     /**
@@ -54,13 +58,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can view the permission, false otherwise.
      */
-    public function view(string|int $id): bool
+    public function view( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can view a permission.
@@ -70,9 +75,10 @@ class PermissionPolicy
          * @hook permissions.view
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.view', 'permissions.view'));
+        return $user->can( applyFilters( 'permissions.view', 'permissions.view' ) );
     }
 
     /**
@@ -80,13 +86,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can create permissions, false otherwise.
      */
-    public function create(string|int $id): bool
+    public function create( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can create permissions.
@@ -96,9 +103,10 @@ class PermissionPolicy
          * @hook permissions.create
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.create', 'permissions.create'));
+        return $user->can( applyFilters( 'permissions.create', 'permissions.create' ) );
     }
 
     /**
@@ -106,13 +114,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can update the permission, false otherwise.
      */
-    public function update(string|int $id): bool
+    public function update( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can update permissions.
@@ -122,9 +131,10 @@ class PermissionPolicy
          * @hook permissions.update
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.update', 'permissions.update'));
+        return $user->can( applyFilters( 'permissions.update', 'permissions.update' ) );
     }
 
     /**
@@ -132,13 +142,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can delete the permission, false otherwise.
      */
-    public function delete(string|int $id): bool
+    public function delete( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can delete permissions.
@@ -146,9 +157,10 @@ class PermissionPolicy
          * @since 1.0.0
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.delete', 'permissions.delete'));
+        return $user->can( applyFilters( 'permissions.delete', 'permissions.delete' ) );
     }
 
     /**
@@ -156,13 +168,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can restore the permission, false otherwise.
      */
-    public function restore(string|int $id): bool
+    public function restore( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can restore permissions.
@@ -172,9 +185,10 @@ class PermissionPolicy
          * @hook permissions.restore
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.restore', 'permissions.restore'));
+        return $user->can( applyFilters( 'permissions.restore', 'permissions.restore' ) );
     }
 
     /**
@@ -182,13 +196,14 @@ class PermissionPolicy
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to check permissions for.
+     * @param  int|string  $id  The ID of the user to check permissions for.
+     *
      * @return bool True if the user can force delete the permission, false otherwise.
      */
-    public function forceDelete(string|int $id): bool
+    public function forceDelete( string|int $id ): bool
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
 
         /**
          * Filters the capability used to determine whether a user can permanently delete permissions.
@@ -198,8 +213,9 @@ class PermissionPolicy
          * @hook permissions.forceDelete
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('permissions.forceDelete', 'permissions.forceDelete'));
+        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete'));
     }
 }

@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Pages Service Provider
  *
  * Registers the Pages module services and bootstraps routes, views, and migrations.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Providers;
@@ -26,19 +28,19 @@ use Illuminate\Support\ServiceProvider;
 /**
  * Registers the Pages module services.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PagesServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function register(): void
     {
         // Register PageManager as singleton
-        $this->app->singleton(PageManager::class, fn () => new PageManager);
+        $this->app->singleton( PageManager::class, fn () => new PageManager );
 
         // Load helpers
         $this->loadHelpers();
@@ -47,22 +49,22 @@ class PagesServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function boot(Router $router): void
+    public function boot( Router $router ): void
     {
         // Load migrations
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
 
         // Load API routes
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
 
         // Register policies
-        Gate::policy(Page::class, PagePolicy::class);
-        Gate::policy(PageCategory::class, PageCategoryPolicy::class);
-        Gate::policy(PageTag::class, PageTagPolicy::class);
+        Gate::policy( Page::class, PagePolicy::class );
+        Gate::policy( PageCategory::class, PageCategoryPolicy::class );
+        Gate::policy( PageTag::class, PageTagPolicy::class );
 
         // Register pages content type
         $this->registerPagesContentType();
@@ -71,40 +73,40 @@ class PagesServiceProvider extends ServiceProvider
     /**
      * Register the pages content type.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected function registerPagesContentType(): void
     {
-        $contentTypeManager = app(ContentTypeManager::class);
+        $contentTypeManager = app( ContentTypeManager::class );
 
-        $contentTypeManager->register([
-            'name' => 'Pages',
-            'slug' => 'pages',
-            'table_name' => 'pages',
-            'model_class' => Page::class,
-            'description' => 'Static pages with hierarchical structure',
-            'hierarchical' => true,
-            'has_archive' => false,
-            'archive_slug' => null,
-            'supports' => ['title', 'content', 'excerpt', 'featured_image', 'author', 'custom_fields', 'page_attributes'],
-            'metadata' => [],
-            'public' => true,
+        $contentTypeManager->register( [
+            'name'          => 'Pages',
+            'slug'          => 'pages',
+            'table_name'    => 'pages',
+            'model_class'   => Page::class,
+            'description'   => 'Static pages with hierarchical structure',
+            'hierarchical'  => true,
+            'has_archive'   => false,
+            'archive_slug'  => null,
+            'supports'      => ['title', 'content', 'excerpt', 'featured_image', 'author', 'custom_fields', 'page_attributes'],
+            'metadata'      => [],
+            'public'        => true,
             'show_in_admin' => true,
-            'icon' => 'fas-file-alt',
+            'icon'          => 'fas-file-alt',
             'menu_position' => 25,
-        ]);
+        ] );
     }
 
     /**
      * Load helper functions.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected function loadHelpers(): void
     {
-        $helpersPath = __DIR__.'/../helpers.php';
+        $helpersPath = __DIR__ . '/../helpers.php';
 
-        if (file_exists($helpersPath)) {
+        if ( file_exists( $helpersPath ) ) {
             require_once $helpersPath;
         }
     }

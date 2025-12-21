@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PageTag Model
  *
  * Represents a page tag in the system.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Models;
@@ -26,7 +28,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PageTag extends Model
 {
@@ -35,7 +37,7 @@ class PageTag extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -48,9 +50,29 @@ class PageTag extends Model
     ];
 
     /**
+     * Get the pages with this tag.
+     *
+     * @since 1.0.0
+     */
+    public function pages(): BelongsToMany
+    {
+        return $this->belongsToMany( Page::class, 'page_tag_pivots', 'page_tag_id', 'page_id' );
+    }
+
+    /**
+     * Get the permalink for the tag archive.
+     *
+     * @since 1.0.0
+     */
+    public function getPermalinkAttribute(): string
+    {
+        return url( "/pages/tag/{$this->slug}" );
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string>
      */
@@ -59,25 +81,5 @@ class PageTag extends Model
         return [
             'metadata' => 'array',
         ];
-    }
-
-    /**
-     * Get the pages with this tag.
-     *
-     * @since 2.0.0
-     */
-    public function pages(): BelongsToMany
-    {
-        return $this->belongsToMany(Page::class, 'page_tag_pivots', 'page_tag_id', 'page_id');
-    }
-
-    /**
-     * Get the permalink for the tag archive.
-     *
-     * @since 2.0.0
-     */
-    public function getPermalinkAttribute(): string
-    {
-        return url("/pages/tag/{$this->slug}");
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
@@ -15,14 +15,14 @@ use Illuminate\Support\Facades\Log;
  *
  * Runs automatically via scheduler to check for updates.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class CheckForUpdateScheduled extends Command
 {
     /**
      * The name and signature of the console command.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var string
      */
@@ -31,7 +31,7 @@ class CheckForUpdateScheduled extends Command
     /**
      * The console command description.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var string
      */
@@ -40,61 +40,61 @@ class CheckForUpdateScheduled extends Command
     /**
      * Execute the console command.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function handle(ApplicationUpdateManager $manager): int
+    public function handle( ApplicationUpdateManager $manager ): int
     {
         try {
             $updateInfo = $manager->checkForUpdate();
 
-            if ($updateInfo->hasUpdate) {
+            if ( $updateInfo->hasUpdate ) {
                 // Store in cache for admin panel notification
-                Cache::put('cms.update_available', $updateInfo->toArray(), now()->addDays(1));
+                Cache::put( 'cms.update_available', $updateInfo->toArray(), now()->addDays( 1 ) );
 
                 // Log the available update
-                Log::info('Update available', [
+                Log::info( 'Update available', [
                     'current_version' => $updateInfo->currentVersion,
                     'latest_version'  => $updateInfo->latestVersion,
                     'release_date'    => $updateInfo->releaseDate,
-                ]);
+                ] );
 
                 // Auto-update if enabled
-                if (config('cms.updates.auto_update_enabled', false)) {
-                    $this->info('Auto-update is enabled. Starting update process...');
+                if ( config( 'cms.updates.auto_update_enabled', false ) ) {
+                    $this->info( 'Auto-update is enabled. Starting update process...' );
 
                     $success = $manager->performUpdate();
 
-                    if ($success) {
-                        Log::info('Auto-update completed successfully', [
+                    if ( $success ) {
+                        Log::info( 'Auto-update completed successfully', [
                             'version' => $updateInfo->latestVersion,
-                        ]);
+                        ] );
 
-                        $this->info('Auto-update completed successfully!');
+                        $this->info( 'Auto-update completed successfully!' );
 
                         return self::SUCCESS;
                     }
 
-                    Log::error('Auto-update failed');
-                    $this->error('Auto-update failed');
+                    Log::error( 'Auto-update failed' );
+                    $this->error( 'Auto-update failed' );
 
                     return self::FAILURE;
                 }
 
-                $this->info("Update available: {$updateInfo->latestVersion}");
+                $this->info( "Update available: {$updateInfo->latestVersion}" );
             } else {
                 // Clear cache if no update available
-                Cache::forget('cms.update_available');
+                Cache::forget( 'cms.update_available' );
 
-                $this->info('No updates available');
+                $this->info( 'No updates available' );
             }
 
             return self::SUCCESS;
-        } catch (Exception $e) {
-            Log::error('Scheduled update check failed', [
+        } catch ( Exception $e ) {
+            Log::error( 'Scheduled update check failed', [
                 'error' => $e->getMessage(),
-            ]);
+            ] );
 
-            $this->error("Failed: {$e->getMessage()}");
+            $this->error( "Failed: {$e->getMessage()}" );
 
             return self::FAILURE;
         }

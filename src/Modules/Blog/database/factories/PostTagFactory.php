@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostTag Factory for the CMS Framework Blog Module.
  *
  * This factory generates fake post tag data for testing purposes.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Database\Factories;
@@ -19,7 +21,7 @@ use Illuminate\Support\Str;
  *
  * Provides simple tag generation for testing blog functionality.
  *
- * @since 2.0.0
+ * @since 1.0.0
  *
  * @extends Factory<PostTag>
  */
@@ -28,7 +30,7 @@ class PostTagFactory extends Factory
     /**
      * The name of the factory's corresponding model.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var class-string<PostTag>
      */
@@ -39,7 +41,7 @@ class PostTagFactory extends Factory
      *
      * Generates a tag with a random name, slug, and description.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, mixed> The default tag attributes.
      */
@@ -48,12 +50,12 @@ class PostTagFactory extends Factory
         $name = fake()->unique()->word();
 
         return [
-            'name' => ucfirst($name),
-            'slug' => Str::slug($name),
+            'name'        => ucfirst( $name ),
+            'slug'        => Str::slug( $name ),
             'description' => fake()->sentence(),
-            'order' => 0,
-            'metadata' => [
-                'seo_title' => ucfirst($name),
+            'order'       => 0,
+            'metadata'    => [
+                'seo_title'       => ucfirst( $name ),
                 'seo_description' => fake()->sentence(),
             ],
         ];

@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * CustomField Controller for the CMS Framework ContentTypes Module.
  *
  * This controller handles CRUD operations for custom fields including listing,
  * creating, showing, updating, and deleting custom field records through API endpoints.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Controllers;
@@ -27,7 +29,7 @@ use Illuminate\Routing\Controller;
  * Provides RESTful API endpoints for custom field management operations
  * with proper validation, authorization, and resource transformation.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class CustomFieldController extends Controller
 {
@@ -36,16 +38,16 @@ class CustomFieldController extends Controller
     /**
      * The custom field manager instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected CustomFieldManager $customFieldManager;
 
     /**
      * Create a new controller instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function __construct(CustomFieldManager $customFieldManager)
+    public function __construct( CustomFieldManager $customFieldManager )
     {
         $this->customFieldManager = $customFieldManager;
     }
@@ -55,17 +57,17 @@ class CustomFieldController extends Controller
      *
      * Retrieves a paginated list of custom fields and returns them as a JSON resource collection.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return AnonymousResourceCollection The paginated collection of custom field resources.
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', CustomField::class);
+        $this->authorize( 'viewAny', CustomField::class );
 
-        $customFields = CustomField::orderBy('order')->paginate(15);
+        $customFields = CustomField::orderBy( 'order' )->paginate( 15 );
 
-        return CustomFieldResource::collection($customFields);
+        return CustomFieldResource::collection( $customFields );
     }
 
     /**
@@ -75,19 +77,20 @@ class CustomFieldController extends Controller
      * provided information. Also adds columns to the content type tables.
      * Returns the created resource with a 201 status code.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  CustomFieldRequest  $request  The HTTP request containing custom field data.
+     *
      * @return JsonResponse The JSON response containing the created custom field resource.
      */
-    public function store(CustomFieldRequest $request): JsonResponse
+    public function store( CustomFieldRequest $request ): JsonResponse
     {
-        $this->authorize('create', CustomField::class);
+        $this->authorize( 'create', CustomField::class );
 
-        $validated = $request->validated();
-        $customField = $this->customFieldManager->createField($validated);
+        $validated   = $request->validated();
+        $customField = $this->customFieldManager->createField( $validated );
 
-        return response()->json(new CustomFieldResource($customField), 201);
+        return response()->json( new CustomFieldResource( $customField ), 201 );
     }
 
     /**
@@ -95,17 +98,18 @@ class CustomFieldController extends Controller
      *
      * Retrieves a single custom field by ID and returns it as a JSON resource.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $id  The ID of the custom field to retrieve.
+     *
      * @return CustomFieldResource The custom field resource.
      */
-    public function show(int $id): CustomFieldResource
+    public function show( int $id ): CustomFieldResource
     {
-        $customField = CustomField::findOrFail($id);
-        $this->authorize('view', $customField);
+        $customField = CustomField::findOrFail( $id );
+        $this->authorize( 'view', $customField );
 
-        return new CustomFieldResource($customField);
+        return new CustomFieldResource( $customField );
     }
 
     /**
@@ -115,21 +119,22 @@ class CustomFieldController extends Controller
      * provided information. Handles adding/removing columns from content type tables.
      * Only provided fields are updated (partial updates).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  CustomFieldRequest  $request  The HTTP request containing updated custom field data.
      * @param  int  $id  The ID of the custom field to update.
+     *
      * @return CustomFieldResource The updated custom field resource.
      */
-    public function update(CustomFieldRequest $request, int $id): CustomFieldResource
+    public function update( CustomFieldRequest $request, int $id ): CustomFieldResource
     {
-        $customField = CustomField::findOrFail($id);
-        $this->authorize('update', $customField);
+        $customField = CustomField::findOrFail( $id );
+        $this->authorize( 'update', $customField );
 
-        $validated = $request->validated();
-        $customField = $this->customFieldManager->updateField($id, $validated);
+        $validated   = $request->validated();
+        $customField = $this->customFieldManager->updateField( $id, $validated );
 
-        return new CustomFieldResource($customField);
+        return new CustomFieldResource( $customField );
     }
 
     /**
@@ -138,17 +143,18 @@ class CustomFieldController extends Controller
      * Deletes a custom field from the database and removes columns from content type tables.
      * Returns a successful response with no content.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $id  The ID of the custom field to delete.
+     *
      * @return Response A response with 204 status code.
      */
-    public function destroy(int $id): Response
+    public function destroy( int $id ): Response
     {
-        $customField = CustomField::findOrFail($id);
-        $this->authorize('delete', $customField);
+        $customField = CustomField::findOrFail( $id );
+        $this->authorize( 'delete', $customField );
 
-        $this->customFieldManager->deleteField($id);
+        $this->customFieldManager->deleteField( $id );
 
         return response()->noContent();
     }

@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Taxonomy Model
  *
  * Represents a taxonomy (category system, tag system, etc.) in the system.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models;
@@ -29,7 +31,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class Taxonomy extends Model
 {
@@ -38,7 +40,7 @@ class Taxonomy extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -54,29 +56,13 @@ class Taxonomy extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @since 2.0.0
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'hierarchical' => 'boolean',
-            'show_in_admin' => 'boolean',
-            'metadata' => 'array',
-        ];
-    }
-
-    /**
      * Get the content type that this taxonomy belongs to.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function contentType(): BelongsTo
     {
-        return $this->belongsTo(ContentType::class, 'content_type_slug', 'slug');
+        return $this->belongsTo( ContentType::class, 'content_type_slug', 'slug' );
     }
 
     /**
@@ -84,7 +70,7 @@ class Taxonomy extends Model
      *
      * This is typically the slug of the taxonomy (e.g., "post_categories", "page_tags").
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function getTermsTable(): string
     {
@@ -97,30 +83,46 @@ class Taxonomy extends Model
      * This attempts to derive the model class from the slug.
      * Example: "post_categories" -> "ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory"
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function getTermModel(): ?string
     {
         // Check if metadata has a custom model class
-        if (isset($this->metadata['model_class'])) {
+        if ( isset( $this->metadata['model_class'] ) ) {
             return $this->metadata['model_class'];
         }
 
         // Try to derive from content type and taxonomy slug
         $contentType = $this->contentType;
-        if (! $contentType) {
+        if ( ! $contentType ) {
             return null;
         }
 
         // Get the model namespace from content type model class
         $modelClass = $contentType->model_class;
-        $namespace = substr($modelClass, 0, strrpos($modelClass, '\\'));
+        $namespace  = substr( $modelClass, 0, strrpos( $modelClass, '\\' ) );
 
         // Convert taxonomy slug to model class name
         // Example: "post_categories" -> "PostCategory"
-        $modelName = str_replace('_', '', ucwords($this->slug, '_'));
-        $modelName = rtrim($modelName, 's'); // Remove trailing 's' if present
+        $modelName = str_replace( '_', '', ucwords( $this->slug, '_' ) );
+        $modelName = rtrim( $modelName, 's' ); // Remove trailing 's' if present
 
-        return $namespace.'\\'.$modelName;
+        return $namespace . '\\' . $modelName;
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @since 1.0.0
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'hierarchical'  => 'boolean',
+            'show_in_admin' => 'boolean',
+            'metadata'      => 'array',
+        ];
     }
 }

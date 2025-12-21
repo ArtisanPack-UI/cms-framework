@@ -8,7 +8,7 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers;
 
@@ -38,7 +38,8 @@ class ThemesController extends Controller
      */
     public function __construct(
         private ThemeManager $themeManager,
-    ) {}
+    ) {
+    }
 
     /**
      * Lists all available themes.
@@ -54,13 +55,13 @@ class ThemesController extends Controller
      */
     public function index(): JsonResponse
     {
-        $themes = $this->themeManager->discoverThemes();
+        $themes      = $this->themeManager->discoverThemes();
         $activeTheme = $this->themeManager->getActiveTheme();
 
-        return response()->json([
+        return response()->json( [
             'themes' => $themes,
             'active' => $activeTheme['slug'] ?? null,
-        ]);
+        ] );
     }
 
     /**
@@ -74,19 +75,20 @@ class ThemesController extends Controller
      * @since 1.0.0
      *
      * @param  string  $slug  Theme slug identifier.
+     *
      * @return JsonResponse JSON response with theme data or error message.
      */
-    public function show(string $slug): JsonResponse
+    public function show( string $slug ): JsonResponse
     {
-        $theme = $this->themeManager->getTheme($slug);
+        $theme = $this->themeManager->getTheme( $slug );
 
-        if (! $theme) {
-            return response()->json([
+        if ( ! $theme ) {
+            return response()->json( [
                 'message' => 'Theme not found',
-            ], 404);
+            ], 404 );
         }
 
-        return response()->json($theme);
+        return response()->json( $theme );
     }
 
     /**
@@ -101,21 +103,22 @@ class ThemesController extends Controller
      * @since 1.0.0
      *
      * @param  string  $slug  Theme slug identifier.
+     *
      * @return JsonResponse JSON response with success message and theme data, or error.
      */
-    public function activate(string $slug): JsonResponse
+    public function activate( string $slug ): JsonResponse
     {
         try {
-            $success = $this->themeManager->activateTheme($slug);
+            $success = $this->themeManager->activateTheme( $slug );
 
-            return response()->json([
+            return response()->json( [
                 'message' => 'Theme activated successfully',
-                'theme' => $this->themeManager->getTheme($slug),
-            ]);
-        } catch (Exception $e) {
-            return response()->json([
+                'theme'   => $this->themeManager->getTheme( $slug ),
+            ] );
+        } catch ( Exception $e ) {
+            return response()->json( [
                 'message' => $e->getMessage(),
-            ], 400);
+            ], 400 );
         }
     }
 }

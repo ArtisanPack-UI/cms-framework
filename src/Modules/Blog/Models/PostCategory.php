@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostCategory Model
  *
  * Represents a post category in the system.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Models;
@@ -29,7 +31,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PostCategory extends Model
 {
@@ -38,7 +40,7 @@ class PostCategory extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -52,9 +54,49 @@ class PostCategory extends Model
     ];
 
     /**
+     * Get the posts in this category.
+     *
+     * @since 1.0.0
+     */
+    public function posts(): BelongsToMany
+    {
+        return $this->belongsToMany( Post::class, 'post_category_pivots', 'post_category_id', 'post_id' );
+    }
+
+    /**
+     * Get the parent category.
+     *
+     * @since 1.0.0
+     */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo( PostCategory::class, 'parent_id' );
+    }
+
+    /**
+     * Get the child categories.
+     *
+     * @since 1.0.0
+     */
+    public function children(): HasMany
+    {
+        return $this->hasMany( PostCategory::class, 'parent_id' );
+    }
+
+    /**
+     * Get the permalink for the category archive.
+     *
+     * @since 1.0.0
+     */
+    public function getPermalinkAttribute(): string
+    {
+        return url( "/blog/category/{$this->slug}" );
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string>
      */
@@ -63,45 +105,5 @@ class PostCategory extends Model
         return [
             'metadata' => 'array',
         ];
-    }
-
-    /**
-     * Get the posts in this category.
-     *
-     * @since 2.0.0
-     */
-    public function posts(): BelongsToMany
-    {
-        return $this->belongsToMany(Post::class, 'post_category_pivots', 'post_category_id', 'post_id');
-    }
-
-    /**
-     * Get the parent category.
-     *
-     * @since 2.0.0
-     */
-    public function parent(): BelongsTo
-    {
-        return $this->belongsTo(PostCategory::class, 'parent_id');
-    }
-
-    /**
-     * Get the child categories.
-     *
-     * @since 2.0.0
-     */
-    public function children(): HasMany
-    {
-        return $this->hasMany(PostCategory::class, 'parent_id');
-    }
-
-    /**
-     * Get the permalink for the category archive.
-     *
-     * @since 2.0.0
-     */
-    public function getPermalinkAttribute(): string
-    {
-        return url("/blog/category/{$this->slug}");
     }
 }

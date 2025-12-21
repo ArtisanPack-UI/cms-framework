@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * API Routes for the CMS Framework Settings Module.
  *
@@ -12,6 +14,6 @@
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers\SettingController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth')->group(function () {
-    Route::apiResource('settings', SettingController::class);
-});
+Route::middleware( 'auth' )->group( function (): void {
+    Route::apiResource( 'settings', SettingController::class );
+} );

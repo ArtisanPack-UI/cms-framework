@@ -1,9 +1,11 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * ContentTypes Module API Routes
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Controllers\ContentTypeController;
@@ -17,14 +19,14 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('content-types')->middleware('auth')->group(function () {
-    Route::get('/', [ContentTypeController::class, 'index']);
-    Route::post('/', [ContentTypeController::class, 'store']);
-    Route::get('/{slug}', [ContentTypeController::class, 'show']);
-    Route::put('/{slug}', [ContentTypeController::class, 'update']);
-    Route::delete('/{slug}', [ContentTypeController::class, 'destroy']);
-    Route::get('/{slug}/custom-fields', [ContentTypeController::class, 'customFields']);
-});
+Route::prefix( 'content-types' )->middleware( 'auth' )->group( function (): void {
+    Route::get( '/', [ContentTypeController::class, 'index'] );
+    Route::post( '/', [ContentTypeController::class, 'store'] );
+    Route::get( '/{slug}', [ContentTypeController::class, 'show'] );
+    Route::put( '/{slug}', [ContentTypeController::class, 'update'] );
+    Route::delete( '/{slug}', [ContentTypeController::class, 'destroy'] );
+    Route::get( '/{slug}/custom-fields', [ContentTypeController::class, 'customFields'] );
+} );
 
 /*
 |--------------------------------------------------------------------------
@@ -32,13 +34,13 @@ Route::prefix('content-types')->middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('custom-fields')->middleware('auth')->group(function () {
-    Route::get('/', [CustomFieldController::class, 'index']);
-    Route::post('/', [CustomFieldController::class, 'store']);
-    Route::get('/{id}', [CustomFieldController::class, 'show']);
-    Route::put('/{id}', [CustomFieldController::class, 'update']);
-    Route::delete('/{id}', [CustomFieldController::class, 'destroy']);
-});
+Route::prefix( 'custom-fields' )->middleware( 'auth' )->group( function (): void {
+    Route::get( '/', [CustomFieldController::class, 'index'] );
+    Route::post( '/', [CustomFieldController::class, 'store'] );
+    Route::get( '/{id}', [CustomFieldController::class, 'show'] );
+    Route::put( '/{id}', [CustomFieldController::class, 'update'] );
+    Route::delete( '/{id}', [CustomFieldController::class, 'destroy'] );
+} );
 
 /*
 |--------------------------------------------------------------------------
@@ -46,11 +48,11 @@ Route::prefix('custom-fields')->middleware('auth')->group(function () {
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('taxonomies')->middleware('auth')->group(function () {
-    Route::get('/', [TaxonomyController::class, 'index']);
-    Route::post('/', [TaxonomyController::class, 'store']);
-    Route::get('/{slug}', [TaxonomyController::class, 'show']);
-    Route::put('/{slug}', [TaxonomyController::class, 'update']);
-    Route::delete('/{slug}', [TaxonomyController::class, 'destroy']);
-    Route::get('/content-type/{contentTypeSlug}', [TaxonomyController::class, 'byContentType']);
-});
+Route::prefix( 'taxonomies' )->middleware( 'auth' )->group( function (): void {
+    Route::get( '/', [TaxonomyController::class, 'index'] );
+    Route::post( '/', [TaxonomyController::class, 'store'] );
+    Route::get( '/{slug}', [TaxonomyController::class, 'show'] );
+    Route::put( '/{slug}', [TaxonomyController::class, 'update'] );
+    Route::delete( '/{slug}', [TaxonomyController::class, 'destroy'] );
+    Route::get( '/content-type/{contentTypeSlug}', [TaxonomyController::class, 'byContentType'] );
+} );

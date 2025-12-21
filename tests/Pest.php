@@ -23,13 +23,13 @@
 
 // This tells Pest that all tests in the 'Feature' directory
 // should use your custom TestCase as their foundation.
-uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Feature');
+uses( ArtisanPackUI\CMSFramework\Tests\TestCase::class )->in( 'Feature' );
 
 // This tells Pest to apply the RefreshDatabase trait to all
 // tests in the 'Feature' directory, resetting the database for each test.
-uses(Illuminate\Foundation\Testing\RefreshDatabase::class)->in('Feature');
+uses( Illuminate\Foundation\Testing\RefreshDatabase::class )->in( 'Feature' );
 
-uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Unit');
+uses( ArtisanPackUI\CMSFramework\Tests\TestCase::class )->in( 'Unit' );
 
 /*
 |--------------------------------------------------------------------------
@@ -42,9 +42,9 @@ uses(ArtisanPackUI\CMSFramework\Tests\TestCase::class)->in('Unit');
 |
 */
 
-expect()->extend('toBeOne', function () {
-    return $this->toBe(1);
-});
+expect()->extend( 'toBeOne', function () {
+    return $this->toBe( 1 );
+} );
 
 /*
 |--------------------------------------------------------------------------
@@ -58,9 +58,9 @@ expect()->extend('toBeOne', function () {
 */
 
 // Load test helpers
-require_once __DIR__.'/Helpers/TestHelpers.php';
+require_once __DIR__ . '/Helpers/TestHelpers.php';
 
-function something()
+function something(): void
 {
     // ..
 }

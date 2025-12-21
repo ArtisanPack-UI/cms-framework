@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * ContentType Model
  *
  * Represents a content type in the system.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models;
@@ -35,7 +37,7 @@ use Illuminate\Support\Collection;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class ContentType extends Model
 {
@@ -44,7 +46,7 @@ class ContentType extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -66,32 +68,13 @@ class ContentType extends Model
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @since 2.0.0
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
-    {
-        return [
-            'hierarchical' => 'boolean',
-            'has_archive' => 'boolean',
-            'public' => 'boolean',
-            'show_in_admin' => 'boolean',
-            'supports' => 'array',
-            'metadata' => 'array',
-        ];
-    }
-
-    /**
      * Get an instance of the model class.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function getModelInstance(): ?Model
     {
-        if (! class_exists($this->model_class)) {
+        if ( ! class_exists( $this->model_class ) ) {
             return null;
         }
 
@@ -101,41 +84,61 @@ class ContentType extends Model
     /**
      * Check if the content type supports a specific feature.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function supportsFeature(string $feature): bool
+    public function supportsFeature( string $feature ): bool
     {
-        if ($this->supports === null) {
+        if ( null === $this->supports ) {
             return false;
         }
 
-        return in_array($feature, $this->supports, true);
+        return in_array( $feature, $this->supports, true );
     }
 
     /**
      * Get the custom fields for this content type.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function getCustomFields(): Collection
     {
-        return CustomField::whereJsonContains('content_types', $this->slug)->get();
+        return CustomField::whereJsonContains( 'content_types', $this->slug )->get();
     }
 
     /**
      * Scope a query to include custom fields count.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Database\Eloquent\Builder  $query
+     *
      * @return \Illuminate\Database\Eloquent\Builder
      */
-    public function scopeWithCustomFieldsCount($query)
+    public function scopeWithCustomFieldsCount( Builder $query )
     {
         return $query->selectSub(
-            CustomField::selectRaw('count(*)')
-                ->whereRaw("JSON_CONTAINS(content_types, CONCAT('\"', content_types.slug, '\"'))"),
-            'custom_fields_count'
+            CustomField::selectRaw( 'count(*)' )
+                ->whereRaw( "JSON_CONTAINS(content_types, CONCAT('\"', content_types.slug, '\"'))" ),
+            'custom_fields_count',
         );
+    }
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @since 1.0.0
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'hierarchical'  => 'boolean',
+            'has_archive'   => 'boolean',
+            'public'        => 'boolean',
+            'show_in_admin' => 'boolean',
+            'supports'      => 'array',
+            'metadata'      => 'array',
+        ];
     }
 }

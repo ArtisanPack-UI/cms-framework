@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * ContentType Controller for the CMS Framework ContentTypes Module.
  *
  * This controller handles CRUD operations for content types including listing,
  * creating, showing, updating, and deleting content type records through API endpoints.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Controllers;
@@ -27,7 +29,7 @@ use Illuminate\Routing\Controller;
  * Provides RESTful API endpoints for content type management operations
  * with proper validation, authorization, and resource transformation.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class ContentTypeController extends Controller
 {
@@ -36,16 +38,16 @@ class ContentTypeController extends Controller
     /**
      * The content type manager instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected ContentTypeManager $contentTypeManager;
 
     /**
      * Create a new controller instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function __construct(ContentTypeManager $contentTypeManager)
+    public function __construct( ContentTypeManager $contentTypeManager )
     {
         $this->contentTypeManager = $contentTypeManager;
     }
@@ -55,23 +57,23 @@ class ContentTypeController extends Controller
      *
      * Retrieves a paginated list of content types and returns them as a JSON resource collection.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return AnonymousResourceCollection The paginated collection of content type resources.
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', ContentType::class);
+        $this->authorize( 'viewAny', ContentType::class );
 
-        $contentTypes = ContentType::select('content_types.*')
+        $contentTypes = ContentType::select( 'content_types.*' )
             ->selectSub(
-                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw('count(*)')
-                    ->whereRaw("JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))"),
-                'custom_fields_count'
+                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw( 'count(*)' )
+                    ->whereRaw( "JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))" ),
+                'custom_fields_count',
             )
-            ->paginate(15);
+            ->paginate( 15 );
 
-        return ContentTypeResource::collection($contentTypes);
+        return ContentTypeResource::collection( $contentTypes );
     }
 
     /**
@@ -80,19 +82,20 @@ class ContentTypeController extends Controller
      * Validates the incoming request data and creates a new content type with the
      * provided information. Returns the created resource with a 201 status code.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  ContentTypeRequest  $request  The HTTP request containing content type data.
+     *
      * @return JsonResponse The JSON response containing the created content type resource.
      */
-    public function store(ContentTypeRequest $request): JsonResponse
+    public function store( ContentTypeRequest $request ): JsonResponse
     {
-        $this->authorize('create', ContentType::class);
+        $this->authorize( 'create', ContentType::class );
 
-        $validated = $request->validated();
-        $contentType = $this->contentTypeManager->createContentType($validated);
+        $validated   = $request->validated();
+        $contentType = $this->contentTypeManager->createContentType( $validated );
 
-        return response()->json(new ContentTypeResource($contentType), 201);
+        return response()->json( new ContentTypeResource( $contentType ), 201 );
     }
 
     /**
@@ -100,24 +103,25 @@ class ContentTypeController extends Controller
      *
      * Retrieves a single content type by slug and returns it as a JSON resource.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $slug  The slug of the content type to retrieve.
+     *
      * @return ContentTypeResource The content type resource.
      */
-    public function show(string $slug): ContentTypeResource
+    public function show( string $slug ): ContentTypeResource
     {
-        $contentType = ContentType::select('content_types.*')
+        $contentType = ContentType::select( 'content_types.*' )
             ->selectSub(
-                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw('count(*)')
-                    ->whereRaw("JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))"),
-                'custom_fields_count'
+                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw( 'count(*)' )
+                    ->whereRaw( "JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))" ),
+                'custom_fields_count',
             )
-            ->where('slug', $slug)
+            ->where( 'slug', sanitizeText( $slug ) )
             ->firstOrFail();
-        $this->authorize('view', $contentType);
+        $this->authorize( 'view', $contentType );
 
-        return new ContentTypeResource($contentType);
+        return new ContentTypeResource( $contentType );
     }
 
     /**
@@ -126,21 +130,22 @@ class ContentTypeController extends Controller
      * Validates the incoming request data and updates the content type with the
      * provided information. Only provided fields are updated (partial updates).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  ContentTypeRequest  $request  The HTTP request containing updated content type data.
      * @param  string  $slug  The slug of the content type to update.
+     *
      * @return ContentTypeResource The updated content type resource.
      */
-    public function update(ContentTypeRequest $request, string $slug): ContentTypeResource
+    public function update( ContentTypeRequest $request, string $slug ): ContentTypeResource
     {
-        $contentType = ContentType::where('slug', $slug)->firstOrFail();
-        $this->authorize('update', $contentType);
+        $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
+        $this->authorize( 'update', $contentType );
 
-        $validated = $request->validated();
-        $contentType = $this->contentTypeManager->updateContentType($slug, $validated);
+        $validated   = $request->validated();
+        $contentType = $this->contentTypeManager->updateContentType( $slug, $validated );
 
-        return new ContentTypeResource($contentType);
+        return new ContentTypeResource( $contentType );
     }
 
     /**
@@ -149,17 +154,18 @@ class ContentTypeController extends Controller
      * Deletes a content type from the database and returns a successful response
      * with no content.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $slug  The slug of the content type to delete.
+     *
      * @return Response A response with 204 status code.
      */
-    public function destroy(string $slug): Response
+    public function destroy( string $slug ): Response
     {
-        $contentType = ContentType::where('slug', $slug)->firstOrFail();
-        $this->authorize('delete', $contentType);
+        $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
+        $this->authorize( 'delete', $contentType );
 
-        $this->contentTypeManager->deleteContentType($slug);
+        $this->contentTypeManager->deleteContentType( $slug );
 
         return response()->noContent();
     }
@@ -167,18 +173,19 @@ class ContentTypeController extends Controller
     /**
      * Get custom fields for a specific content type.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $slug  The slug of the content type.
+     *
      * @return JsonResponse The JSON response containing the custom fields.
      */
-    public function customFields(string $slug): JsonResponse
+    public function customFields( string $slug ): JsonResponse
     {
-        $contentType = ContentType::where('slug', $slug)->firstOrFail();
-        $this->authorize('view', $contentType);
+        $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
+        $this->authorize( 'view', $contentType );
 
         $customFields = $contentType->getCustomFields();
 
-        return response()->json($customFields);
+        return response()->json( $customFields);
     }
 }

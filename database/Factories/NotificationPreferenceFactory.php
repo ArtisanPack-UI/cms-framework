@@ -13,7 +13,7 @@ class NotificationPreferenceFactory extends Factory
     /**
      * The name of the factory's corresponding model.
      *
-     * @var class-string<\ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference>
+     * @var class-string<NotificationPreference>
      */
     protected $model = NotificationPreference::class;
 
@@ -25,16 +25,16 @@ class NotificationPreferenceFactory extends Factory
     public function definition(): array
     {
         return [
-            'user_id' => 1, // Default user ID for package tests
-            'notification_type' => fake()->randomElement([
+            'user_id'           => 1, // Default user ID for package tests
+            'notification_type' => fake()->randomElement( [
                 'user.registered',
                 'user.login.failed',
                 'system.error',
                 'backup.completed',
                 'content.published',
-            ]),
-            'is_enabled' => fake()->boolean(80),
-            'email_enabled' => fake()->boolean(60),
+            ] ),
+            'is_enabled'    => fake()->boolean( 80 ),
+            'email_enabled' => fake()->boolean( 60 ),
         ];
     }
 
@@ -43,9 +43,9 @@ class NotificationPreferenceFactory extends Factory
      */
     public function enabled(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'is_enabled' => true,
-        ]);
+        ] );
     }
 
     /**
@@ -53,9 +53,9 @@ class NotificationPreferenceFactory extends Factory
      */
     public function disabled(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'is_enabled' => false,
-        ]);
+        ] );
     }
 
     /**
@@ -63,9 +63,9 @@ class NotificationPreferenceFactory extends Factory
      */
     public function emailEnabled(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'email_enabled' => true,
-        ]);
+        ] );
     }
 
     /**
@@ -73,7 +73,7 @@ class NotificationPreferenceFactory extends Factory
      */
     public function emailDisabled(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'email_enabled' => false,
         ]);
     }

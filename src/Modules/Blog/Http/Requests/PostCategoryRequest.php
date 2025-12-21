@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostCategory Request for the CMS Framework Blog Module.
  *
  * This form request handles validation and authorization for post category-related
  * HTTP requests, ensuring data integrity and security.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests;
@@ -20,14 +22,14 @@ use Illuminate\Validation\Rule;
  * Provides validation rules and authorization logic for post category creation
  * and update operations with proper field validation.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PostCategoryRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return bool True if the user is authorized, false otherwise.
      */
@@ -39,18 +41,18 @@ class PostCategoryRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, mixed> The validation rules.
      */
     public function rules(): array
     {
-        $id = $this->route('id');
+        $id = $this->route( 'id' );
 
         $parentIdRules = ['nullable', 'integer', 'exists:post_categories,id'];
 
-        if ($id) {
-            $parentIdRules[] = Rule::notIn([$id]);
+        if ( $id ) {
+            $parentIdRules[] = Rule::notIn( [$id] );
         }
 
         $slugRules = [
@@ -60,36 +62,49 @@ class PostCategoryRequest extends FormRequest
             'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
         ];
 
-        $uniqueRule = Rule::unique('post_categories', 'slug');
-        if ($id) {
-            $uniqueRule->ignore($id);
+        $uniqueRule = Rule::unique( 'post_categories', 'slug' );
+        if ( $id ) {
+            $uniqueRule->ignore( $id );
         }
         $slugRules[] = $uniqueRule;
 
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'slug' => $slugRules,
-            'description' => ['nullable', 'string'],
-            'parent_id' => $parentIdRules,
-            'order' => ['integer', 'min:0'],
-            'metadata' => ['nullable', 'array'],
+            'name'        => [
+                'required',
+                'string',
+                'max:255',
+            ],
+            'slug'        => $slugRules,
+            'description' => [
+                'nullable',
+                'string',
+            ],
+            'parent_id'   => $parentIdRules,
+            'order'       => [
+                'integer',
+                'min:0',
+            ],
+            'metadata'    => [
+                'nullable',
+                'array',
+            ],
         ];
     }
 
     /**
      * Get custom messages for validator errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string> The custom error messages.
      */
     public function messages(): array
     {
         return [
-            'name.required' => __('The category name is required.'),
-            'slug.required' => __('The category slug is required.'),
-            'slug.regex' => __('The slug must be lowercase letters, numbers, and hyphens only.'),
-            'slug.unique' => __('A category with this slug already exists.'),
+            'name.required' => __( 'The category name is required.' ),
+            'slug.required' => __( 'The category slug is required.' ),
+            'slug.regex'    => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
+            'slug.unique'   => __( 'A category with this slug already exists.' ),
         ];
     }
 }

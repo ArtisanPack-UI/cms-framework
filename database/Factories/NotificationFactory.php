@@ -14,7 +14,7 @@ class NotificationFactory extends Factory
     /**
      * The name of the factory's corresponding model.
      *
-     * @var class-string<\ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification>
+     * @var class-string<Notification>
      */
     protected $model = Notification::class;
 
@@ -26,14 +26,14 @@ class NotificationFactory extends Factory
     public function definition(): array
     {
         return [
-            'type' => fake()->randomElement(NotificationType::cases()),
-            'title' => fake()->sentence(4),
-            'content' => fake()->paragraph(),
+            'type'     => fake()->randomElement( NotificationType::cases() ),
+            'title'    => fake()->sentence( 4 ),
+            'content'  => fake()->paragraph(),
             'metadata' => [
-                'category' => fake()->randomElement(['user', 'system', 'content', 'security']),
-                'priority' => fake()->randomElement(['low', 'medium', 'high']),
+                'category' => fake()->randomElement( ['user', 'system', 'content', 'security'] ),
+                'priority' => fake()->randomElement( ['low', 'medium', 'high'] ),
             ],
-            'send_email' => fake()->boolean(30),
+            'send_email' => fake()->boolean( 30 ),
         ];
     }
 
@@ -42,9 +42,9 @@ class NotificationFactory extends Factory
      */
     public function error(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'type' => NotificationType::Error,
-        ]);
+        ] );
     }
 
     /**
@@ -52,9 +52,9 @@ class NotificationFactory extends Factory
      */
     public function warning(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'type' => NotificationType::Warning,
-        ]);
+        ] );
     }
 
     /**
@@ -62,9 +62,9 @@ class NotificationFactory extends Factory
      */
     public function success(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'type' => NotificationType::Success,
-        ]);
+        ] );
     }
 
     /**
@@ -72,9 +72,9 @@ class NotificationFactory extends Factory
      */
     public function info(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'type' => NotificationType::Info,
-        ]);
+        ] );
     }
 
     /**
@@ -82,9 +82,9 @@ class NotificationFactory extends Factory
      */
     public function withEmail(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'send_email' => true,
-        ]);
+        ] );
     }
 
     /**
@@ -92,7 +92,7 @@ class NotificationFactory extends Factory
      */
     public function withoutEmail(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'send_email' => false,
         ]);
     }

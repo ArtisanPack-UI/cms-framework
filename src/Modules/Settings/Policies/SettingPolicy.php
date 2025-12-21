@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Setting Policy for the CMS Framework Settings Module.
  *
@@ -30,9 +32,10 @@ class SettingPolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can view settings, false otherwise.
      */
-    public function viewAny(Authenticatable $user): bool
+    public function viewAny( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any settings.
@@ -42,9 +45,10 @@ class SettingPolicy
          * @hook  settings.viewAny
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.viewAny', 'settings.manage'));
+        return $user->can( applyFilters( 'settings.viewAny', 'settings.manage' ) );
     }
 
     /**
@@ -54,9 +58,10 @@ class SettingPolicy
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
      * @param  Setting  $setting  The setting instance to check permissions for.
+     *
      * @return bool True if the user can view the setting, false otherwise.
      */
-    public function view(Authenticatable $user, Setting $setting): bool
+    public function view( Authenticatable $user, Setting $setting ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a setting.
@@ -67,9 +72,10 @@ class SettingPolicy
          *
          * @param  string  $capability  Default capability slug to check.
          * @param  Setting  $setting  The setting being checked.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.view', 'settings.manage', $setting));
+        return $user->can( applyFilters( 'settings.view', 'settings.manage', $setting ) );
     }
 
     /**
@@ -78,9 +84,10 @@ class SettingPolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can create settings, false otherwise.
      */
-    public function create(Authenticatable $user): bool
+    public function create( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can create settings.
@@ -90,9 +97,10 @@ class SettingPolicy
          * @hook  settings.create
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.create', 'settings.manage'));
+        return $user->can( applyFilters( 'settings.create', 'settings.manage' ) );
     }
 
     /**
@@ -101,9 +109,10 @@ class SettingPolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can update the setting, false otherwise.
      */
-    public function update(Authenticatable $user): bool
+    public function update( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can update settings.
@@ -113,9 +122,10 @@ class SettingPolicy
          * @hook  settings.update
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.update', 'settings.manage'));
+        return $user->can( applyFilters( 'settings.update', 'settings.manage' ) );
     }
 
     /**
@@ -124,9 +134,10 @@ class SettingPolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can delete the setting, false otherwise.
      */
-    public function delete(Authenticatable $user): bool
+    public function delete( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete settings.
@@ -136,9 +147,10 @@ class SettingPolicy
          * @hook  settings.delete
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.delete', 'settings.delete'));
+        return $user->can( applyFilters( 'settings.delete', 'settings.delete' ) );
     }
 
     /**
@@ -147,9 +159,10 @@ class SettingPolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can restore the setting, false otherwise.
      */
-    public function restore(Authenticatable $user): bool
+    public function restore( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can restore settings.
@@ -159,9 +172,10 @@ class SettingPolicy
          * @hook  settings.restore
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.restore', 'settings.manage'));
+        return $user->can( applyFilters( 'settings.restore', 'settings.manage' ) );
     }
 
     /**
@@ -170,9 +184,10 @@ class SettingPolicy
      * @since 1.0.0
      *
      * @param  Authenticatable  $user  The authenticated user to check capabilities for.
+     *
      * @return bool True if the user can force delete the setting, false otherwise.
      */
-    public function forceDelete(Authenticatable $user): bool
+    public function forceDelete( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can permanently delete settings.
@@ -182,8 +197,9 @@ class SettingPolicy
          * @hook  settings.forceDelete
          *
          * @param  string  $capability  Default capability slug to check.
+         *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('settings.forceDelete', 'settings.delete'));
+        return $user->can( applyFilters( 'settings.forceDelete', 'settings.delete' ));
     }
 }

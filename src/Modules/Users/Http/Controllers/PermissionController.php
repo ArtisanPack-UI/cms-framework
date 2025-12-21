@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Permission Controller for the CMS Framework Users Module.
  *
@@ -40,9 +42,9 @@ class PermissionController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $permissions = Permission::with('roles')->paginate(15);
+        $permissions = Permission::with( 'roles' )->paginate( 15 );
 
-        return PermissionResource::collection($permissions);
+        return PermissionResource::collection( $permissions );
     }
 
     /**
@@ -54,19 +56,20 @@ class PermissionController extends Controller
      * @since 1.0.0
      *
      * @param  Request  $request  The HTTP request containing permission data.
+     *
      * @return PermissionResource The created permission resource with loaded roles.
      */
-    public function store(Request $request): PermissionResource
+    public function store( Request $request ): PermissionResource
     {
-        $validated = $request->validate([
+        $validated = $request->validate( [
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:permissions',
-        ]);
+        ] );
 
-        $permission = Permission::create($validated);
-        $permission->load('roles');
+        $permission = Permission::create( $validated );
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
     /**
@@ -77,14 +80,15 @@ class PermissionController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the permission to retrieve.
+     * @param  int|string  $id  The ID of the permission to retrieve.
+     *
      * @return PermissionResource The permission resource with loaded roles.
      */
-    public function show(string|int $id): PermissionResource
+    public function show( string|int $id ): PermissionResource
     {
-        $permission = Permission::with('roles')->findOrFail($id);
+        $permission = Permission::with( 'roles' )->findOrFail( $id );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
     /**
@@ -96,21 +100,22 @@ class PermissionController extends Controller
      * @since 1.0.0
      *
      * @param  Request  $request  The HTTP request containing updated permission data.
-     * @param  string|int  $id  The ID of the permission to update.
+     * @param  int|string  $id  The ID of the permission to update.
+     *
      * @return PermissionResource The updated permission resource with loaded roles.
      */
-    public function update(Request $request, string|int $id): PermissionResource
+    public function update( Request $request, string|int $id ): PermissionResource
     {
-        $permission = Permission::findOrFail($id);
-        $validated = $request->validate([
+        $permission = Permission::findOrFail( $id );
+        $validated  = $request->validate( [
             'name' => 'sometimes|required|string|max:255',
-            'slug' => 'sometimes|required|string|max:255|unique:permissions,slug,'.$permission->id,
-        ]);
+            'slug' => 'sometimes|required|string|max:255|unique:permissions,slug,' . $permission->id,
+        ] );
 
-        $permission->update($validated);
-        $permission->load('roles');
+        $permission->update( $validated );
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
     /**
@@ -121,14 +126,15 @@ class PermissionController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the permission to delete.
+     * @param  int|string  $id  The ID of the permission to delete.
+     *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy(string|int $id): JsonResponse
+    public function destroy( string|int $id ): JsonResponse
     {
-        $permission = Permission::findOrFail($id);
+        $permission = Permission::findOrFail( $id );
         $permission->delete();
 
-        return response()->json([], 204);
+        return response()->json( [], 204 );
     }
 }

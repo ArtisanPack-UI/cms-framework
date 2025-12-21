@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Notification Service Provider
  *
  * Registers the Notification module services and bootstraps routes, views, and migrations.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Notifications\Providers;
@@ -21,19 +23,19 @@ use Illuminate\Support\ServiceProvider;
 /**
  * Registers the Notification module services.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class NotificationServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function register(): void
     {
         // Register NotificationManager as singleton
-        $this->app->singleton(NotificationManager::class, fn () => new NotificationManager);
+        $this->app->singleton( NotificationManager::class, fn () => new NotificationManager );
 
         // Load helpers
         $this->loadHelpers();
@@ -42,35 +44,35 @@ class NotificationServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function boot(Router $router): void
+    public function boot( Router $router ): void
     {
         // Load migrations
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
 
         // Load API routes
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
 
         // Load views
-        $this->loadViewsFrom(__DIR__.'/../resources/views', 'notifications');
+        $this->loadViewsFrom( __DIR__ . '/../resources/views', 'notifications' );
 
         // Register policy
-        Gate::policy(Notification::class, NotificationPolicy::class);
+        Gate::policy( Notification::class, NotificationPolicy::class );
     }
 
     /**
      * Load helper functions.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected function loadHelpers(): void
     {
-        $helpersPath = __DIR__.'/../helpers.php';
+        $helpersPath = __DIR__ . '/../helpers.php';
 
-        if (file_exists($helpersPath)) {
+        if ( file_exists( $helpersPath ) ) {
             require_once $helpersPath;
         }
     }

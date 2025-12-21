@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * User Controller for the CMS Framework Users Module.
  *
@@ -40,10 +42,10 @@ class UserController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $userModel = config('cms-framework.user_model');
-        $users = $userModel::with('roles')->paginate(15);
+        $userModel = config( 'cms-framework.user_model' );
+        $users     = $userModel::with( 'roles' )->paginate( 15 );
 
-        return UserResource::collection($users);
+        return UserResource::collection( $users );
     }
 
     /**
@@ -55,24 +57,25 @@ class UserController extends Controller
      * @since 1.0.0
      *
      * @param  Request  $request  The HTTP request containing user data.
+     *
      * @return UserResource The created user resource with loaded roles.
      */
-    public function store(Request $request): UserResource
+    public function store( Request $request ): UserResource
     {
-        $userModel = config('cms-framework.user_model');
+        $userModel = config( 'cms-framework.user_model' );
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|email|max:255|unique:users',
+        $validated = $request->validate( [
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-        ]);
+        ] );
 
-        $validated['password'] = bcrypt($validated['password']);
+        $validated['password'] = bcrypt( $validated['password'] );
 
-        $user = $userModel::create($validated);
-        $user->load('roles');
+        $user = $userModel::create( $validated );
+        $user->load( 'roles' );
 
-        return new UserResource($user);
+        return new UserResource( $user );
     }
 
     /**
@@ -83,15 +86,16 @@ class UserController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to retrieve.
+     * @param  int|string  $id  The ID of the user to retrieve.
+     *
      * @return UserResource The user resource with loaded roles.
      */
-    public function show(string|int $id): UserResource
+    public function show( string|int $id ): UserResource
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::with('roles')->findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::with( 'roles' )->findOrFail( $id );
 
-        return new UserResource($user);
+        return new UserResource( $user );
     }
 
     /**
@@ -104,27 +108,28 @@ class UserController extends Controller
      * @since 1.0.0
      *
      * @param  Request  $request  The HTTP request containing updated user data.
-     * @param  string|int  $id  The ID of the user to update.
+     * @param  int|string  $id  The ID of the user to update.
+     *
      * @return UserResource The updated user resource with loaded roles.
      */
-    public function update(Request $request, string|int $id): UserResource
+    public function update( Request $request, string|int $id ): UserResource
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
-        $validated = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'email' => 'sometimes|required|string|email|max:255|unique:users,email,'.$user->id,
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
+        $validated = $request->validate( [
+            'name'     => 'sometimes|required|string|max:255',
+            'email'    => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
             'password' => 'sometimes|required|string|min:8',
-        ]);
+        ] );
 
-        if (isset($validated['password'])) {
-            $validated['password'] = bcrypt($validated['password']);
+        if ( isset( $validated['password'] ) ) {
+            $validated['password'] = bcrypt( $validated['password'] );
         }
 
-        $user->update($validated);
-        $user->load('roles');
+        $user->update( $validated );
+        $user->load( 'roles' );
 
-        return new UserResource($user);
+        return new UserResource( $user );
     }
 
     /**
@@ -135,15 +140,16 @@ class UserController extends Controller
      *
      * @since 1.0.0
      *
-     * @param  string|int  $id  The ID of the user to delete.
+     * @param  int|string  $id  The ID of the user to delete.
+     *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy(string|int $id): JsonResponse
+    public function destroy( string|int $id ): JsonResponse
     {
-        $userModel = config('cms-framework.user_model');
-        $user = $userModel::findOrFail($id);
+        $userModel = config( 'cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
         $user->delete();
 
-        return response()->json([], 204);
+        return response()->json( [], 204 );
     }
 }

@@ -1,9 +1,11 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Service provider for the Settings module.
  *
- * @since      2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Providers;
@@ -16,29 +18,29 @@ use Illuminate\Support\ServiceProvider;
 /**
  * Registers Settings module services and bootstraps Settings routing/middleware.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class SettingsServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function register(): void
     {
-        $this->app->singleton(SettingsManager::class, fn () => new SettingsManager);
+        $this->app->singleton( SettingsManager::class, fn () => new SettingsManager );
     }
 
     /**
      * Bootstrap any application services.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function boot(Router $router): void
+    public function boot( Router $router ): void
     {
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
     }
 }

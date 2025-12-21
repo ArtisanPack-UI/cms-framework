@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostCategory Controller for the CMS Framework Blog Module.
  *
  * This controller handles CRUD operations for post categories including listing,
  * creating, showing, updating, and deleting category records through API endpoints.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers;
@@ -26,7 +28,7 @@ use Illuminate\Routing\Controller;
  * Provides RESTful API endpoints for post category management operations
  * with proper validation, authorization, and resource transformation.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PostCategoryController extends Controller
 {
@@ -37,17 +39,17 @@ class PostCategoryController extends Controller
      *
      * Retrieves a paginated list of post categories and returns them as a JSON resource collection.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return AnonymousResourceCollection The paginated collection of category resources.
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', PostCategory::class);
+        $this->authorize( 'viewAny', PostCategory::class );
 
-        $categories = PostCategory::with(['parent', 'children'])->orderBy('order')->paginate(15);
+        $categories = PostCategory::with( ['parent', 'children'] )->orderBy( 'order' )->paginate( 15 );
 
-        return PostCategoryResource::collection($categories);
+        return PostCategoryResource::collection( $categories );
     }
 
     /**
@@ -56,20 +58,21 @@ class PostCategoryController extends Controller
      * Validates the incoming request data and creates a new category with the
      * provided information. Returns the created resource with a 201 status code.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  PostCategoryRequest  $request  The HTTP request containing category data.
+     *
      * @return JsonResponse The JSON response containing the created category resource.
      */
-    public function store(PostCategoryRequest $request): JsonResponse
+    public function store( PostCategoryRequest $request ): JsonResponse
     {
-        $this->authorize('create', PostCategory::class);
+        $this->authorize( 'create', PostCategory::class );
 
         $validated = $request->validated();
-        $category = PostCategory::create($validated);
-        $category->load(['parent', 'children']);
+        $category  = PostCategory::create( $validated );
+        $category->load( ['parent', 'children'] );
 
-        return response()->json(new PostCategoryResource($category), 201);
+        return response()->json( new PostCategoryResource( $category ), 201 );
     }
 
     /**
@@ -77,17 +80,18 @@ class PostCategoryController extends Controller
      *
      * Retrieves a single post category by ID and returns it as a JSON resource.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $id  The ID of the category to retrieve.
+     *
      * @return PostCategoryResource The category resource.
      */
-    public function show(int $id): PostCategoryResource
+    public function show( int $id ): PostCategoryResource
     {
-        $category = PostCategory::with(['parent', 'children'])->findOrFail($id);
-        $this->authorize('view', $category);
+        $category = PostCategory::with( ['parent', 'children'] )->findOrFail( $id );
+        $this->authorize( 'view', $category );
 
-        return new PostCategoryResource($category);
+        return new PostCategoryResource( $category );
     }
 
     /**
@@ -96,22 +100,23 @@ class PostCategoryController extends Controller
      * Validates the incoming request data and updates the category with the
      * provided information. Only provided fields are updated (partial updates).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  PostCategoryRequest  $request  The HTTP request containing updated category data.
      * @param  int  $id  The ID of the category to update.
+     *
      * @return PostCategoryResource The updated category resource.
      */
-    public function update(PostCategoryRequest $request, int $id): PostCategoryResource
+    public function update( PostCategoryRequest $request, int $id ): PostCategoryResource
     {
-        $category = PostCategory::findOrFail($id);
-        $this->authorize('update', $category);
+        $category = PostCategory::findOrFail( $id );
+        $this->authorize( 'update', $category );
 
         $validated = $request->validated();
-        $category->update($validated);
-        $category->load(['parent', 'children']);
+        $category->update( $validated );
+        $category->load( ['parent', 'children'] );
 
-        return new PostCategoryResource($category);
+        return new PostCategoryResource( $category );
     }
 
     /**
@@ -120,15 +125,16 @@ class PostCategoryController extends Controller
      * Deletes a category from the database and returns a successful response
      * with no content.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $id  The ID of the category to delete.
+     *
      * @return Response A response with 204 status code.
      */
-    public function destroy(int $id): Response
+    public function destroy( int $id ): Response
     {
-        $category = PostCategory::findOrFail($id);
-        $this->authorize('delete', $category);
+        $category = PostCategory::findOrFail( $id );
+        $this->authorize( 'delete', $category );
 
         $category->delete();
 

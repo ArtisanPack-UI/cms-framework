@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 return [
     /*
@@ -27,9 +27,9 @@ return [
     |--------------------------------------------------------------------------
     | Configure caching for plugin discovery to improve performance.
     */
-    'cacheEnabled' => env('PLUGINS_CACHE_ENABLED', true),
-    'cacheKey' => 'cms.plugins.discovered',
-    'cacheTtl' => 3600, // 1 hour in seconds
+    'cacheEnabled' => env( 'PLUGINS_CACHE_ENABLED', true ),
+    'cacheKey'     => 'cms.plugins.discovered',
+    'cacheTtl'     => 3600, // 1 hour in seconds
 
     /*
     |--------------------------------------------------------------------------
@@ -37,7 +37,7 @@ return [
     |--------------------------------------------------------------------------
     | Security settings for plugin ZIP uploads.
     */
-    'maxUploadSize' => 10 * 1024 * 1024, // 10MB in bytes
+    'maxUploadSize'    => 10 * 1024 * 1024, // 10MB in bytes
     'allowedMimeTypes' => [
         'application/zip',
         'application/x-zip-compressed',
@@ -50,6 +50,6 @@ return [
     | Settings for plugin update checking and execution.
     */
     'updateCheckTimeout' => 10, // HTTP request timeout in seconds
-    'updateCacheTtl' => 43200, // 12 hours in seconds
-    'backupPath' => 'plugin-backups', // Relative to storage_path()
+    'updateCacheTtl'     => 43200, // 12 hours in seconds
+    'backupPath'         => 'plugin-backups', // Relative to storage_path()
 ];

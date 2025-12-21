@@ -2,7 +2,7 @@
   "name": "artisanpack-ui/cms-framework",
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
-  "license": "GPL-3.0-or-later",
+  "license": "MIT",
   "version": "0.2.4",
   "autoload": {
     "psr-4": {

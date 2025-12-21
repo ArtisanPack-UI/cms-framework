@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects;
 
@@ -11,14 +11,14 @@ use InvalidArgumentException;
  *
  * Immutable object containing update metadata.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class UpdateInfo
 {
     /**
      * Create a new UpdateInfo instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  string  $currentVersion  Current installed version
      * @param  string  $latestVersion  Latest available version
@@ -44,26 +44,27 @@ class UpdateInfo
         public readonly ?string $sha256 = null,
         public readonly ?int $fileSize = null,
         public readonly array $metadata = [],
-    ) {}
+    ) {
+    }
 
     /**
      * Create UpdateInfo from array (for JSON responses).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  array  $data  Update data array
      * @param  string  $currentVersion  Current version
      */
-    public static function fromArray(array $data, string $currentVersion): self
+    public static function fromArray( array $data, string $currentVersion ): self
     {
-        if (! isset($data['version'], $data['download_url'])) {
-            throw new InvalidArgumentException('Missing required keys: version, download_url');
+        if ( ! isset( $data['version'], $data['download_url'] ) ) {
+            throw new InvalidArgumentException( 'Missing required keys: version, download_url' );
         }
 
         return new self(
             currentVersion: $currentVersion,
             latestVersion: $data['version'],
-            hasUpdate: version_compare($data['version'], $currentVersion, '>'),
+            hasUpdate: version_compare( $data['version'], $currentVersion, '>' ),
             downloadUrl: $data['download_url'],
             changelog: $data['changelog'] ?? null,
             releaseDate: $data['release_date'] ?? null,
@@ -78,7 +79,7 @@ class UpdateInfo
     /**
      * Convert to array (for JSON responses).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function toArray(): array
     {

@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Send Notification Email Job
  *
  * Queued job for sending notification emails to users.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Notifications\Jobs;
@@ -22,7 +24,7 @@ use Illuminate\Support\Facades\Mail;
 /**
  * Job to send notification emails.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class SendNotificationEmail implements ShouldQueue
 {
@@ -34,44 +36,44 @@ class SendNotificationEmail implements ShouldQueue
     /**
      * The notification instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected Notification $notification;
 
     /**
      * Array of user IDs to send email to.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected array $userIds;
 
     /**
      * Create a new job instance.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  Notification  $notification  The notification to send.
      * @param  array  $userIds  Array of user IDs to send to.
      */
-    public function __construct(Notification $notification, array $userIds)
+    public function __construct( Notification $notification, array $userIds )
     {
         $this->notification = $notification;
-        $this->userIds = $userIds;
+        $this->userIds      = $userIds;
     }
 
     /**
      * Execute the job.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function handle(): void
     {
-        $userModel = config('auth.providers.users.model');
-        $users = $userModel::whereIn('id', $this->userIds)->get();
+        $userModel = config( 'auth.providers.users.model' );
+        $users     = $userModel::whereIn( 'id', $this->userIds )->get();
 
-        foreach ($users as $user) {
-            Mail::to($user->email)->send(
-                new NotificationMail($this->notification, $user)
+        foreach ( $users as $user ) {
+            Mail::to( $user->email )->send(
+                new NotificationMail( $this->notification, $user ),
             );
         }
     }

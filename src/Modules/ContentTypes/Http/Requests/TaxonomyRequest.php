@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Taxonomy Request for the CMS Framework ContentTypes Module.
  *
  * This form request handles validation and authorization for taxonomy-related
  * HTTP requests, ensuring data integrity and security.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests;
@@ -20,14 +22,14 @@ use Illuminate\Validation\Rule;
  * Provides validation rules and authorization logic for taxonomy creation
  * and update operations with proper field validation.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class TaxonomyRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return bool True if the user is authorized, false otherwise.
      */
@@ -40,13 +42,13 @@ class TaxonomyRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, mixed> The validation rules.
      */
     public function rules(): array
     {
-        $slug = $this->route('slug');
+        $slug = $this->route( 'slug' );
 
         $slugRules = [
             'required',
@@ -55,9 +57,9 @@ class TaxonomyRequest extends FormRequest
             'regex:/^[a-z0-9_]+$/',
         ];
 
-        $uniqueRule = Rule::unique('taxonomies', 'slug');
-        if ($slug) {
-            $uniqueRule->ignore($slug, 'slug');
+        $uniqueRule = Rule::unique( 'taxonomies', 'slug' );
+        if ( $slug ) {
+            $uniqueRule->ignore( $slug, 'slug' );
         }
         $slugRules[] = $uniqueRule;
 
@@ -67,7 +69,7 @@ class TaxonomyRequest extends FormRequest
                 'string',
                 'max:255',
             ],
-            'slug' => $slugRules,
+            'slug'              => $slugRules,
             'content_type_slug' => [
                 'required',
                 'string',
@@ -100,40 +102,40 @@ class TaxonomyRequest extends FormRequest
     /**
      * Get custom messages for validator errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string> The custom error messages.
      */
     public function messages(): array
     {
         return [
-            'name.required' => __('The taxonomy name is required.'),
-            'slug.required' => __('The taxonomy slug is required.'),
-            'slug.regex' => __('The slug must be lowercase letters, numbers, and underscores only.'),
-            'slug.unique' => __('A taxonomy with this slug already exists.'),
-            'content_type_slug.required' => __('The content type is required.'),
-            'content_type_slug.exists' => __('The selected content type does not exist.'),
+            'name.required'              => __( 'The taxonomy name is required.' ),
+            'slug.required'              => __( 'The taxonomy slug is required.' ),
+            'slug.regex'                 => __( 'The slug must be lowercase letters, numbers, and underscores only.' ),
+            'slug.unique'                => __( 'A taxonomy with this slug already exists.' ),
+            'content_type_slug.required' => __( 'The content type is required.' ),
+            'content_type_slug.exists'   => __( 'The selected content type does not exist.' ),
         ];
     }
 
     /**
      * Get custom attributes for validator errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string> The custom attribute names.
      */
     public function attributes(): array
     {
         return [
-            'name' => __('name'),
-            'slug' => __('slug'),
-            'content_type_slug' => __('content type'),
-            'description' => __('description'),
-            'hierarchical' => __('hierarchical'),
-            'show_in_admin' => __('show in admin'),
-            'rest_base' => __('REST base'),
-            'metadata' => __('metadata'),
+            'name'              => __( 'name' ),
+            'slug'              => __( 'slug' ),
+            'content_type_slug' => __( 'content type' ),
+            'description'       => __( 'description' ),
+            'hierarchical'      => __( 'hierarchical' ),
+            'show_in_admin'     => __( 'show in admin' ),
+            'rest_base'         => __( 'REST base' ),
+            'metadata'          => __( 'metadata' ),
         ];
     }
 }

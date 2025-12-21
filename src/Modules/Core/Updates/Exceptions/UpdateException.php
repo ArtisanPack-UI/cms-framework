@@ -1,177 +1,177 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions;
 
-use Exception;
+use ArtisanPackUI\CMSFramework\Exceptions\CMSFrameworkException;
 
 /**
  * Update Exception
  *
  * Exception thrown during update operations.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
-class UpdateException extends Exception
+class UpdateException extends CMSFrameworkException
 {
     /**
      * Version check failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function versionCheckFailed(string $reason): self
+    public static function versionCheckFailed( string $reason ): self
     {
-        return new self("Failed to check for updates: {$reason}");
+        return new self( "Failed to check for updates: {$reason}" );
     }
 
     /**
      * Update URL not configured.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public static function noUpdateUrlConfigured(): self
     {
-        return new self('Update URL not configured. Please set UPDATE_SOURCE_URL in .env');
+        return new self( 'Update URL not configured. Please set UPDATE_SOURCE_URL in .env' );
     }
 
     /**
      * Invalid JSON response from update source.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function invalidJsonResponse(string $url): self
+    public static function invalidJsonResponse( string $url ): self
     {
-        return new self("Invalid JSON response from update URL: {$url}");
+        return new self( "Invalid JSON response from update URL: {$url}" );
     }
 
     /**
      * Required field missing from update JSON.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function missingRequiredField(string $field): self
+    public static function missingRequiredField( string $field ): self
     {
-        return new self("Update JSON missing required field: {$field}");
+        return new self( "Update JSON missing required field: {$field}" );
     }
 
     /**
      * Backup creation failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function backupFailed(string $path): self
+    public static function backupFailed( string $path ): self
     {
-        return new self("Failed to create backup at: {$path}");
+        return new self( "Failed to create backup at: {$path}" );
     }
 
     /**
      * Download failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function downloadFailed(string $url): self
+    public static function downloadFailed( string $url ): self
     {
-        return new self("Failed to download update from: {$url}");
+        return new self( "Failed to download update from: {$url}" );
     }
 
     /**
      * Checksum verification failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function checksumMismatch(string $expected, string $actual): self
+    public static function checksumMismatch( string $expected, string $actual ): self
     {
-        return new self("Checksum mismatch. Expected: {$expected}, Got: {$actual}");
+        return new self( "Checksum mismatch. Expected: {$expected}, Got: {$actual}" );
     }
 
     /**
      * ZIP extraction failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function extractionFailed(string $zipPath): self
+    public static function extractionFailed( string $zipPath ): self
     {
-        return new self("Failed to extract ZIP archive: {$zipPath}");
+        return new self( "Failed to extract ZIP archive: {$zipPath}" );
     }
 
     /**
      * Composer install failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function composerInstallFailed(string $output): self
+    public static function composerInstallFailed( string $output ): self
     {
-        return new self("Composer install failed. Output:\n{$output}");
+        return new self( "Composer install failed. Output:\n{$output}" );
     }
 
     /**
      * Database migration failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function migrationFailed(string $output): self
+    public static function migrationFailed( string $output ): self
     {
-        return new self("Migration failed. Output:\n{$output}");
+        return new self( "Migration failed. Output:\n{$output}" );
     }
 
     /**
      * Rollback failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function rollbackFailed(string $reason): self
+    public static function rollbackFailed( string $reason ): self
     {
-        return new self("Rollback failed: {$reason}. Manual intervention required.");
+        return new self( "Rollback failed: {$reason}. Manual intervention required." );
     }
 
     /**
      * No update available.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public static function noUpdateAvailable(): self
     {
-        return new self('No update available. Already running the latest version.');
+        return new self( 'No update available. Already running the latest version.' );
     }
 
     /**
      * Permission denied.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public static function permissionDenied(): self
     {
-        return new self('You do not have permission to perform core updates.');
+        return new self( 'You do not have permission to perform core updates.' );
     }
 
     /**
      * Maintenance mode operation failed.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function maintenanceModeFailure(string $action): self
+    public static function maintenanceModeFailure( string $action ): self
     {
-        return new self("Failed to {$action} maintenance mode.");
+        return new self( "Failed to {$action} maintenance mode." );
     }
 
     /**
      * PHP version incompatible.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function incompatiblePhpVersion(string $required, string $current): self
+    public static function incompatiblePhpVersion( string $required, string $current ): self
     {
-        return new self("Update requires PHP {$required}, but you have {$current}");
+        return new self( "Update requires PHP {$required}, but you have {$current}" );
     }
 
     /**
      * Framework version incompatible.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public static function incompatibleFrameworkVersion(string $required, string $current): self
+    public static function incompatibleFrameworkVersion( string $required, string $current ): self
     {
-        return new self("Update requires cms-framework {$required}, but you have {$current}");
+        return new self( "Update requires cms-framework {$required}, but you have {$current}");
     }
 }

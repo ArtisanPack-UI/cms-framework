@@ -8,7 +8,7 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers\ThemesController;
 use Illuminate\Support\Facades\Route;
@@ -28,10 +28,10 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware(['auth:sanctum'])
-    ->prefix('v1')
-    ->group(function (): void {
-        Route::get('/themes', [ThemesController::class, 'index'])->name('themes.index');
-        Route::get('/themes/{slug}', [ThemesController::class, 'show'])->name('themes.show');
-        Route::post('/themes/{slug}/activate', [ThemesController::class, 'activate'])->name('themes.activate');
-    });
+Route::middleware( ['auth:sanctum'] )
+    ->prefix( 'v1' )
+    ->group( function (): void {
+        Route::get( '/themes', [ThemesController::class, 'index'] )->name( 'themes.index' );
+        Route::get( '/themes/{slug}', [ThemesController::class, 'show'] )->name( 'themes.show' );
+        Route::post( '/themes/{slug}/activate', [ThemesController::class, 'activate'] )->name( 'themes.activate' );
+    } );

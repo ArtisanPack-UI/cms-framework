@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Service provider for the CMS Framework.
  *
@@ -24,6 +26,7 @@ use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvide
 use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use Illuminate\Support\ServiceProvider;
+use InvalidArgumentException;
 
 /**
  * Registers and bootstraps the CMS Framework within the application.
@@ -51,60 +54,13 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->validateConfiguration();
 
-        if ($this->app->runningInConsole()) {
-            $this->publishes([
-                __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
-            ], 'artisanpack-package-config');
+        if ( $this->app->runningInConsole() ) {
+            $this->publishes( [
+                __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
+            ], 'cms-framework-config' );
         }
 
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-    }
-
-    /**
-     * Merges the package's default configuration with the user's customizations.
-     *
-     * This method ensures that the user's settings in `config/artisanpack.php`
-     * take precedence over the package's default values.
-     *
-     * @since 2.0.0
-     */
-    protected function mergeConfiguration(): void
-    {
-        // Get the package's default configuration.
-        $packageDefaults = config('artisanpack-cms-framework-temp', []);
-
-        // Get the user's custom configuration from config/artisanpack.php.
-        $userConfig = config('artisanpack.cms-framework', []);
-
-        // Merge them, with the user's config overwriting the defaults.
-        $mergedConfig = array_replace_recursive($packageDefaults, $userConfig);
-
-        // Set the final, correctly merged configuration.
-        config(['artisanpack.cms-framework' => $mergedConfig]);
-    }
-
-    /**
-     * Validates the package configuration.
-     *
-     * This method ensures that required configuration values are properly set.
-     *
-     * @throws \InvalidArgumentException If required configuration is missing.
-     *
-     * @since 2.0.0
-     */
-    protected function validateConfiguration(): void
-    {
-        $userModel = config('cms-framework.user_model');
-
-        if ($userModel === null) {
-            throw new \InvalidArgumentException(
-                'The CMS Framework user_model configuration is not set. '.
-                'Please publish the configuration file using: '.
-                'php artisan vendor:publish --tag=cms-framework-config '.
-                'Then set the user_model value in config/cms-framework.php to your User model class. '.
-                'Example: \'user_model\' => \App\Models\User::class'
-            );
-        }
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
     }
 
     /**
@@ -119,19 +75,66 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__.'/../config/cms-framework.php', 'artisanpack-cms-framework-temp'
+            __DIR__ . '/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
         );
 
-        $this->app->register(UserServiceProvider::class);
-        $this->app->register(AdminServiceProvider::class);
-        $this->app->register(AdminWidgetServiceProvider::class);
-        $this->app->register(CoreServiceProvider::class);
-        $this->app->register(SettingsServiceProvider::class);
-        $this->app->register(NotificationServiceProvider::class);
-        $this->app->register(ContentTypesServiceProvider::class);
-        $this->app->register(BlogServiceProvider::class);
-        $this->app->register(PagesServiceProvider::class);
-        $this->app->register(ThemesServiceProvider::class);
-        $this->app->register(PluginsServiceProvider::class);
+        $this->app->register( UserServiceProvider::class );
+        $this->app->register( AdminServiceProvider::class );
+        $this->app->register( AdminWidgetServiceProvider::class );
+        $this->app->register( CoreServiceProvider::class );
+        $this->app->register( SettingsServiceProvider::class );
+        $this->app->register( NotificationServiceProvider::class );
+        $this->app->register( ContentTypesServiceProvider::class );
+        $this->app->register( BlogServiceProvider::class );
+        $this->app->register( PagesServiceProvider::class );
+        $this->app->register( ThemesServiceProvider::class );
+        $this->app->register( PluginsServiceProvider::class );
+    }
+
+    /**
+     * Merges the package's default configuration with the user's customizations.
+     *
+     * This method ensures that the user's settings in `config/artisanpack.php`
+     * take precedence over the package's default values.
+     *
+     * @since 1.0.0
+     */
+    protected function mergeConfiguration(): void
+    {
+        // Get the package's default configuration.
+        $packageDefaults = config( 'artisanpack-cms-framework-temp', [] );
+
+        // Get the user's custom configuration from config/artisanpack.php.
+        $userConfig = config( 'artisanpack.cms-framework', [] );
+
+        // Merge them, with the user's config overwriting the defaults.
+        $mergedConfig = array_replace_recursive( $packageDefaults, $userConfig );
+
+        // Set the final, correctly merged configuration.
+        config( ['artisanpack.cms-framework' => $mergedConfig] );
+    }
+
+    /**
+     * Validates the package configuration.
+     *
+     * This method ensures that required configuration values are properly set.
+     *
+     * @throws InvalidArgumentException If required configuration is missing.
+     *
+     * @since 1.0.0
+     */
+    protected function validateConfiguration(): void
+    {
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+
+        if ( null === $userModel ) {
+            throw new InvalidArgumentException(
+                'The CMS Framework user_model configuration is not set. ' .
+                'Please publish the configuration file using: ' .
+                'php artisan vendor:publish --tag=cms-framework-config ' .
+                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. ' .
+                'Example: \'user_model\' => \\App\\Models\\User::class',
+            );
+        }
     }
 }

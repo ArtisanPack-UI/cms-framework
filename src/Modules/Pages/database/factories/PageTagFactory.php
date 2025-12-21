@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PageTag Factory for the CMS Framework Pages Module.
  *
  * This factory generates fake page tag data for testing purposes.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Database\Factories;
@@ -19,7 +21,7 @@ use Illuminate\Support\Str;
  *
  * Creates random tags with metadata for testing purposes.
  *
- * @since 2.0.0
+ * @since 1.0.0
  *
  * @extends Factory<PageTag>
  */
@@ -28,7 +30,7 @@ class PageTagFactory extends Factory
     /**
      * The name of the factory's corresponding model.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var class-string<PageTag>
      */
@@ -39,21 +41,21 @@ class PageTagFactory extends Factory
      *
      * Generates a tag with random name, description, and metadata.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, mixed> The default tag attributes.
      */
     public function definition(): array
     {
-        $name = fake()->words(rand(1, 2), true);
+        $name = fake()->words( rand( 1, 2 ), true );
 
         return [
-            'name' => ucwords($name),
-            'slug' => Str::slug($name),
+            'name'        => ucwords( $name ),
+            'slug'        => Str::slug( $name ),
             'description' => fake()->sentence(),
-            'order' => 0,
-            'metadata' => [
-                'seo_title' => ucwords($name),
+            'order'       => 0,
+            'metadata'    => [
+                'seo_title'       => ucwords( $name ),
                 'seo_description' => fake()->sentence(),
             ],
         ];
@@ -62,15 +64,16 @@ class PageTagFactory extends Factory
     /**
      * Set the order for the tag.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $order  The tag order.
+     *
      * @return static The factory instance for method chaining.
      */
-    public function withOrder(int $order): static
+    public function withOrder( int $order ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'order' => $order,
-        ]);
+        ] );
     }
 }

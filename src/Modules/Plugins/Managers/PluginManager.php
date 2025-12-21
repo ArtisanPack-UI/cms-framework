@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
@@ -9,10 +9,12 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundExceptio
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Composer\Autoload\ClassLoader;
+use Exception;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use RuntimeException;
 use ZipArchive;
 
 class PluginManager
@@ -23,23 +25,6 @@ class PluginManager
     {
         // Get Composer's ClassLoader instance from registered autoloaders
         $this->classLoader = $this->getComposerClassLoader();
-    }
-
-    /**
-     * Get Composer's ClassLoader from SPL autoload functions.
-     *
-     *
-     * @throws \RuntimeException If ClassLoader not found
-     */
-    private function getComposerClassLoader(): ClassLoader
-    {
-        foreach (spl_autoload_functions() as $autoloader) {
-            if (is_array($autoloader) && $autoloader[0] instanceof ClassLoader) {
-                return $autoloader[0];
-            }
-        }
-
-        throw new \RuntimeException('Composer ClassLoader not found in registered autoloaders');
     }
 
     /**
@@ -54,11 +39,11 @@ class PluginManager
      */
     public function discoverPlugins(): array
     {
-        if (config('cms.plugins.cacheEnabled')) {
+        if ( config( 'cms.plugins.cacheEnabled' ) ) {
             return Cache::remember(
-                config('cms.plugins.cacheKey'),
-                config('cms.plugins.cacheTtl'),
-                fn () => $this->scanPluginsDirectory()
+                config( 'cms.plugins.cacheKey' ),
+                config( 'cms.plugins.cacheTtl' ),
+                fn () => $this->scanPluginsDirectory(),
             );
         }
 
@@ -72,54 +57,55 @@ class PluginManager
      * to prevent path traversal attacks.
      *
      * @param  string  $slug  Plugin slug (validated)
+     *
      * @return array|null Plugin data or null if not found
      */
-    public function getPlugin(string $slug): ?array
+    public function getPlugin( string $slug ): ?array
     {
         // Validate slug format (alphanumeric, hyphens, underscores only)
-        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $slug)) {
+        if ( ! preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ) ) {
             return null;
         }
 
         // Build and validate path
         $pluginsBasePath = $this->getPluginsPath();
-        $pluginPath = $pluginsBasePath.'/'.$slug;
+        $pluginPath      = $pluginsBasePath . '/' . $slug;
 
         // Resolve real path and verify it's within plugins directory
-        $realPluginPath = realpath($pluginPath);
-        if ($realPluginPath === false) {
+        $realPluginPath = realpath( $pluginPath );
+        if ( false === $realPluginPath ) {
             return null;
         }
 
-        $realBasePath = realpath($pluginsBasePath);
-        if ($realBasePath === false || strpos($realPluginPath, $realBasePath.DIRECTORY_SEPARATOR) !== 0) {
+        $realBasePath = realpath( $pluginsBasePath );
+        if ( false === $realBasePath || 0 !== strpos( $realPluginPath, $realBasePath . DIRECTORY_SEPARATOR ) ) {
             return null; // Path traversal attempt detected
         }
 
         // Check if plugin.json exists
-        $manifestPath = $realPluginPath.'/plugin.json';
-        if (! File::exists($manifestPath)) {
+        $manifestPath = $realPluginPath . '/plugin.json';
+        if ( ! File::exists( $manifestPath ) ) {
             return null;
         }
 
         // Parse manifest
-        $manifest = $this->parseManifest($manifestPath);
-        if ($manifest === null) {
+        $manifest = $this->parseManifest( $manifestPath );
+        if ( null === $manifest ) {
             return null;
         }
 
         // Get database record if exists
-        $dbPlugin = Plugin::where('slug', $slug)->first();
+        $dbPlugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
         return [
-            'slug' => $slug,
-            'name' => $manifest['name'] ?? $slug,
-            'version' => $manifest['version'] ?? '0.0.0',
+            'slug'        => $slug,
+            'name'        => $manifest['name'] ?? $slug,
+            'version'     => $manifest['version'] ?? '0.0.0',
             'description' => $manifest['description'] ?? '',
-            'author' => $manifest['author'] ?? '',
-            'is_active' => $dbPlugin ? $dbPlugin->is_active : false,
-            'path' => $realPluginPath,
-            'manifest' => $manifest,
+            'author'      => $manifest['author'] ?? '',
+            'is_active'   => $dbPlugin ? $dbPlugin->is_active : false,
+            'path'        => $realPluginPath,
+            'manifest'    => $manifest,
         ];
     }
 
@@ -135,42 +121,43 @@ class PluginManager
      * 6. Fire installation hooks
      *
      * @param  string  $zipPath  Absolute path to uploaded ZIP file
-     * @return Plugin The installed plugin model
      *
      * @throws PluginValidationException If ZIP or manifest is invalid
      * @throws PluginInstallationException If extraction or registration fails
+     *
+     * @return Plugin The installed plugin model
      */
-    public function installFromZip(string $zipPath): Plugin
+    public function installFromZip( string $zipPath ): Plugin
     {
-        $this->validateZip($zipPath);
+        $this->validateZip( $zipPath );
 
-        $slug = $this->extractZip($zipPath);
-        $manifestPath = $this->getPluginsPath().'/'.$slug.'/plugin.json';
-        $manifest = $this->parseManifest($manifestPath);
+        $slug         = $this->extractZip( $zipPath );
+        $manifestPath = $this->getPluginsPath() . '/' . $slug . '/plugin.json';
+        $manifest     = $this->parseManifest( $manifestPath );
 
-        $this->validateManifest($manifest);
+        $this->validateManifest( $manifest );
 
         // Check if already installed
-        if (Plugin::where('slug', $slug)->exists()) {
-            throw PluginInstallationException::alreadyInstalled($slug);
+        if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
+            throw PluginInstallationException::alreadyInstalled( $slug );
         }
 
-        doAction('plugin.installing', $slug);
+        doAction( 'plugin.installing', $slug );
 
         // Register in database
-        $plugin = Plugin::create([
-            'slug' => $slug,
-            'name' => $manifest['name'],
-            'version' => $manifest['version'],
-            'is_active' => false,
+        $plugin = Plugin::create( [
+            'slug'             => $slug,
+            'name'             => $manifest['name'],
+            'version'          => $manifest['version'],
+            'is_active'        => false,
             'service_provider' => $manifest['service_provider'] ?? null,
-            'meta' => $manifest,
-            'installed_at' => now(),
-        ]);
+            'meta'             => $manifest,
+            'installed_at'     => now(),
+        ] );
 
         $this->clearCaches();
 
-        doAction('plugin.installed', $slug, $plugin);
+        doAction( 'plugin.installed', $slug, $plugin );
 
         return $plugin;
     }
@@ -187,44 +174,45 @@ class PluginManager
      * 6. Fire activation hooks
      *
      * @param  string  $slug  Plugin slug
-     * @return bool True on success
      *
      * @throws PluginNotFoundException If plugin doesn't exist
+     *
+     * @return bool True on success
      */
-    public function activate(string $slug): bool
+    public function activate( string $slug ): bool
     {
-        $plugin = Plugin::where('slug', $slug)->first();
+        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
-        if (! $plugin) {
-            throw PluginNotFoundException::forSlug($slug);
+        if ( ! $plugin ) {
+            throw PluginNotFoundException::forSlug( $slug );
         }
 
-        doAction('plugin.activating', $slug);
+        doAction( 'plugin.activating', $slug );
 
-        DB::transaction(function () use ($plugin) {
+        DB::transaction( function () use ( $plugin ): void {
             // Register autoloader
-            if (isset($plugin->meta['autoload'])) {
-                $this->registerAutoloader($plugin->slug, $plugin->meta['autoload']);
+            if ( isset( $plugin->meta['autoload'] ) ) {
+                $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
             }
 
             // Run migrations
-            if (isset($plugin->meta['migrations_path'])) {
-                $this->runMigrations($plugin->slug, $plugin->meta['migrations_path']);
+            if ( isset( $plugin->meta['migrations_path'] ) ) {
+                $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
             }
 
             // Register service provider
-            if ($plugin->hasServiceProvider()) {
-                app()->register($plugin->service_provider);
+            if ( $plugin->hasServiceProvider() ) {
+                app()->register( $plugin->service_provider );
             }
 
             // Mark as active
             $plugin->is_active = true;
             $plugin->save();
-        });
+        } );
 
         $this->clearCaches();
 
-        doAction('plugin.activated', $slug, $plugin);
+        doAction( 'plugin.activated', $slug, $plugin );
 
         return true;
     }
@@ -241,24 +229,25 @@ class PluginManager
      * Note: Does NOT rollback migrations. Plugin handles cleanup via hooks.
      *
      * @param  string  $slug  Plugin slug
+     *
      * @return bool True on success
      */
-    public function deactivate(string $slug): bool
+    public function deactivate( string $slug ): bool
     {
-        $plugin = Plugin::where('slug', $slug)->first();
+        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
-        if (! $plugin) {
-            throw PluginNotFoundException::forSlug($slug);
+        if ( ! $plugin ) {
+            throw PluginNotFoundException::forSlug( $slug );
         }
 
-        doAction('plugin.deactivating', $slug);
+        doAction( 'plugin.deactivating', $slug );
 
         $plugin->is_active = false;
         $plugin->save();
 
         $this->clearCaches();
 
-        doAction('plugin.deactivated', $slug);
+        doAction( 'plugin.deactivated', $slug );
 
         return true;
     }
@@ -275,39 +264,40 @@ class PluginManager
      *
      * @param  string  $slug  Plugin slug
      * @param  bool  $deleteFiles  Whether to delete plugin files
-     * @return bool True on success
      *
      * @throws PluginNotFoundException If plugin doesn't exist
+     *
+     * @return bool True on success
      */
-    public function delete(string $slug, bool $deleteFiles = true): bool
+    public function delete( string $slug, bool $deleteFiles = true ): bool
     {
-        $plugin = Plugin::where('slug', $slug)->first();
+        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
-        if (! $plugin) {
-            throw PluginNotFoundException::forSlug($slug);
+        if ( ! $plugin ) {
+            throw PluginNotFoundException::forSlug( $slug );
         }
 
         // Deactivate if active
-        if ($plugin->is_active) {
-            $this->deactivate($slug);
+        if ( $plugin->is_active ) {
+            $this->deactivate( $slug );
         }
 
-        doAction('plugin.deleting', $slug);
+        doAction( 'plugin.deleting', $slug );
 
         // Remove from database
         $plugin->delete();
 
         // Remove from filesystem
-        if ($deleteFiles) {
-            $pluginPath = $this->getPluginsPath().'/'.$slug;
-            if (File::exists($pluginPath)) {
-                File::deleteDirectory($pluginPath);
+        if ( $deleteFiles ) {
+            $pluginPath = $this->getPluginsPath() . '/' . $slug;
+            if ( File::exists( $pluginPath ) ) {
+                File::deleteDirectory( $pluginPath );
             }
         }
 
         $this->clearCaches();
 
-        doAction('plugin.deleted', $slug);
+        doAction( 'plugin.deleted', $slug );
 
         return true;
     }
@@ -322,21 +312,21 @@ class PluginManager
     {
         $activePlugins = Plugin::active()->get();
 
-        foreach ($activePlugins as $plugin) {
+        foreach ( $activePlugins as $plugin ) {
             // Register autoloader
-            if (isset($plugin->meta['autoload'])) {
-                $this->registerAutoloader($plugin->slug, $plugin->meta['autoload']);
+            if ( isset( $plugin->meta['autoload'] ) ) {
+                $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
             }
 
             // Register service provider
-            if ($plugin->hasServiceProvider()) {
+            if ( $plugin->hasServiceProvider() ) {
                 try {
-                    app()->register($plugin->service_provider);
-                } catch (\Exception $e) {
+                    app()->register( $plugin->service_provider );
+                } catch ( Exception $e ) {
                     // Log error but don't break application
-                    logger()->error("Failed to register plugin service provider: {$plugin->slug}", [
+                    logger()->error( "Failed to register plugin service provider: {$plugin->slug}", [
                         'exception' => $e->getMessage(),
-                    ]);
+                    ] );
                 }
             }
         }
@@ -348,19 +338,19 @@ class PluginManager
      * @param  string  $slug  Plugin slug
      * @param  string  $migrationsPath  Relative path to migrations directory
      */
-    protected function runMigrations(string $slug, string $migrationsPath): void
+    protected function runMigrations( string $slug, string $migrationsPath ): void
     {
-        $fullPath = $this->getPluginsPath().'/'.$slug.'/'.$migrationsPath;
+        $fullPath = $this->getPluginsPath() . '/' . $slug . '/' . $migrationsPath;
 
-        if (! File::isDirectory($fullPath)) {
+        if ( ! File::isDirectory( $fullPath ) ) {
             return;
         }
 
         // Run migrations using Artisan
-        Artisan::call('migrate', [
-            '--path' => str_replace(base_path(), '', $fullPath),
+        Artisan::call( 'migrate', [
+            '--path'  => str_replace( base_path(), '', $fullPath ),
             '--force' => true,
-        ]);
+        ] );
     }
 
     /**
@@ -369,23 +359,23 @@ class PluginManager
      * @param  string  $slug  Plugin slug
      * @param  array  $autoloadConfig  Autoload configuration from plugin.json
      */
-    protected function registerAutoloader(string $slug, array $autoloadConfig): void
+    protected function registerAutoloader( string $slug, array $autoloadConfig ): void
     {
-        if (! isset($autoloadConfig['psr-4'])) {
+        if ( ! isset( $autoloadConfig['psr-4'] ) ) {
             return;
         }
 
-        $pluginPath = $this->getPluginsPath().'/'.$slug;
+        $pluginPath = $this->getPluginsPath() . '/' . $slug;
 
-        foreach ($autoloadConfig['psr-4'] as $namespace => $path) {
+        foreach ( $autoloadConfig['psr-4'] as $namespace => $path ) {
             $this->classLoader->addPsr4(
                 $namespace,
-                $pluginPath.'/'.$path
+                $pluginPath . '/' . $path,
             );
         }
 
         // Re-register the autoloader
-        $this->classLoader->register(true);
+        $this->classLoader->register( true );
     }
 
     /**
@@ -395,26 +385,26 @@ class PluginManager
      *
      * @throws PluginValidationException If validation fails
      */
-    protected function validateManifest(array $manifest): void
+    protected function validateManifest( array $manifest ): void
     {
         // Check required fields
         $required = ['slug', 'name', 'version'];
 
-        foreach ($required as $field) {
-            if (! isset($manifest[$field]) || empty($manifest[$field])) {
-                throw PluginValidationException::invalidManifest("Missing required field: {$field}");
+        foreach ( $required as $field ) {
+            if ( ! isset( $manifest[ $field ] ) || empty( $manifest[ $field ] ) ) {
+                throw PluginValidationException::invalidManifest( "Missing required field: {$field}" );
             }
         }
 
         // Validate slug format
-        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $manifest['slug'])) {
-            throw PluginValidationException::invalidManifest('Invalid slug format. Use alphanumeric, hyphens, and underscores only.');
+        if ( ! preg_match( '/^[a-zA-Z0-9_-]+$/', $manifest['slug'] ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid slug format. Use alphanumeric, hyphens, and underscores only.' );
         }
 
         // Validate version format (basic semver check)
         // Anchored at end to prevent injection attempts like "1.0.0'; DROP TABLE"
-        if (! preg_match('/^\d+\.\d+\.\d+$/', $manifest['version'])) {
-            throw PluginValidationException::invalidManifest('Invalid version format. Use semantic versioning (e.g., 1.0.0).');
+        if ( ! preg_match( '/^\d+\.\d+\.\d+$/', $manifest['version'] ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid version format. Use semantic versioning (e.g., 1.0.0).' );
         }
     }
 
@@ -425,38 +415,38 @@ class PluginManager
      *
      * @throws PluginValidationException If ZIP is invalid
      */
-    protected function validateZip(string $zipPath): void
+    protected function validateZip( string $zipPath ): void
     {
         // Check file exists
-        if (! File::exists($zipPath)) {
-            throw PluginValidationException::invalidZip('ZIP file not found');
+        if ( ! File::exists( $zipPath ) ) {
+            throw PluginValidationException::invalidZip( 'ZIP file not found' );
         }
 
         // Check MIME type
-        $mimeType = mime_content_type($zipPath);
-        $allowedTypes = config('cms.plugins.allowedMimeTypes');
+        $mimeType     = mime_content_type( $zipPath );
+        $allowedTypes = config( 'cms.plugins.allowedMimeTypes' );
 
-        if (! in_array($mimeType, $allowedTypes)) {
-            throw PluginValidationException::invalidZip('Invalid file type. Must be a ZIP file.');
+        if ( ! in_array( $mimeType, $allowedTypes ) ) {
+            throw PluginValidationException::invalidZip( 'Invalid file type. Must be a ZIP file.' );
         }
 
         // Check file size
-        $maxSize = config('cms.plugins.maxUploadSize');
-        if (filesize($zipPath) > $maxSize) {
-            throw PluginValidationException::invalidZip('File size exceeds maximum allowed size.');
+        $maxSize = config( 'cms.plugins.maxUploadSize' );
+        if ( filesize( $zipPath ) > $maxSize ) {
+            throw PluginValidationException::invalidZip( 'File size exceeds maximum allowed size.' );
         }
 
         // Validate ZIP integrity
         $zip = new ZipArchive;
-        if ($zip->open($zipPath) !== true) {
-            throw PluginValidationException::invalidZip('Invalid or corrupted ZIP file.');
+        if ( true !== $zip->open( $zipPath ) ) {
+            throw PluginValidationException::invalidZip( 'Invalid or corrupted ZIP file.' );
         }
 
         // Check for plugin.json in ZIP
         $manifestFound = false;
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $filename = $zip->getNameIndex($i);
-            if (str_ends_with($filename, 'plugin.json')) {
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $filename = $zip->getNameIndex( $i );
+            if ( str_ends_with( $filename, 'plugin.json' ) ) {
                 $manifestFound = true;
                 break;
             }
@@ -464,8 +454,8 @@ class PluginManager
 
         $zip->close();
 
-        if (! $manifestFound) {
-            throw PluginValidationException::invalidZip('Plugin manifest (plugin.json) not found in ZIP.');
+        if ( ! $manifestFound ) {
+            throw PluginValidationException::invalidZip( 'Plugin manifest (plugin.json) not found in ZIP.' );
         }
     }
 
@@ -473,26 +463,27 @@ class PluginManager
      * Extract ZIP file to plugins directory.
      *
      * @param  string  $zipPath  Path to ZIP file
-     * @return string Plugin slug
      *
      * @throws PluginInstallationException If extraction fails
+     *
+     * @return string Plugin slug
      */
-    protected function extractZip(string $zipPath): string
+    protected function extractZip( string $zipPath ): string
     {
         $zip = new ZipArchive;
-        if ($zip->open($zipPath) !== true) {
-            throw PluginInstallationException::extractionFailed('unknown');
+        if ( true !== $zip->open( $zipPath ) ) {
+            throw PluginInstallationException::extractionFailed( 'unknown' );
         }
 
         // Get the first directory name (plugin slug)
-        $firstEntry = $zip->getNameIndex(0);
-        $slug = explode('/', $firstEntry)[0];
+        $firstEntry = $zip->getNameIndex( 0 );
+        $slug       = explode( '/', $firstEntry )[0];
 
         // Extract to plugins directory
         $extractPath = $this->getPluginsPath();
-        if (! $zip->extractTo($extractPath)) {
+        if ( ! $zip->extractTo( $extractPath ) ) {
             $zip->close();
-            throw PluginInstallationException::extractionFailed($slug);
+            throw PluginInstallationException::extractionFailed( $slug );
         }
 
         $zip->close();
@@ -504,18 +495,19 @@ class PluginManager
      * Parse plugin.json manifest file.
      *
      * @param  string  $manifestPath  Path to plugin.json
+     *
      * @return array|null Parsed manifest or null if invalid
      */
-    protected function parseManifest(string $manifestPath): ?array
+    protected function parseManifest( string $manifestPath ): ?array
     {
-        if (! File::exists($manifestPath)) {
+        if ( ! File::exists( $manifestPath ) ) {
             return null;
         }
 
-        $content = File::get($manifestPath);
-        $manifest = json_decode($content, true);
+        $content  = File::get( $manifestPath );
+        $manifest = json_decode( $content, true );
 
-        if (json_last_error() !== JSON_ERROR_NONE) {
+        if ( JSON_ERROR_NONE !== json_last_error() ) {
             return null;
         }
 
@@ -530,39 +522,39 @@ class PluginManager
     protected function scanPluginsDirectory(): array
     {
         $pluginsPath = $this->getPluginsPath();
-        $plugins = [];
+        $plugins     = [];
 
-        if (! File::isDirectory($pluginsPath)) {
+        if ( ! File::isDirectory( $pluginsPath ) ) {
             return $plugins;
         }
 
-        $directories = File::directories($pluginsPath);
+        $directories = File::directories( $pluginsPath );
 
-        foreach ($directories as $directory) {
-            $slug = basename($directory);
-            $manifestPath = $directory.'/plugin.json';
+        foreach ( $directories as $directory ) {
+            $slug         = basename( $directory );
+            $manifestPath = $directory . '/plugin.json';
 
-            if (! File::exists($manifestPath)) {
+            if ( ! File::exists( $manifestPath ) ) {
                 continue;
             }
 
-            $manifest = $this->parseManifest($manifestPath);
-            if ($manifest === null) {
+            $manifest = $this->parseManifest( $manifestPath );
+            if ( null === $manifest ) {
                 continue;
             }
 
             // Get database record if exists
-            $dbPlugin = Plugin::where('slug', $slug)->first();
+            $dbPlugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
             $plugins[] = [
-                'slug' => $slug,
-                'name' => $manifest['name'] ?? $slug,
-                'version' => $manifest['version'] ?? '0.0.0',
+                'slug'        => $slug,
+                'name'        => $manifest['name'] ?? $slug,
+                'version'     => $manifest['version'] ?? '0.0.0',
                 'description' => $manifest['description'] ?? '',
-                'author' => $manifest['author'] ?? '',
-                'is_active' => $dbPlugin ? $dbPlugin->is_active : false,
-                'path' => $directory,
-                'manifest' => $manifest,
+                'author'      => $manifest['author'] ?? '',
+                'is_active'   => $dbPlugin ? $dbPlugin->is_active : false,
+                'path'        => $directory,
+                'manifest'    => $manifest,
             ];
         }
 
@@ -576,7 +568,7 @@ class PluginManager
      */
     protected function getPluginsPath(): string
     {
-        return base_path(config('cms.plugins.directory', 'plugins'));
+        return base_path( config( 'cms.plugins.directory', 'plugins' ) );
     }
 
     /**
@@ -584,6 +576,23 @@ class PluginManager
      */
     protected function clearCaches(): void
     {
-        Cache::forget(config('cms.plugins.cacheKey'));
+        Cache::forget( config( 'cms.plugins.cacheKey' ) );
+    }
+
+    /**
+     * Get Composer's ClassLoader from SPL autoload functions.
+     *
+     *
+     * @throws RuntimeException If ClassLoader not found
+     */
+    private function getComposerClassLoader(): ClassLoader
+    {
+        foreach ( spl_autoload_functions() as $autoloader ) {
+            if ( is_array( $autoloader ) && $autoloader[0] instanceof ClassLoader ) {
+                return $autoloader[0];
+            }
+        }
+
+        throw new RuntimeException( 'Composer ClassLoader not found in registered autoloaders');
     }
 }

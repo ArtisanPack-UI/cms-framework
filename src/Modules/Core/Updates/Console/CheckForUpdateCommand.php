@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
@@ -13,14 +13,14 @@ use Illuminate\Console\Command;
  *
  * Console command to check for available updates.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class CheckForUpdateCommand extends Command
 {
     /**
      * The name and signature of the console command.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var string
      */
@@ -30,7 +30,7 @@ class CheckForUpdateCommand extends Command
     /**
      * The console command description.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var string
      */
@@ -39,48 +39,48 @@ class CheckForUpdateCommand extends Command
     /**
      * Execute the console command.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
-    public function handle(ApplicationUpdateManager $manager): int
+    public function handle( ApplicationUpdateManager $manager ): int
     {
-        $this->info('Checking for updates...');
+        $this->info( 'Checking for updates...' );
 
-        if ($this->option('clear-cache')) {
+        if ( $this->option( 'clear-cache' ) ) {
             $manager->clearCache();
-            $this->line('Cache cleared.');
+            $this->line( 'Cache cleared.' );
         }
 
         try {
             $updateInfo = $manager->checkForUpdate();
 
-            if ($updateInfo->hasUpdate) {
+            if ( $updateInfo->hasUpdate ) {
                 $this->newLine();
-                $this->info('✓ Update available!');
-                $this->line("Current version: {$updateInfo->currentVersion}");
-                $this->line("Latest version:  {$updateInfo->latestVersion}");
+                $this->info( '✓ Update available!' );
+                $this->line( "Current version: {$updateInfo->currentVersion}" );
+                $this->line( "Latest version:  {$updateInfo->latestVersion}" );
 
-                if ($updateInfo->releaseDate) {
-                    $this->line("Release date: {$updateInfo->releaseDate}");
+                if ( $updateInfo->releaseDate ) {
+                    $this->line( "Release date: {$updateInfo->releaseDate}" );
                 }
 
-                if ($updateInfo->changelog) {
+                if ( $updateInfo->changelog ) {
                     $this->newLine();
-                    $this->line('Changelog:');
-                    $this->line($updateInfo->changelog);
+                    $this->line( 'Changelog:' );
+                    $this->line( $updateInfo->changelog );
                 }
 
                 $this->newLine();
-                $this->comment('Run "php artisan update:perform" to install the update.');
+                $this->comment( 'Run "php artisan update:perform" to install the update.' );
 
                 return self::SUCCESS;
             }
 
-            $this->info('✓ You are running the latest version.');
+            $this->info( '✓ You are running the latest version.' );
 
             return self::SUCCESS;
-        } catch (Exception $e) {
-            $this->error('✗ Failed to check for updates:');
-            $this->error($e->getMessage());
+        } catch ( Exception $e ) {
+            $this->error( '✗ Failed to check for updates:' );
+            $this->error( $e->getMessage() );
 
             return self::FAILURE;
         }

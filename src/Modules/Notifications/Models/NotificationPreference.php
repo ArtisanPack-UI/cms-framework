@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * NotificationPreference Model
  *
  * Represents user preferences for notification types.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Notifications\Models;
@@ -25,7 +27,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class NotificationPreference extends Model
 {
@@ -34,7 +36,7 @@ class NotificationPreference extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var array<int, string>
      */
@@ -46,9 +48,19 @@ class NotificationPreference extends Model
     ];
 
     /**
+     * Get the user that owns the notification preference.
+     *
+     * @since 1.0.0
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo( config( 'auth.providers.users.model' ) );
+    }
+
+    /**
      * Create a new factory instance for the model.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     protected static function newFactory()
     {
@@ -58,25 +70,15 @@ class NotificationPreference extends Model
     /**
      * Get the attributes that should be cast.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'is_enabled' => 'boolean',
+            'is_enabled'    => 'boolean',
             'email_enabled' => 'boolean',
         ];
-    }
-
-    /**
-     * Get the user that owns the notification preference.
-     *
-     * @since 2.0.0
-     */
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(config('auth.providers.users.model'));
     }
 }

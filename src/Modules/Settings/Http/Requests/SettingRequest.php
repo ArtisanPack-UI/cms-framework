@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Setting Request for the CMS Framework Settings Module.
  *
@@ -40,7 +42,7 @@ class SettingRequest extends FormRequest
      *
      * @param  Setting  $setting  The setting instance.
      */
-    public function setSetting(Setting $setting): self
+    public function setSetting( Setting $setting ): self
     {
         $this->setting = $setting;
 
@@ -76,7 +78,7 @@ class SettingRequest extends FormRequest
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('settings', 'key')->ignore($this->route('setting'), 'key'),
+                Rule::unique( 'settings', 'key' )->ignore( $this->route( 'setting' ), 'key' ),
             ],
 
             'value' => [
@@ -100,10 +102,10 @@ class SettingRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'key.required' => __('The setting key is required.'),
-            'key.regex' => __('The setting key must be lowercase letters, numbers, and hyphens only.'),
-            'key.unique' => __('A setting with this key already exists.'),
-            'value.required' => __('The setting value is required.'),
+            'key.required'   => __( 'The setting key is required.' ),
+            'key.regex'      => __( 'The setting key must be lowercase letters, numbers, and hyphens only.' ),
+            'key.unique'     => __( 'A setting with this key already exists.' ),
+            'value.required' => __( 'The setting value is required.' ),
         ];
     }
 
@@ -117,9 +119,9 @@ class SettingRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'key' => __('setting key'),
-            'value' => __('setting value'),
-            'type' => __('setting type'),
+            'key'   => __( 'setting key' ),
+            'value' => __( 'setting value' ),
+            'type'  => __( 'setting type' ),
         ];
     }
 }

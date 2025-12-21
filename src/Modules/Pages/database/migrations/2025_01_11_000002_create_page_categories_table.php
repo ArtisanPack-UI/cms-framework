@@ -4,26 +4,25 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::create('page_categories', function (Blueprint $table) {
+        Schema::create( 'page_categories', function ( Blueprint $table ): void {
             $table->id();
-            $table->string('name');
-            $table->string('slug')->unique();
-            $table->text('description')->nullable();
-            $table->foreignId('parent_id')->nullable()->constrained('page_categories')->onDelete('cascade');
-            $table->integer('order')->default(0);
-            $table->json('metadata')->nullable();
+            $table->string( 'name' );
+            $table->string( 'slug' )->unique();
+            $table->text( 'description' )->nullable();
+            $table->foreignId( 'parent_id' )->nullable()->constrained( 'page_categories' )->onDelete( 'cascade' );
+            $table->integer( 'order' )->default( 0 );
+            $table->json( 'metadata' )->nullable();
             $table->timestamps();
 
-            $table->index('slug');
-            $table->index('parent_id');
-        });
+            $table->index( 'slug' );
+            $table->index( 'parent_id' );
+        } );
     }
 
     /**
@@ -31,6 +30,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('page_categories');
+        Schema::dropIfExists( 'page_categories');
     }
 };

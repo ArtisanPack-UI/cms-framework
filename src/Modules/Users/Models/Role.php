@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Role Model for the CMS Framework Users Module.
  *
@@ -49,7 +51,7 @@ class Role extends Model
      */
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany(config('cms-framework.user_model'), 'role_user', 'role_id', 'user_id');
+        return $this->belongsToMany( config( 'cms-framework.user_model' ), 'role_user', 'role_id', 'user_id' );
     }
 
     /**
@@ -58,23 +60,23 @@ class Role extends Model
      * Replaces existing permissions with the provided set. Accepts an array or
      * collection of Permission models or permission names.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Collection|array  $permissions  Collection of Permission models or array of permission names.
+     * @param  array|Collection  $permissions  Collection of Permission models or array of permission names.
      */
-    public function syncPermissions(Collection|array $permissions): self
+    public function syncPermissions( Collection|array $permissions ): self
     {
         // If the items are Permission models, pluck their names.
         // If they are already strings, this won't change them.
-        $permissionNames = collect($permissions)->map(function ($permission) {
+        $permissionNames = collect( $permissions )->map( function ( $permission ) {
             return $permission instanceof Permission ? $permission->name : $permission;
-        });
+        } );
 
         // Find all the permission models for the given names.
-        $permissionsToSync = Permission::whereIn('name', $permissionNames)->get();
+        $permissionsToSync = Permission::whereIn( 'name', $permissionNames )->get();
 
         // Use Laravel's built-in sync() method on the relationship.
-        $this->permissions()->sync($permissionsToSync);
+        $this->permissions()->sync( $permissionsToSync );
 
         return $this;
     }
@@ -90,7 +92,7 @@ class Role extends Model
      */
     public function permissions(): BelongsToMany
     {
-        return $this->belongsToMany(Permission::class);
+        return $this->belongsToMany( Permission::class );
     }
 
     /**
@@ -98,24 +100,24 @@ class Role extends Model
      *
      * This will not remove any existing permissions.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Collection|array  $permissions  A collection of Permission models or an array of
-     *                                                                       permission names.
+     * @param  array|Collection  $permissions  A collection of Permission models or an array of
+     *                                         permission names.
      */
-    public function givePermissionTo(Collection|array $permissions): self
+    public function givePermissionTo( Collection|array $permissions ): self
     {
         // If the items are Permission models, pluck their names.
         // If they are already strings, this won't change them.
-        $permissionNames = collect($permissions)->map(function ($permission) {
+        $permissionNames = collect( $permissions )->map( function ( $permission ) {
             return $permission instanceof Permission ? $permission->name : $permission;
-        });
+        } );
 
         // Find all the permission models for the given names.
-        $permissionsToGive = Permission::whereIn('name', $permissionNames)->get();
+        $permissionsToGive = Permission::whereIn( 'name', $permissionNames )->get();
 
         // Use syncWithoutDetaching() to add the new permissions without removing existing ones.
-        $this->permissions()->syncWithoutDetaching($permissionsToGive);
+        $this->permissions()->syncWithoutDetaching( $permissionsToGive );
 
         return $this;
     }

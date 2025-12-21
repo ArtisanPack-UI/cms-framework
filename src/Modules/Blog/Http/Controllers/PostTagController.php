@@ -1,12 +1,14 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * PostTag Controller for the CMS Framework Blog Module.
  *
  * This controller handles CRUD operations for post tags including listing,
  * creating, showing, updating, and deleting tag records through API endpoints.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers;
@@ -26,7 +28,7 @@ use Illuminate\Routing\Controller;
  * Provides RESTful API endpoints for post tag management operations
  * with proper validation, authorization, and resource transformation.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class PostTagController extends Controller
 {
@@ -37,17 +39,17 @@ class PostTagController extends Controller
      *
      * Retrieves a paginated list of post tags and returns them as a JSON resource collection.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return AnonymousResourceCollection The paginated collection of tag resources.
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', PostTag::class);
+        $this->authorize( 'viewAny', PostTag::class );
 
-        $tags = PostTag::orderBy('order')->paginate(15);
+        $tags = PostTag::orderBy( 'order' )->paginate( 15 );
 
-        return PostTagResource::collection($tags);
+        return PostTagResource::collection( $tags );
     }
 
     /**
@@ -56,19 +58,20 @@ class PostTagController extends Controller
      * Validates the incoming request data and creates a new tag with the
      * provided information. Returns the created resource with a 201 status code.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  PostTagRequest  $request  The HTTP request containing tag data.
+     *
      * @return JsonResponse The JSON response containing the created tag resource.
      */
-    public function store(PostTagRequest $request): JsonResponse
+    public function store( PostTagRequest $request ): JsonResponse
     {
-        $this->authorize('create', PostTag::class);
+        $this->authorize( 'create', PostTag::class );
 
         $validated = $request->validated();
-        $tag = PostTag::create($validated);
+        $tag       = PostTag::create( $validated );
 
-        return response()->json(new PostTagResource($tag), 201);
+        return response()->json( new PostTagResource( $tag ), 201 );
     }
 
     /**
@@ -76,17 +79,18 @@ class PostTagController extends Controller
      *
      * Retrieves a single post tag by ID and returns it as a JSON resource.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $id  The ID of the tag to retrieve.
+     *
      * @return PostTagResource The tag resource.
      */
-    public function show(int $id): PostTagResource
+    public function show( int $id ): PostTagResource
     {
-        $tag = PostTag::findOrFail($id);
-        $this->authorize('view', $tag);
+        $tag = PostTag::findOrFail( $id );
+        $this->authorize( 'view', $tag );
 
-        return new PostTagResource($tag);
+        return new PostTagResource( $tag );
     }
 
     /**
@@ -95,21 +99,22 @@ class PostTagController extends Controller
      * Validates the incoming request data and updates the tag with the
      * provided information. Only provided fields are updated (partial updates).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  PostTagRequest  $request  The HTTP request containing updated tag data.
      * @param  int  $id  The ID of the tag to update.
+     *
      * @return PostTagResource The updated tag resource.
      */
-    public function update(PostTagRequest $request, int $id): PostTagResource
+    public function update( PostTagRequest $request, int $id ): PostTagResource
     {
-        $tag = PostTag::findOrFail($id);
-        $this->authorize('update', $tag);
+        $tag = PostTag::findOrFail( $id );
+        $this->authorize( 'update', $tag );
 
         $validated = $request->validated();
-        $tag->update($validated);
+        $tag->update( $validated );
 
-        return new PostTagResource($tag);
+        return new PostTagResource( $tag );
     }
 
     /**
@@ -118,15 +123,16 @@ class PostTagController extends Controller
      * Deletes a tag from the database and returns a successful response
      * with no content.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $id  The ID of the tag to delete.
+     *
      * @return Response A response with 204 status code.
      */
-    public function destroy(int $id): Response
+    public function destroy( int $id ): Response
     {
-        $tag = PostTag::findOrFail($id);
-        $this->authorize('delete', $tag);
+        $tag = PostTag::findOrFail( $id );
+        $this->authorize( 'delete', $tag );
 
         $tag->delete();
 

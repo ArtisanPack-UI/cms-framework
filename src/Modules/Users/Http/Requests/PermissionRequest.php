@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Permission Request for the CMS Framework Users Module.
  *
@@ -46,21 +48,21 @@ class PermissionRequest extends FormRequest
      */
     public function rules(): array
     {
-        $permissionId = $this->route('permission') ?? $this->route('id');
+        $permissionId = $this->route( 'permission' ) ?? $this->route( 'id' );
 
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique('permissions', 'name')->ignore($permissionId),
+                Rule::unique( 'permissions', 'name' )->ignore( $permissionId ),
             ],
             'slug' => [
                 'required',
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:\.[a-z0-9]+)*(?:-[a-z0-9]+)*$/',
-                Rule::unique('permissions', 'slug')->ignore($permissionId),
+                Rule::unique( 'permissions', 'slug' )->ignore( $permissionId ),
             ],
         ];
     }
@@ -76,10 +78,10 @@ class PermissionRequest extends FormRequest
     {
         return [
             'name.required' => 'The permission name is required.',
-            'name.unique' => 'A permission with this name already exists.',
+            'name.unique'   => 'A permission with this name already exists.',
             'slug.required' => 'The permission slug is required.',
-            'slug.regex' => 'The permission slug must be lowercase letters, numbers, dots, and hyphens only (e.g., "user.create", "post.edit").',
-            'slug.unique' => 'A permission with this slug already exists.',
+            'slug.regex'    => 'The permission slug must be lowercase letters, numbers, dots, and hyphens only (e.g., "user.create", "post.edit").',
+            'slug.unique'   => 'A permission with this slug already exists.',
         ];
     }
 

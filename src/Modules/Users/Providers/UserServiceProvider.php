@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * User Service Provider for the CMS Framework Users Module.
  *
@@ -36,8 +38,8 @@ class UserServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(RoleManager::class, fn () => new RoleManager);
-        $this->app->singleton(PermissionManager::class, fn () => new PermissionManager);
+        $this->app->singleton( RoleManager::class, fn () => new RoleManager );
+        $this->app->singleton( PermissionManager::class, fn () => new PermissionManager );
     }
 
     /**
@@ -50,8 +52,8 @@ class UserServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
     }
 }

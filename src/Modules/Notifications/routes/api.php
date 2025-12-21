@@ -1,11 +1,13 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Notifications API Routes
  *
  * Defines API routes for notification operations.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Http\Controllers\NotificationController;
@@ -21,12 +23,12 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware(['auth:sanctum'])->prefix('notifications')->group(function () {
-    Route::get('/', [NotificationController::class, 'index'])->name('api.notifications.index');
-    Route::get('/unread-count', [NotificationController::class, 'unreadCount'])->name('api.notifications.unreadCount');
-    Route::get('/{id}', [NotificationController::class, 'show'])->name('api.notifications.show');
-    Route::post('/{id}/mark-as-read', [NotificationController::class, 'markAsRead'])->name('api.notifications.markAsRead');
-    Route::post('/{id}/dismiss', [NotificationController::class, 'dismiss'])->name('api.notifications.dismiss');
-    Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('api.notifications.markAllAsRead');
-    Route::post('/dismiss-all', [NotificationController::class, 'dismissAll'])->name('api.notifications.dismissAll');
-});
+Route::middleware( ['auth:sanctum'] )->prefix( 'notifications' )->group( function (): void {
+    Route::get( '/', [NotificationController::class, 'index'] )->name( 'api.notifications.index' );
+    Route::get( '/unread-count', [NotificationController::class, 'unreadCount'] )->name( 'api.notifications.unreadCount' );
+    Route::get( '/{id}', [NotificationController::class, 'show'] )->name( 'api.notifications.show' );
+    Route::post( '/{id}/mark-as-read', [NotificationController::class, 'markAsRead'] )->name( 'api.notifications.markAsRead' );
+    Route::post( '/{id}/dismiss', [NotificationController::class, 'dismiss'] )->name( 'api.notifications.dismiss' );
+    Route::post( '/mark-all-as-read', [NotificationController::class, 'markAllAsRead'] )->name( 'api.notifications.markAllAsRead' );
+    Route::post( '/dismiss-all', [NotificationController::class, 'dismissAll'] )->name( 'api.notifications.dismissAll' );
+} );

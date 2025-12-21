@@ -1,18 +1,21 @@
 <?php
 
+declare( strict_types = 1 );
+
 /**
  * Post Factory for the CMS Framework Blog Module.
  *
  * This factory generates fake post data for testing purposes,
  * including published, draft, and scheduled states.
  *
- * @since   2.0.0
+ * @since 1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Database\Factories;
 
 use App\Models\User;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
+use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -21,7 +24,7 @@ use Illuminate\Support\Str;
  *
  * Provides states for different post statuses and publication scenarios.
  *
- * @since 2.0.0
+ * @since 1.0.0
  *
  * @extends Factory<Post>
  */
@@ -30,7 +33,7 @@ class PostFactory extends Factory
     /**
      * The name of the factory's corresponding model.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @var class-string<Post>
      */
@@ -41,24 +44,24 @@ class PostFactory extends Factory
      *
      * Generates a published post by default with random content and metadata.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return array<string, mixed> The default post attributes.
      */
     public function definition(): array
     {
-        $title = fake()->sentence(6, true);
+        $title = fake()->sentence( 6, true );
 
         return [
-            'title' => $title,
-            'slug' => Str::slug($title),
-            'content' => fake()->paragraphs(5, true),
-            'excerpt' => fake()->paragraph(),
-            'author_id' => User::factory(),
-            'status' => 'published',
+            'title'        => $title,
+            'slug'         => Str::slug( $title ),
+            'content'      => fake()->paragraphs( 5, true ),
+            'excerpt'      => fake()->paragraph(),
+            'author_id'    => User::factory(),
+            'status'       => 'published',
             'published_at' => now(),
-            'metadata' => [
-                'seo_title' => $title,
+            'metadata'     => [
+                'seo_title'       => $title,
                 'seo_description' => fake()->sentence(),
             ],
         ];
@@ -69,16 +72,16 @@ class PostFactory extends Factory
      *
      * Sets the status to 'draft' and clears the published_at timestamp.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return static The factory instance for method chaining.
      */
     public function draft(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'draft',
+        return $this->state( fn ( array $attributes ) => [
+            'status'       => 'draft',
             'published_at' => null,
-        ]);
+        ] );
     }
 
     /**
@@ -86,16 +89,16 @@ class PostFactory extends Factory
      *
      * Sets the status to 'published' with a future published_at timestamp.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return static The factory instance for method chaining.
      */
     public function scheduled(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'published',
-            'published_at' => now()->addDays(rand(1, 30)),
-        ]);
+        return $this->state( fn ( array $attributes ) => [
+            'status'       => 'published',
+            'published_at' => now()->addDays( rand( 1, 30 ) ),
+        ] );
     }
 
     /**
@@ -103,45 +106,47 @@ class PostFactory extends Factory
      *
      * Sets the status to 'published' with a past published_at timestamp.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @return static The factory instance for method chaining.
      */
     public function published(): static
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'published',
-            'published_at' => now()->subDays(rand(0, 365)),
-        ]);
+        return $this->state( fn ( array $attributes ) => [
+            'status'       => 'published',
+            'published_at' => now()->subDays( rand( 0, 365 ) ),
+        ] );
     }
 
     /**
      * Indicate that the post was published on a specific date.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
-     * @param  \DateTimeInterface|string  $date  The publication date.
+     * @param  DateTimeInterface|string  $date  The publication date.
+     *
      * @return static The factory instance for method chaining.
      */
-    public function publishedAt($date): static
+    public function publishedAt( $date ): static
     {
-        return $this->state(fn (array $attributes) => [
-            'status' => 'published',
+        return $this->state( fn ( array $attributes ) => [
+            'status'       => 'published',
             'published_at' => $date,
-        ]);
+        ] );
     }
 
     /**
      * Indicate that the post has a specific author.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  int  $authorId  The author's user ID.
+     *
      * @return static The factory instance for method chaining.
      */
-    public function byAuthor(int $authorId): static
+    public function byAuthor( int $authorId ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'author_id' => $authorId,
         ]);
     }
