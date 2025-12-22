@@ -3,7 +3,7 @@
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
   "license": "MIT",
-  "version": "0.2.4",
+  "version": "1.0.0-beta1",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\CMSFramework\\": "src/",
@@ -32,8 +32,8 @@
     "illuminate/support": "^12.17.0",
     "laravel/framework": "^12.0",
     "laravel/tinker": "^2.10.1",
-    "artisanpack-ui/accessibility": "@dev",
-    "artisanpack-ui/security": "@dev",
+    "artisanpack-ui/accessibility": "^2.1.0",
+    "artisanpack-ui/security": "^1.0.3",
     "artisanpack-ui/core": "^1.0",
     "artisanpack-ui/hooks": "^1.1"
   },

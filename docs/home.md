@@ -4,17 +4,22 @@ title: CMS Framework Documentation
 
 # CMS Framework Documentation
 
-Welcome to the CMS Framework documentation! This Laravel package provides a comprehensive content management system foundation with built-in user management, role-based access control, and extensible architecture.
+Welcome to the CMS Framework documentation! This Laravel package provides a comprehensive content management system foundation with built-in user management, role-based access control, notifications, and extensible architecture.
 
 ## Overview
 
-The CMS Framework is designed to help developers quickly build content management systems with robust user management and permission systems. It provides:
+The CMS Framework is designed to help developers quickly build content management systems with robust features. It provides:
 
-- **User Management System**: Complete CRUD operations for users
-- **Role-Based Access Control (RBAC)**: Flexible roles and permissions system
+- **User Management System**: Complete CRUD operations for users with role-based access control
+- **Content Management**: Blog posts, pages, custom content types, and taxonomies
+- **Notification System**: In-app notifications with email support and user preferences
+- **Settings Management**: Application-wide configuration with type casting and sanitization
+- **Admin Framework**: Menu system, widgets, and authorization helpers
+- **Theme & Plugin Architecture**: Extensible system for themes and plugins
 - **RESTful API**: Clean API endpoints for all operations
-- **Configurable User Model**: Use your existing User model
 - **Laravel Integration**: Seamless integration with Laravel applications
+
+---
 
 ## Getting Started
 
@@ -22,84 +27,207 @@ The CMS Framework is designed to help developers quickly build content managemen
 - [[Configuration]] - Configuring the CMS Framework for your application
 - [[Quick Start]] - Get up and running quickly
 
-## User Management
+---
 
-- [[User Management]] - Managing users in your CMS
-- [[Roles and Permissions]] - Understanding the RBAC system
-- [[User API Reference]] - Complete API documentation
-
-## Developer Resources
-
-- [[Developer Guide]] - Extending and customizing the framework
-- [[API Authentication]] - Securing your API endpoints
-- [[Testing]] - Testing your CMS implementation
-- [[Hooks and Events]] - Filters and actions you can use to extend functionality
-
-## Core Components
+## Core Modules
 
 ### Users Module
-The Users module provides comprehensive user management functionality including:
-- User CRUD operations
-- Role assignment and management
-- Permission-based access control
-- Configurable user model support
+
+Complete user management with roles and permissions.
+
+- [[Users]] - Overview of the users module
+- [[users/User Management]] - Managing users in your CMS
+- [[users/Roles and Permissions]] - Understanding the RBAC system
+- [[users/User API Reference]] - Complete API documentation
 
 ### Admin Module
-Provides the building blocks for your admin area:
-- Menu sections, pages, and subpages
-- Automatic route registration under /admin with auth middleware
-- Capability-based authorization
-- Dashboard widgets
 
-See [[Admin]] for details.
+Building blocks for your admin area with automatic route registration.
+
+- [[Admin]] - Overview of the admin module
+- [[admin/Menu and Pages]] - Creating admin navigation and pages
+- [[admin/Widgets]] - Dashboard widgets system
+- [[admin/Authorization]] - Capability-based authorization
 
 ### Core Module
-Provides cross-cutting services:
-- Asset registration and retrieval for admin/public/auth contexts
-- Filter hooks to modify asset collections
 
-See [[Core]] for details.
+Cross-cutting services for assets and utilities.
+
+- [[Core]] - Overview of core services
+- [[core/Assets]] - Asset registration and management
 
 ### Settings Module
-Provides application-wide configuration storage:
-- Register keys with defaults, types, and sanitizers
-- Retrieve and update values via helpers
-- Backed by a database table with automatic casting
 
-See [[Settings]] for details.
+Application-wide configuration storage with type casting.
+
+- [[Settings]] - Overview of settings management
+- [[settings/Getting Started]] - Quick start guide
+- [[settings/Registering Settings]] - How to register settings
+- [[settings/Retrieving and Updating]] - Working with setting values
+- [[settings/Sanitization and Types]] - Type casting and validation
+- [[settings/Hooks and Events]] - Extending the settings system
+- [[settings/Database and Migrations]] - Database structure
+
+### Notifications Module
+
+Complete notification system with email support and preferences.
+
+- [[Notifications]] - Overview of the notification system
+- [[notifications/Getting Started]] - Quick start guide
+- [[notifications/Registering Notifications]] - Defining notification types
+- [[notifications/Sending Notifications]] - Sending to users and roles
+- [[notifications/Managing Notifications]] - Read, dismiss, and manage
+- [[notifications/Notification Preferences]] - User preference system
+- [[notifications/API Reference]] - Complete API documentation
+- [[notifications/Hooks and Events]] - Extending notifications
+- [[notifications/Database and Migrations]] - Database structure
 
 ### Themes Module
-Provides a flexible theme management system:
-- Automatic theme discovery from configured directory
-- Theme activation with cache management
-- WordPress-style template hierarchy for content types
-- View path registration for Laravel's Blade engine
-- RESTful API endpoints for theme operations
 
-See [[Themes]] for details.
+Flexible theme management with WordPress-style template hierarchy.
 
-### Models
-- **User Model**: Uses your application's User model with HasRolesAndPermissions trait
-- **Role Model**: Manages user roles with name and slug fields
-- **Permission Model**: Manages individual permissions with name and slug fields
-
-### API Endpoints
-All user management operations are available through RESTful API endpoints:
-- `GET /api/v1/users` - List users with pagination
-- `POST /api/v1/users` - Create new user
-- `GET /api/v1/users/{id}` - Get specific user
-- `PUT/PATCH /api/v1/users/{id}` - Update user
-- `DELETE /api/v1/users/{id}` - Delete user
-
-## Configuration
-
-The framework uses a simple configuration file to customize behavior:
-- `user_model` - Specify your application's User model class
-
-## Support
-
-For issues, feature requests, and contributions, please refer to the project repository.
+- [[Themes]] - Theme system overview and usage
 
 ---
 
-*This documentation covers CMS Framework v2.0.0+*
+## Content Modules
+
+### Blog Module
+
+Full-featured blog with posts, categories, and tags.
+
+- Posts with drafts, scheduling, and publishing
+- Categories with hierarchical structure
+- Tags for flexible content organization
+- Author relationships and archives
+
+### Pages Module
+
+Hierarchical page management with templates.
+
+- Pages with parent-child relationships
+- Template support for custom layouts
+- Categories and tags for pages
+- Breadcrumb generation
+
+### Content Types Module
+
+Custom content type builder for extensible content.
+
+- [[developer/content types]] - Creating custom content types
+- [[developer/custom fields]] - Adding custom fields to content
+- [[developer/taxonomies]] - Creating custom taxonomies
+
+---
+
+## Extension Modules
+
+### Plugins Module (Experimental)
+
+Plugin architecture for extending functionality.
+
+- Plugin discovery and manifest validation
+- Activation/deactivation lifecycle
+- Migration support for plugins
+- Update checking and version management
+- Security: path traversal prevention, input sanitization
+
+### Core Updater
+
+System update management for keeping the CMS current.
+
+- Version checking from GitHub, GitLab, or custom sources
+- Backup creation before updates
+- Rollback support
+
+---
+
+## Developer Resources
+
+### Guides
+
+- [[Developer Guide]] - Extending and customizing the framework
+- [[Hooks and Events]] - Filters and actions for extending functionality
+- [[developer/hooks reference]] - Complete hooks reference
+
+### API Documentation
+
+- [[api/README]] - REST API overview and authentication
+- [[Routes]] - Complete route registry
+- [[Relationships]] - Model relationship documentation
+
+### Reference
+
+- [[Helpers]] - Helper functions reference (ap-prefixed)
+- [[Exceptions]] - Exception hierarchy and error handling
+
+---
+
+## Module Quick Reference
+
+| Module | Purpose | Status |
+|--------|---------|--------|
+| Users | User management, roles, permissions | Stable |
+| Admin | Admin menu, pages, widgets | Stable |
+| Core | Assets, utilities | Stable |
+| Settings | Application configuration | Stable |
+| Notifications | In-app and email notifications | Stable |
+| Themes | Theme management | Stable |
+| Blog | Posts, categories, tags | Stable |
+| Pages | Hierarchical pages | Stable |
+| Content Types | Custom content types | Stable |
+| Plugins | Plugin system | Experimental |
+| Core Updater | System updates | Experimental |
+
+---
+
+## API Endpoints Overview
+
+All API endpoints use the `/api/cms` prefix with Sanctum authentication.
+
+### User Management
+- `GET/POST /users` - List/create users
+- `GET/PUT/DELETE /users/{id}` - User operations
+- `GET/POST /roles` - Role management
+- `GET/POST /permissions` - Permission management
+
+### Content
+- `GET/POST /posts` - Blog post management
+- `GET/POST /pages` - Page management
+- `GET/POST /content-types` - Content type management
+
+### System
+- `GET/POST /settings` - Settings management
+- `GET/POST /notifications` - Notification operations
+- `GET/POST /themes` - Theme management
+- `GET/POST /plugins` - Plugin management (experimental)
+
+See [[api/README]] for complete API documentation.
+
+---
+
+## Configuration
+
+The framework uses configuration files to customize behavior:
+
+```php
+// config/artisanpack/cms-framework.php
+return [
+    'user_model' => \App\Models\User::class,
+];
+```
+
+See [[Configuration]] for all available options.
+
+---
+
+## Support
+
+For issues, feature requests, and contributions:
+
+- **GitLab**: https://gitlab.com/artisanpack-ui/cms-framework
+- **Documentation**: https://artisanpack.dev/packages/cms-framework
+
+---
+
+*This documentation covers CMS Framework v1.0.0-beta1*

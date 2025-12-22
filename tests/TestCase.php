@@ -11,6 +11,7 @@ namespace ArtisanPackUI\CMSFramework\Tests;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
+use ArtisanPackUI\Security\SecurityServiceProvider;
 use Illuminate\Foundation\Application;
 
 /**
@@ -38,6 +39,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
     protected function getPackageProviders( $app ): array
     {
         return [
+            SecurityServiceProvider::class,
             CMSFrameworkServiceProvider::class,
             HooksServiceProvider::class,
         ];
