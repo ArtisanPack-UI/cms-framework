@@ -1,0 +1,13 @@
+{
+  "slug": "valid-plugin",
+  "name": "Valid Test Plugin",
+  "version": "1.0.0",
+  "description": "A valid test plugin for unit testing",
+  "author": "Test Author",
+  "service_provider": "ValidPlugin\\ValidPluginServiceProvider",
+  "autoload": {
+    "psr-4": {
+      "ValidPlugin\\": "src/"
+    }
+  }
+}

@@ -1,108 +1,102 @@
 <?php
 
-use ArtisanPackUI\CMSFramework\Models\Role;
-use ArtisanPackUI\CMSFramework\Models\User;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns\HasRolesAndPermissions;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
+use Illuminate\Database\Eloquent\Model;
 
-uses( RefreshDatabase::class );
+// Create a test user model that uses the trait
+class RoleTestUser extends Model
+{
+    use HasRolesAndPermissions;
 
-it( 'can create a role', function () {
-	$role = Role::factory()->create( [
-		'name'         => 'Test Editor',
-		'slug'         => 'test-editor',
-		'description'  => 'Can edit content',
-		'capabilities' => [ 'edit_posts', 'publish_posts' ],
-	] );
+    protected $table = 'users';
 
-	$this->assertInstanceOf( Role::class, $role );
-	$this->assertEquals( 'Test Editor', $role->name );
-	$this->assertEquals( 'test-editor', $role->slug );
-	$this->assertEquals( 'Can edit content', $role->description );
-	$this->assertIsArray( $role->capabilities );
-	$this->assertContains( 'edit_posts', $role->capabilities );
-	$this->assertContains( 'publish_posts', $role->capabilities );
+    protected $fillable = ['name', 'email', 'password'];
+}
+
+beforeEach( function (): void {
+    $this->artisan( 'migrate', ['--database' => 'testing'] );
+
+    // Set up test configuration
+    config( ['cms-framework.user_model' => RoleTestUser::class] );
 } );
 
-it( 'can check if role has capability', function () {
-	$role = Role::factory()->create( [
-		'capabilities' => [ 'edit_posts', 'publish_posts' ],
-	] );
+test( 'role can be created with fillable attributes', function (): void {
+    $role = Role::create( [
+        'name' => 'Administrator',
+        'slug' => 'admin',
+    ] );
 
-	$this->assertTrue( $role->hasCapability( 'edit_posts' ) );
-	$this->assertTrue( $role->hasCapability( 'publish_posts' ) );
-	$this->assertFalse( $role->hasCapability( 'delete_users' ) );
+    expect( $role->name )->toBe( 'Administrator' );
+    expect( $role->slug )->toBe( 'admin' );
+    expect( $role->exists )->toBeTrue();
 } );
 
-it( 'can add capability to role', function () {
-	$role = Role::factory()->create( [
-		'capabilities' => [ 'edit_posts' ],
-	] );
+test( 'role has many-to-many relationship with permissions', function (): void {
+    $role = Role::create( [
+        'name' => 'Editor',
+        'slug' => 'editor',
+    ] );
 
-	// Add a new capability
-	$result = $role->addCapability( 'publish_posts' );
-	$this->assertTrue( $result );
+    $permission = Permission::create( [
+        'name' => 'Edit Posts',
+        'slug' => 'edit-posts',
+    ] );
 
-	// Verify it was added
-	$this->assertTrue( $role->hasCapability( 'publish_posts' ) );
+    $role->permissions()->attach( $permission );
 
-	// Try to add the same capability again
-	$result = $role->addCapability( 'edit_posts' );
-	$this->assertFalse( $result ); // Should return false since it already exists
+    expect( $role->permissions )->toHaveCount( 1 );
+    expect( $role->permissions->first()->name )->toBe( 'Edit Posts' );
+    expect( $role->permissions->first()->slug )->toBe( 'edit-posts' );
 } );
 
-it( 'can remove capability from role', function () {
-	$role = Role::factory()->create( [
-		'capabilities' => [ 'edit_posts', 'publish_posts' ],
-	] );
+test( 'role has many-to-many relationship with users', function (): void {
+    $role = Role::create( [
+        'name' => 'Manager',
+        'slug' => 'manager',
+    ] );
 
-	// Remove a capability
-	$result = $role->removeCapability( 'edit_posts' );
-	$this->assertTrue( $result );
+    // Get the configured user model
+    $userModel = config( 'cms-framework.user_model', 'App\Models\User' );
 
-	// Verify it was removed
-	$this->assertFalse( $role->hasCapability( 'edit_posts' ) );
-	$this->assertTrue( $role->hasCapability( 'publish_posts' ) );
+    // Create a user using the configured model
+    $user = $userModel::create( [
+        'name'     => 'John Doe',
+        'email'    => 'john@example.com',
+        'password' => bcrypt( 'password' ),
+    ] );
 
-	// Try to remove a non-existent capability
-	$result = $role->removeCapability( 'non_existent' );
-	$this->assertFalse( $result );
+    $role->users()->attach( $user );
+
+    expect( $role->users )->toHaveCount( 1 );
+    expect( $role->users->first()->name )->toBe( 'John Doe' );
+    expect( $role->users->first()->email )->toBe( 'john@example.com' );
 } );
 
-it( 'has a relationship with users', function () {
-	$role = Role::factory()->create();
+test( 'role fillable attributes are correct', function (): void {
+    $role = new Role;
 
-	// Create users with this role
-	$user1 = User::factory()->create( [ 'role_id' => $role->id ] );
-	$user2 = User::factory()->create( [ 'role_id' => $role->id ] );
-
-	// Check the relationship
-	$this->assertInstanceOf( 'Illuminate\Database\Eloquent\Collection', $role->users );
-	$this->assertCount( 2, $role->users );
-	$this->assertTrue( $role->users->contains( $user1 ) );
-	$this->assertTrue( $role->users->contains( $user2 ) );
+    expect( $role->getFillable() )->toContain( 'name' );
+    expect( $role->getFillable() )->toContain( 'slug' );
 } );
 
-it( 'handles empty capabilities array', function () {
-	$role = Role::factory()->create( [
-		'capabilities' => [],
-	] );
+test( 'role can have multiple permissions', function (): void {
+    $role = Role::create( [
+        'name' => 'Super Admin',
+        'slug' => 'super-admin',
+    ] );
 
-	$this->assertIsArray( $role->capabilities );
-	$this->assertEmpty( $role->capabilities );
-	$this->assertFalse( $role->hasCapability( 'any_capability' ) );
-} );
+    $permissions = [
+        Permission::create( ['name' => 'Create Posts', 'slug' => 'create-posts'] ),
+        Permission::create( ['name' => 'Edit Posts', 'slug' => 'edit-posts'] ),
+        Permission::create( ['name' => 'Delete Posts', 'slug' => 'delete-posts'] ),
+    ];
 
-it( 'handles null capabilities', function () {
-	// Create a role without specifying capabilities
-	$role              = new Role();
-	$role->name        = 'Test Role';
-	$role->slug        = 'test-role';
-	$role->description = 'Test description';
-	$role->save();
+    $role->permissions()->attach( $permissions );
 
-	// Refresh the model to ensure we're getting the data from the database
-	$role->refresh();
-
-	// Test that the hasCapability method handles null capabilities correctly
-	$this->assertFalse( $role->hasCapability( 'any_capability' ) );
-} );
+    expect( $role->permissions )->toHaveCount( 3 );
+    expect( $role->permissions->pluck( 'slug' )->toArray() )->toContain( 'create-posts' );
+    expect( $role->permissions->pluck( 'slug')->toArray())->toContain( 'edit-posts');
+    expect( $role->permissions->pluck( 'slug')->toArray())->toContain( 'delete-posts');
+});
