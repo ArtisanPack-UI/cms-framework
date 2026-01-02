@@ -1,3 +1,7 @@
+---
+title: Test Coverage
+---
+
 # Test Coverage for CMS Framework
 
 This document explains how to set up and use test coverage reporting for the CMS Framework package.

@@ -8,8 +8,8 @@ This guide will walk you through installing and setting up the CMS Framework in 
 
 ## Requirements
 
-- PHP 8.1 or higher
-- Laravel 10.0 or higher
+- PHP 8.2 or higher
+- Laravel 12.0 or higher
 - MySQL 8.0+ or PostgreSQL 10.0+
 
 ## Installation Steps

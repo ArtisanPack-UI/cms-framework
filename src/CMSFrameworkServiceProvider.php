@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Service provider for the CMS Framework.
@@ -54,13 +54,13 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->validateConfiguration();
 
-        if ( $this->app->runningInConsole() ) {
-            $this->publishes( [
-                __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
-            ], 'cms-framework-config' );
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
+            ], 'cms-framework-config');
         }
 
-        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
     }
 
     /**
@@ -75,20 +75,20 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__ . '/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
+            __DIR__.'/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
         );
 
-        $this->app->register( UserServiceProvider::class );
-        $this->app->register( AdminServiceProvider::class );
-        $this->app->register( AdminWidgetServiceProvider::class );
-        $this->app->register( CoreServiceProvider::class );
-        $this->app->register( SettingsServiceProvider::class );
-        $this->app->register( NotificationServiceProvider::class );
-        $this->app->register( ContentTypesServiceProvider::class );
-        $this->app->register( BlogServiceProvider::class );
-        $this->app->register( PagesServiceProvider::class );
-        $this->app->register( ThemesServiceProvider::class );
-        $this->app->register( PluginsServiceProvider::class );
+        $this->app->register(UserServiceProvider::class);
+        $this->app->register(AdminServiceProvider::class);
+        $this->app->register(AdminWidgetServiceProvider::class);
+        $this->app->register(CoreServiceProvider::class);
+        $this->app->register(SettingsServiceProvider::class);
+        $this->app->register(NotificationServiceProvider::class);
+        $this->app->register(ContentTypesServiceProvider::class);
+        $this->app->register(BlogServiceProvider::class);
+        $this->app->register(PagesServiceProvider::class);
+        $this->app->register(ThemesServiceProvider::class);
+        $this->app->register(PluginsServiceProvider::class);
     }
 
     /**
@@ -102,37 +102,45 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     protected function mergeConfiguration(): void
     {
         // Get the package's default configuration.
-        $packageDefaults = config( 'artisanpack-cms-framework-temp', [] );
+        $packageDefaults = config('artisanpack-cms-framework-temp', []);
 
         // Get the user's custom configuration from config/artisanpack.php.
-        $userConfig = config( 'artisanpack.cms-framework', [] );
+        $userConfig = config('artisanpack.cms-framework', []);
 
         // Merge them, with the user's config overwriting the defaults.
-        $mergedConfig = array_replace_recursive( $packageDefaults, $userConfig );
+        $mergedConfig = array_replace_recursive($packageDefaults, $userConfig);
 
         // Set the final, correctly merged configuration.
-        config( ['artisanpack.cms-framework' => $mergedConfig] );
+        config(['artisanpack.cms-framework' => $mergedConfig]);
     }
 
     /**
      * Validates the package configuration.
      *
      * This method ensures that required configuration values are properly set.
+     * Validation is skipped when running in console mode to allow setup commands
+     * like `vendor:publish` to run before configuration is complete.
      *
-     * @throws InvalidArgumentException If required configuration is missing.
+     * @throws InvalidArgumentException If required configuration is missing (non-console only).
      *
      * @since 1.0.0
      */
     protected function validateConfiguration(): void
     {
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        // Skip validation in console mode to allow setup commands (vendor:publish,
+        // package:discover, etc.) to run before the config has been published.
+        if ($this->app->runningInConsole()) {
+            return;
+        }
 
-        if ( null === $userModel ) {
+        $userModel = config('artisanpack.cms-framework.user_model');
+
+        if (null === $userModel) {
             throw new InvalidArgumentException(
-                'The CMS Framework user_model configuration is not set. ' .
-                'Please publish the configuration file using: ' .
-                'php artisan vendor:publish --tag=cms-framework-config ' .
-                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. ' .
+                'The CMS Framework user_model configuration is not set. '.
+                'Please publish the configuration file using: '.
+                'php artisan vendor:publish --tag=cms-framework-config '.
+                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. '.
                 'Example: \'user_model\' => \\App\\Models\\User::class',
             );
         }

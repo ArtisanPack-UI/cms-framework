@@ -124,9 +124,9 @@ addAction('ap.cms.after_content_save', function($content) {
 });
 ```
 
-## Experimental Features (Beta)
+## Experimental Features
 
-The following features are **experimental** in the 1.0.0-beta1 release and should be used with caution in production environments:
+The following features are **experimental** in the 1.0.0 release and should be used with caution in production environments:
 
 ### Plugin System
 

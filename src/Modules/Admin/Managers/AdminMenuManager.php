@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Manages the registration and structure of the admin navigation menu.
@@ -49,9 +49,9 @@ class AdminMenuManager
      * @param  string  $title  The display title for the section.
      * @param  int  $order  The display order for the section.
      */
-    public function addSection( string $slug, string $title, int $order = 99 ): void
+    public function addSection(string $slug, string $title, int $order = 99): void
     {
-        $this->sections[ $slug ] = ['title' => $title, 'order' => $order, 'items' => []];
+        $this->sections[$slug] = ['title' => $title, 'order' => $order, 'items' => []];
     }
 
     /**
@@ -64,7 +64,7 @@ class AdminMenuManager
      * @param  string|null  $sectionSlug  The slug of the menu section, or null for a top-level item.
      * @param  array  $options  An array of options (view, icon, capability, etc.).
      */
-    public function addPage( string $title, string $slug, ?string $sectionSlug, array $options = [] ): void
+    public function addPage(string $title, string $slug, ?string $sectionSlug, array $options = []): void
     {
         $defaults = [
             'action'     => '',
@@ -73,9 +73,9 @@ class AdminMenuManager
             'order'      => 99,
             'menuTitle'  => $title,
         ];
-        $options = array_merge( $defaults, $options );
+        $options = array_merge($defaults, $options);
 
-        $this->items[ $slug ] = [
+        $this->items[$slug] = [
             'title'      => $title,
             'slug'       => $slug,
             'parent'     => null,
@@ -83,11 +83,11 @@ class AdminMenuManager
             'icon'       => $options['icon'],
             'capability' => $options['capability'],
             'order'      => $options['order'],
-            'route'      => 'admin.' . $slug,
+            'route'      => 'admin.'.$slug,
             'menuTitle'  => $options['menuTitle'],
         ];
 
-        app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
+        app(AdminPageManager::class)->register($slug, $options['action'], $options['capability']);
     }
 
     /**
@@ -100,7 +100,7 @@ class AdminMenuManager
      * @param  string  $parentSlug  The slug of the parent menu item.
      * @param  array  $options  An array of options (view, capability, showInMenu, etc.).
      */
-    public function addSubPage( string $title, string $slug, string $parentSlug, array $options = [] ): void
+    public function addSubPage(string $title, string $slug, string $parentSlug, array $options = []): void
     {
         $defaults = [
             'action'     => '',
@@ -110,9 +110,9 @@ class AdminMenuManager
             'menuTitle'  => $title,
             'icon'       => '',
         ];
-        $options = array_merge( $defaults, $options );
+        $options = array_merge($defaults, $options);
 
-        $this->items[ $slug ] = [
+        $this->items[$slug] = [
             'title'      => $title,
             'slug'       => $slug,
             'parent'     => $parentSlug,
@@ -120,12 +120,12 @@ class AdminMenuManager
             'capability' => $options['capability'],
             'order'      => $options['order'],
             'showInMenu' => $options['showInMenu'],
-            'route'      => 'admin.' . str_replace( '/', '.', $slug ),
+            'route'      => 'admin.'.str_replace('/', '.', $slug),
             'menuTitle'  => $options['menuTitle'],
             'icon'       => $options['icon'],
         ];
 
-        app( AdminPageManager::class )->register( $slug, $options['action'], $options['capability'] );
+        app(AdminPageManager::class)->register($slug, $options['action'], $options['capability']);
     }
 
     /**
@@ -142,55 +142,55 @@ class AdminMenuManager
         $topLevelItems = [];
 
         // 1. Filter all items based on the current user's capabilities.
-        $authorizedItems = array_filter( $items, function ( $item ) {
+        $authorizedItems = array_filter($items, function ($item) {
             // Only check the gate if a capability is set and not empty.
-            return ! empty( $item['capability'] ) ? Gate::allows( $item['capability'] ) : true;
-        } );
+            return ! empty($item['capability']) ? Gate::allows($item['capability']) : true;
+        });
 
         // 2. Structure the menu (top-level, sections, and sub-items).
-        foreach ( $authorizedItems as $slug => $item ) {
-            if ( $item['parent'] && isset( $authorizedItems[ $item['parent'] ] ) ) {
-                $authorizedItems[ $item['parent'] ]['subItems'][ $slug ] = $item;
+        foreach ($authorizedItems as $slug => $item) {
+            if ($item['parent'] && isset($authorizedItems[$item['parent']])) {
+                $authorizedItems[$item['parent']]['subItems'][$slug] = $item;
             }
         }
 
         // Now add items to their final destinations, using the updated items with subItems
-        foreach ( $authorizedItems as $slug => $item ) {
-            if ( $item['parent'] && isset( $authorizedItems[ $item['parent'] ] ) ) {
+        foreach ($authorizedItems as $slug => $item) {
+            if ($item['parent'] && isset($authorizedItems[$item['parent']])) {
                 // This item is a child, it was already added to its parent's subItems above
                 continue;
-            } elseif ( $item['section'] && isset( $menu[ $item['section'] ] ) ) {
-                $menu[ $item['section'] ]['items'][ $slug ] = $authorizedItems[ $slug ];
-            } elseif ( is_null( $item['section'] ) ) {
-                $topLevelItems[ $slug ] = $authorizedItems[ $slug ];
+            } elseif ($item['section'] && isset($menu[$item['section']])) {
+                $menu[$item['section']]['items'][$slug] = $authorizedItems[$slug];
+            } elseif (is_null($item['section'])) {
+                $topLevelItems[$slug] = $authorizedItems[$slug];
             }
         }
 
         // 3. Remove any sections that are now empty after filtering.
-        $menu = array_filter( $menu, fn ( $section ) => ! empty( $section['items'] ) );
+        $menu = array_filter($menu, fn ($section) => ! empty($section['items']));
 
         // 4. Sort everything by the 'order' property.
-        uasort( $topLevelItems, fn ( $a, $b ) => $a['order'] <=> $b['order'] );
-        uasort( $menu, fn ( $a, $b ) => $a['order'] <=> $b['order'] );
-        foreach ( $menuas & $section ) {
-            if ( ! empty( $section['items'] ) ) {
-                uasort( $section['items'], fn ( $a, $b ) => $a['order'] <=> $b['order'] );
+        uasort($topLevelItems, fn ($a, $b) => $a['order'] <=> $b['order']);
+        uasort($menu, fn ($a, $b) => $a['order'] <=> $b['order']);
+        foreach ($menu as &$section) {
+            if (! empty($section['items'])) {
+                uasort($section['items'], fn ($a, $b) => $a['order'] <=> $b['order']);
                 // Also sort subItems for each menu item in the section
-                foreach ( $section['items']as & $item ) {
-                    if ( ! empty( $item['subItems'] ) ) {
-                        uasort( $item['subItems'], fn ( $a, $b ) => $a['order'] <=> $b['order'] );
+                foreach ($section['items'] as &$item) {
+                    if (! empty($item['subItems'])) {
+                        uasort($item['subItems'], fn ($a, $b) => $a['order'] <=> $b['order']);
                     }
                 }
             }
         }
         // Sort subItems for top-level items as well
-        foreach ( $topLevelItemsas & $item ) {
-            if ( ! empty( $item['subItems'] ) ) {
-                uasort( $item['subItems'], fn ( $a, $b ) => $a['order'] <=> $b['order'] );
+        foreach ($topLevelItems as &$item) {
+            if (! empty($item['subItems'])) {
+                uasort($item['subItems'], fn ($a, $b) => $a['order'] <=> $b['order']);
             }
         }
 
-        return array_merge( $topLevelItems, $menu);
+        return array_merge($topLevelItems, $menu);
     }
 
     /**
@@ -202,8 +202,8 @@ class AdminMenuManager
      *
      * @return array|null The page's data array, or null if not found.
      */
-    public function getPageBySlug( string $slug): ?array
+    public function getPageBySlug(string $slug): ?array
     {
-        return $this->items[ $slug ] ?? null;
+        return $this->items[$slug] ?? null;
     }
 }

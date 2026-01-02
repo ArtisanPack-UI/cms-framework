@@ -230,4 +230,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers CMS Framework v1.0.0-beta1*
+*This documentation covers CMS Framework v1.0.0*

@@ -19,6 +19,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [1.0.0] - 2026-01-02
+
+### Added
+
+- Configuration publishing for module-specific configs
+  - Plugins config: `php artisan vendor:publish --tag=cms-plugins-config`
+  - Themes config: `php artisan vendor:publish --tag=cms-themes-config`
+  - Updates config: `php artisan vendor:publish --tag=cms-updates-config`
+
+### Changed
+
+- Moved developer documentation to `docs/developer/` directory
+  - `SKIPPED_TESTS.md` → `docs/developer/Skipped-Tests.md`
+  - `COVERAGE.md` → `docs/developer/Test-Coverage.md`
+- Updated documentation to reflect PHP 8.2 and Laravel 12 requirements
+
+### Fixed
+
+- Replaced deprecated `mime_content_type()` with `finfo_file()` in PluginManager
+- Fixed code style inconsistency in PluginManager exception handling
+- Documented all skipped tests with explanations
+
+### Removed
+
+- `V1_RELEASE_CHECKLIST.md` - internal development tracking file
+
 ## [1.0.0-beta1] - 2024-12-21
 
 ### Added
@@ -63,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Relationship documentation (`docs/relationships.md`)
   - Helper functions reference (`docs/helpers.md`)
   - Exception handling guide (`docs/exceptions.md`)
-  - Skipped tests documentation (`SKIPPED_TESTS.md`)
+  - Skipped tests documentation (now at `docs/developer/Skipped-Tests.md`)
 - Improved `.gitattributes` for cleaner package distribution
 
 ### Changed
@@ -112,7 +138,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Plugin system is experimental - full lifecycle hooks not yet implemented
 - Theme system is experimental - asset compilation and child themes pending
-- 4 plugin-related tests remain skipped (documented in SKIPPED_TESTS.md)
+- 4 plugin-related tests remain skipped (documented in `docs/developer/Skipped-Tests.md`)
 - Test coverage report requires Xdebug/PCOV (recommended for CI/CD)
 - 235 PHPCS code style warnings remain (mostly spacing and false positives)
 
