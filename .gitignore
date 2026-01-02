@@ -1,2 +1,9 @@
 vendor/
 .idea/
+
+# Test coverage reports
+tests/coverage/
+.phpunit.cache/
+
+# Claude local settings
+.claude/settings.local.json
