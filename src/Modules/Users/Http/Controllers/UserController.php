@@ -42,7 +42,7 @@ class UserController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
         $users     = $userModel::with( 'roles' )->paginate( 15 );
 
         return UserResource::collection( $users );
@@ -62,7 +62,7 @@ class UserController extends Controller
      */
     public function store( Request $request ): UserResource
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
 
         $validated = $request->validate( [
             'name'     => 'required|string|max:255',
@@ -92,7 +92,7 @@ class UserController extends Controller
      */
     public function show( string|int $id ): UserResource
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
         $user      = $userModel::with( 'roles' )->findOrFail( $id );
 
         return new UserResource( $user );
@@ -114,7 +114,7 @@ class UserController extends Controller
      */
     public function update( Request $request, string|int $id ): UserResource
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
         $user      = $userModel::findOrFail( $id );
         $validated = $request->validate( [
             'name'     => 'sometimes|required|string|max:255',
@@ -146,7 +146,7 @@ class UserController extends Controller
      */
     public function destroy( string|int $id ): JsonResponse
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
         $user      = $userModel::findOrFail( $id );
         $user->delete();
 

@@ -36,7 +36,7 @@ class PermissionPolicy
      */
     public function viewAny( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**
@@ -64,7 +64,7 @@ class PermissionPolicy
      */
     public function view( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**
@@ -92,7 +92,7 @@ class PermissionPolicy
      */
     public function create( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**
@@ -120,7 +120,7 @@ class PermissionPolicy
      */
     public function update( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**
@@ -148,7 +148,7 @@ class PermissionPolicy
      */
     public function delete( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**
@@ -174,7 +174,7 @@ class PermissionPolicy
      */
     public function restore( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**
@@ -202,7 +202,7 @@ class PermissionPolicy
      */
     public function forceDelete( string|int $id ): bool
     {
-        $userModel = config( 'cms-framework.user_model' );
+        $userModel = config( 'artisanpack.cms-framework.user_model', \App\Models\User::class );
         $user      = $userModel::findOrFail( $id );
 
         /**

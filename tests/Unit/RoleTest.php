@@ -19,7 +19,7 @@ beforeEach( function (): void {
     $this->artisan( 'migrate', ['--database' => 'testing'] );
 
     // Set up test configuration
-    config( ['cms-framework.user_model' => RoleTestUser::class] );
+    config( ['artisanpack.cms-framework.user_model' => RoleTestUser::class] );
 } );
 
 test( 'role can be created with fillable attributes', function (): void {
@@ -58,7 +58,7 @@ test( 'role has many-to-many relationship with users', function (): void {
     ] );
 
     // Get the configured user model
-    $userModel = config( 'cms-framework.user_model', 'App\Models\User' );
+    $userModel = config( 'artisanpack.cms-framework.user_model', 'App\Models\User' );
 
     // Create a user using the configured model
     $user = $userModel::create( [

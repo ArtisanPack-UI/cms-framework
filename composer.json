@@ -3,7 +3,7 @@
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
   "license": "MIT",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\CMSFramework\\": "src/",

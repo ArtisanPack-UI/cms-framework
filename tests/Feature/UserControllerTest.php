@@ -7,7 +7,7 @@ beforeEach( function (): void {
     $this->artisan( 'migrate', ['--database' => 'testing'] );
 
     // Set up configuration
-    config( ['cms-framework.user_model' => 'App\Models\User'] );
+    config( ['artisanpack.cms-framework.user_model' => 'App\Models\User'] );
 
     // Create a test user model class if it doesn't exist
     if ( ! class_exists( 'App\Models\User' ) ) {
@@ -28,7 +28,7 @@ beforeEach( function (): void {
 } );
 
 test( 'user controller index returns paginated users with roles', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     // Create test users
     $users = collect();
@@ -95,7 +95,7 @@ test( 'user controller store creates new user with valid data', function (): voi
     expect( $response->json( 'data.email' ) )->toBe( 'john@example.com' );
 
     // Verify user was created in database
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
     $user      = $userModel::where( 'email', 'john@example.com' )->first();
     expect( $user )->not->toBeNull();
     expect( Hash::check( 'password123', $user->password ) )->toBeTrue();
@@ -109,7 +109,7 @@ test( 'user controller store validates required fields', function (): void {
 } );
 
 test( 'user controller store validates email uniqueness', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     // Create existing user
     $userModel::create( [
@@ -140,7 +140,7 @@ test( 'user controller store validates password length', function (): void {
 } );
 
 test( 'user controller show returns specific user with roles', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     $user = $userModel::create( [
         'name'     => 'Jane Doe',
@@ -178,7 +178,7 @@ test( 'user controller show returns 404 for non-existent user', function (): voi
 } );
 
 test( 'user controller update modifies existing user', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     $user = $userModel::create( [
         'name'     => 'Old Name',
@@ -204,7 +204,7 @@ test( 'user controller update modifies existing user', function (): void {
 } );
 
 test( 'user controller update allows partial updates', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     $user = $userModel::create( [
         'name'     => 'John Doe',
@@ -222,7 +222,7 @@ test( 'user controller update allows partial updates', function (): void {
 } );
 
 test( 'user controller update validates email uniqueness excluding current user', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     $user1 = $userModel::create( [
         'name'     => 'User 1',
@@ -246,7 +246,7 @@ test( 'user controller update validates email uniqueness excluding current user'
 } );
 
 test( 'user controller update encrypts password when provided', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     $user = $userModel::create( [
         'name'     => 'John Doe',
@@ -265,7 +265,7 @@ test( 'user controller update encrypts password when provided', function (): voi
 } );
 
 test( 'user controller destroy deletes user', function (): void {
-    $userModel = config( 'cms-framework.user_model' );
+    $userModel = config( 'artisanpack.cms-framework.user_model' );
 
     $user = $userModel::create( [
         'name'     => 'To Delete',
