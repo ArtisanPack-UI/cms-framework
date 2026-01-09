@@ -64,7 +64,7 @@ class Role extends Model
      */
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany( config( 'cms-framework.user_model' ), 'role_user', 'role_id', 'user_id' );
+        return $this->belongsToMany( config( 'artisanpack.cms-framework.user_model' ), 'role_user', 'role_id', 'user_id' );
     }
 
     /**

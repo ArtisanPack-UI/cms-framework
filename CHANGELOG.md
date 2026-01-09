@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [1.0.1] - 2026-01-09
+
+### Added
+
+- Support for the core ArtisanPack UI package in the service provider
+
+### Changed
+
+- Updated config settings names across controllers, models, policies, and tests for consistency
+
 ## [1.0.0] - 2026-01-02
 
 ### Added

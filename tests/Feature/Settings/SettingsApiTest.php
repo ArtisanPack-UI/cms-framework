@@ -25,7 +25,7 @@ beforeEach( function (): void {
     $this->artisan( 'migrate', ['--database' => 'testing'] );
 
     // Set up configuration
-    config( ['cms-framework.user_model' => 'App\Models\User'] );
+    config( ['artisanpack.cms-framework.user_model' => 'App\Models\User'] );
 
     // Create a test user model class if it doesn't exist
     if ( ! class_exists( 'App\\Models\\User' ) ) {

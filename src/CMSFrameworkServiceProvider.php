@@ -57,7 +57,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
-            ], 'cms-framework-config');
+            ], 'artisanpack-package-config');
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
@@ -139,7 +139,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
             throw new InvalidArgumentException(
                 'The CMS Framework user_model configuration is not set. '.
                 'Please publish the configuration file using: '.
-                'php artisan vendor:publish --tag=cms-framework-config '.
+                'php artisan vendor:publish --tag=artisanpack-package-config '.
                 'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. '.
                 'Example: \'user_model\' => \\App\\Models\\User::class',
             );
