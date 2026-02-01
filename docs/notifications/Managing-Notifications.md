@@ -518,7 +518,7 @@ public function markAsRead($notificationId)
 
 ## Next Steps
 
-- Configure [Notification Preferences](Notification-Preferences.md) for user control
-- Use the [API Reference](API-Reference.md) to explore all available methods
-- Learn about [Hooks and Events](Hooks-and-Events.md) to extend functionality
-- Review [Database and Migrations](Database-and-Migrations.md) for schema details
+- Configure [Notification Preferences](Notification-Preferences) for user control
+- Use the [API Reference](Api-Reference) to explore all available methods
+- Learn about [Hooks and Events](Hooks-And-Events) to extend functionality
+- Review [Database and Migrations](Database-And-Migrations) for schema details

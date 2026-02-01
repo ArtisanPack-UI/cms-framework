@@ -437,7 +437,7 @@ When backing up your database, consider:
 
 ## Next Steps
 
-- Review the [API Reference](API-Reference.md) for helper functions
-- Learn about [Managing Notifications](Managing-Notifications.md) for querying
-- Understand [Notification Preferences](Notification-Preferences.md) for user control
-- Explore [Hooks and Events](Hooks-and-Events.md) for extending functionality
+- Review the [API Reference](Api-Reference) for helper functions
+- Learn about [Managing Notifications](Managing-Notifications) for querying
+- Understand [Notification Preferences](Notification-Preferences) for user control
+- Explore [Hooks and Events](Hooks-And-Events) for extending functionality

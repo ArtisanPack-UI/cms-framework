@@ -95,4 +95,4 @@ addFilter('ap.settings.registeredSettings', function (array $settings) {
 });
 ```
 
-See the Settings module docs for details: [Settings Hooks and Events](settings/Hooks-and-Events.md).
+See the Settings module docs for details: [Settings Hooks and Events](Settings-Hooks-And-Events).

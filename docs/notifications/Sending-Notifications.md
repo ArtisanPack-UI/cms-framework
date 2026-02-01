@@ -169,7 +169,7 @@ if (!$notification) {
 }
 ```
 
-See [Notification Preferences](Notification-Preferences.md) for details on how users control their preferences.
+See [Notification Preferences](Notification-Preferences) for details on how users control their preferences.
 
 ## Email Notifications
 
@@ -380,7 +380,7 @@ if (!$notification) {
 
 ## Next Steps
 
-- Learn about [Managing Notifications](Managing-Notifications.md) to mark as read and dismiss
-- Understand [Notification Preferences](Notification-Preferences.md) for user control
-- Explore [Hooks and Events](Hooks-and-Events.md) to extend sending behavior
-- Review the [API Reference](API-Reference.md) for all available helpers
+- Learn about [Managing Notifications](Managing-Notifications) to mark as read and dismiss
+- Understand [Notification Preferences](Notification-Preferences) for user control
+- Explore [Hooks and Events](Hooks-And-Events) to extend sending behavior
+- Review the [API Reference](Api-Reference) for all available helpers

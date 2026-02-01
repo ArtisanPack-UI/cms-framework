@@ -945,10 +945,10 @@ use ArtisanPackUI\CMSFramework\Modules\Notifications\Policies\NotificationPolicy
 
 ## Next Steps
 
-- Return to [Getting Started](Getting-Started.md) for a quick intro
-- Learn about [Registering Notifications](Registering-Notifications.md)
-- Explore [Sending Notifications](Sending-Notifications.md)
-- Understand [Managing Notifications](Managing-Notifications.md)
-- Configure [Notification Preferences](Notification-Preferences.md)
-- Extend with [Hooks and Events](Hooks-and-Events.md)
-- Review [Database and Migrations](Database-and-Migrations.md)
+- Return to [Getting Started](Getting-Started) for a quick intro
+- Learn about [Registering Notifications](Registering-Notifications)
+- Explore [Sending Notifications](Sending-Notifications)
+- Understand [Managing Notifications](Managing-Notifications)
+- Configure [Notification Preferences](Notification-Preferences)
+- Extend with [Hooks and Events](Hooks-And-Events)
+- Review [Database and Migrations](Database-And-Migrations)

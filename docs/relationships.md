@@ -515,7 +515,7 @@ test('user has many posts', function () {
 
 ## See Also
 
-- [Models Documentation](models.md)
-- [Database Migrations](migrations.md)
-- [Query Scopes](scopes.md)
-- [Testing Guide](testing.md)
+- [Models Documentation](Models)
+- [Database Migrations](Migrations)
+- [Query Scopes](Scopes)
+- [Testing Guide](Testing)

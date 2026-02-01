@@ -88,4 +88,4 @@ Tip: Keep your sanitizer consistent with the declared `type`.
 - Use form request validation for user input errors (required, min/max, etc.).
 - Use the sanitizer to coerce/clean values and enforce invariants before persistence.
 
-See also: [Retrieving and Updating](Retrieving-and-Updating.md) and [Registering Settings](Registering-Settings.md).
+See also: [Retrieving and Updating](Retrieving-And-Updating) and [Registering Settings](Registering-Settings).

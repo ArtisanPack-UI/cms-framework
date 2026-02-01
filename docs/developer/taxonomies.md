@@ -582,6 +582,6 @@ if ($taxonomyManager->taxonomyExists('product_categories')) {
 
 ## See Also
 
-- [Content Types Developer Guide](content-types.md)
-- [Custom Fields Developer Guide](custom-fields.md)
-- [Hooks Reference](hooks-reference.md)
+- [Content Types Developer Guide](Content-Types)
+- [Custom Fields Developer Guide](Custom-Fields)
+- [Hooks Reference](Hooks-Reference)

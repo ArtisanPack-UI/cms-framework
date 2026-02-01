@@ -55,4 +55,4 @@ public function boot(SettingsManager $settings): void
 
 Under the hood, settings are collected through the `ap.settings.registeredSettings` filter so multiple packages can contribute without conflicts.
 
-See also: [Hooks and Events](Hooks-and-Events.md).
+See also: [Hooks and Events](Hooks-And-Events).

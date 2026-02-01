@@ -66,22 +66,22 @@ $token = $user->createToken('token-name')->plainTextToken;
 
 ### Core Modules
 
-- **[Users API](users.md)** - User management endpoints
-- **[Roles API](roles.md)** - Role and permission management
-- **[Settings API](settings.md)** - Application settings management
-- **[Notifications API](notifications.md)** - Notification system endpoints
+- **[Users API](Users)** - User management endpoints
+- **[Roles API](Roles)** - Role and permission management
+- **[Settings API](Settings)** - Application settings management
+- **[Notifications API](Notifications)** - Notification system endpoints
 
 ### Content Modules
 
-- **[Content Types API](content-types.md)** - Custom content type management
-- **[Blog API](blog.md)** - Blog posts, categories, and tags
-- **[Pages API](pages.md)** - Page management
+- **[Content Types API](Content-Types)** - Custom content type management
+- **[Blog API](Blog)** - Blog posts, categories, and tags
+- **[Pages API](Pages)** - Page management
 
 ### Extension Modules
 
-- **[Plugins API](plugins.md)** - Plugin lifecycle management (Experimental)
-- **[Themes API](themes.md)** - Theme management (Experimental)
-- **[Core Updates API](core-updates.md)** - System update management
+- **[Plugins API](Plugins)** - Plugin lifecycle management (Experimental)
+- **[Themes API](Themes)** - Theme management (Experimental)
+- **[Core Updates API](Core-Updates)** - System update management
 
 ## Common Patterns
 
@@ -204,7 +204,7 @@ curl -X DELETE https://example.com/api/cms/posts/1 \
 
 ### Using Postman
 
-1. Import the [Postman Collection](../postman/cms-framework.json)
+1. Import the [Postman Collection](Postman-Cms-Framework.Json)
 2. Set up environment variables:
    - `base_url`: Your application URL
    - `token`: Your Sanctum token
@@ -289,4 +289,4 @@ For issues or questions:
 
 ## Changelog
 
-See [CHANGELOG.md](../../CHANGELOG.md) for API changes and version history.
+See [CHANGELOG.md](Changelog) for API changes and version history.

@@ -525,7 +525,7 @@ In your preferences UI, clearly explain what each notification type does:
 
 ## Next Steps
 
-- Learn about [Hooks and Events](Hooks-and-Events.md) to extend preference functionality
-- Review [Database and Migrations](Database-and-Migrations.md) for schema details
-- Use the [API Reference](API-Reference.md) for complete method documentation
-- Explore [Sending Notifications](Sending-Notifications.md) to understand how preferences affect delivery
+- Learn about [Hooks and Events](Hooks-And-Events) to extend preference functionality
+- Review [Database and Migrations](Database-And-Migrations) for schema details
+- Use the [API Reference](Api-Reference) for complete method documentation
+- Explore [Sending Notifications](Sending-Notifications) to understand how preferences affect delivery

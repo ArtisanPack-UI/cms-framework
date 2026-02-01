@@ -8,4 +8,4 @@ The Core module provides cross‑cutting services used throughout the CMS Framew
 
 ## Core Guides
 
-- [Assets](core/Assets.md) — Registering and retrieving admin, public, and authenticated assets
+- [Assets](Core-Assets) — Registering and retrieving admin, public, and authenticated assets

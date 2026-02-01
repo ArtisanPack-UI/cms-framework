@@ -15,14 +15,14 @@ The Notifications module provides a comprehensive in-app notification system wit
 
 ## Notifications Guides
 
-- [Getting Started](notifications/Getting-Started.md) — Quick intro and sending your first notification
-- [Registering Notifications](notifications/Registering-Notifications.md) — Define notification types with defaults, metadata, and email settings
-- [Sending Notifications](notifications/Sending-Notifications.md) — Send to users, roles, or current user with overrides
-- [Managing Notifications](notifications/Managing-Notifications.md) — Mark as read, dismiss, and retrieve notifications
-- [Notification Preferences](notifications/Notification-Preferences.md) — User preferences for notification types and email delivery
-- [Hooks and Events](notifications/Hooks-and-Events.md) — Filter and action hooks for extending notifications
-- [Database and Migrations](notifications/Database-and-Migrations.md) — Storage schema and pivot table structure
-- [API Reference](notifications/API-Reference.md) — Complete reference of all helper functions
+- [Getting Started](Notifications-Getting-Started) — Quick intro and sending your first notification
+- [Registering Notifications](Notifications-Registering-Notifications) — Define notification types with defaults, metadata, and email settings
+- [Sending Notifications](Notifications-Sending-Notifications) — Send to users, roles, or current user with overrides
+- [Managing Notifications](Notifications-Managing-Notifications) — Mark as read, dismiss, and retrieve notifications
+- [Notification Preferences](Notifications-Notification-Preferences) — User preferences for notification types and email delivery
+- [Hooks and Events](Notifications-Hooks-And-Events) — Filter and action hooks for extending notifications
+- [Database and Migrations](Notifications-Database-And-Migrations) — Storage schema and pivot table structure
+- [API Reference](Notifications-Api-Reference) — Complete reference of all helper functions
 
 ## Overview
 

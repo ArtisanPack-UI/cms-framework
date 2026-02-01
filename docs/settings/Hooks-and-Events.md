@@ -42,6 +42,6 @@ addFilter('ap.settings.registeredSettings', function (array $settings) {
 
 ## Related Docs
 
-- [Registering Settings](Registering-Settings.md)
-- [Retrieving and Updating](Retrieving-and-Updating.md)
+- [Registering Settings](Registering-Settings)
+- [Retrieving and Updating](Retrieving-And-Updating)
 - Global hooks overview: ../Hooks-and-Events.md

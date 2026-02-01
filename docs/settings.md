@@ -12,12 +12,12 @@ The Settings module provides a lightweight, application‑wide key–value store
 
 ## Settings Guides
 
-- [Getting Started](settings/Getting-Started.md) — Quick intro and first setting
-- [Registering Settings](settings/Registering-Settings.md) — Define defaults, types, and sanitizers
-- [Retrieving and Updating](settings/Retrieving-and-Updating.md) — Read and write values at runtime
-- [Sanitization and Types](settings/Sanitization-and-Types.md) — Ensure clean, typed input
-- [Hooks and Events](settings/Hooks-and-Events.md) — `ap.settings.registeredSettings` filter
-- [Database and Migrations](settings/Database-and-Migrations.md) — Storage schema and considerations
+- [Getting Started](Settings-Getting-Started) — Quick intro and first setting
+- [Registering Settings](Settings-Registering-Settings) — Define defaults, types, and sanitizers
+- [Retrieving and Updating](Settings-Retrieving-And-Updating) — Read and write values at runtime
+- [Sanitization and Types](Settings-Sanitization-And-Types) — Ensure clean, typed input
+- [Hooks and Events](Settings-Hooks-And-Events) — `ap.settings.registeredSettings` filter
+- [Database and Migrations](Settings-Database-And-Migrations) — Storage schema and considerations
 
 ## Overview
 

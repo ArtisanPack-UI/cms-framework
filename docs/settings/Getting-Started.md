@@ -67,4 +67,4 @@ When calling `apGetSetting($key, $default)` the value is resolved as:
 2) Otherwise your explicit `$default` argument, if provided (takes precedence over registered default)
 3) Otherwise the registered default from when you called `apRegisterSetting`
 
-Proceed to [Registering Settings](Registering-Settings.md) for more options and examples.
+Proceed to [Registering Settings](Registering-Settings) for more options and examples.

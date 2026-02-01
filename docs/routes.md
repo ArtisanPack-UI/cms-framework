@@ -318,7 +318,7 @@ Applications can register additional routes by publishing and modifying route fi
 
 ## See Also
 
-- [API Documentation](api/README.md)
-- [Controller Documentation](controllers.md)
-- [Authorization Policies](policies.md)
-- [Testing Guide](testing.md)
+- [API Documentation](Api-Readme)
+- [Controller Documentation](Controllers)
+- [Authorization Policies](Policies)
+- [Testing Guide](Testing)

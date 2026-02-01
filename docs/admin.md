@@ -8,9 +8,9 @@ The Admin module provides infrastructure for building an authenticated admin are
 
 ## Admin Guides
 
-- [Menu and Pages](admin/Menu-and-Pages.md) — Create sections, pages, and subpages, and understand how routes are registered
-- [Widgets](admin/Widgets.md) — Register and create admin dashboard widgets
-- [Authorization](admin/Authorization.md) — Gate capabilities and admin middleware
+- [Menu and Pages](Admin-Menu-And-Pages) — Create sections, pages, and subpages, and understand how routes are registered
+- [Widgets](Admin-Widgets) — Register and create admin dashboard widgets
+- [Authorization](Admin-Authorization) — Gate capabilities and admin middleware
 
 ## Overview
 

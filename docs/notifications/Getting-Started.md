@@ -157,8 +157,8 @@ Each type has associated icons and color classes for consistent UI styling.
 
 ## Next Steps
 
-- Learn about [Registering Notifications](Registering-Notifications.md) with metadata and email settings
-- Explore [Sending Notifications](Sending-Notifications.md) to roles and with advanced options
-- Understand [Managing Notifications](Managing-Notifications.md) for read/dismissed state
-- Configure [Notification Preferences](Notification-Preferences.md) for users
-- Use the [API Reference](API-Reference.md) for complete helper documentation
+- Learn about [Registering Notifications](Registering-Notifications) with metadata and email settings
+- Explore [Sending Notifications](Sending-Notifications) to roles and with advanced options
+- Understand [Managing Notifications](Managing-Notifications) for read/dismissed state
+- Configure [Notification Preferences](Notification-Preferences) for users
+- Use the [API Reference](Api-Reference) for complete helper documentation

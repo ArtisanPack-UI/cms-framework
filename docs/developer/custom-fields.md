@@ -680,6 +680,6 @@ Deleting a custom field **permanently removes data**. Always backup before delet
 
 ## See Also
 
-- [Content Types Developer Guide](content-types.md)
-- [Taxonomies Developer Guide](taxonomies.md)
-- [Hooks Reference](hooks-reference.md)
+- [Content Types Developer Guide](Content-Types)
+- [Taxonomies Developer Guide](Taxonomies)
+- [Hooks Reference](Hooks-Reference)

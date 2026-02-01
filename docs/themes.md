@@ -14,11 +14,11 @@ The Themes module provides a flexible, WordPress‑inspired theme system with:
 
 ## Theme Guides
 
-- [Getting Started](themes/Getting-Started.md) — Create your first theme
-- [Theme Structure](themes/Theme-Structure.md) — Directory layout and required files
-- [Template Hierarchy](themes/Template-Hierarchy.md) — How templates are resolved
-- [Theme Manifest](themes/Theme-Manifest.md) — The theme.json file format
-- [API Reference](themes/API-Reference.md) — REST endpoints and helper functions
+- [Getting Started](Themes-Getting-Started) — Create your first theme
+- [Theme Structure](Themes-Theme-Structure) — Directory layout and required files
+- [Template Hierarchy](Themes-Template-Hierarchy) — How templates are resolved
+- [Theme Manifest](Themes-Theme-Manifest) — The theme.json file format
+- [API Reference](Themes-Api-Reference) — REST endpoints and helper functions
 
 ## Overview
 

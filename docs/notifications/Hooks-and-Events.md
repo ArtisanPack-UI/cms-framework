@@ -518,6 +518,6 @@ $content = applyFilters('custom_module.notification.content', $content, $notific
 
 ## Next Steps
 
-- Review [Database and Migrations](Database-and-Migrations.md) for schema details
-- Explore the [API Reference](API-Reference.md) for all available methods
-- Learn about [Registering Notifications](Registering-Notifications.md) and [Sending Notifications](Sending-Notifications.md)
+- Review [Database and Migrations](Database-And-Migrations) for schema details
+- Explore the [API Reference](Api-Reference) for all available methods
+- Learn about [Registering Notifications](Registering-Notifications) and [Sending Notifications](Sending-Notifications)

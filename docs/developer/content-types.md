@@ -410,6 +410,6 @@ if ($contentType->supportsFeature('featured_image')) {
 
 ## See Also
 
-- [Custom Fields Developer Guide](custom-fields.md)
-- [Taxonomies Developer Guide](taxonomies.md)
-- [Hooks Reference](hooks-reference.md)
+- [Custom Fields Developer Guide](Custom-Fields)
+- [Taxonomies Developer Guide](Taxonomies)
+- [Hooks Reference](Hooks-Reference)

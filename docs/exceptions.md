@@ -275,6 +275,6 @@ public function update(Request $request, int $id)
 
 ## See Also
 
-- [Error Handling Documentation](error-handling.md)
-- [Testing Exception Scenarios](testing.md#exception-testing)
-- [API Error Responses](api.md#error-responses)
+- [Error Handling Documentation](Error-Handling)
+- [Testing Exception Scenarios](Testing#exception-testing)
+- [API Error Responses](Api#error-responses)

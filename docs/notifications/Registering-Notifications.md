@@ -202,7 +202,7 @@ When you send this notification, emails are queued automatically:
 apSendNotification('invoice.overdue', [1, 2, 3]);
 ```
 
-Users can disable email notifications via their [notification preferences](Notification-Preferences.md).
+Users can disable email notifications via their [notification preferences](Notification-Preferences).
 
 ## Content Placeholders
 
@@ -279,7 +279,7 @@ addFilter('ap.notifications.registeredNotifications', function ($notifications) 
 });
 ```
 
-See [Hooks and Events](Hooks-and-Events.md) for more details.
+See [Hooks and Events](Hooks-And-Events) for more details.
 
 ## Best Practices
 
@@ -324,7 +324,7 @@ Group related notifications:
 
 ## Next Steps
 
-- Learn how to [Send Notifications](Sending-Notifications.md) to users and roles
-- Understand [Managing Notifications](Managing-Notifications.md) for users
-- Configure [Notification Preferences](Notification-Preferences.md)
-- Explore [Hooks and Events](Hooks-and-Events.md) for advanced customization
+- Learn how to [Send Notifications](Sending-Notifications) to users and roles
+- Understand [Managing Notifications](Managing-Notifications) for users
+- Configure [Notification Preferences](Notification-Preferences)
+- Explore [Hooks and Events](Hooks-And-Events) for advanced customization

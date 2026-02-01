@@ -166,7 +166,7 @@ The theme system allows customization of the CMS appearance.
 
 ### Reporting Issues
 
-If you encounter issues with experimental features, please report them on our [issue tracker](https://gitlab.com/artisanpack-ui/cms-framework/-/issues) with the `experimental` label.
+If you encounter issues with experimental features, please report them on our [issue tracker](https://github.com/ArtisanPack-UI/cms-framework/issues) with the `experimental` label.
 
 ## Contributing
 

@@ -626,6 +626,6 @@ All hooks follow the format: `ap.{module}.{event}` or `ap.{module}.{context}.{ev
 
 ## See Also
 
-- [Content Types Developer Guide](content-types.md)
-- [Custom Fields Developer Guide](custom-fields.md)
-- [Taxonomies Developer Guide](taxonomies.md)
+- [Content Types Developer Guide](Content-Types)
+- [Custom Fields Developer Guide](Custom-Fields)
+- [Taxonomies Developer Guide](Taxonomies)

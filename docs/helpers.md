@@ -530,7 +530,7 @@ if (! function_exists('myapp_custom_helper')) {
 
 ## See Also
 
-- [Notification System](notifications.md)
-- [Settings Management](settings.md)
-- [Admin Pages](admin-pages.md)
-- [User Roles & Permissions](roles-permissions.md)
+- [Notification System](Notifications)
+- [Settings Management](Settings)
+- [Admin Pages](Admin-Pages)
+- [User Roles & Permissions](Roles-Permissions)
