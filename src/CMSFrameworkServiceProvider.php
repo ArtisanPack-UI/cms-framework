@@ -1,4 +1,7 @@
 <?php
+
+declare(strict_types=1);
+
 /**
  * Service provider for the CMS Framework.
  *
@@ -6,16 +9,24 @@
  * providing necessary hooks for customization using the Eventy system.
  *
  * @link       https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
- *
- * @package    ArtisanPackUI\CMSFramework
- * @subpackage ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider
  * @since      1.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework;
 
+use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Providers\BlogServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Providers\PagesServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Providers\PluginsServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use Illuminate\Support\ServiceProvider;
-use TorMorten\Eventy\Facades\Eventy;
+use InvalidArgumentException;
 
 /**
  * Registers and bootstraps the CMS Framework within the application.
@@ -28,149 +39,110 @@ use TorMorten\Eventy\Facades\Eventy;
  */
 class CMSFrameworkServiceProvider extends ServiceProvider
 {
+    /**
+     * Boots the CMS framework and loads database migration files.
+     *
+     * This method is triggered during the Laravel bootstrapping process to initialize
+     * the CMS framework and register migration paths for the system.
+     *
+     * @since 1.0.0
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     */
+    public function boot(): void
+    {
+        $this->mergeConfiguration();
+        $this->validateConfiguration();
 
-	/**
-	 * Registers a singleton instance of the CMSFramework within the application container.
-	 *
-	 * This method is called by the Laravel framework during the bootstrapping process to run the CMS framework.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return void
-	 */
-	public function register(): void
-	{
-		$this->app->singleton( 'cmsframework', function ( $app ) {
-			return new CMSFramework();
-		} );
-	}
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
+            ], 'artisanpack-package-config');
+        }
 
-	/**
-	 * Boots the CMS framework and loads database migration files.
-	 *
-	 * This method is triggered during the Laravel bootstrapping process to initialize
-	 * the CMS framework and register migration paths for the system.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return void
-	 */
-	public function boot(): void
-	{
-		global $cmsFramework;
-		$cmsFramework = new CMSFramework();
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+    }
 
-		$this->loadMigrationsFrom( $this->getMigrationDirectories() );
+    /**
+     * Registers a singleton instance of the CMSFramework within the application container.
+     *
+     * This method is called by the Laravel framework during the bootstrapping process to run the CMS framework.
+     *
+     * @since 1.0.0
+     * @see   CMSFrameworkServiceProvider
+     * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
+     */
+    public function register(): void
+    {
+        $this->mergeConfigFrom(
+            __DIR__.'/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
+        );
 
-		/**
-		 * Fires when the migrations are loaded.
-		 *
-		 * Runs functions that need to wait until the migrations are loaded in order to work.
-		 *
-		 * @since 1.0.0
-		 */
-		Eventy::action( 'ap.init.migrations-loaded' );
+        $this->app->register(UserServiceProvider::class);
+        $this->app->register(AdminServiceProvider::class);
+        $this->app->register(AdminWidgetServiceProvider::class);
+        $this->app->register(CoreServiceProvider::class);
+        $this->app->register(SettingsServiceProvider::class);
+        $this->app->register(NotificationServiceProvider::class);
+        $this->app->register(ContentTypesServiceProvider::class);
+        $this->app->register(BlogServiceProvider::class);
+        $this->app->register(PagesServiceProvider::class);
+        $this->app->register(ThemesServiceProvider::class);
+        $this->app->register(PluginsServiceProvider::class);
+    }
 
-		$this->loadViewsFromDirectories( $this->getViewsDirectories() );
+    /**
+     * Merges the package's default configuration with the user's customizations.
+     *
+     * This method ensures that the user's settings in `config/artisanpack.php`
+     * take precedence over the package's default values.
+     *
+     * @since 1.0.0
+     */
+    protected function mergeConfiguration(): void
+    {
+        // Get the package's default configuration.
+        $packageDefaults = config('artisanpack-cms-framework-temp', []);
 
-		/**
-		 * Fires when the views are loaded.
-		 *
-		 * Runs functions that need to wait until the views are loaded in order to work.
-		 *
-		 * @since 1.0.0
-		 */
-		Eventy::action( 'ap.init.views-loaded' );
-	}
+        // Get the user's custom configuration from config/artisanpack.php.
+        $userConfig = config('artisanpack.cms-framework', []);
 
-	/**
-	 * Returns an array of migration directories to load.
-	 *
-	 * This method is used to allow for customization of the migration directories
-	 * by other modules.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return array List of migration directories.
-	 */
-	public function getMigrationDirectories(): array
-	{
-		/**
-		 * Loads the migration directories from the modules.
-		 *
-		 * Grabs the migration directories from the modules that have been registered and returns them as an array.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $directories List of directories to load migrations from.
-		 */
-		return Eventy::filter( 'ap.migrations.directories', [] );
-	}
+        // Merge them, with the user's config overwriting the defaults.
+        $mergedConfig = array_replace_recursive($packageDefaults, $userConfig);
 
-	/**
-	 * Loads views from the specified directories.
-	 *
-	 * This method is used to allow for customization of the view directories
-	 * by other modules.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @param array $directories List of directories to load views from.
-	 *
-	 * @return void
-	 */
-	public function loadViewsFromDirectories( $directories )
-	{
-		if ( $directories ) {
-			foreach ( $directories as $directory ) {
-				$this->loadViewsFrom( $directory['path'], $directory['namespace'] );
-			}
-		}
-	}
+        // Set the final, correctly merged configuration.
+        config(['artisanpack.cms-framework' => $mergedConfig]);
+    }
 
-	/**
-	 * Returns an array of view directories to load.
-	 *
-	 * This method is used to allow for customization of the view directories
-	 * by other modules.
-	 *
-	 * @since 1.0.0
-	 *
-	 * @see   CMSFrameworkServiceProvider
-	 * @link  https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-cms-framework
-	 *
-	 * @return array List of view directories.
-	 */
-	public function getViewsDirectories(): array
-	{
-		/**
-		 * Loads the view directories from the modules.
-		 *
-		 * Grabs the view directories from the modules that have been registered and returns them as an array.
-		 * The returned array includes the path and namespace for each view directory.
-		 *
-		 * @since 1.0.0
-		 *
-		 * @param array $directories List of directories to load views from.
-		 * @return array {
-		 *                           List of view directories.
-		 *
-		 * @type string $path        Path to the view directory.
-		 * @type string $namespace   Namespace for the view directory.
-		 *                           }
-		 */
-		return Eventy::filter( 'ap.views.directories', [] );
-	}
+    /**
+     * Validates the package configuration.
+     *
+     * This method ensures that required configuration values are properly set.
+     * Validation is skipped when running in console mode to allow setup commands
+     * like `vendor:publish` to run before configuration is complete.
+     *
+     * @throws InvalidArgumentException If required configuration is missing (non-console only).
+     *
+     * @since 1.0.0
+     */
+    protected function validateConfiguration(): void
+    {
+        // Skip validation in console mode to allow setup commands (vendor:publish,
+        // package:discover, etc.) to run before the config has been published.
+        if ($this->app->runningInConsole()) {
+            return;
+        }
+
+        $userModel = config('artisanpack.cms-framework.user_model');
+
+        if (null === $userModel) {
+            throw new InvalidArgumentException(
+                'The CMS Framework user_model configuration is not set. '.
+                'Please publish the configuration file using: '.
+                'php artisan vendor:publish --tag=artisanpack-package-config '.
+                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. '.
+                'Example: \'user_model\' => \\App\\Models\\User::class',
+            );
+        }
+    }
 }

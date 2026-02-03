@@ -1,12 +1,37 @@
 # Ignore all test and documentation with "export-ignore".
 
-/.gitlab export-ignore
+# Git & IDE
+/.git               export-ignore
+/.gitattributes     export-ignore
 /.gitignore         export-ignore
+/.gitlab            export-ignore
+/.gitlab-ci.yml     export-ignore
+/.github            export-ignore
+/.idea              export-ignore
+/.vscode            export-ignore
+
+# Tests
 /tests              export-ignore
-/.idea export-ignore
 /src/**/Tests       export-ignore
 /src/**/*Test.php   export-ignore
 /src/**/Test.php    export-ignore
-/phpunit.xml   export-ignore
-/.gitlab-ci.yml export-ignore
-/docs export-ignore
+/phpunit.xml        export-ignore
+/.phpunit.cache     export-ignore
+/pest.json          export-ignore
+
+# Documentation
+/docs               export-ignore
+/CONTRIBUTING.md    export-ignore
+/COVERAGE.md        export-ignore
+/SKIPPED_TESTS.md   export-ignore
+
+# Code Quality
+/phpcs.xml          export-ignore
+/.php-cs-fixer.dist.php export-ignore
+/.php-cs-fixer.cache    export-ignore
+/pint.json          export-ignore
+/.php_cs            export-ignore
+/.php_cs.cache      export-ignore
+
+# Development Files
+/.editorconfig      export-ignore
