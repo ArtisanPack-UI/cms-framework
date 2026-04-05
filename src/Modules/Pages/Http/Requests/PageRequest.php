@@ -65,7 +65,7 @@ class PageRequest extends FormRequest
             'parent_id'    => ['nullable', 'integer', 'exists:pages,id'],
             'order'        => ['nullable', 'integer', 'min:0'],
             'template'     => ['nullable', 'string', 'max:255'],
-            'status'       => ['required', 'string', Rule::enum(ContentStatus::class)],
+            'status'       => ['required', 'string', ContentStatus::validationRule()],
             'published_at' => ['nullable', 'date'],
             'metadata'     => ['nullable', 'array'],
             'categories'   => ['nullable', 'array'],
