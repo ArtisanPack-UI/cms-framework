@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Page Factory for the CMS Framework Pages Module.
@@ -14,6 +14,7 @@ declare( strict_types = 1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Database\Factories;
 
 use App\Models\User;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -49,18 +50,18 @@ class PageFactory extends Factory
      */
     public function definition(): array
     {
-        $title = fake()->sentence( 4, true );
+        $title = fake()->sentence(4, true);
 
         return [
             'title'        => $title,
-            'slug'         => Str::slug( $title ),
-            'content'      => fake()->paragraphs( 3, true ),
+            'slug'         => Str::slug($title),
+            'content'      => fake()->paragraphs(3, true),
             'excerpt'      => fake()->paragraph(),
             'author_id'    => User::factory(),
             'parent_id'    => null,
-            'order'        => fake()->numberBetween( 0, 100 ),
+            'order'        => fake()->numberBetween(0, 100),
             'template'     => 'default',
-            'status'       => 'published',
+            'status'       => ContentStatus::Published,
             'published_at' => now(),
             'metadata'     => [
                 'seo_title'       => $title,
@@ -80,10 +81,10 @@ class PageFactory extends Factory
      */
     public function draft(): static
     {
-        return $this->state( fn ( array $attributes ) => [
-            'status'       => 'draft',
+        return $this->state(fn (array $attributes) => [
+            'status'       => ContentStatus::Draft,
             'published_at' => null,
-        ] );
+        ]);
     }
 
     /**
@@ -97,10 +98,10 @@ class PageFactory extends Factory
      */
     public function published(): static
     {
-        return $this->state( fn ( array $attributes ) => [
-            'status'       => 'published',
-            'published_at' => now()->subDays( rand( 0, 365 ) ),
-        ] );
+        return $this->state(fn (array $attributes) => [
+            'status'       => ContentStatus::Published,
+            'published_at' => now()->subDays(rand(0, 365)),
+        ]);
     }
 
     /**
@@ -112,11 +113,11 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withParent( int $parentId ): static
+    public function withParent(int $parentId): static
     {
-        return $this->state( fn ( array $attributes ) => [
+        return $this->state(fn (array $attributes) => [
             'parent_id' => $parentId,
-        ] );
+        ]);
     }
 
     /**
@@ -128,9 +129,9 @@ class PageFactory extends Factory
      */
     public function topLevel(): static
     {
-        return $this->state( fn ( array $attributes ) => [
+        return $this->state(fn (array $attributes) => [
             'parent_id' => null,
-        ] );
+        ]);
     }
 
     /**
@@ -142,11 +143,11 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withTemplate( string $template ): static
+    public function withTemplate(string $template): static
     {
-        return $this->state( fn ( array $attributes ) => [
+        return $this->state(fn (array $attributes) => [
             'template' => $template,
-        ] );
+        ]);
     }
 
     /**
@@ -158,11 +159,11 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function byAuthor( int $authorId ): static
+    public function byAuthor(int $authorId): static
     {
-        return $this->state( fn ( array $attributes ) => [
+        return $this->state(fn (array $attributes) => [
             'author_id' => $authorId,
-        ] );
+        ]);
     }
 
     /**
@@ -174,9 +175,9 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withOrder( int $order ): static
+    public function withOrder(int $order): static
     {
-        return $this->state( fn ( array $attributes ) => [
+        return $this->state(fn (array $attributes) => [
             'order' => $order,
         ]);
     }

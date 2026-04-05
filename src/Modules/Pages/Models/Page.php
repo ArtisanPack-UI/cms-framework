@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Page Model
@@ -12,6 +12,7 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Models;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\MediaLibrary\Models\Media;
@@ -82,7 +83,7 @@ class Page extends Model
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo( config( 'auth.providers.users.model' ), 'author_id' );
+        return $this->belongsTo(config('auth.providers.users.model'), 'author_id');
     }
 
     /**
@@ -92,7 +93,7 @@ class Page extends Model
      */
     public function featuredImageMedia(): BelongsTo
     {
-        return $this->belongsTo( Media::class, 'featured_image_id' );
+        return $this->belongsTo(Media::class, 'featured_image_id');
     }
 
     /**
@@ -102,7 +103,7 @@ class Page extends Model
      */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo( Page::class, 'parent_id' );
+        return $this->belongsTo(Page::class, 'parent_id');
     }
 
     /**
@@ -112,7 +113,7 @@ class Page extends Model
      */
     public function children(): HasMany
     {
-        return $this->hasMany( Page::class, 'parent_id' )->orderBy( 'order' );
+        return $this->hasMany(Page::class, 'parent_id')->orderBy('order');
     }
 
     /**
@@ -122,7 +123,7 @@ class Page extends Model
      */
     public function categories(): BelongsToMany
     {
-        return $this->belongsToMany( PageCategory::class, 'page_category_pivots', 'page_id', 'page_category_id' );
+        return $this->belongsToMany(PageCategory::class, 'page_category_pivots', 'page_id', 'page_category_id');
     }
 
     /**
@@ -132,7 +133,7 @@ class Page extends Model
      */
     public function tags(): BelongsToMany
     {
-        return $this->belongsToMany( PageTag::class, 'page_tag_pivots', 'page_id', 'page_tag_id' );
+        return $this->belongsToMany(PageTag::class, 'page_tag_pivots', 'page_id', 'page_tag_id');
     }
 
     /**
@@ -143,9 +144,9 @@ class Page extends Model
     public function siblings(): HasMany
     {
         // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
-        return $this->hasMany( Page::class, 'parent_id', 'parent_id' )
-            ->where( 'id', '!=', $this->id )
-            ->orderBy( 'order' );
+        return $this->hasMany(Page::class, 'parent_id', 'parent_id')
+            ->where('id', '!=', $this->id)
+            ->orderBy('order');
     }
 
     /**
@@ -158,8 +159,8 @@ class Page extends Model
         $ancestors = collect();
         $parent    = $this->parent;
 
-        while ( $parent ) {
-            $ancestors->prepend( $parent );
+        while ($parent) {
+            $ancestors->prepend($parent);
             $parent = $parent->parent;
         }
 
@@ -175,9 +176,9 @@ class Page extends Model
     {
         $descendants = collect();
 
-        foreach ( $this->children as $child ) {
-            $descendants->push( $child );
-            $descendants = $descendants->merge( $child->descendants() );
+        foreach ($this->children as $child) {
+            $descendants->push($child);
+            $descendants = $descendants->merge($child->descendants());
         }
 
         return $descendants;
@@ -188,17 +189,15 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
-    public function scopePublished( Builder $query )
+    public function scopePublished(Builder $query)
     {
-        return $query->where( 'status', 'published' )
-            ->where( function ( $q ): void {
-                $q->whereNull( 'published_at' )
-                    ->orWhere( 'published_at', '<=', now() );
-            } );
+        return $query->where('status', ContentStatus::Published)
+            ->where(function ($q): void {
+                $q->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            });
     }
 
     /**
@@ -206,13 +205,11 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
-    public function scopeDraft( Builder $query )
+    public function scopeDraft(Builder $query)
     {
-        return $query->where( 'status', 'draft' );
+        return $query->where('status', ContentStatus::Draft);
     }
 
     /**
@@ -220,13 +217,11 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
-    public function scopeByAuthor( Builder $query, int $authorId )
+    public function scopeByAuthor(Builder $query, int $authorId)
     {
-        return $query->where( 'author_id', sanitizeInt( $authorId ) );
+        return $query->where('author_id', sanitizeInt($authorId));
     }
 
     /**
@@ -234,13 +229,11 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
-    public function scopeTopLevel( Builder $query )
+    public function scopeTopLevel(Builder $query)
     {
-        return $query->whereNull( 'parent_id' );
+        return $query->whereNull('parent_id');
     }
 
     /**
@@ -248,13 +241,11 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
-    public function scopeByTemplate( Builder $query, string $template )
+    public function scopeByTemplate(Builder $query, string $template)
     {
-        return $query->where( 'template', sanitizeText( $template ) );
+        return $query->where('template', sanitizeText($template));
     }
 
     /**
@@ -264,8 +255,8 @@ class Page extends Model
      */
     public function isPublished(): bool
     {
-        return 'published' === $this->status &&
-            ( null === $this->published_at || $this->published_at->isPast() );
+        return ContentStatus::Published === $this->status &&
+            (null === $this->published_at || $this->published_at->isPast());
     }
 
     /**
@@ -277,7 +268,7 @@ class Page extends Model
     {
         $breadcrumb = [];
 
-        foreach ( $this->ancestors() as $ancestor ) {
+        foreach ($this->ancestors() as $ancestor) {
             $breadcrumb[] = [
                 'title' => $ancestor->title,
                 'url'   => $ancestor->permalink,
@@ -311,13 +302,13 @@ class Page extends Model
     {
         $ancestors = $this->ancestors();
 
-        if ( $ancestors->isEmpty() ) {
-            return url( "/{$this->slug}" );
+        if ($ancestors->isEmpty()) {
+            return url("/{$this->slug}");
         }
 
-        $path = $ancestors->pluck( 'slug' )->implode( '/' ) . '/' . $this->slug;
+        $path = $ancestors->pluck('slug')->implode('/').'/'.$this->slug;
 
-        return url( "/{$path}" );
+        return url("/{$path}");
     }
 
     /**
@@ -333,6 +324,7 @@ class Page extends Model
             'published_at' => 'datetime',
             'metadata'     => 'array',
             'order'        => 'integer',
+            'status'       => ContentStatus::class,
         ];
     }
 }
