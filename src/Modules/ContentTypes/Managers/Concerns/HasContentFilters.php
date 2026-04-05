@@ -68,11 +68,12 @@ trait HasContentFilters
     protected function applySearchFilter(Builder $query, array $filters): void
     {
         if (isset($filters['search'])) {
-            $search = str_replace(['%', '_', '\\'], ['\\%', '\\_', '\\\\'], $filters['search']);
-            $query->where(function ($q) use ($search): void {
-                $q->where('title', 'like', "%{$search}%")
-                    ->orWhere('content', 'like', "%{$search}%")
-                    ->orWhere('excerpt', 'like', "%{$search}%");
+            $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $filters['search']);
+            $pattern = "%{$escaped}%";
+            $query->where(function ($q) use ($pattern): void {
+                $q->whereRaw('title LIKE ? ESCAPE ?', [$pattern, '\\'])
+                    ->orWhereRaw('content LIKE ? ESCAPE ?', [$pattern, '\\'])
+                    ->orWhereRaw('excerpt LIKE ? ESCAPE ?', [$pattern, '\\']);
             });
         }
     }
