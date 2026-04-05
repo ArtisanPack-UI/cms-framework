@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Support\ServiceProvider;
@@ -84,7 +85,7 @@ class ThemesServiceProvider extends ServiceProvider
             'themes.activeTheme',
             config('cms.themes.default', 'digital-shopfront'),
             fn ($value) => is_string($value) ? sanitizeText($value) : '',
-            'string',
+            SettingType::String,
         );
     }
 }
