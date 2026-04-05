@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Settings Manager
@@ -14,6 +14,7 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 use Illuminate\Support\Facades\Schema;
 
@@ -35,9 +36,9 @@ class SettingsManager
      * @param  string  $key  Unique key for the setting.
      * @param  mixed  $defaultValue  Default value returned when no stored value exists.
      * @param  callable  $callback  Sanitization callback used to clean values on update.
-     * @param  string  $type  Data type of the setting (e.g., 'string', 'boolean', 'integer').
+     * @param  SettingType  $type  Data type of the setting.
      */
-    public function registerSetting( string $key, mixed $defaultValue, callable $callback, string $type = 'string' ): void
+    public function registerSetting(string $key, mixed $defaultValue, callable $callback, SettingType $type = SettingType::String): void
     {
         /**
          * Filters the array of registered settings to add or modify items.
@@ -50,19 +51,19 @@ class SettingsManager
          * @hook  ap.settings.registeredSettings
          *
          * @param  array  $settings  Associative array of registered settings keyed by setting key. Each item
-         *                           contains: 'default' (mixed), 'type' (string), and 'callback' (callable).
+         *                           contains: 'default' (mixed), 'type' (SettingType), and 'callback' (callable).
          *
          * @return array Filtered settings array.
          */
-        addFilter( 'ap.settings.registeredSettings', function ( $settings ) use ( $key, $defaultValue, $type, $callback ) {
-            $settings[ $key ] = [
+        addFilter('ap.settings.registeredSettings', function ($settings) use ($key, $defaultValue, $type, $callback) {
+            $settings[$key] = [
                 'default'  => $defaultValue,
                 'type'     => $type,
                 'callback' => $callback,
             ];
 
             return $settings;
-        } );
+        });
     }
 
     /**
@@ -79,12 +80,12 @@ class SettingsManager
      *
      * @return mixed The setting value.
      */
-    public function getSetting( string $key, mixed $default = null ): mixed
+    public function getSetting(string $key, mixed $default = null): mixed
     {
-        if ( Schema::hasTable( 'settings' ) ) {
-            $setting = Setting::where( 'key', sanitizeText( $key ) )->first();
+        if (Schema::hasTable('settings')) {
+            $setting = Setting::where('key', sanitizeText($key))->first();
 
-            if ( $setting ) {
+            if ($setting) {
                 return $setting->value;
             }
         }
@@ -100,8 +101,8 @@ class SettingsManager
          *
          * @return array Filtered settings array.
          */
-        $settings          = applyFilters( 'ap.settings.registeredSettings', [] );
-        $registeredDefault = $settings[ $key ]['default'] ?? null;
+        $settings          = applyFilters('ap.settings.registeredSettings', []);
+        $registeredDefault = $settings[$key]['default'] ?? null;
 
         return $default ?? $registeredDefault;
     }
@@ -116,9 +117,9 @@ class SettingsManager
      * @param  string  $key  Unique key for the setting.
      * @param  mixed  $value  New value to store for the setting (will be sanitized first).
      */
-    public function updateSetting( string $key, mixed $value ): void
+    public function updateSetting(string $key, mixed $value): void
     {
-        if ( ! Schema::hasTable( 'settings' ) ) {
+        if (! Schema::hasTable('settings')) {
             return;
         }
 
@@ -131,22 +132,34 @@ class SettingsManager
          *
          * @return array Filtered settings array.
          */
-        $settings  = applyFilters( 'ap.settings.registeredSettings', [] );
-        $def       = $settings[ $key ] ?? null;
-        $sanitized = is_array( $def ) && isset( $def['callback'] ) && is_callable( $def['callback'] )
-            ? call_user_func( $def['callback'], $value )
+        $settings  = applyFilters('ap.settings.registeredSettings', []);
+        $def       = $settings[$key] ?? null;
+        $sanitized = is_array($def) && isset($def['callback']) && is_callable($def['callback'])
+            ? call_user_func($def['callback'], $value)
             : $value;
 
-        $currentSetting = Setting::where( 'key', sanitizeText( $key ) )->first();
+        $registeredType = ($def['type'] ?? null) instanceof SettingType ? $def['type'] : null;
+        $currentSetting = Setting::where('key', sanitizeText($key))->first();
 
-        if ( $currentSetting ) {
+        if ($currentSetting) {
             $currentSetting->value = $sanitized;
+
+            if ($registeredType) {
+                $currentSetting->type = $registeredType->value;
+            }
+
             $currentSetting->save();
         } else {
-            Setting::create( [
+            $attributes = [
                 'key'   => $key,
                 'value' => $sanitized,
-            ] );
+            ];
+
+            if ($registeredType) {
+                $attributes['type'] = $registeredType->value;
+            }
+
+            Setting::create($attributes);
         }
     }
 }
