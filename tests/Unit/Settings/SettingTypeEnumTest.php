@@ -79,6 +79,20 @@ test('serialize converts values to storage strings', function (): void {
     expect(SettingType::Json->serialize(['a' => 1]))->toBe('{"a":1}');
 });
 
-test('serialize handles null for string type', function (): void {
+test('serialize handles null values', function (): void {
     expect(SettingType::String->serialize(null))->toBe('');
+    expect(SettingType::Boolean->serialize(null))->toBe('0');
+    expect(SettingType::Integer->serialize(null))->toBe('');
+    expect(SettingType::Float->serialize(null))->toBe('');
+    expect(SettingType::Json->serialize(null))->toBe('null');
 });
+
+test('cast throws JsonException for malformed json', function (): void {
+    SettingType::Json->cast('{invalid json}');
+})->throws(JsonException::class);
+
+test('serialize throws JsonException for unencodable value', function (): void {
+    $resource = fopen('php://memory', 'r');
+    SettingType::Json->serialize($resource);
+    fclose($resource);
+})->throws(JsonException::class);

@@ -138,16 +138,28 @@ class SettingsManager
             ? call_user_func($def['callback'], $value)
             : $value;
 
+        $registeredType = ($def['type'] ?? null) instanceof SettingType ? $def['type'] : null;
         $currentSetting = Setting::where('key', sanitizeText($key))->first();
 
         if ($currentSetting) {
             $currentSetting->value = $sanitized;
+
+            if ($registeredType) {
+                $currentSetting->type = $registeredType->value;
+            }
+
             $currentSetting->save();
         } else {
-            Setting::create([
+            $attributes = [
                 'key'   => $key,
                 'value' => $sanitized,
-            ]);
+            ];
+
+            if ($registeredType) {
+                $attributes['type'] = $registeredType->value;
+            }
+
+            Setting::create($attributes);
         }
     }
 }
