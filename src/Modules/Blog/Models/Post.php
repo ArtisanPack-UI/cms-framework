@@ -33,7 +33,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string|null $content
  * @property string|null $excerpt
  * @property int $author_id
- * @property string $status
+ * @property ContentStatus $status
  * @property Carbon|null $published_at
  * @property array|null $metadata
  * @property \Illuminate\Support\Carbon $created_at

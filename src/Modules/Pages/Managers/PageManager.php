@@ -257,9 +257,9 @@ class PageManager
         if (isset($filters['status'])) {
             $status = $filters['status'] instanceof ContentStatus
                 ? $filters['status']
-                : ContentStatus::from(sanitizeText($filters['status']));
+                : ContentStatus::tryFrom(sanitizeText($filters['status']));
 
-            if (ContentStatus::Published === $status) {
+            if (null === $status || ContentStatus::Published === $status) {
                 $query->published();
             } else {
                 $query->where('status', $status);

@@ -26,8 +26,10 @@ test('content status enum tryFrom returns null for invalid value', function (): 
 });
 
 test('content status enum label returns translatable string', function (): void {
-    expect(ContentStatus::Draft->label())->toBe('Draft');
-    expect(ContentStatus::Published->label())->toBe('Published');
-    expect(ContentStatus::Scheduled->label())->toBe('Scheduled');
-    expect(ContentStatus::Private->label())->toBe('Private');
+    app()->setLocale('en');
+
+    expect(ContentStatus::Draft->label())->toBe(__('Draft'));
+    expect(ContentStatus::Published->label())->toBe(__('Published'));
+    expect(ContentStatus::Scheduled->label())->toBe(__('Scheduled'));
+    expect(ContentStatus::Private->label())->toBe(__('Private'));
 });

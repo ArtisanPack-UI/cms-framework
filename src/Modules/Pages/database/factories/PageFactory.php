@@ -61,7 +61,7 @@ class PageFactory extends Factory
             'parent_id'    => null,
             'order'        => fake()->numberBetween(0, 100),
             'template'     => 'default',
-            'status'       => ContentStatus::Published,
+            'status'       => ContentStatus::Published->value,
             'published_at' => now(),
             'metadata'     => [
                 'seo_title'       => $title,
@@ -82,7 +82,7 @@ class PageFactory extends Factory
     public function draft(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status'       => ContentStatus::Draft,
+            'status'       => ContentStatus::Draft->value,
             'published_at' => null,
         ]);
     }
@@ -99,7 +99,7 @@ class PageFactory extends Factory
     public function published(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status'       => ContentStatus::Published,
+            'status'       => ContentStatus::Published->value,
             'published_at' => now()->subDays(rand(0, 365)),
         ]);
     }

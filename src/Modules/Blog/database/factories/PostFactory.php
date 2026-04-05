@@ -59,7 +59,7 @@ class PostFactory extends Factory
             'content'      => fake()->paragraphs(5, true),
             'excerpt'      => fake()->paragraph(),
             'author_id'    => User::factory(),
-            'status'       => ContentStatus::Published,
+            'status'       => ContentStatus::Published->value,
             'published_at' => now(),
             'metadata'     => [
                 'seo_title'       => $title,
@@ -80,7 +80,7 @@ class PostFactory extends Factory
     public function draft(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status'       => ContentStatus::Draft,
+            'status'       => ContentStatus::Draft->value,
             'published_at' => null,
         ]);
     }
@@ -97,7 +97,7 @@ class PostFactory extends Factory
     public function scheduled(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status'       => ContentStatus::Published,
+            'status'       => ContentStatus::Published->value,
             'published_at' => now()->addDays(rand(1, 30)),
         ]);
     }
@@ -114,7 +114,7 @@ class PostFactory extends Factory
     public function published(): static
     {
         return $this->state(fn (array $attributes) => [
-            'status'       => ContentStatus::Published,
+            'status'       => ContentStatus::Published->value,
             'published_at' => now()->subDays(rand(0, 365)),
         ]);
     }
@@ -131,7 +131,7 @@ class PostFactory extends Factory
     public function publishedAt($date): static
     {
         return $this->state(fn (array $attributes) => [
-            'status'       => ContentStatus::Published,
+            'status'       => ContentStatus::Published->value,
             'published_at' => $date,
         ]);
     }

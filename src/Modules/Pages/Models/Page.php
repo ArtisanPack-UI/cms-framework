@@ -38,7 +38,7 @@ use Illuminate\Support\Collection;
  * @property int|null $parent_id
  * @property int $order
  * @property string|null $template
- * @property string $status
+ * @property ContentStatus $status
  * @property Carbon|null $published_at
  * @property array|null $metadata
  * @property \Illuminate\Support\Carbon $created_at
