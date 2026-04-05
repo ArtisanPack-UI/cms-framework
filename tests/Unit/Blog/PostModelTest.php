@@ -3,6 +3,7 @@
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Carbon\Carbon;
 
@@ -29,7 +30,7 @@ test( 'post can be created with required attributes', function (): void {
     expect( $post )->toBeInstanceOf( Post::class );
     expect( $post->title )->toBe( 'Test Post' );
     expect( $post->slug )->toBe( 'test-post' );
-    expect( $post->status )->toBe( 'draft' );
+    expect( $post->status )->toBe( ContentStatus::Draft );
     expect( $post->author_id )->toBe( $user->id );
 } );
 
