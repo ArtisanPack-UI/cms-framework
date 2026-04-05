@@ -93,6 +93,10 @@ test('cast throws JsonException for malformed json', function (): void {
 
 test('serialize throws JsonException for unencodable value', function (): void {
     $resource = fopen('php://memory', 'r');
-    SettingType::Json->serialize($resource);
-    fclose($resource);
+
+    try {
+        SettingType::Json->serialize($resource);
+    } finally {
+        fclose($resource);
+    }
 })->throws(JsonException::class);
