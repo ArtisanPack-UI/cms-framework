@@ -1,0 +1,94 @@
+<?php
+
+declare(strict_types=1);
+
+/**
+ * HasContentFilters Trait
+ *
+ * Provides shared content query filter logic for content managers.
+ *
+ * @since 1.1.0
+ */
+
+namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\Concerns;
+
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use Illuminate\Database\Eloquent\Builder;
+
+/**
+ * Trait for applying common content filters to query builders.
+ *
+ * Provides shared status filtering and search filtering logic
+ * that is used by BlogManager, PageManager, and other content managers.
+ *
+ * @since 1.1.0
+ */
+trait HasContentFilters
+{
+    /**
+     * Apply status filter to a query.
+     *
+     * If a status is provided, it filters by that status. If the status is
+     * 'published' or null/invalid, it uses the published scope. Otherwise,
+     * it defaults to published when no status filter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @param  Builder  $query  The query builder instance.
+     * @param  array  $filters  Array of filters (expects 'status' key).
+     * @param  bool  $defaultToPublished  Whether to default to published scope when no status filter is provided.
+     */
+    protected function applyStatusFilter(Builder $query, array $filters, bool $defaultToPublished = true): void
+    {
+        if (isset($filters['status'])) {
+            $status = $filters['status'] instanceof ContentStatus
+                ? $filters['status']
+                : ContentStatus::tryFrom(sanitizeText($filters['status']));
+
+            if (null === $status || ContentStatus::Published === $status) {
+                $query->published();
+            } else {
+                $query->where('status', $status);
+            }
+        } elseif ($defaultToPublished) {
+            $query->published();
+        }
+    }
+
+    /**
+     * Apply search filter to a query.
+     *
+     * Searches across title, content, and excerpt fields.
+     *
+     * @since 1.1.0
+     *
+     * @param  Builder  $query  The query builder instance.
+     * @param  array  $filters  Array of filters (expects 'search' key).
+     */
+    protected function applySearchFilter(Builder $query, array $filters): void
+    {
+        if (isset($filters['search'])) {
+            $search = str_replace(['%', '_', '\\'], ['\\%', '\\_', '\\\\'], $filters['search']);
+            $query->where(function ($q) use ($search): void {
+                $q->where('title', 'like', "%{$search}%")
+                    ->orWhere('content', 'like', "%{$search}%")
+                    ->orWhere('excerpt', 'like', "%{$search}%");
+            });
+        }
+    }
+
+    /**
+     * Apply author filter to a query.
+     *
+     * @since 1.1.0
+     *
+     * @param  Builder  $query  The query builder instance.
+     * @param  array  $filters  Array of filters (expects 'author' key).
+     */
+    protected function applyAuthorFilter(Builder $query, array $filters): void
+    {
+        if (isset($filters['author'])) {
+            $query->byAuthor($filters['author']);
+        }
+    }
+}

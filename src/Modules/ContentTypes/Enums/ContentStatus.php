@@ -12,6 +12,9 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums;
 
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
+
 /**
  * Enum for content statuses.
  *
@@ -34,6 +37,18 @@ enum ContentStatus: string
             self::Scheduled => __('Scheduled'),
             self::Private   => __('Private'),
         };
+    }
+
+    /**
+     * Get the validation rule for content status fields.
+     *
+     * @since 1.1.0
+     *
+     * @return Enum The validation rule.
+     */
+    public static function validationRule(): Enum
+    {
+        return Rule::enum(self::class);
     }
     case Draft     = 'draft';
     case Published = 'published';

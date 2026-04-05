@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use Illuminate\Validation\Rules\Enum;
 
 test('content status enum has expected cases', function (): void {
     $cases = ContentStatus::cases();
@@ -32,4 +33,10 @@ test('content status enum label returns translatable string', function (): void 
     expect(ContentStatus::Published->label())->toBe(__('Published'));
     expect(ContentStatus::Scheduled->label())->toBe(__('Scheduled'));
     expect(ContentStatus::Private->label())->toBe(__('Private'));
+});
+
+test('content status enum validationRule returns enum rule', function (): void {
+    $rule = ContentStatus::validationRule();
+
+    expect($rule)->toBeInstanceOf(Enum::class);
 });

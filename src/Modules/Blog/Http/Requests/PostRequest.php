@@ -66,7 +66,7 @@ class PostRequest extends FormRequest
             'content'      => ['nullable', 'string'],
             'excerpt'      => ['nullable', 'string'],
             'author_id'    => ['required', 'integer', 'exists:users,id'],
-            'status'       => ['required', 'string', Rule::enum(ContentStatus::class)],
+            'status'       => ['required', 'string', ContentStatus::validationRule()],
             'published_at' => ['nullable', 'date'],
             'metadata'     => ['nullable', 'array'],
             'categories'   => ['nullable', 'array'],
