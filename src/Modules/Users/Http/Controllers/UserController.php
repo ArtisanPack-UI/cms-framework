@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 
 /**
@@ -167,12 +168,12 @@ class UserController extends Controller
      *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy(string|int $id): JsonResponse
+    public function destroy(string|int $id): Response
     {
         $userModel = config('artisanpack.cms-framework.user_model');
         $user      = $userModel::findOrFail($id);
         $user->delete();
 
-        return response()->json([], 204);
+        return response()->noContent();
     }
 }

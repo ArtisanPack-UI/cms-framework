@@ -15,12 +15,47 @@ function grantRolePermission(string $permission): void
     Gate::define($permission, fn () => true);
 }
 
+/**
+ * Create a test user with an attached role.
+ */
+function createUserWithRole(string $roleState = 'admin'): TestUser
+{
+    $user = TestUser::factory()->create();
+    $role = Role::factory()->{$roleState}()->create();
+    $user->roles()->attach($role);
+
+    return $user;
+}
+
+/**
+ * Create a role with an attached permission.
+ *
+ * @return array{role: Role, permission: Permission}
+ */
+function createRoleWithPermission(): array
+{
+    $role       = Role::factory()->admin()->create();
+    $permission = Permission::create(['name' => 'Edit Posts', 'slug' => 'edit-posts']);
+    $role->permissions()->attach($permission);
+
+    return ['role' => $role, 'permission' => $permission];
+}
+
+/**
+ * Create an authenticated user with role management permission granted.
+ */
+function authenticatedRoleManager(): TestUser
+{
+    $user = TestUser::factory()->create();
+    grantRolePermission('roles.manage');
+
+    return $user;
+}
+
 // --- User Controller: include parameter tests ---
 
 test('user index returns roles by default when no include param', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->admin()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole();
 
     $response = $this->getJson('/api/v1/users');
 
@@ -30,9 +65,7 @@ test('user index returns roles by default when no include param', function (): v
 });
 
 test('user index loads only requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->admin()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole();
 
     $response = $this->getJson('/api/v1/users?include=roles');
 
@@ -41,31 +74,25 @@ test('user index loads only requested includes', function (): void {
 });
 
 test('user index returns empty roles when include is empty string', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->admin()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole();
 
     $response = $this->getJson('/api/v1/users?include=');
 
     $response->assertSuccessful();
-    // With empty include, no relationships are loaded, so roles won't be in response
     expect($response->json('data.0'))->not->toHaveKey('roles');
 });
 
 test('user index ignores invalid include values', function (): void {
-    $user = TestUser::factory()->create();
+    TestUser::factory()->create();
 
     $response = $this->getJson('/api/v1/users?include=nonexistent,invalid');
 
     $response->assertSuccessful();
-    // Invalid includes are silently ignored, no relationships loaded
     expect($response->json('data.0'))->not->toHaveKey('roles');
 });
 
 test('user index filters out invalid includes but keeps valid ones', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->admin()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole();
 
     $response = $this->getJson('/api/v1/users?include=roles,nonexistent');
 
@@ -74,9 +101,7 @@ test('user index filters out invalid includes but keeps valid ones', function ()
 });
 
 test('user show loads requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->editor()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole('editor');
 
     $response = $this->getJson("/api/v1/users/{$user->id}?include=roles");
 
@@ -86,9 +111,7 @@ test('user show loads requested includes', function (): void {
 });
 
 test('user show omits relationships with empty include', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->admin()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole();
 
     $response = $this->getJson("/api/v1/users/{$user->id}?include=");
 
@@ -108,9 +131,7 @@ test('user store loads requested includes', function (): void {
 });
 
 test('user update loads requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    $role = Role::factory()->admin()->create();
-    $user->roles()->attach($role);
+    $user = createUserWithRole();
 
     $response = $this->putJson("/api/v1/users/{$user->id}?include=roles", [
         'name' => 'Updated Name',
@@ -123,14 +144,10 @@ test('user update loads requested includes', function (): void {
 // --- Role Controller: include parameter tests ---
 
 test('role index returns permissions by default when no include param', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor                          = authenticatedRoleManager();
+    ['role' => $role]               = createRoleWithPermission();
 
-    $role       = Role::factory()->admin()->create();
-    $permission = Permission::create(['name' => 'Edit Posts', 'slug' => 'edit-posts']);
-    $role->permissions()->attach($permission);
-
-    $response = $this->actingAs($user)->getJson('/api/v1/roles');
+    $response = $this->actingAs($actor)->getJson('/api/v1/roles');
 
     $response->assertSuccessful();
     expect($response->json('data.0.permissions'))->toHaveCount(1);
@@ -138,52 +155,39 @@ test('role index returns permissions by default when no include param', function
 });
 
 test('role index loads only requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor = authenticatedRoleManager();
+    createRoleWithPermission();
 
-    $role       = Role::factory()->admin()->create();
-    $permission = Permission::create(['name' => 'Edit Posts', 'slug' => 'edit-posts']);
-    $role->permissions()->attach($permission);
-
-    $response = $this->actingAs($user)->getJson('/api/v1/roles?include=permissions');
+    $response = $this->actingAs($actor)->getJson('/api/v1/roles?include=permissions');
 
     $response->assertSuccessful();
     expect($response->json('data.0.permissions'))->toHaveCount(1);
 });
 
 test('role index omits permissions with empty include', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor = authenticatedRoleManager();
+    createRoleWithPermission();
 
-    $role       = Role::factory()->admin()->create();
-    $permission = Permission::create(['name' => 'Edit Posts', 'slug' => 'edit-posts']);
-    $role->permissions()->attach($permission);
-
-    $response = $this->actingAs($user)->getJson('/api/v1/roles?include=');
+    $response = $this->actingAs($actor)->getJson('/api/v1/roles?include=');
 
     $response->assertSuccessful();
     expect($response->json('data.0'))->not->toHaveKey('permissions');
 });
 
 test('role show loads requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor                          = authenticatedRoleManager();
+    ['role' => $role]               = createRoleWithPermission();
 
-    $role       = Role::factory()->admin()->create();
-    $permission = Permission::create(['name' => 'Edit Posts', 'slug' => 'edit-posts']);
-    $role->permissions()->attach($permission);
-
-    $response = $this->actingAs($user)->getJson("/api/v1/roles/{$role->id}?include=permissions");
+    $response = $this->actingAs($actor)->getJson("/api/v1/roles/{$role->id}?include=permissions");
 
     $response->assertSuccessful();
     expect($response->json('data.permissions'))->toHaveCount(1);
 });
 
 test('role store loads requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor = authenticatedRoleManager();
 
-    $response = $this->actingAs($user)->postJson('/api/v1/roles?include=permissions', [
+    $response = $this->actingAs($actor)->postJson('/api/v1/roles?include=permissions', [
         'name' => 'New Role',
         'slug' => 'new-role',
     ]);
@@ -193,14 +197,10 @@ test('role store loads requested includes', function (): void {
 });
 
 test('role update loads requested includes', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor                          = authenticatedRoleManager();
+    ['role' => $role]               = createRoleWithPermission();
 
-    $role       = Role::factory()->admin()->create();
-    $permission = Permission::create(['name' => 'Edit Posts', 'slug' => 'edit-posts']);
-    $role->permissions()->attach($permission);
-
-    $response = $this->actingAs($user)->putJson("/api/v1/roles/{$role->id}?include=permissions", [
+    $response = $this->actingAs($actor)->putJson("/api/v1/roles/{$role->id}?include=permissions", [
         'name' => 'Updated Admin',
     ]);
 
@@ -209,12 +209,10 @@ test('role update loads requested includes', function (): void {
 });
 
 test('role index ignores invalid include values', function (): void {
-    $user = TestUser::factory()->create();
-    grantRolePermission('roles.manage');
+    $actor = authenticatedRoleManager();
+    Role::factory()->admin()->create();
 
-    $role = Role::factory()->admin()->create();
-
-    $response = $this->actingAs($user)->getJson('/api/v1/roles?include=nonexistent');
+    $response = $this->actingAs($actor)->getJson('/api/v1/roles?include=nonexistent');
 
     $response->assertSuccessful();
     expect($response->json('data.0'))->not->toHaveKey('permissions');
