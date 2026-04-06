@@ -82,7 +82,7 @@ class UserController extends Controller
      *
      * @return UserResource The created user resource with loaded roles.
      */
-    public function store(Request $request): UserResource
+    public function store(Request $request): JsonResponse
     {
         $userModel = config('artisanpack.cms-framework.user_model');
 
@@ -97,7 +97,7 @@ class UserController extends Controller
         $user = $userModel::create($validated);
         $user->load($this->getRequestedIncludes($request));
 
-        return new UserResource($user);
+        return (new UserResource($user))->response()->setStatusCode(201);
     }
 
     /**

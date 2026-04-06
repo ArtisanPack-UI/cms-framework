@@ -109,8 +109,10 @@ class PageCategoryController extends Controller
      */
     public function show(Request $request, int $id): PageCategoryResource
     {
-        $category = PageCategory::with($this->getRequestedIncludes($request))->findOrFail($id);
+        $category = PageCategory::findOrFail($id);
         $this->authorize('view', $category);
+
+        $category->load($this->getRequestedIncludes($request));
 
         return new PageCategoryResource($category);
     }

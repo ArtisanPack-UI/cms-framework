@@ -109,8 +109,10 @@ class PostCategoryController extends Controller
      */
     public function show(Request $request, int $id): PostCategoryResource
     {
-        $category = PostCategory::with($this->getRequestedIncludes($request))->findOrFail($id);
+        $category = PostCategory::findOrFail($id);
         $this->authorize('view', $category);
+
+        $category->load($this->getRequestedIncludes($request));
 
         return new PostCategoryResource($category);
     }

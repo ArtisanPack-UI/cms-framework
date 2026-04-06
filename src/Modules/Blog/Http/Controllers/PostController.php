@@ -223,11 +223,12 @@ class PostController extends Controller
      * @param  int|null  $month  Month to filter by (optional).
      * @param  int|null  $day  Day to filter by (optional).
      */
-    public function archiveByDate(int $year, ?int $month = null, ?int $day = null): AnonymousResourceCollection
+    public function archiveByDate(Request $request, int $year, ?int $month = null, ?int $day = null): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Post::class);
 
         $posts = $this->blogManager->getPostsByDate($year, $month, $day);
+        $posts->load($this->getRequestedIncludes($request));
 
         return PostResource::collection($posts);
     }
@@ -239,11 +240,12 @@ class PostController extends Controller
      *
      * @param  int  $authorId  Author ID to filter by.
      */
-    public function archiveByAuthor(int $authorId): AnonymousResourceCollection
+    public function archiveByAuthor(Request $request, int $authorId): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Post::class);
 
         $posts = $this->blogManager->getPostsByAuthor($authorId);
+        $posts->load($this->getRequestedIncludes($request));
 
         return PostResource::collection($posts);
     }
@@ -255,11 +257,12 @@ class PostController extends Controller
      *
      * @param  string  $slug  Category slug to filter by.
      */
-    public function archiveByCategory(string $slug): AnonymousResourceCollection
+    public function archiveByCategory(Request $request, string $slug): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Post::class);
 
         $posts = $this->blogManager->getPostsByCategory($slug);
+        $posts->load($this->getRequestedIncludes($request));
 
         return PostResource::collection($posts);
     }
@@ -271,11 +274,12 @@ class PostController extends Controller
      *
      * @param  string  $slug  Tag slug to filter by.
      */
-    public function archiveByTag(string $slug): AnonymousResourceCollection
+    public function archiveByTag(Request $request, string $slug): AnonymousResourceCollection
     {
         $this->authorize('viewAny', Post::class);
 
         $posts = $this->blogManager->getPostsByTag($slug);
+        $posts->load($this->getRequestedIncludes($request));
 
         return PostResource::collection($posts);
     }
