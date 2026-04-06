@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
 use App\Models\User;
 use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
+use ArtisanPackUI\CMSFramework\Modules\Users\Http\Requests\BulkUserRequest;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
@@ -22,6 +23,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Throwable;
 
 /**
  * API controller for managing users.
@@ -177,5 +179,75 @@ class UserController extends Controller
         $user->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Perform a bulk action on multiple users.
+     *
+     * Processes the requested action on each user individually.
+     * Returns a summary of successes and failures.
+     *
+     * @since 1.1.0
+     *
+     * @param  BulkUserRequest  $request  The validated bulk action request.
+     *
+     * @return JsonResponse Summary with processed count, failed count, and error details.
+     */
+    public function bulk(BulkUserRequest $request): JsonResponse
+    {
+        $action    = $request->validated('action');
+        $ids       = $request->validated('ids');
+        $processed = 0;
+        $errors    = [];
+
+        $userModel = config('artisanpack.cms-framework.user_model');
+        $users     = $userModel::whereIn('id', $ids)->get()->keyBy('id');
+
+        foreach ($ids as $id) {
+            $user = $users->get($id);
+
+            if (null === $user) {
+                $errors[$id] = __('User not found.');
+
+                continue;
+            }
+
+            // Prevent users from performing bulk actions on themselves
+            if ($request->user() && $user->id === $request->user()->id) {
+                $errors[$id] = __('You cannot perform bulk actions on your own account.');
+
+                continue;
+            }
+
+            try {
+                $this->executeBulkAction($action, $user);
+                $processed++;
+            } catch (Throwable $e) {
+                $errors[$id] = $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'processed' => $processed,
+            'failed'    => count($errors),
+            'errors'    => $errors,
+        ]);
+    }
+
+    /**
+     * Execute a bulk action on a single user.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action to perform.
+     * @param  mixed  $user  The user model instance to perform the action on.
+     */
+    protected function executeBulkAction(string $action, mixed $user): void
+    {
+        match ($action) {
+            'delete'     => $user->delete(),
+            'activate'   => $user->update(['email_verified_at' => now()]),
+            'deactivate' => $user->update(['email_verified_at' => null]),
+        };
     }
 }

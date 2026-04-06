@@ -15,6 +15,8 @@ declare(strict_types=1);
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Http\Controllers;
 
 use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\BulkPageRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\PageRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Resources\PageResource;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
@@ -27,6 +29,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * API controller for managing pages.
@@ -290,5 +293,99 @@ class PageController extends Controller
         $page->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Perform a bulk action on multiple pages.
+     *
+     * Processes the requested action on each page individually, respecting
+     * authorization policies. Returns a summary of successes and failures.
+     *
+     * @since 1.1.0
+     *
+     * @param  BulkPageRequest  $request  The validated bulk action request.
+     *
+     * @return JsonResponse Summary with processed count, failed count, and error details.
+     */
+    public function bulk(BulkPageRequest $request): JsonResponse
+    {
+        $action    = $request->validated('action');
+        $ids       = $request->validated('ids');
+        $processed = 0;
+        $errors    = [];
+
+        $pages = Page::whereIn('id', $ids)->get()->keyBy('id');
+
+        foreach ($ids as $id) {
+            $page = $pages->get($id);
+
+            if (null === $page) {
+                $errors[$id] = __('Page not found.');
+
+                continue;
+            }
+
+            $policyMethod = $this->getBulkPolicyMethod($action);
+
+            if (! $request->user()->can($policyMethod, $page)) {
+                $errors[$id] = __('You do not have permission to :action this page.', ['action' => $action]);
+
+                continue;
+            }
+
+            try {
+                $this->executeBulkAction($action, $page);
+                $processed++;
+            } catch (Throwable $e) {
+                $errors[$id] = $e->getMessage();
+            }
+        }
+
+        return response()->json([
+            'processed' => $processed,
+            'failed'    => count($errors),
+            'errors'    => $errors,
+        ]);
+    }
+
+    /**
+     * Get the policy method for a bulk action.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action name.
+     *
+     * @return string The policy method name.
+     */
+    protected function getBulkPolicyMethod(string $action): string
+    {
+        return match ($action) {
+            'delete'  => 'delete',
+            'publish' => 'publish',
+            'draft'   => 'update',
+        };
+    }
+
+    /**
+     * Execute a bulk action on a single page.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action to perform.
+     * @param  Page  $page  The page to perform the action on.
+     */
+    protected function executeBulkAction(string $action, Page $page): void
+    {
+        match ($action) {
+            'delete'  => $page->delete(),
+            'publish' => $page->update([
+                'status'       => ContentStatus::Published->value,
+                'published_at' => $page->published_at ?? now(),
+            ]),
+            'draft'   => $page->update([
+                'status'       => ContentStatus::Draft->value,
+                'published_at' => null,
+            ]),
+        };
     }
 }
