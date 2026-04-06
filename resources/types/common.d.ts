@@ -7,6 +7,9 @@
 /** ISO 8601 date-time string (e.g. "2024-01-15T12:00:00.000000Z"). */
 export type DateTimeString = string;
 
+/** An array guaranteed to contain at least one element. */
+export type NonEmptyArray<T> = [T, ...T[]];
+
 /** A JSON-serializable metadata object. */
 export type Metadata = Record<string, unknown> | null;
 

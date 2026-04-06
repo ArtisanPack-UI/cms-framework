@@ -72,11 +72,11 @@ export interface NotificationResponse {
 	/** Whether an email was sent for this notification. */
 	send_email: boolean;
 	/** When the notification was created (ISO 8601). */
-	created_at: string;
+	created_at: DateTimeString;
 	/** Human-readable time since creation (e.g., "2 hours ago"). */
 	created_at_human: string;
 	/** When the notification was last updated (ISO 8601). */
-	updated_at: string;
+	updated_at: DateTimeString;
 	/** User-specific read/dismissed data. Present when loaded via the pivot table. */
 	user_data?: NotificationUserData;
 }

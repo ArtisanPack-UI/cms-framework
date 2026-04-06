@@ -13,6 +13,7 @@
 export type {
 	DateTimeString,
 	Metadata,
+	NonEmptyArray,
 	PaginatedResponse,
 	ResourceResponse,
 } from './common';

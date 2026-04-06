@@ -11,8 +11,8 @@ test('cms-types publish tag is registered', function (): void {
 test('type definition source files exist', function (string $file): void {
     $path = realpath(__DIR__.'/../../resources/types/'.$file);
 
-    expect($path)->not()->toBeFalse()
-        ->and(file_exists($path))->toBeTrue();
+    expect($path)->not()->toBeFalse();
+    expect(file_exists((string) $path))->toBeTrue();
 })->with([
     'index.d.ts',
     'common.d.ts',
@@ -26,12 +26,21 @@ test('type definition source files exist', function (string $file): void {
 ]);
 
 test('type definition files are publishable to resource path', function (): void {
-    $tags = Illuminate\Support\ServiceProvider::$publishGroups;
+    $tags     = Illuminate\Support\ServiceProvider::$publishGroups;
+    $mappings = $tags['cms-types'];
 
-    $sourceKeys  = array_keys($tags['cms-types']);
-    $sourcePath  = $sourceKeys[0];
-    $destination = $tags['cms-types'][$sourcePath];
+    $hasSourcePath      = false;
+    $hasDestinationPath = false;
 
-    expect($sourcePath)->toContain('resources/types')
-        ->and($destination)->toContain('types/cms-framework');
+    foreach ($mappings as $source => $destination) {
+        if (str_contains($source, 'resources/types')) {
+            $hasSourcePath = true;
+        }
+        if (str_contains($destination, 'types/cms-framework')) {
+            $hasDestinationPath = true;
+        }
+    }
+
+    expect($hasSourcePath)->toBeTrue()
+        ->and($hasDestinationPath)->toBeTrue();
 });

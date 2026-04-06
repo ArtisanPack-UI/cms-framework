@@ -15,7 +15,7 @@
  * @since 1.1.0
  */
 
-import type { DateTimeString, Metadata } from './common';
+import type { DateTimeString, Metadata, NonEmptyArray } from './common';
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -265,7 +265,7 @@ export interface CustomFieldRequestData {
 	/** A description of the field. */
 	description?: string | null;
 	/** Array of content type slugs this field belongs to (at least one required). */
-	content_types: string[];
+	content_types: NonEmptyArray<string>;
 	/** Configuration options for the field. */
 	options?: Record<string, unknown> | null;
 	/** The sort order (min 0). */

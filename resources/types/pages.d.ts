@@ -137,8 +137,8 @@ export interface PageCategoryResponse {
 	description: string | null;
 	/** The parent category ID, or null if top-level. */
 	parent_id: number | null;
-	/** The parent category summary. Present when the `parent` relationship is loaded. */
-	parent?: PageCategoryParentResponse;
+	/** The parent category summary. Present when the `parent` relationship is loaded; null for top-level categories. */
+	parent?: PageCategoryParentResponse | null;
 	/** Child categories. Present when the `children` relationship is loaded. */
 	children?: PageCategoryResponse[];
 	/** The sort order. */
@@ -204,7 +204,7 @@ export interface PageRequestData {
 	/** The publication status. */
 	status: ContentStatus;
 	/** The date and time to publish the page. */
-	published_at?: string | null;
+	published_at?: DateTimeString | null;
 	/** Arbitrary metadata as a JSON object. */
 	metadata?: Record<string, unknown> | null;
 	/** Array of category IDs to attach. */
