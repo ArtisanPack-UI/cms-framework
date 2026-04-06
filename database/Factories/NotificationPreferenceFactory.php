@@ -75,6 +75,6 @@ class NotificationPreferenceFactory extends Factory
     {
         return $this->state( fn ( array $attributes ) => [
             'email_enabled' => false,
-        ]);
+        ] );
     }
 }

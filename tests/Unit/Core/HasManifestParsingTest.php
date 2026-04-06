@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use Illuminate\Support\Facades\File;
@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\File;
 /**
  * Anonymous class that uses the trait so we can test the trait methods directly.
  */
-beforeEach(function (): void {
+beforeEach( function (): void {
     $this->parser = new class {
         use HasManifestParsing {
             parseManifest as public;
@@ -16,58 +16,58 @@ beforeEach(function (): void {
             resolveSecurePath as public;
         }
     };
-});
+} );
 
-describe('parseManifest', function (): void {
-    it('parses valid JSON manifest', function (): void {
-        $tempFile = storage_path('app/test-manifest.json');
-        File::put($tempFile, json_encode([
+describe( 'parseManifest', function (): void {
+    it( 'parses valid JSON manifest', function (): void {
+        $tempFile = storage_path( 'app/test-manifest.json' );
+        File::put( $tempFile, json_encode( [
             'slug'    => 'test-package',
             'name'    => 'Test Package',
             'version' => '1.0.0',
-        ]));
+        ] ) );
 
-        $manifest = $this->parser->parseManifest($tempFile);
+        $manifest = $this->parser->parseManifest( $tempFile );
 
-        expect($manifest)->toBeArray()
-            ->and($manifest['slug'])->toBe('test-package')
-            ->and($manifest['name'])->toBe('Test Package')
-            ->and($manifest['version'])->toBe('1.0.0');
+        expect( $manifest )->toBeArray()
+            ->and( $manifest['slug'] )->toBe( 'test-package' )
+            ->and( $manifest['name'] )->toBe( 'Test Package' )
+            ->and( $manifest['version'] )->toBe( '1.0.0' );
 
-        File::delete($tempFile);
-    });
+        File::delete( $tempFile );
+    } );
 
-    it('returns null for non-existent manifest', function (): void {
-        $manifest = $this->parser->parseManifest('/non/existent/path/manifest.json');
+    it( 'returns null for non-existent manifest', function (): void {
+        $manifest = $this->parser->parseManifest( '/non/existent/path/manifest.json' );
 
-        expect($manifest)->toBeNull();
-    });
+        expect( $manifest )->toBeNull();
+    } );
 
-    it('returns null for invalid JSON', function (): void {
-        $tempFile = storage_path('app/invalid-manifest.json');
-        File::put($tempFile, '{invalid json content}');
+    it( 'returns null for invalid JSON', function (): void {
+        $tempFile = storage_path( 'app/invalid-manifest.json' );
+        File::put( $tempFile, '{invalid json content}' );
 
-        $manifest = $this->parser->parseManifest($tempFile);
+        $manifest = $this->parser->parseManifest( $tempFile );
 
-        expect($manifest)->toBeNull();
+        expect( $manifest )->toBeNull();
 
-        File::delete($tempFile);
-    });
+        File::delete( $tempFile );
+    } );
 
-    it('returns null for empty file', function (): void {
-        $tempFile = storage_path('app/empty-manifest.json');
-        File::put($tempFile, '');
+    it( 'returns null for empty file', function (): void {
+        $tempFile = storage_path( 'app/empty-manifest.json' );
+        File::put( $tempFile, '' );
 
-        $manifest = $this->parser->parseManifest($tempFile);
+        $manifest = $this->parser->parseManifest( $tempFile );
 
-        expect($manifest)->toBeNull();
+        expect( $manifest )->toBeNull();
 
-        File::delete($tempFile);
-    });
+        File::delete( $tempFile );
+    } );
 
-    it('handles nested JSON structures', function (): void {
-        $tempFile = storage_path('app/nested-manifest.json');
-        File::put($tempFile, json_encode([
+    it( 'handles nested JSON structures', function (): void {
+        $tempFile = storage_path( 'app/nested-manifest.json' );
+        File::put( $tempFile, json_encode( [
             'slug'     => 'nested-package',
             'name'     => 'Nested Package',
             'version'  => '2.0.0',
@@ -76,22 +76,22 @@ describe('parseManifest', function (): void {
                     'NestedPackage\\' => 'src/',
                 ],
             ],
-        ]));
+        ] ) );
 
-        $manifest = $this->parser->parseManifest($tempFile);
+        $manifest = $this->parser->parseManifest( $tempFile );
 
-        expect($manifest)->toBeArray()
-            ->and($manifest['autoload']['psr-4'])->toBeArray()
-            ->and($manifest['autoload']['psr-4']['NestedPackage\\'])->toBe('src/');
+        expect( $manifest )->toBeArray()
+            ->and( $manifest['autoload']['psr-4'] )->toBeArray()
+            ->and( $manifest['autoload']['psr-4']['NestedPackage\\'] )->toBe( 'src/' );
 
-        File::delete($tempFile);
-    });
-});
+        File::delete( $tempFile );
+    } );
+} );
 
-describe('validateSlug', function (): void {
-    it('accepts valid slugs', function (string $slug): void {
-        expect($this->parser->validateSlug($slug))->toBeTrue();
-    })->with([
+describe( 'validateSlug', function (): void {
+    it( 'accepts valid slugs', function ( string $slug ): void {
+        expect( $this->parser->validateSlug( $slug ) )->toBeTrue();
+    } )->with( [
         'lowercase'          => 'my-plugin',
         'uppercase'          => 'MyPlugin',
         'mixed case'         => 'My-Plugin',
@@ -101,11 +101,11 @@ describe('validateSlug', function (): void {
         'mixed'              => 'my-Plugin_123',
         'single character'   => 'a',
         'all numbers'        => '123',
-    ]);
+    ] );
 
-    it('rejects invalid slugs', function (string $slug): void {
-        expect($this->parser->validateSlug($slug))->toBeFalse();
-    })->with([
+    it( 'rejects invalid slugs', function ( string $slug ): void {
+        expect( $this->parser->validateSlug( $slug ) )->toBeFalse();
+    } )->with( [
         'path traversal'     => '../../../etc/passwd',
         'slashes'            => 'plugin/with/slashes',
         'spaces'             => 'plugin with spaces',
@@ -116,54 +116,54 @@ describe('validateSlug', function (): void {
         'backslash'          => 'plugin\\name',
         'semicolon'          => 'plugin;name',
         'pipe'               => 'plugin|name',
-    ]);
-});
+    ] );
+} );
 
-describe('resolveSecurePath', function (): void {
-    it('resolves a valid path within base directory', function (): void {
-        $basePath = storage_path('app');
-        $itemPath = $basePath.'/test-item';
+describe( 'resolveSecurePath', function (): void {
+    it( 'resolves a valid path within base directory', function (): void {
+        $basePath = storage_path( 'app' );
+        $itemPath = $basePath . '/test-item';
 
         // Create the directory so realpath works
-        File::ensureDirectoryExists($itemPath);
+        File::ensureDirectoryExists( $itemPath );
 
-        $result = $this->parser->resolveSecurePath($itemPath, $basePath);
+        $result = $this->parser->resolveSecurePath( $itemPath, $basePath );
 
-        expect($result)->not->toBeNull()
-            ->and($result)->toContain('test-item');
+        expect( $result )->not->toBeNull()
+            ->and( $result )->toContain( 'test-item' );
 
-        File::deleteDirectory($itemPath);
-    });
+        File::deleteDirectory( $itemPath );
+    } );
 
-    it('returns null for non-existent path', function (): void {
-        $basePath = storage_path('app');
-        $itemPath = $basePath.'/non-existent-directory';
+    it( 'returns null for non-existent path', function (): void {
+        $basePath = storage_path( 'app' );
+        $itemPath = $basePath . '/non-existent-directory';
 
-        $result = $this->parser->resolveSecurePath($itemPath, $basePath);
+        $result = $this->parser->resolveSecurePath( $itemPath, $basePath );
 
-        expect($result)->toBeNull();
-    });
+        expect( $result )->toBeNull();
+    } );
 
-    it('returns null for path traversal attempt', function (): void {
-        $basePath = storage_path('app/plugins');
-        File::ensureDirectoryExists($basePath);
+    it( 'returns null for path traversal attempt', function (): void {
+        $basePath = storage_path( 'app/plugins' );
+        File::ensureDirectoryExists( $basePath );
 
         // Try to escape the base directory
-        $itemPath = $basePath.'/../../';
+        $itemPath = $basePath . '/../../';
 
-        $result = $this->parser->resolveSecurePath($itemPath, $basePath);
+        $result = $this->parser->resolveSecurePath( $itemPath, $basePath );
 
-        expect($result)->toBeNull();
+        expect( $result )->toBeNull();
 
-        File::deleteDirectory($basePath);
-    });
+        File::deleteDirectory( $basePath );
+    } );
 
-    it('returns null when base path does not exist', function (): void {
-        $basePath = storage_path('app/non-existent-base');
-        $itemPath = $basePath.'/some-item';
+    it( 'returns null when base path does not exist', function (): void {
+        $basePath = storage_path( 'app/non-existent-base');
+        $itemPath = $basePath . '/some-item';
 
-        $result = $this->parser->resolveSecurePath($itemPath, $basePath);
+        $result = $this->parser->resolveSecurePath( $itemPath, $basePath);
 
-        expect($result)->toBeNull();
+        expect( $result)->toBeNull();
     });
 });

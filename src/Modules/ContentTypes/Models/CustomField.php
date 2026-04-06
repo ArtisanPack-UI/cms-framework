@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * CustomField Model
@@ -71,13 +71,13 @@ class CustomField extends Model
         $definition = "\$table->{$this->column_type->value}('{$this->key}')";
 
         // Add nullable if not required
-        if (! $this->required) {
+        if ( ! $this->required ) {
             $definition .= '->nullable()';
         }
 
         // Add default value if specified
-        if (null !== $this->default_value) {
-            $default = is_numeric($this->default_value) ? $this->default_value : "'{$this->default_value}'";
+        if ( null !== $this->default_value ) {
+            $default = is_numeric( $this->default_value ) ? $this->default_value : "'{$this->default_value}'";
             $definition .= "->default({$default})";
         }
 
@@ -93,7 +93,7 @@ class CustomField extends Model
      */
     public function getContentTypes(): Collection
     {
-        return ContentType::whereIn('slug', $this->content_types)->get();
+        return ContentType::whereIn( 'slug', $this->content_types )->get();
     }
 
     /**

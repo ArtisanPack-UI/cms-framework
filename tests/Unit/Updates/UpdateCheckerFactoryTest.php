@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -30,8 +30,8 @@ class UpdateCheckerFactoryTest extends TestCase
             '1.0.0',
         );
 
-        $this->assertInstanceOf(UpdateChecker::class, $checker);
-        $this->assertEquals('GitHub', $checker->getSourceName());
+        $this->assertInstanceOf( UpdateChecker::class, $checker );
+        $this->assertEquals( 'GitHub', $checker->getSourceName() );
     }
 
     /**
@@ -48,8 +48,8 @@ class UpdateCheckerFactoryTest extends TestCase
             '1.0.0',
         );
 
-        $this->assertInstanceOf(UpdateChecker::class, $checker);
-        $this->assertEquals('GitLab', $checker->getSourceName());
+        $this->assertInstanceOf( UpdateChecker::class, $checker );
+        $this->assertEquals( 'GitLab', $checker->getSourceName() );
     }
 
     /**
@@ -66,8 +66,8 @@ class UpdateCheckerFactoryTest extends TestCase
             '1.0.0',
         );
 
-        $this->assertInstanceOf(UpdateChecker::class, $checker);
-        $this->assertEquals('Custom JSON', $checker->getSourceName());
+        $this->assertInstanceOf( UpdateChecker::class, $checker );
+        $this->assertEquals( 'Custom JSON', $checker->getSourceName() );
     }
 
     /**
@@ -83,7 +83,7 @@ class UpdateCheckerFactoryTest extends TestCase
             'test-app',
         );
 
-        $this->assertInstanceOf(UpdateChecker::class, $checker);
+        $this->assertInstanceOf( UpdateChecker::class, $checker );
     }
 
     /**
@@ -100,8 +100,8 @@ class UpdateCheckerFactoryTest extends TestCase
             '1.0.0',
         );
 
-        $this->assertSame(UpdateType::Plugin, $checker->getType());
-        $this->assertEquals('test-plugin', $checker->getSlug());
+        $this->assertSame( UpdateType::Plugin, $checker->getType() );
+        $this->assertEquals( 'test-plugin', $checker->getSlug() );
     }
 
     /**
@@ -111,9 +111,9 @@ class UpdateCheckerFactoryTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment($app): void
+    protected function defineEnvironment( $app ): void
     {
         // Set app version for testing
-        $app['config']->set('app.version', '1.0.0');
+        $app['config']->set( 'app.version', '1.0.0');
     }
 }

@@ -90,9 +90,9 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  Builder  $query
      *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeUnreadForUser( Builder $query, int $userId )
     {
@@ -108,9 +108,9 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  Builder  $query
      *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeReadForUser( Builder $query, int $userId )
     {
@@ -126,9 +126,9 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  Builder  $query
      *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeNotDismissedForUser( Builder $query, int $userId )
     {
@@ -143,9 +143,9 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  Builder  $query
      *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeOfType( Builder $query, NotificationType $type )
     {

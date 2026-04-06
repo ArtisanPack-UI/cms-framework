@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Post Model
@@ -77,7 +77,7 @@ class Post extends Model
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo(config('auth.providers.users.model'), 'author_id');
+        return $this->belongsTo( config( 'auth.providers.users.model' ), 'author_id' );
     }
 
     /**
@@ -87,7 +87,7 @@ class Post extends Model
      */
     public function featuredImageMedia(): BelongsTo
     {
-        return $this->belongsTo(Media::class, 'featured_image_id');
+        return $this->belongsTo( Media::class, 'featured_image_id' );
     }
 
     /**
@@ -97,7 +97,7 @@ class Post extends Model
      */
     public function categories(): BelongsToMany
     {
-        return $this->belongsToMany(PostCategory::class, 'post_category_pivots', 'post_id', 'post_category_id');
+        return $this->belongsToMany( PostCategory::class, 'post_category_pivots', 'post_id', 'post_category_id' );
     }
 
     /**
@@ -107,7 +107,7 @@ class Post extends Model
      */
     public function tags(): BelongsToMany
     {
-        return $this->belongsToMany(PostTag::class, 'post_tag_pivots', 'post_id', 'post_tag_id');
+        return $this->belongsToMany( PostTag::class, 'post_tag_pivots', 'post_id', 'post_tag_id' );
     }
 
     /**
@@ -117,9 +117,9 @@ class Post extends Model
      *
      * @return Builder
      */
-    public function scopeByAuthor(Builder $query, int $authorId)
+    public function scopeByAuthor( Builder $query, int $authorId )
     {
-        return $query->where('author_id', sanitizeInt($authorId));
+        return $query->where( 'author_id', sanitizeInt( $authorId ) );
     }
 
     /**
@@ -129,11 +129,11 @@ class Post extends Model
      *
      * @return Builder
      */
-    public function scopeByCategory(Builder $query, int $categoryId)
+    public function scopeByCategory( Builder $query, int $categoryId )
     {
-        return $query->whereHas('categories', function ($q) use ($categoryId): void {
-            $q->where('post_categories.id', sanitizeInt($categoryId));
-        });
+        return $query->whereHas( 'categories', function ( $q ) use ( $categoryId ): void {
+            $q->where( 'post_categories.id', sanitizeInt( $categoryId ) );
+        } );
     }
 
     /**
@@ -143,11 +143,11 @@ class Post extends Model
      *
      * @return Builder
      */
-    public function scopeByTag(Builder $query, int $tagId)
+    public function scopeByTag( Builder $query, int $tagId )
     {
-        return $query->whereHas('tags', function ($q) use ($tagId): void {
-            $q->where('post_tags.id', sanitizeInt($tagId));
-        });
+        return $query->whereHas( 'tags', function ( $q ) use ( $tagId ): void {
+            $q->where( 'post_tags.id', sanitizeInt( $tagId ) );
+        } );
     }
 
     /**
@@ -157,9 +157,9 @@ class Post extends Model
      *
      * @return Builder
      */
-    public function scopeByYear(Builder $query, int $year)
+    public function scopeByYear( Builder $query, int $year )
     {
-        return $query->whereYear('published_at', $year);
+        return $query->whereYear( 'published_at', $year );
     }
 
     /**
@@ -169,10 +169,10 @@ class Post extends Model
      *
      * @return Builder
      */
-    public function scopeByMonth(Builder $query, int $year, int $month)
+    public function scopeByMonth( Builder $query, int $year, int $month )
     {
-        return $query->whereYear('published_at', $year)
-            ->whereMonth('published_at', $month);
+        return $query->whereYear( 'published_at', $year )
+            ->whereMonth( 'published_at', $month );
     }
 
     /**
@@ -182,9 +182,9 @@ class Post extends Model
      *
      * @return Builder
      */
-    public function scopeByDate(Builder $query, Carbon $date)
+    public function scopeByDate( Builder $query, Carbon $date )
     {
-        return $query->whereDate('published_at', $date);
+        return $query->whereDate( 'published_at', $date );
     }
 
     /**
@@ -194,7 +194,7 @@ class Post extends Model
      */
     public function getPermalinkAttribute(): string
     {
-        return url("/blog/{$this->slug}");
+        return url( "/blog/{$this->slug}" );
     }
 
     /**

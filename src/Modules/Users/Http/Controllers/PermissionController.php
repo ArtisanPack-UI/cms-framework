@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Permission Controller for the CMS Framework Users Module.
@@ -29,7 +29,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Permissions', weight: 12)]
+#[Group( 'Permissions', weight: 12 )]
 class PermissionController extends Controller
 {
     /**
@@ -44,9 +44,9 @@ class PermissionController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $permissions = Permission::with('roles')->paginate(15);
+        $permissions = Permission::with( 'roles' )->paginate( 15 );
 
-        return PermissionResource::collection($permissions);
+        return PermissionResource::collection( $permissions );
     }
 
     /**
@@ -61,17 +61,17 @@ class PermissionController extends Controller
      *
      * @return PermissionResource The created permission resource with loaded roles.
      */
-    public function store(Request $request): PermissionResource
+    public function store( Request $request ): PermissionResource
     {
-        $validated = $request->validate([
+        $validated = $request->validate( [
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:permissions',
-        ]);
+        ] );
 
-        $permission = Permission::create($validated);
-        $permission->load('roles');
+        $permission = Permission::create( $validated );
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
     /**
@@ -86,11 +86,11 @@ class PermissionController extends Controller
      *
      * @return PermissionResource The permission resource with loaded roles.
      */
-    public function show(string|int $id): PermissionResource
+    public function show( string|int $id ): PermissionResource
     {
-        $permission = Permission::with('roles')->findOrFail($id);
+        $permission = Permission::with( 'roles' )->findOrFail( $id );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
     /**
@@ -106,18 +106,18 @@ class PermissionController extends Controller
      *
      * @return PermissionResource The updated permission resource with loaded roles.
      */
-    public function update(Request $request, string|int $id): PermissionResource
+    public function update( Request $request, string|int $id ): PermissionResource
     {
-        $permission = Permission::findOrFail($id);
-        $validated  = $request->validate([
+        $permission = Permission::findOrFail( $id );
+        $validated  = $request->validate( [
             'name' => 'sometimes|required|string|max:255',
-            'slug' => 'sometimes|required|string|max:255|unique:permissions,slug,'.$permission->id,
-        ]);
+            'slug' => 'sometimes|required|string|max:255|unique:permissions,slug,' . $permission->id,
+        ] );
 
-        $permission->update($validated);
-        $permission->load('roles');
+        $permission->update( $validated );
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
     /**
@@ -132,11 +132,11 @@ class PermissionController extends Controller
      *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy(string|int $id): JsonResponse
+    public function destroy( string|int $id ): JsonResponse
     {
-        $permission = Permission::findOrFail($id);
+        $permission = Permission::findOrFail( $id );
         $permission->delete();
 
-        return response()->json([], 204);
+        return response()->json( [], 204);
     }
 }

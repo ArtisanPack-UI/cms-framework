@@ -472,19 +472,19 @@ test( 'post uses soft deletes', function (): void {
         'name'     => 'Test Author',
         'email'    => 'author@example.com',
         'password' => 'password',
-    ]);
+    ] );
 
     $post = Post::create( [
         'title'     => 'Test Post',
         'slug'      => 'test-post',
         'author_id' => $user->id,
         'status'    => 'draft',
-    ]);
+    ] );
 
     $postId = $post->id;
 
     $post->delete();
 
-    expect( Post::find( $postId))->toBeNull();
-    expect( Post::withTrashed()->find( $postId))->not->toBeNull();
+    expect( Post::find( $postId ) )->toBeNull();
+    expect( Post::withTrashed()->find( $postId ) )->not->toBeNull();
 });

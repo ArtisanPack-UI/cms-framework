@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates;
 
@@ -31,7 +31,8 @@ class UpdateChecker
         protected UpdateSourceInterface $source,
         protected UpdateType $type,
         protected string $slug,
-    ) {}
+    ) {
+    }
 
     /**
      * Check for available updates (with caching).
@@ -43,19 +44,19 @@ class UpdateChecker
     public function checkForUpdate(): UpdateInfo
     {
         $cacheKey = "cms.{$this->type->value}.{$this->slug}.update_check";
-        $cacheTtl = config('cms.updates.cache_ttl', 43200);
+        $cacheTtl = config( 'cms.updates.cache_ttl', 43200 );
 
-        if (config('cms.updates.cache_enabled', true)) {
-            $cached = Cache::get($cacheKey);
-            if ($cached instanceof UpdateInfo) {
+        if ( config( 'cms.updates.cache_enabled', true ) ) {
+            $cached = Cache::get( $cacheKey );
+            if ( $cached instanceof UpdateInfo ) {
                 return $cached;
             }
         }
 
         $updateInfo = $this->source->checkForUpdate();
 
-        if (config('cms.updates.cache_enabled', true)) {
-            Cache::put($cacheKey, $updateInfo, $cacheTtl);
+        if ( config( 'cms.updates.cache_enabled', true ) ) {
+            Cache::put( $cacheKey, $updateInfo, $cacheTtl );
         }
 
         return $updateInfo;
@@ -70,9 +71,9 @@ class UpdateChecker
      *
      * @return string Path to downloaded ZIP file
      */
-    public function downloadUpdate(string $version): string
+    public function downloadUpdate( string $version ): string
     {
-        return $this->source->downloadUpdate($version);
+        return $this->source->downloadUpdate( $version );
     }
 
     /**
@@ -84,9 +85,9 @@ class UpdateChecker
      *
      * @return $this
      */
-    public function setAuthentication(string|array $credentials): self
+    public function setAuthentication( string|array $credentials ): self
     {
-        $this->source->setAuthentication($credentials);
+        $this->source->setAuthentication( $credentials );
 
         return $this;
     }
@@ -111,7 +112,7 @@ class UpdateChecker
     public function clearCache(): void
     {
         $cacheKey = "cms.{$this->type->value}.{$this->slug}.update_check";
-        Cache::forget($cacheKey);
+        Cache::forget( $cacheKey );
     }
 
     /**

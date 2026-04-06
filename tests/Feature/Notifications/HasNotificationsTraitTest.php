@@ -143,10 +143,10 @@ test( 'user can get unread notifications count', function (): void {
     $notification1 = Notification::factory()->create();
     $notification2 = Notification::factory()->create();
 
-    $notification1->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false]);
-    $notification2->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false]);
+    $notification1->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false] );
+    $notification2->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false] );
 
     $count = $user->unreadSystemNotificationsCount();
 
-    expect( $count)->toBe( 2);
+    expect( $count )->toBe( 2 );
 });

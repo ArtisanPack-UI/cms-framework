@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Setting Type Enum
@@ -31,13 +31,13 @@ enum SettingType: string
      *
      * @return self The detected setting type.
      */
-    public static function fromValue(mixed $value): self
+    public static function fromValue( mixed $value ): self
     {
-        return match (true) {
-            is_bool($value)                        => self::Boolean,
-            is_int($value)                         => self::Integer,
-            is_float($value)                       => self::Float,
-            is_array($value), is_object($value)    => self::Json,
+        return match ( true ) {
+            is_bool( $value )                        => self::Boolean,
+            is_int( $value )                         => self::Integer,
+            is_float( $value )                       => self::Float,
+            is_array( $value ), is_object( $value )    => self::Json,
             default                                => self::String,
         };
     }
@@ -53,17 +53,17 @@ enum SettingType: string
      *
      * @return mixed The value cast to the appropriate PHP type.
      */
-    public function cast(mixed $value): mixed
+    public function cast( mixed $value ): mixed
     {
-        if (is_null($value)) {
-            return (self::String === $this) ? '' : null;
+        if ( is_null( $value ) ) {
+            return ( self::String === $this ) ? '' : null;
         }
 
-        return match ($this) {
-            self::Boolean => filter_var($value, FILTER_VALIDATE_BOOLEAN),
+        return match ( $this ) {
+            self::Boolean => filter_var( $value, FILTER_VALIDATE_BOOLEAN ),
             self::Integer => (int) $value,
             self::Float   => (float) $value,
-            self::Json    => json_decode($value, true, 512, JSON_THROW_ON_ERROR),
+            self::Json    => json_decode( $value, true, 512, JSON_THROW_ON_ERROR ),
             self::String  => (string) $value,
         };
     }
@@ -79,13 +79,13 @@ enum SettingType: string
      *
      * @return string The serialized string for storage.
      */
-    public function serialize(mixed $value): string
+    public function serialize( mixed $value ): string
     {
-        return match ($this) {
+        return match ( $this ) {
             self::Boolean              => $value ? '1' : '0',
             self::Integer, self::Float => (string) $value,
-            self::Json                 => json_encode($value, JSON_THROW_ON_ERROR),
-            self::String               => is_null($value) ? '' : (string) $value,
+            self::Json                 => json_encode( $value, JSON_THROW_ON_ERROR ),
+            self::String               => is_null( $value ) ? '' : (string) $value,
         };
     }
     case String  = 'string';

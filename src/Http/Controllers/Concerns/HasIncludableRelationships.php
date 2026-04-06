@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * HasIncludableRelationships Trait for API Controllers.
@@ -40,23 +40,23 @@ trait HasIncludableRelationships
      *
      * @return array<int, string> The validated relationship names to eager load.
      */
-    protected function getRequestedIncludes(Request $request): array
+    protected function getRequestedIncludes( Request $request ): array
     {
         $allowable = $this->getIncludableRelationships();
 
-        if (! $request->has('include')) {
+        if ( ! $request->has( 'include' ) ) {
             return $this->getDefaultIncludes();
         }
 
-        $requested = $request->query('include', '');
+        $requested = $request->query( 'include', '' );
 
-        if (empty($requested)) {
+        if ( empty( $requested ) ) {
             return [];
         }
 
-        $includes = array_map('trim', explode(',', $requested));
+        $includes = array_map( 'trim', explode( ',', $requested ) );
 
-        return array_values(array_intersect($includes, $allowable));
+        return array_values( array_intersect( $includes, $allowable ) );
     }
 
     /**

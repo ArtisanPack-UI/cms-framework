@@ -216,6 +216,6 @@ class PermissionPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete'));
+        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete' ));
     }
 }

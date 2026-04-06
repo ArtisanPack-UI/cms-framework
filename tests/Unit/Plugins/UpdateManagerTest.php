@@ -269,4 +269,4 @@ describe( 'Version Comparison', function (): void {
 
         expect( $method->invoke( $updateManager, '1.0.0', '1.0.0' ) )->toBeFalse();
     } );
-});
+} );

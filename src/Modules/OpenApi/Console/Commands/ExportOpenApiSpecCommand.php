@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Artisan command to export the CMS Framework OpenAPI specification.
@@ -53,42 +53,42 @@ class ExportOpenApiSpecCommand extends Command
      */
     public function handle(): int
     {
-        $path  = $this->argument('path') ?? base_path('cms-openapi.json');
+        $path  = $this->argument( 'path' ) ?? base_path( 'cms-openapi.json' );
         $flags = JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
 
-        if ($this->option('pretty')) {
+        if ( $this->option( 'pretty' ) ) {
             $flags |= JSON_PRETTY_PRINT;
         }
 
-        $this->info('Generating CMS Framework OpenAPI specification...');
+        $this->info( 'Generating CMS Framework OpenAPI specification...' );
 
-        $config    = Scramble::getGeneratorConfig('cms');
-        $generator = app(Generator::class);
-        $spec      = $generator($config);
-        $json      = json_encode($spec, $flags);
+        $config    = Scramble::getGeneratorConfig( 'cms' );
+        $generator = app( Generator::class );
+        $spec      = $generator( $config );
+        $json      = json_encode( $spec, $flags );
 
-        if (false === $json) {
-            $this->error('Failed to encode OpenAPI specification to JSON.');
+        if ( false === $json ) {
+            $this->error( 'Failed to encode OpenAPI specification to JSON.' );
 
             return self::FAILURE;
         }
 
-        $directory = dirname($path);
-        if (! is_dir($directory) && ! mkdir($directory, 0755, true)) {
+        $directory = dirname( $path );
+        if ( ! is_dir( $directory ) && ! mkdir( $directory, 0755, true ) ) {
             $error = error_get_last();
-            $this->error("Failed to create directory: {$directory} — ".($error['message'] ?? 'unknown error'));
+            $this->error( "Failed to create directory: {$directory} — " . ( $error['message'] ?? 'unknown error' ) );
 
             return self::FAILURE;
         }
 
-        if (false === file_put_contents($path, $json."\n")) {
+        if ( false === file_put_contents( $path, $json . "\n" ) ) {
             $error = error_get_last();
-            $this->error("Failed to write file: {$path} — ".($error['message'] ?? 'unknown error'));
+            $this->error( "Failed to write file: {$path} — " . ( $error['message'] ?? 'unknown error' ) );
 
             return self::FAILURE;
         }
 
-        $this->info("OpenAPI specification exported to: {$path}");
+        $this->info( "OpenAPI specification exported to: {$path}");
 
         return self::SUCCESS;
     }

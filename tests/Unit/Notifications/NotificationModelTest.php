@@ -184,11 +184,11 @@ test( 'factory info state creates info notification', function (): void {
 test( 'factory withEmail state enables email sending', function (): void {
     $notification = Notification::factory()->withEmail()->create();
 
-    expect( $notification->send_email)->toBeTrue();
-});
+    expect( $notification->send_email )->toBeTrue();
+} );
 
 test( 'factory withoutEmail state disables email sending', function (): void {
     $notification = Notification::factory()->withoutEmail()->create();
 
-    expect( $notification->send_email)->toBeFalse();
+    expect( $notification->send_email )->toBeFalse();
 });

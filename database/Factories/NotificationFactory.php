@@ -94,6 +94,6 @@ class NotificationFactory extends Factory
     {
         return $this->state( fn ( array $attributes ) => [
             'send_email' => false,
-        ]);
+        ] );
     }
 }

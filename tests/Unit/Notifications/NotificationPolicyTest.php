@@ -58,5 +58,5 @@ test( 'update policy denies user from updating others notification', function ()
     $policy = new NotificationPolicy;
     $result = $policy->update( $user, $notification );
 
-    expect( $result)->toBeFalse();
-});
+    expect( $result )->toBeFalse();
+} );

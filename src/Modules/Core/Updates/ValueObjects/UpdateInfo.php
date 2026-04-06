@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects;
 
@@ -42,7 +42,8 @@ class UpdateInfo
         public readonly ?string $sha256 = null,
         public readonly ?int $fileSize = null,
         public readonly array $metadata = [],
-    ) {}
+    ) {
+    }
 
     /**
      * Whether an update is available.
@@ -54,7 +55,7 @@ class UpdateInfo
      */
     public function hasUpdate(): bool
     {
-        return version_compare($this->latestVersion, $this->currentVersion, '>');
+        return version_compare( $this->latestVersion, $this->currentVersion, '>' );
     }
 
     /**
@@ -65,10 +66,10 @@ class UpdateInfo
      * @param  array  $data  Update data array
      * @param  string  $currentVersion  Current version
      */
-    public static function fromArray(array $data, string $currentVersion): self
+    public static function fromArray( array $data, string $currentVersion ): self
     {
-        if (! isset($data['version'], $data['download_url'])) {
-            throw new InvalidArgumentException('Missing required keys: version, download_url');
+        if ( ! isset( $data['version'], $data['download_url'] ) ) {
+            throw new InvalidArgumentException( 'Missing required keys: version, download_url' );
         }
 
         return new self(

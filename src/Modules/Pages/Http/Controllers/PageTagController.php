@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PageTag Controller for the CMS Framework Pages Module.
@@ -31,7 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Page Tags', weight: 6)]
+#[Group( 'Page Tags', weight: 6 )]
 class PageTagController extends Controller
 {
     use AuthorizesRequests;
@@ -47,11 +47,11 @@ class PageTagController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', PageTag::class);
+        $this->authorize( 'viewAny', PageTag::class );
 
-        $tags = PageTag::orderBy('order')->paginate(15);
+        $tags = PageTag::orderBy( 'order' )->paginate( 15 );
 
-        return PageTagResource::collection($tags);
+        return PageTagResource::collection( $tags );
     }
 
     /**
@@ -66,14 +66,14 @@ class PageTagController extends Controller
      *
      * @return JsonResponse The JSON response containing the created tag resource.
      */
-    public function store(PageTagRequest $request): JsonResponse
+    public function store( PageTagRequest $request ): JsonResponse
     {
-        $this->authorize('create', PageTag::class);
+        $this->authorize( 'create', PageTag::class );
 
         $validated = $request->validated();
-        $tag       = PageTag::create($validated);
+        $tag       = PageTag::create( $validated );
 
-        return response()->json(new PageTagResource($tag), 201);
+        return response()->json( new PageTagResource( $tag ), 201 );
     }
 
     /**
@@ -87,12 +87,12 @@ class PageTagController extends Controller
      *
      * @return PageTagResource The tag resource.
      */
-    public function show(int $id): PageTagResource
+    public function show( int $id ): PageTagResource
     {
-        $tag = PageTag::findOrFail($id);
-        $this->authorize('view', $tag);
+        $tag = PageTag::findOrFail( $id );
+        $this->authorize( 'view', $tag );
 
-        return new PageTagResource($tag);
+        return new PageTagResource( $tag );
     }
 
     /**
@@ -108,15 +108,15 @@ class PageTagController extends Controller
      *
      * @return PageTagResource The updated tag resource.
      */
-    public function update(PageTagRequest $request, int $id): PageTagResource
+    public function update( PageTagRequest $request, int $id ): PageTagResource
     {
-        $tag = PageTag::findOrFail($id);
-        $this->authorize('update', $tag);
+        $tag = PageTag::findOrFail( $id );
+        $this->authorize( 'update', $tag );
 
         $validated = $request->validated();
-        $tag->update($validated);
+        $tag->update( $validated );
 
-        return new PageTagResource($tag);
+        return new PageTagResource( $tag );
     }
 
     /**
@@ -131,10 +131,10 @@ class PageTagController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy(int $id): Response
+    public function destroy( int $id ): Response
     {
-        $tag = PageTag::findOrFail($id);
-        $this->authorize('delete', $tag);
+        $tag = PageTag::findOrFail( $id );
+        $this->authorize( 'delete', $tag );
 
         $tag->delete();
 
