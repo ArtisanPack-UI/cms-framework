@@ -143,11 +143,24 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_can_set_authentication(): void
     {
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200),
+        ]);
+
         $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
         $source->setAuthentication('glpat-test_token');
 
-        // We can't directly test the token is used, but we can verify the method doesn't throw
-        $this->assertTrue(true);
+        $source->checkForUpdate();
+
+        Http::assertSent(function ($request) {
+            return $request->hasHeader('PRIVATE-TOKEN', 'glpat-test_token');
+        });
     }
 
     /**

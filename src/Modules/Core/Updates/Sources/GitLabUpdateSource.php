@@ -129,7 +129,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
             $downloadUrl = $this->extractDownloadUrl($release);
         }
 
-        $tempPath = storage_path('app/temp/update-'.time().'.zip');
+        $tempPath = storage_path('app/temp/update-'.bin2hex(random_bytes(16)).'.zip');
 
         if (! File::exists(dirname($tempPath))) {
             File::makeDirectory(dirname($tempPath), 0755, true);
@@ -196,7 +196,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
 
         $path = parse_url($url, PHP_URL_PATH);
 
-        if (! $path || '/' === trim($path, '/')) {
+        if (! $path || '' === trim($path, '/')) {
             throw new InvalidArgumentException('Invalid GitLab URL');
         }
 

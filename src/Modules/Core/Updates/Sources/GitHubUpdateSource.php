@@ -147,7 +147,7 @@ class GitHubUpdateSource implements UpdateSourceInterface
             $downloadUrl = $this->extractDownloadUrl($release);
         }
 
-        $tempPath = storage_path('app/temp/update-'.time().'.zip');
+        $tempPath = storage_path('app/temp/update-'.bin2hex(random_bytes(16)).'.zip');
 
         // Ensure temp directory exists
         if (! File::exists(dirname($tempPath))) {

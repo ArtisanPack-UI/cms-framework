@@ -195,11 +195,29 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_can_set_authentication(): void
     {
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([
+                [
+                    'tag_name'     => 'v2.0.0',
+                    'prerelease'   => false,
+                    'body'         => 'Release',
+                    'published_at' => '2024-12-15T10:00:00Z',
+                    'html_url'     => 'https://github.com/user/repo/releases/tag/v2.0.0',
+                    'id'           => 123,
+                    'assets'       => [],
+                    'zipball_url'  => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
+                ],
+            ], 200),
+        ]);
+
         $source = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
         $source->setAuthentication('ghp_test_token');
 
-        // We can't directly test the token is used, but we can verify the method doesn't throw
-        $this->assertTrue(true);
+        $source->checkForUpdate();
+
+        Http::assertSent(function ($request) {
+            return $request->hasHeader('Authorization', 'token ghp_test_token');
+        });
     }
 
     /**
