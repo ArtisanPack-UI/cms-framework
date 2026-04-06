@@ -81,7 +81,7 @@ class UserController extends Controller
      *
      * @param  Request  $request  The HTTP request containing user data.
      *
-     * @return UserResource The created user resource with loaded roles.
+     * @return JsonResponse The created user resource with a 201 status code.
      */
     public function store(Request $request): JsonResponse
     {
@@ -166,7 +166,7 @@ class UserController extends Controller
      *
      * @param  int|string  $id  The ID of the user to delete.
      *
-     * @return JsonResponse A JSON response with 204 status code.
+     * @return Response A response with 204 status code.
      */
     public function destroy(string|int $id): Response
     {
