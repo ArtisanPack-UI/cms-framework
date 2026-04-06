@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
@@ -19,6 +20,8 @@ use ZipArchive;
 
 class PluginManager
 {
+    use HasManifestParsing;
+
     private ClassLoader $classLoader;
 
     public function __construct()
@@ -63,23 +66,16 @@ class PluginManager
     public function getPlugin(string $slug): ?array
     {
         // Validate slug format (alphanumeric, hyphens, underscores only)
-        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $slug)) {
+        if (! $this->validateSlug($slug)) {
             return null;
         }
 
-        // Build and validate path
+        // Build and validate path within plugins directory
         $pluginsBasePath = $this->getPluginsPath();
-        $pluginPath      = $pluginsBasePath.'/'.$slug;
+        $realPluginPath  = $this->resolveSecurePath($pluginsBasePath.'/'.$slug, $pluginsBasePath);
 
-        // Resolve real path and verify it's within plugins directory
-        $realPluginPath = realpath($pluginPath);
-        if (false === $realPluginPath) {
+        if (null === $realPluginPath) {
             return null;
-        }
-
-        $realBasePath = realpath($pluginsBasePath);
-        if (false === $realBasePath || 0 !== strpos($realPluginPath, $realBasePath.DIRECTORY_SEPARATOR)) {
-            return null; // Path traversal attempt detected
         }
 
         // Check if plugin.json exists
@@ -397,7 +393,7 @@ class PluginManager
         }
 
         // Validate slug format
-        if (! preg_match('/^[a-zA-Z0-9_-]+$/', $manifest['slug'])) {
+        if (! $this->validateSlug($manifest['slug'])) {
             throw PluginValidationException::invalidManifest('Invalid slug format. Use alphanumeric, hyphens, and underscores only.');
         }
 
@@ -491,29 +487,6 @@ class PluginManager
         $zip->close();
 
         return $slug;
-    }
-
-    /**
-     * Parse plugin.json manifest file.
-     *
-     * @param  string  $manifestPath  Path to plugin.json
-     *
-     * @return array|null Parsed manifest or null if invalid
-     */
-    protected function parseManifest(string $manifestPath): ?array
-    {
-        if (! File::exists($manifestPath)) {
-            return null;
-        }
-
-        $content  = File::get($manifestPath);
-        $manifest = json_decode($content, true);
-
-        if (JSON_ERROR_NONE !== json_last_error()) {
-            return null;
-        }
-
-        return $manifest;
     }
 
     /**
