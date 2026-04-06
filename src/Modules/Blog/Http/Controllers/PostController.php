@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Post Controller for the CMS Framework Blog Module.
@@ -13,6 +13,7 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\PostRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Resources\PostResource;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
@@ -35,6 +36,25 @@ use Illuminate\Routing\Controller;
 class PostController extends Controller
 {
     use AuthorizesRequests;
+    use HasIncludableRelationships;
+
+    /**
+     * The relationships that can be included via the include query parameter.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $includableRelationships = ['author', 'categories', 'tags'];
+
+    /**
+     * The default relationships to load when no include parameter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $defaultIncludes = ['author', 'categories', 'tags'];
 
     /**
      * The blog manager instance.
@@ -48,7 +68,7 @@ class PostController extends Controller
      *
      * @since 1.0.0
      */
-    public function __construct( BlogManager $blogManager )
+    public function __construct(BlogManager $blogManager)
     {
         $this->blogManager = $blogManager;
     }
@@ -62,14 +82,15 @@ class PostController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of post resources.
      */
-    public function index( Request $request ): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Post::class );
+        $this->authorize('viewAny', Post::class);
 
-        $filters = $request->only( ['status', 'category', 'tag', 'author', 'year', 'month', 'search'] );
-        $posts   = $this->blogManager->getArchiveQuery( $filters )->paginate( 15 );
+        $filters  = $request->only(['status', 'category', 'tag', 'author', 'year', 'month', 'search']);
+        $includes = $this->getRequestedIncludes($request);
+        $posts    = $this->blogManager->getArchiveQuery($filters)->with($includes)->paginate(15);
 
-        return PostResource::collection( $posts );
+        return PostResource::collection($posts);
     }
 
     /**
@@ -84,30 +105,30 @@ class PostController extends Controller
      *
      * @return JsonResponse The JSON response containing the created post resource.
      */
-    public function store( PostRequest $request ): JsonResponse
+    public function store(PostRequest $request): JsonResponse
     {
-        $this->authorize( 'create', Post::class );
+        $this->authorize('create', Post::class);
 
         $validated  = $request->validated();
         $categories = $validated['categories'] ?? [];
         $tags       = $validated['tags'] ?? [];
 
-        unset( $validated['categories'], $validated['tags'] );
+        unset($validated['categories'], $validated['tags']);
 
-        $post = Post::create( $validated );
+        $post = Post::create($validated);
 
         // Sync categories and tags
-        if ( ! empty( $categories ) ) {
-            $post->categories()->sync( $categories );
+        if (! empty($categories)) {
+            $post->categories()->sync($categories);
         }
 
-        if ( ! empty( $tags ) ) {
-            $post->tags()->sync( $tags );
+        if (! empty($tags)) {
+            $post->tags()->sync($tags);
         }
 
-        $post->load( ['author', 'categories', 'tags'] );
+        $post->load($this->getRequestedIncludes($request));
 
-        return response()->json( new PostResource( $post ), 201 );
+        return response()->json(new PostResource($post), 201);
     }
 
     /**
@@ -121,12 +142,14 @@ class PostController extends Controller
      *
      * @return PostResource The post resource.
      */
-    public function show( int $id ): PostResource
+    public function show(Request $request, int $id): PostResource
     {
-        $post = Post::with( ['author', 'categories', 'tags'] )->findOrFail( $id );
-        $this->authorize( 'view', $post );
+        $post = Post::findOrFail($id);
+        $this->authorize('view', $post);
 
-        return new PostResource( $post );
+        $post->load($this->getRequestedIncludes($request));
+
+        return new PostResource($post);
     }
 
     /**
@@ -142,31 +165,31 @@ class PostController extends Controller
      *
      * @return PostResource The updated post resource.
      */
-    public function update( PostRequest $request, int $id ): PostResource
+    public function update(PostRequest $request, int $id): PostResource
     {
-        $post = Post::findOrFail( $id );
-        $this->authorize( 'update', $post );
+        $post = Post::findOrFail($id);
+        $this->authorize('update', $post);
 
         $validated  = $request->validated();
         $categories = $validated['categories'] ?? null;
         $tags       = $validated['tags'] ?? null;
 
-        unset( $validated['categories'], $validated['tags'] );
+        unset($validated['categories'], $validated['tags']);
 
-        $post->update( $validated );
+        $post->update($validated);
 
         // Sync categories and tags if provided
-        if ( null !== $categories ) {
-            $post->categories()->sync( $categories );
+        if (null !== $categories) {
+            $post->categories()->sync($categories);
         }
 
-        if ( null !== $tags ) {
-            $post->tags()->sync( $tags );
+        if (null !== $tags) {
+            $post->tags()->sync($tags);
         }
 
-        $post->load( ['author', 'categories', 'tags'] );
+        $post->load($this->getRequestedIncludes($request));
 
-        return new PostResource( $post );
+        return new PostResource($post);
     }
 
     /**
@@ -181,10 +204,10 @@ class PostController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( int $id ): Response
+    public function destroy(int $id): Response
     {
-        $post = Post::findOrFail( $id );
-        $this->authorize( 'delete', $post );
+        $post = Post::findOrFail($id);
+        $this->authorize('delete', $post);
 
         $post->delete();
 
@@ -200,13 +223,14 @@ class PostController extends Controller
      * @param  int|null  $month  Month to filter by (optional).
      * @param  int|null  $day  Day to filter by (optional).
      */
-    public function archiveByDate( int $year, ?int $month = null, ?int $day = null ): AnonymousResourceCollection
+    public function archiveByDate(Request $request, int $year, ?int $month = null, ?int $day = null): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Post::class );
+        $this->authorize('viewAny', Post::class);
 
-        $posts = $this->blogManager->getPostsByDate( $year, $month, $day );
+        $posts = $this->blogManager->getPostsByDate($year, $month, $day);
+        $posts->load($this->getRequestedIncludes($request));
 
-        return PostResource::collection( $posts );
+        return PostResource::collection($posts);
     }
 
     /**
@@ -216,13 +240,14 @@ class PostController extends Controller
      *
      * @param  int  $authorId  Author ID to filter by.
      */
-    public function archiveByAuthor( int $authorId ): AnonymousResourceCollection
+    public function archiveByAuthor(Request $request, int $authorId): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Post::class );
+        $this->authorize('viewAny', Post::class);
 
-        $posts = $this->blogManager->getPostsByAuthor( $authorId );
+        $posts = $this->blogManager->getPostsByAuthor($authorId);
+        $posts->load($this->getRequestedIncludes($request));
 
-        return PostResource::collection( $posts );
+        return PostResource::collection($posts);
     }
 
     /**
@@ -232,13 +257,14 @@ class PostController extends Controller
      *
      * @param  string  $slug  Category slug to filter by.
      */
-    public function archiveByCategory( string $slug ): AnonymousResourceCollection
+    public function archiveByCategory(Request $request, string $slug): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Post::class );
+        $this->authorize('viewAny', Post::class);
 
-        $posts = $this->blogManager->getPostsByCategory( $slug );
+        $posts = $this->blogManager->getPostsByCategory($slug);
+        $posts->load($this->getRequestedIncludes($request));
 
-        return PostResource::collection( $posts );
+        return PostResource::collection($posts);
     }
 
     /**
@@ -248,12 +274,13 @@ class PostController extends Controller
      *
      * @param  string  $slug  Tag slug to filter by.
      */
-    public function archiveByTag( string $slug ): AnonymousResourceCollection
+    public function archiveByTag(Request $request, string $slug): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Post::class );
+        $this->authorize('viewAny', Post::class);
 
-        $posts = $this->blogManager->getPostsByTag( $slug );
+        $posts = $this->blogManager->getPostsByTag($slug);
+        $posts->load($this->getRequestedIncludes($request));
 
-        return PostResource::collection( $posts);
+        return PostResource::collection($posts);
     }
 }

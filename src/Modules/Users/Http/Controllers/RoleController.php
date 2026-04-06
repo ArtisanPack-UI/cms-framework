@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Role Controller for the CMS Framework Users Module.
@@ -13,8 +13,10 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\RoleResource;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +32,27 @@ use Illuminate\Routing\Controller;
  */
 class RoleController extends Controller
 {
+    use AuthorizesRequests;
+    use HasIncludableRelationships;
+
+    /**
+     * The relationships that can be included via the include query parameter.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $includableRelationships = ['permissions'];
+
+    /**
+     * The default relationships to load when no include parameter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $defaultIncludes = ['permissions'];
+
     /**
      * Display a listing of roles.
      *
@@ -40,11 +63,13 @@ class RoleController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of role resources.
      */
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $roles = Role::with( 'permissions' )->paginate( 15 );
+        $this->authorize('viewAny', Role::class);
 
-        return RoleResource::collection( $roles );
+        $roles = Role::with($this->getRequestedIncludes($request))->paginate(15);
+
+        return RoleResource::collection($roles);
     }
 
     /**
@@ -59,17 +84,19 @@ class RoleController extends Controller
      *
      * @return RoleResource The created role resource with loaded permissions.
      */
-    public function store( Request $request ): RoleResource
+    public function store(Request $request): JsonResponse
     {
-        $validated = $request->validate( [
+        $this->authorize('create', Role::class);
+
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:roles',
-        ] );
+        ]);
 
-        $role = Role::create( $validated );
-        $role->load( 'permissions' );
+        $role = Role::create($validated);
+        $role->load($this->getRequestedIncludes($request));
 
-        return new RoleResource( $role );
+        return (new RoleResource($role))->response()->setStatusCode(201);
     }
 
     /**
@@ -84,11 +111,14 @@ class RoleController extends Controller
      *
      * @return RoleResource The role resource with loaded permissions.
      */
-    public function show( string|int $id ): RoleResource
+    public function show(Request $request, string|int $id): RoleResource
     {
-        $role = Role::with( 'permissions' )->findOrFail( $id );
+        $role = Role::findOrFail($id);
+        $this->authorize('view', $role);
 
-        return new RoleResource( $role );
+        $role->load($this->getRequestedIncludes($request));
+
+        return new RoleResource($role);
     }
 
     /**
@@ -104,18 +134,20 @@ class RoleController extends Controller
      *
      * @return RoleResource The updated role resource with loaded permissions.
      */
-    public function update( Request $request, string|int $id ): RoleResource
+    public function update(Request $request, string|int $id): RoleResource
     {
-        $role      = Role::findOrFail( $id );
-        $validated = $request->validate( [
+        $role = Role::findOrFail($id);
+        $this->authorize('update', $role);
+
+        $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'slug' => 'sometimes|required|string|max:255|unique:roles,slug,' . $role->id,
-        ] );
+            'slug' => 'sometimes|required|string|max:255|unique:roles,slug,'.$role->id,
+        ]);
 
-        $role->update( $validated );
-        $role->load( 'permissions' );
+        $role->update($validated);
+        $role->load($this->getRequestedIncludes($request));
 
-        return new RoleResource( $role );
+        return new RoleResource($role);
     }
 
     /**
@@ -130,11 +162,13 @@ class RoleController extends Controller
      *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy( string|int $id ): JsonResponse
+    public function destroy(string|int $id): JsonResponse
     {
-        $role = Role::findOrFail( $id );
+        $role = Role::findOrFail($id);
+        $this->authorize('delete', $role);
+
         $role->delete();
 
-        return response()->json( [], 204 );
+        return response()->json([], 204);
     }
 }

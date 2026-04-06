@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PostCategory Controller for the CMS Framework Blog Module.
@@ -13,11 +13,13 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\PostCategoryRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Resources\PostCategoryResource;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
@@ -33,6 +35,25 @@ use Illuminate\Routing\Controller;
 class PostCategoryController extends Controller
 {
     use AuthorizesRequests;
+    use HasIncludableRelationships;
+
+    /**
+     * The relationships that can be included via the include query parameter.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $includableRelationships = ['parent', 'children'];
+
+    /**
+     * The default relationships to load when no include parameter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $defaultIncludes = ['parent', 'children'];
 
     /**
      * Display a listing of post categories.
@@ -43,13 +64,13 @@ class PostCategoryController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of category resources.
      */
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', PostCategory::class );
+        $this->authorize('viewAny', PostCategory::class);
 
-        $categories = PostCategory::with( ['parent', 'children'] )->orderBy( 'order' )->paginate( 15 );
+        $categories = PostCategory::with($this->getRequestedIncludes($request))->orderBy('order')->paginate(15);
 
-        return PostCategoryResource::collection( $categories );
+        return PostCategoryResource::collection($categories);
     }
 
     /**
@@ -64,15 +85,15 @@ class PostCategoryController extends Controller
      *
      * @return JsonResponse The JSON response containing the created category resource.
      */
-    public function store( PostCategoryRequest $request ): JsonResponse
+    public function store(PostCategoryRequest $request): JsonResponse
     {
-        $this->authorize( 'create', PostCategory::class );
+        $this->authorize('create', PostCategory::class);
 
         $validated = $request->validated();
-        $category  = PostCategory::create( $validated );
-        $category->load( ['parent', 'children'] );
+        $category  = PostCategory::create($validated);
+        $category->load($this->getRequestedIncludes($request));
 
-        return response()->json( new PostCategoryResource( $category ), 201 );
+        return response()->json(new PostCategoryResource($category), 201);
     }
 
     /**
@@ -86,12 +107,14 @@ class PostCategoryController extends Controller
      *
      * @return PostCategoryResource The category resource.
      */
-    public function show( int $id ): PostCategoryResource
+    public function show(Request $request, int $id): PostCategoryResource
     {
-        $category = PostCategory::with( ['parent', 'children'] )->findOrFail( $id );
-        $this->authorize( 'view', $category );
+        $category = PostCategory::findOrFail($id);
+        $this->authorize('view', $category);
 
-        return new PostCategoryResource( $category );
+        $category->load($this->getRequestedIncludes($request));
+
+        return new PostCategoryResource($category);
     }
 
     /**
@@ -107,16 +130,16 @@ class PostCategoryController extends Controller
      *
      * @return PostCategoryResource The updated category resource.
      */
-    public function update( PostCategoryRequest $request, int $id ): PostCategoryResource
+    public function update(PostCategoryRequest $request, int $id): PostCategoryResource
     {
-        $category = PostCategory::findOrFail( $id );
-        $this->authorize( 'update', $category );
+        $category = PostCategory::findOrFail($id);
+        $this->authorize('update', $category);
 
         $validated = $request->validated();
-        $category->update( $validated );
-        $category->load( ['parent', 'children'] );
+        $category->update($validated);
+        $category->load($this->getRequestedIncludes($request));
 
-        return new PostCategoryResource( $category );
+        return new PostCategoryResource($category);
     }
 
     /**
@@ -131,10 +154,10 @@ class PostCategoryController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( int $id ): Response
+    public function destroy(int $id): Response
     {
-        $category = PostCategory::findOrFail( $id );
-        $this->authorize( 'delete', $category );
+        $category = PostCategory::findOrFail($id);
+        $this->authorize('delete', $category);
 
         $category->delete();
 
