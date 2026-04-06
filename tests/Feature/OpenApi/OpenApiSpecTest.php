@@ -150,16 +150,24 @@ test('export command writes openapi spec to file', function (): void {
 });
 
 test('export command supports pretty print', function (): void {
-    $outputPath          = sys_get_temp_dir().'/cms-openapi-pretty-test-'.uniqid().'.json';
-    $this->tempFiles[]   = $outputPath;
+    $compactPath         = sys_get_temp_dir().'/cms-openapi-compact-test-'.uniqid().'.json';
+    $prettyPath          = sys_get_temp_dir().'/cms-openapi-pretty-test-'.uniqid().'.json';
+    $this->tempFiles[]   = $compactPath;
+    $this->tempFiles[]   = $prettyPath;
 
     $this->artisan('cms:openapi:export', [
-        'path'     => $outputPath,
+        'path' => $compactPath,
+    ])->assertSuccessful();
+
+    $this->artisan('cms:openapi:export', [
+        'path'     => $prettyPath,
         '--pretty' => true,
     ])->assertSuccessful();
 
-    $content = file_get_contents($outputPath);
+    $compactContent = file_get_contents($compactPath);
+    $prettyContent  = file_get_contents($prettyPath);
 
-    // Pretty-printed JSON contains newlines
-    expect($content)->toContain("\n");
+    // Pretty-printed JSON is longer and contains indentation
+    expect(strlen($prettyContent))->toBeGreaterThan(strlen($compactContent));
+    expect($prettyContent)->toContain("\n    ");
 });

@@ -86,7 +86,7 @@ class ThemesController extends Controller
 
         if (! $theme) {
             return response()->json([
-                'message' => 'Theme not found',
+                'message' => __('Theme not found.'),
             ], 404);
         }
 
@@ -117,9 +117,9 @@ class ThemesController extends Controller
                 'message' => __('Theme activated successfully.'),
                 'theme'   => $this->themeManager->getTheme($slug),
             ]);
-        } catch (ThemeNotFoundException $e) {
+        } catch (ThemeNotFoundException) {
             return response()->json([
-                'message' => $e->getMessage(),
+                'message' => __('Theme ":slug" not found.', ['slug' => $slug]),
             ], 404);
         } catch (Exception $e) {
             report($e);
