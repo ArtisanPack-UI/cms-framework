@@ -1,9 +1,10 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use Orchestra\Testbench\TestCase;
@@ -24,13 +25,13 @@ class UpdateCheckerFactoryTest extends TestCase
     {
         $checker = UpdateCheckerFactory::buildUpdateChecker(
             'https://github.com/username/repo',
-            'application',
+            UpdateType::Application,
             'test-app',
             '1.0.0',
         );
 
-        $this->assertInstanceOf( UpdateChecker::class, $checker );
-        $this->assertEquals( 'GitHub', $checker->getSourceName() );
+        $this->assertInstanceOf(UpdateChecker::class, $checker);
+        $this->assertEquals('GitHub', $checker->getSourceName());
     }
 
     /**
@@ -42,13 +43,13 @@ class UpdateCheckerFactoryTest extends TestCase
     {
         $checker = UpdateCheckerFactory::buildUpdateChecker(
             'https://gitlab.com/username/repo',
-            'application',
+            UpdateType::Application,
             'test-app',
             '1.0.0',
         );
 
-        $this->assertInstanceOf( UpdateChecker::class, $checker );
-        $this->assertEquals( 'GitLab', $checker->getSourceName() );
+        $this->assertInstanceOf(UpdateChecker::class, $checker);
+        $this->assertEquals('GitLab', $checker->getSourceName());
     }
 
     /**
@@ -60,13 +61,13 @@ class UpdateCheckerFactoryTest extends TestCase
     {
         $checker = UpdateCheckerFactory::buildUpdateChecker(
             'https://example.com/updates.json',
-            'application',
+            UpdateType::Application,
             'test-app',
             '1.0.0',
         );
 
-        $this->assertInstanceOf( UpdateChecker::class, $checker );
-        $this->assertEquals( 'Custom JSON', $checker->getSourceName() );
+        $this->assertInstanceOf(UpdateChecker::class, $checker);
+        $this->assertEquals('Custom JSON', $checker->getSourceName());
     }
 
     /**
@@ -78,11 +79,11 @@ class UpdateCheckerFactoryTest extends TestCase
     {
         $checker = UpdateCheckerFactory::buildUpdateChecker(
             'https://github.com/username/repo',
-            'application',
+            UpdateType::Application,
             'test-app',
         );
 
-        $this->assertInstanceOf( UpdateChecker::class, $checker );
+        $this->assertInstanceOf(UpdateChecker::class, $checker);
     }
 
     /**
@@ -94,13 +95,13 @@ class UpdateCheckerFactoryTest extends TestCase
     {
         $checker = UpdateCheckerFactory::buildUpdateChecker(
             'https://github.com/username/repo',
-            'plugin',
+            UpdateType::Plugin,
             'test-plugin',
             '1.0.0',
         );
 
-        $this->assertEquals( 'plugin', $checker->getType() );
-        $this->assertEquals( 'test-plugin', $checker->getSlug() );
+        $this->assertSame(UpdateType::Plugin, $checker->getType());
+        $this->assertEquals('test-plugin', $checker->getSlug());
     }
 
     /**
@@ -110,9 +111,9 @@ class UpdateCheckerFactoryTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app ): void
+    protected function defineEnvironment($app): void
     {
         // Set app version for testing
-        $app['config']->set( 'app.version', '1.0.0' );
+        $app['config']->set('app.version', '1.0.0');
     }
 }
