@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * CustomField Controller for the CMS Framework ContentTypes Module.
@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests\CustomFieldReq
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Resources\CustomFieldResource;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,6 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Custom Fields', weight: 8)]
 class CustomFieldController extends Controller
 {
     use AuthorizesRequests;
@@ -47,7 +49,7 @@ class CustomFieldController extends Controller
      *
      * @since 1.0.0
      */
-    public function __construct( CustomFieldManager $customFieldManager )
+    public function __construct(CustomFieldManager $customFieldManager)
     {
         $this->customFieldManager = $customFieldManager;
     }
@@ -63,11 +65,11 @@ class CustomFieldController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', CustomField::class );
+        $this->authorize('viewAny', CustomField::class);
 
-        $customFields = CustomField::orderBy( 'order' )->paginate( 15 );
+        $customFields = CustomField::orderBy('order')->paginate(15);
 
-        return CustomFieldResource::collection( $customFields );
+        return CustomFieldResource::collection($customFields);
     }
 
     /**
@@ -83,14 +85,14 @@ class CustomFieldController extends Controller
      *
      * @return JsonResponse The JSON response containing the created custom field resource.
      */
-    public function store( CustomFieldRequest $request ): JsonResponse
+    public function store(CustomFieldRequest $request): JsonResponse
     {
-        $this->authorize( 'create', CustomField::class );
+        $this->authorize('create', CustomField::class);
 
         $validated   = $request->validated();
-        $customField = $this->customFieldManager->createField( $validated );
+        $customField = $this->customFieldManager->createField($validated);
 
-        return response()->json( new CustomFieldResource( $customField ), 201 );
+        return response()->json(new CustomFieldResource($customField), 201);
     }
 
     /**
@@ -104,12 +106,12 @@ class CustomFieldController extends Controller
      *
      * @return CustomFieldResource The custom field resource.
      */
-    public function show( int $id ): CustomFieldResource
+    public function show(int $id): CustomFieldResource
     {
-        $customField = CustomField::findOrFail( $id );
-        $this->authorize( 'view', $customField );
+        $customField = CustomField::findOrFail($id);
+        $this->authorize('view', $customField);
 
-        return new CustomFieldResource( $customField );
+        return new CustomFieldResource($customField);
     }
 
     /**
@@ -126,15 +128,15 @@ class CustomFieldController extends Controller
      *
      * @return CustomFieldResource The updated custom field resource.
      */
-    public function update( CustomFieldRequest $request, int $id ): CustomFieldResource
+    public function update(CustomFieldRequest $request, int $id): CustomFieldResource
     {
-        $customField = CustomField::findOrFail( $id );
-        $this->authorize( 'update', $customField );
+        $customField = CustomField::findOrFail($id);
+        $this->authorize('update', $customField);
 
         $validated   = $request->validated();
-        $customField = $this->customFieldManager->updateField( $id, $validated );
+        $customField = $this->customFieldManager->updateField($id, $validated);
 
-        return new CustomFieldResource( $customField );
+        return new CustomFieldResource($customField);
     }
 
     /**
@@ -149,12 +151,12 @@ class CustomFieldController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( int $id ): Response
+    public function destroy(int $id): Response
     {
-        $customField = CustomField::findOrFail( $id );
-        $this->authorize( 'delete', $customField );
+        $customField = CustomField::findOrFail($id);
+        $this->authorize('delete', $customField);
 
-        $this->customFieldManager->deleteField( $id );
+        $this->customFieldManager->deleteField($id);
 
         return response()->noContent();
     }

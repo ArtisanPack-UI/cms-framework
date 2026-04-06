@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\PageRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Resources\PageResource;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,6 +36,7 @@ use InvalidArgumentException;
  *
  * @since 1.0.0
  */
+#[Group('Pages', weight: 4)]
 class PageController extends Controller
 {
     use AuthorizesRequests;

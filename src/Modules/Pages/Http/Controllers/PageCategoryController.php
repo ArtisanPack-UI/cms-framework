@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationsh
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\PageCategoryRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Resources\PageCategoryResource;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\PageCategory;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Page Categories', weight: 5)]
 class PageCategoryController extends Controller
 {
     use AuthorizesRequests;

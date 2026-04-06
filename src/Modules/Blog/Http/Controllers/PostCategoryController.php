@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationsh
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\PostCategoryRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Resources\PostCategoryResource;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Post Categories', weight: 2)]
 class PostCategoryController extends Controller
 {
     use AuthorizesRequests;
