@@ -58,6 +58,10 @@ class CMSFrameworkServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
             ], 'artisanpack-package-config');
+
+            $this->publishes([
+                __DIR__.'/../resources/types' => resource_path('types/cms-framework'),
+            ], 'cms-types');
         }
 
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
