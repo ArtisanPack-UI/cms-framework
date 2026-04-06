@@ -23,6 +23,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Gate;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -219,6 +221,14 @@ class UserController extends Controller
                 continue;
             }
 
+            $permission = $this->getBulkPermission($action);
+
+            if (! Gate::forUser($request->user())->allows($permission)) {
+                $errors[$id] = __('You do not have permission to :action this user.', ['action' => $action]);
+
+                continue;
+            }
+
             try {
                 $this->executeBulkAction($action, $user);
                 $processed++;
@@ -235,6 +245,24 @@ class UserController extends Controller
     }
 
     /**
+     * Get the Gate permission for a bulk action.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action name.
+     *
+     * @return string The Gate permission name.
+     */
+    protected function getBulkPermission(string $action): string
+    {
+        return match ($action) {
+            'delete'              => 'users.delete',
+            'activate', 'deactivate' => 'users.manage',
+            default               => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
+        };
+    }
+
+    /**
      * Execute a bulk action on a single user.
      *
      * @since 1.1.0
@@ -248,6 +276,7 @@ class UserController extends Controller
             'delete'     => $user->delete(),
             'activate'   => $user->update(['email_verified_at' => now()]),
             'deactivate' => $user->update(['email_verified_at' => null]),
+            default      => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 }

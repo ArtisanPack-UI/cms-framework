@@ -17,6 +17,9 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 
 Route::apiResource('users', UserController::class);
-Route::post('users/bulk', [UserController::class, 'bulk'])->middleware('auth');
 Route::apiResource('roles', RoleController::class);
 Route::apiResource('permissions', PermissionController::class);
+
+Route::middleware('auth')->group(function (): void {
+    Route::post('users/bulk', [UserController::class, 'bulk']);
+});

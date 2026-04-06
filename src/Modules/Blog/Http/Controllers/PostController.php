@@ -27,6 +27,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use InvalidArgumentException;
 use Throwable;
 
 /**
@@ -354,9 +355,10 @@ class PostController extends Controller
     protected function getBulkPolicyMethod(string $action): string
     {
         return match ($action) {
-            'delete', 'archive' => 'delete',
-            'publish'           => 'publish',
-            'draft'             => 'update',
+            'delete'  => 'delete',
+            'publish' => 'publish',
+            'draft'   => 'update',
+            default   => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 
@@ -380,7 +382,7 @@ class PostController extends Controller
                 'status'       => ContentStatus::Draft->value,
                 'published_at' => null,
             ]),
-            'archive' => $post->delete(),
+            default   => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 }

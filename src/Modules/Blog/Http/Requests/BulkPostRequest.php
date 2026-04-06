@@ -46,7 +46,7 @@ class BulkPostRequest extends FormRequest
      */
     public static function allowedActions(): array
     {
-        return ['delete', 'publish', 'draft', 'archive'];
+        return ['delete', 'publish', 'draft'];
     }
 
     /**

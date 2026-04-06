@@ -3,10 +3,21 @@
 declare(strict_types=1);
 
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use Illuminate\Support\Facades\Gate;
+
+/**
+ * Grant all user bulk action permissions via Gate.
+ */
+function grantAllUserPermissions(): void
+{
+    Gate::define('users.delete', fn () => true);
+    Gate::define('users.manage', fn () => true);
+}
 
 // --- Bulk Delete ---
 
 test('bulk user delete removes multiple users', function (): void {
+    grantAllUserPermissions();
     $actor = TestUser::factory()->create();
     $users = TestUser::factory()->count(3)->create();
 
@@ -28,6 +39,7 @@ test('bulk user delete removes multiple users', function (): void {
 // --- Bulk Activate ---
 
 test('bulk user activate sets email_verified_at', function (): void {
+    grantAllUserPermissions();
     $actor = TestUser::factory()->create();
     $users = TestUser::factory()->count(3)->create(['email_verified_at' => null]);
 
@@ -49,6 +61,7 @@ test('bulk user activate sets email_verified_at', function (): void {
 // --- Bulk Deactivate ---
 
 test('bulk user deactivate clears email_verified_at', function (): void {
+    grantAllUserPermissions();
     $actor = TestUser::factory()->create();
     $users = TestUser::factory()->count(3)->create(['email_verified_at' => now()]);
 
@@ -70,6 +83,7 @@ test('bulk user deactivate clears email_verified_at', function (): void {
 // --- Self-action prevention ---
 
 test('bulk user action prevents acting on own account', function (): void {
+    grantAllUserPermissions();
     $actor = TestUser::factory()->create();
     $other = TestUser::factory()->create();
 
@@ -87,6 +101,52 @@ test('bulk user action prevents acting on own account', function (): void {
     expect(TestUser::find($actor->id))->not->toBeNull();
     // Other user should be deleted
     expect(TestUser::find($other->id))->toBeNull();
+});
+
+// --- Authorization failures ---
+
+test('bulk user delete fails without users.delete permission', function (): void {
+    // No permissions granted
+    $actor = TestUser::factory()->create();
+    $users = TestUser::factory()->count(2)->create();
+
+    $response = $this->actingAs($actor)->postJson('/api/v1/users/bulk', [
+        'action' => 'delete',
+        'ids'    => $users->pluck('id')->toArray(),
+    ]);
+
+    $response->assertSuccessful();
+    expect($response->json('processed'))->toBe(0);
+    expect($response->json('failed'))->toBe(2);
+    expect($response->json('errors'))->toHaveCount(2);
+
+    // Users should still exist
+    foreach ($users as $user) {
+        expect(TestUser::find($user->id))->not->toBeNull();
+    }
+});
+
+test('bulk user activate fails without users.manage permission', function (): void {
+    // Only grant delete, not manage
+    Gate::define('users.delete', fn () => true);
+
+    $actor = TestUser::factory()->create();
+    $users = TestUser::factory()->count(2)->create(['email_verified_at' => null]);
+
+    $response = $this->actingAs($actor)->postJson('/api/v1/users/bulk', [
+        'action' => 'activate',
+        'ids'    => $users->pluck('id')->toArray(),
+    ]);
+
+    $response->assertSuccessful();
+    expect($response->json('processed'))->toBe(0);
+    expect($response->json('failed'))->toBe(2);
+
+    // Users should still be unverified
+    foreach ($users as $user) {
+        $user->refresh();
+        expect($user->email_verified_at)->toBeNull();
+    }
 });
 
 // --- Validation ---
@@ -152,6 +212,7 @@ test('bulk user action validates ids exist in database', function (): void {
 // --- Response structure ---
 
 test('bulk user action returns correct response structure', function (): void {
+    grantAllUserPermissions();
     $actor = TestUser::factory()->create();
     $user  = TestUser::factory()->create();
 

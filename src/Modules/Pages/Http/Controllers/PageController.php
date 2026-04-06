@@ -363,6 +363,7 @@ class PageController extends Controller
             'delete'  => 'delete',
             'publish' => 'publish',
             'draft'   => 'update',
+            default   => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 
@@ -386,6 +387,7 @@ class PageController extends Controller
                 'status'       => ContentStatus::Draft->value,
                 'published_at' => null,
             ]),
+            default   => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 }

@@ -140,30 +140,19 @@ test('bulk post draft sets status to draft', function (): void {
     }
 });
 
-// --- Bulk Archive ---
+// --- Archive is not a valid action ---
 
-test('bulk post archive soft-deletes posts', function (): void {
-    grantAllPostPermissions();
+test('bulk post action rejects archive as invalid action', function (): void {
     $user = TestUser::factory()->create();
-
-    $posts = collect();
-    for ($i = 0; $i < 2; $i++) {
-        $posts->push(createTestPost(['author_id' => $user->id]));
-    }
+    $post = createTestPost(['author_id' => $user->id]);
 
     $response = $this->actingAs($user)->postJson('/api/v1/posts/bulk', [
         'action' => 'archive',
-        'ids'    => $posts->pluck('id')->toArray(),
+        'ids'    => [$post->id],
     ]);
 
-    $response->assertSuccessful();
-    expect($response->json('processed'))->toBe(2);
-    expect($response->json('failed'))->toBe(0);
-
-    foreach ($posts as $post) {
-        expect(Post::find($post->id))->toBeNull();
-        expect(Post::withTrashed()->find($post->id))->not->toBeNull();
-    }
+    $response->assertStatus(422);
+    $response->assertJsonValidationErrors(['action']);
 });
 
 // --- Authorization failures ---
