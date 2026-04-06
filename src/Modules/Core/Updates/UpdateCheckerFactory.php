@@ -1,10 +1,11 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\CustomJsonUpdateSource;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitHubUpdateSource;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitLabUpdateSource;
@@ -40,26 +41,26 @@ class UpdateCheckerFactory
      * @since 1.0.0
      *
      * @param  string  $url  Update source URL (GitHub, GitLab, custom JSON, etc.)
-     * @param  string  $type  Update type: 'application', 'plugin', 'theme'
+     * @param  UpdateType  $type  Update type
      * @param  string  $slug  Unique identifier (e.g., 'digital-shopfront-cms')
      * @param  string|null  $currentVersion  Current version (auto-detected if null)
      */
     public static function buildUpdateChecker(
         string $url,
-        string $type,
+        UpdateType $type,
         string $slug,
         ?string $currentVersion = null,
     ): UpdateChecker {
         // Detect current version if not provided
-        if ( ! $currentVersion ) {
-            $currentVersion = static::detectCurrentVersion( $type, $slug );
+        if (! $currentVersion) {
+            $currentVersion = static::detectCurrentVersion($type, $slug);
         }
 
         // Detect and instantiate appropriate source
-        $source = static::detectSource( $url, $currentVersion );
+        $source = static::detectSource($url, $currentVersion);
 
         // Create and return UpdateChecker
-        return new UpdateChecker( $source, $type, $slug );
+        return new UpdateChecker($source, $type, $slug);
     }
 
     /**
@@ -72,10 +73,10 @@ class UpdateCheckerFactory
      *
      * @param  class-string<UpdateSourceInterface>  $sourceClass  Source class name
      */
-    public static function registerSource( string $sourceClass ): void
+    public static function registerSource(string $sourceClass): void
     {
-        if ( ! in_array( $sourceClass, static::$sources ) ) {
-            array_unshift( static::$sources, $sourceClass );
+        if (! in_array($sourceClass, static::$sources)) {
+            array_unshift(static::$sources, $sourceClass);
         }
     }
 
@@ -87,24 +88,24 @@ class UpdateCheckerFactory
      * @param  string  $url  Update source URL
      * @param  string  $currentVersion  Current version
      */
-    protected static function detectSource( string $url, string $currentVersion ): UpdateSourceInterface
+    protected static function detectSource(string $url, string $currentVersion): UpdateSourceInterface
     {
-        foreach ( static::$sources as $sourceClass ) {
+        foreach (static::$sources as $sourceClass) {
             try {
                 /** @var UpdateSourceInterface $source */
-                $source = new $sourceClass( $url, $currentVersion );
+                $source = new $sourceClass($url, $currentVersion);
 
-                if ( $source->supports( $url ) ) {
+                if ($source->supports($url)) {
                     return $source;
                 }
-            } catch ( InvalidArgumentException $e ) {
+            } catch (InvalidArgumentException $e) {
                 // Skip sources that can't parse this URL
                 continue;
             }
         }
 
         // Fallback to custom JSON (always supports)
-        return new CustomJsonUpdateSource( $url, $currentVersion );
+        return new CustomJsonUpdateSource($url, $currentVersion);
     }
 
     /**
@@ -112,18 +113,17 @@ class UpdateCheckerFactory
      *
      * @since 1.0.0
      *
-     * @param  string  $type  Update type
+     * @param  UpdateType  $type  Update type
      * @param  string  $slug  Item slug
      *
      * @return string Current version
      */
-    protected static function detectCurrentVersion( string $type, string $slug ): string
+    protected static function detectCurrentVersion(UpdateType $type, string $slug): string
     {
-        return match ( $type ) {
-            'application' => config( 'app.version', '0.0.0' ),
-            'plugin'      => static::getPluginVersion( $slug ),
-            'theme'       => static::getThemeVersion( $slug ),
-            default       => '0.0.0',
+        return match ($type) {
+            UpdateType::Application => config('app.version', '0.0.0'),
+            UpdateType::Plugin      => static::getPluginVersion($slug),
+            UpdateType::Theme       => static::getThemeVersion($slug),
         };
     }
 
@@ -136,19 +136,19 @@ class UpdateCheckerFactory
      *
      * @return string Plugin version
      */
-    protected static function getPluginVersion( string $slug ): string
+    protected static function getPluginVersion(string $slug): string
     {
         try {
             $pluginModel = \ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin::class;
 
-            if ( ! class_exists( $pluginModel ) ) {
+            if (! class_exists($pluginModel)) {
                 return '0.0.0';
             }
 
-            $plugin = $pluginModel::where( 'slug', sanitizeText( $slug ) )->first();
+            $plugin = $pluginModel::where('slug', sanitizeText($slug))->first();
 
             return $plugin?->version ?? '0.0.0';
-        } catch ( Exception $e ) {
+        } catch (Exception $e) {
             return '0.0.0';
         }
     }
@@ -162,33 +162,33 @@ class UpdateCheckerFactory
      *
      * @return string Theme version
      */
-    protected static function getThemeVersion( string $slug ): string
+    protected static function getThemeVersion(string $slug): string
     {
-        $themePath = base_path( "themes/{$slug}/theme.json" );
+        $themePath = base_path("themes/{$slug}/theme.json");
 
-        if ( ! File::exists( $themePath ) ) {
+        if (! File::exists($themePath)) {
             return '0.0.0';
         }
 
         try {
-            $contents = File::get( $themePath );
-            $manifest = json_decode( $contents, true );
+            $contents = File::get($themePath);
+            $manifest = json_decode($contents, true);
 
             // Check if json_decode failed or didn't return an array
-            if ( null === $manifest || ! is_array( $manifest ) ) {
+            if (null === $manifest || ! is_array($manifest)) {
                 // Log the JSON error for debugging
                 $jsonError = json_last_error_msg();
-                \Illuminate\Support\Facades\Log::warning( 'Invalid JSON in theme manifest', [
+                \Illuminate\Support\Facades\Log::warning('Invalid JSON in theme manifest', [
                     'theme'      => $slug,
                     'path'       => $themePath,
                     'json_error' => $jsonError,
-                ] );
+                ]);
 
                 return '0.0.0';
             }
 
             return $manifest['version'] ?? '0.0.0';
-        } catch ( Exception $e ) {
+        } catch (Exception $e) {
             return '0.0.0';
         }
     }
