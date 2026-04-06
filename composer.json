@@ -35,7 +35,8 @@
     "artisanpack-ui/accessibility": "^2.1.0",
     "artisanpack-ui/security": "^1.0.3",
     "artisanpack-ui/core": "^1.0",
-    "artisanpack-ui/hooks": "^1.1"
+    "artisanpack-ui/hooks": "^1.1",
+    "dedoc/scramble": "^0.12 || ^0.13"
   },
   "require-dev": {
     "pestphp/pest": "^3.8",

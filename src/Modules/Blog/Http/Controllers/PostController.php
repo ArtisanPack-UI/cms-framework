@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\PostRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Resources\PostResource;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -33,6 +34,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Posts', weight: 1)]
 class PostController extends Controller
 {
     use AuthorizesRequests;

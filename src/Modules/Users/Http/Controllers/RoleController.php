@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\RoleResource;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Roles', weight: 11)]
 class RoleController extends Controller
 {
     use AuthorizesRequests;

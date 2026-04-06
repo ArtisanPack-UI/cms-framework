@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Setting Controller for the CMS Framework Settings Module.
@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests\SettingRequest;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources\SettingResource;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Settings', weight: 13)]
 class SettingController extends Controller
 {
     use AuthorizesRequests;
@@ -46,11 +48,11 @@ class SettingController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Setting::class );
+        $this->authorize('viewAny', Setting::class);
 
-        $settings = Setting::paginate( 15 );
+        $settings = Setting::paginate(15);
 
-        return SettingResource::collection( $settings );
+        return SettingResource::collection($settings);
     }
 
     /**
@@ -66,15 +68,15 @@ class SettingController extends Controller
      *
      * @return JsonResponse The JSON response containing the created setting resource.
      */
-    public function store( SettingRequest $request ): JsonResponse // Correct return type hint
+    public function store(SettingRequest $request): JsonResponse // Correct return type hint
     {
-        $this->authorize( 'create', Setting::class );
+        $this->authorize('create', Setting::class);
 
         $validated = $request->validated();
-        $setting   = Setting::create( $validated );
+        $setting   = Setting::create($validated);
 
         // Return JsonResponse explicitly with 201 status
-        return response()->json( new SettingResource( $setting ), 201 );
+        return response()->json(new SettingResource($setting), 201);
     }
 
     /**
@@ -89,13 +91,12 @@ class SettingController extends Controller
      *
      * @return SettingResource The setting resource with loaded permissions.
      */
-    public function show( string|int $id ): SettingResource
+    public function show(string|int $id): SettingResource
     {
-        $this->authorize( 'view', Setting::class );
+        $setting = Setting::findOrFail($id);
+        $this->authorize('view', $setting);
 
-        $setting = Setting::findOrFail( $id );
-
-        return new SettingResource( $setting );
+        return new SettingResource($setting);
     }
 
     /**
@@ -111,14 +112,14 @@ class SettingController extends Controller
      *
      * @return SettingResource The updated setting resource with loaded permissions.
      */
-    public function update( SettingRequest $request, string|int $id ): SettingResource
+    public function update(SettingRequest $request, string|int $id): SettingResource
     {
-        $setting = Setting::findOrFail( $id );
-        $this->authorize( 'update', $setting );
+        $setting = Setting::findOrFail($id);
+        $this->authorize('update', $setting);
         $validated = $request->validated();
-        $setting->update( $validated );
+        $setting->update($validated);
 
-        return new SettingResource( $setting );
+        return new SettingResource($setting);
     }
 
     /**
@@ -134,10 +135,10 @@ class SettingController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( string|int $id ): Response // Correct return type hint
+    public function destroy(string|int $id): Response // Correct return type hint
     {
-        $setting = Setting::findOrFail( $id );
-        $this->authorize( 'delete', $setting );
+        $setting = Setting::findOrFail($id);
+        $this->authorize('delete', $setting);
         $setting->delete();
 
         return response()->noContent();

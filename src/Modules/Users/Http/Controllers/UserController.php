@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 use App\Models\User;
 use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group('Users', weight: 10)]
 class UserController extends Controller
 {
     use HasIncludableRelationships;
