@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
@@ -42,30 +42,30 @@ class PerformUpdateCommand extends Command
      *
      * @since 1.0.0
      */
-    public function handle( ApplicationUpdateManager $manager ): int
+    public function handle(ApplicationUpdateManager $manager): int
     {
         try {
             // Check for updates first
             $updateInfo = $manager->checkForUpdate();
 
-            if ( ! $updateInfo->hasUpdate ) {
-                $this->info( '✓ You are already running the latest version.' );
+            if (! $updateInfo->hasUpdate()) {
+                $this->info('✓ You are already running the latest version.');
 
                 return self::SUCCESS;
             }
 
-            $version = $this->option( 'version' ) ?? $updateInfo->latestVersion;
+            $version = $this->option('version') ?? $updateInfo->latestVersion;
 
             // Show update information
             $this->newLine();
-            $this->line( "Current version: {$updateInfo->currentVersion}" );
-            $this->line( "Update to:       {$version}" );
+            $this->line("Current version: {$updateInfo->currentVersion}");
+            $this->line("Update to:       {$version}");
             $this->newLine();
 
             // Confirm update
-            if ( ! $this->option( 'force' ) ) {
-                if ( ! $this->confirm( 'Do you want to proceed with the update?' ) ) {
-                    $this->info( 'Update cancelled.' );
+            if (! $this->option('force')) {
+                if (! $this->confirm('Do you want to proceed with the update?')) {
+                    $this->info('Update cancelled.');
 
                     return self::SUCCESS;
                 }
@@ -73,24 +73,24 @@ class PerformUpdateCommand extends Command
 
             // Perform update
             $this->newLine();
-            $this->warn( '⚠ Starting update process...' );
-            $this->line( 'This may take several minutes. Do not interrupt the process.' );
+            $this->warn('⚠ Starting update process...');
+            $this->line('This may take several minutes. Do not interrupt the process.');
             $this->newLine();
 
-            $manager->performUpdate( $version );
+            $manager->performUpdate($version);
 
-            $this->newLine( 2 );
-            $this->info( '✓ Update completed successfully!' );
-            $this->line( "Application updated to version {$version}" );
+            $this->newLine(2);
+            $this->info('✓ Update completed successfully!');
+            $this->line("Application updated to version {$version}");
 
             return self::SUCCESS;
-        } catch ( Exception $e ) {
+        } catch (Exception $e) {
             $this->newLine();
-            $this->error( '✗ Update failed:' );
-            $this->error( $e->getMessage() );
+            $this->error('✗ Update failed:');
+            $this->error($e->getMessage());
             $this->newLine();
-            $this->warn( 'If a backup was created, you can restore it using:' );
-            $this->comment( 'php artisan update:rollback' );
+            $this->warn('If a backup was created, you can restore it using:');
+            $this->comment('php artisan update:rollback');
 
             return self::FAILURE;
         }

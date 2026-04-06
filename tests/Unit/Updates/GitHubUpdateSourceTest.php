@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -25,12 +25,12 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_supports_github_urls(): void
     {
-        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
 
-        $this->assertTrue( $source->supports( 'https://github.com/user/repo' ) );
-        $this->assertTrue( $source->supports( 'https://github.com/another-user/another-repo' ) );
-        $this->assertFalse( $source->supports( 'https://gitlab.com/user/repo' ) );
-        $this->assertFalse( $source->supports( 'https://example.com/updates.json' ) );
+        $this->assertTrue($source->supports('https://github.com/user/repo'));
+        $this->assertTrue($source->supports('https://github.com/another-user/another-repo'));
+        $this->assertFalse($source->supports('https://gitlab.com/user/repo'));
+        $this->assertFalse($source->supports('https://example.com/updates.json'));
     }
 
     /**
@@ -40,9 +40,9 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_returns_correct_name(): void
     {
-        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
 
-        $this->assertEquals( 'GitHub', $source->getName() );
+        $this->assertEquals('GitHub', $source->getName());
     }
 
     /**
@@ -52,8 +52,8 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_can_check_for_updates(): void
     {
-        Http::fake( [
-            'api.github.com/repos/user/repo/releases' => Http::response( [
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([
                 [
                     'tag_name'     => 'v2.0.0',
                     'prerelease'   => false,
@@ -69,18 +69,18 @@ class GitHubUpdateSourceTest extends TestCase
                     ],
                     'zipball_url' => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
                 ],
-            ], 200 ),
-        ] );
+            ], 200),
+        ]);
 
-        $source     = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source     = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
-        $this->assertEquals( '1.0.0', $updateInfo->currentVersion );
-        $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
-        $this->assertTrue( $updateInfo->hasUpdate );
-        $this->assertStringContainsString( 'github.com', $updateInfo->downloadUrl );
-        $this->assertEquals( 'Release notes here', $updateInfo->changelog );
+        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
+        $this->assertEquals('1.0.0', $updateInfo->currentVersion);
+        $this->assertEquals('2.0.0', $updateInfo->latestVersion);
+        $this->assertTrue($updateInfo->hasUpdate());
+        $this->assertStringContainsString('github.com', $updateInfo->downloadUrl);
+        $this->assertEquals('Release notes here', $updateInfo->changelog);
     }
 
     /**
@@ -90,14 +90,14 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_throws_exception_when_no_releases(): void
     {
-        Http::fake( [
-            'api.github.com/repos/user/repo/releases' => Http::response( [], 200 ),
-        ] );
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([], 200),
+        ]);
 
-        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
 
-        $this->expectException( UpdateException::class );
-        $this->expectExceptionMessage( 'No releases found' );
+        $this->expectException(UpdateException::class);
+        $this->expectExceptionMessage('No releases found');
 
         $source->checkForUpdate();
     }
@@ -109,8 +109,8 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_skips_prerelease_versions(): void
     {
-        Http::fake( [
-            'api.github.com/repos/user/repo/releases' => Http::response( [
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([
                 [
                     'tag_name'     => 'v3.0.0-beta',
                     'prerelease'   => true,
@@ -131,13 +131,13 @@ class GitHubUpdateSourceTest extends TestCase
                     'assets'       => [],
                     'zipball_url'  => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
                 ],
-            ], 200 ),
-        ] );
+            ], 200),
+        ]);
 
-        $source     = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source     = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
+        $this->assertEquals('2.0.0', $updateInfo->latestVersion);
     }
 
     /**
@@ -147,8 +147,8 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_falls_back_to_zipball_when_no_assets(): void
     {
-        Http::fake( [
-            'api.github.com/repos/user/repo/releases' => Http::response( [
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([
                 [
                     'tag_name'     => 'v2.0.0',
                     'prerelease'   => false,
@@ -159,13 +159,13 @@ class GitHubUpdateSourceTest extends TestCase
                     'assets'       => [],
                     'zipball_url'  => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
                 ],
-            ], 200 ),
-        ] );
+            ], 200),
+        ]);
 
-        $source     = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source     = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertStringContainsString( 'zipball', $updateInfo->downloadUrl );
+        $this->assertStringContainsString('zipball', $updateInfo->downloadUrl);
     }
 
     /**
@@ -175,14 +175,14 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_handles_api_errors(): void
     {
-        Http::fake( [
-            'api.github.com/repos/user/repo/releases' => Http::response( [], 500 ),
-        ] );
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([], 500),
+        ]);
 
-        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
 
-        $this->expectException( UpdateException::class );
-        $this->expectExceptionMessage( 'GitHub API error' );
+        $this->expectException(UpdateException::class);
+        $this->expectExceptionMessage('GitHub API error');
 
         $source->checkForUpdate();
     }
@@ -194,11 +194,11 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_can_set_authentication(): void
     {
-        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
-        $source->setAuthentication( 'ghp_test_token' );
+        $source = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
+        $source->setAuthentication('ghp_test_token');
 
         // We can't directly test the token is used, but we can verify the method doesn't throw
-        $this->assertTrue( true );
+        $this->assertTrue(true);
     }
 
     /**
@@ -208,8 +208,8 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_parses_repository_url_correctly(): void
     {
-        Http::fake( [
-            'api.github.com/repos/test-owner/test-repo/releases' => Http::response( [
+        Http::fake([
+            'api.github.com/repos/test-owner/test-repo/releases' => Http::response([
                 [
                     'tag_name'     => 'v1.0.0',
                     'prerelease'   => false,
@@ -219,14 +219,14 @@ class GitHubUpdateSourceTest extends TestCase
                     'assets'       => [],
                     'zipball_url'  => 'https://api.github.com/repos/test-owner/test-repo/zipball/v1.0.0',
                 ],
-            ], 200 ),
-        ] );
+            ], 200),
+        ]);
 
-        $source     = new GitHubUpdateSource( 'https://github.com/test-owner/test-repo', '0.9.0' );
+        $source     = new GitHubUpdateSource('https://github.com/test-owner/test-repo', '0.9.0');
         $updateInfo = $source->checkForUpdate();
 
         // If we get here without exception, the URL was parsed correctly
-        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
+        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
     }
 
     /**
@@ -236,10 +236,10 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_throws_exception_for_invalid_urls(): void
     {
-        $this->expectException( InvalidArgumentException::class );
-        $this->expectExceptionMessage( 'Invalid GitHub URL' );
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid GitHub URL');
 
-        new GitHubUpdateSource( 'https://invalid-url.com', '1.0.0' );
+        new GitHubUpdateSource('https://invalid-url.com', '1.0.0');
     }
 
     /**
@@ -249,8 +249,8 @@ class GitHubUpdateSourceTest extends TestCase
      */
     public function test_strips_v_prefix_from_version_tags(): void
     {
-        Http::fake( [
-            'api.github.com/repos/user/repo/releases' => Http::response( [
+        Http::fake([
+            'api.github.com/repos/user/repo/releases' => Http::response([
                 [
                     'tag_name'     => 'v2.5.1',
                     'prerelease'   => false,
@@ -260,13 +260,13 @@ class GitHubUpdateSourceTest extends TestCase
                     'assets'       => [],
                     'zipball_url'  => 'https://api.github.com/repos/user/repo/zipball/v2.5.1',
                 ],
-            ], 200 ),
-        ] );
+            ], 200),
+        ]);
 
-        $source     = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $source     = new GitHubUpdateSource('https://github.com/user/repo', '1.0.0');
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertEquals( '2.5.1', $updateInfo->latestVersion );
+        $this->assertEquals('2.5.1', $updateInfo->latestVersion);
     }
 
     /**
@@ -276,9 +276,9 @@ class GitHubUpdateSourceTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app ): void
+    protected function defineEnvironment($app): void
     {
-        $app['config']->set( 'cms.updates.http_timeout', 15 );
-        $app['config']->set( 'cms.updates.download_timeout', 300 );
+        $app['config']->set('cms.updates.http_timeout', 15);
+        $app['config']->set('cms.updates.download_timeout', 300);
     }
 }

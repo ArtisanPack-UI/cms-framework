@@ -71,7 +71,7 @@ class ApplicationUpdateManager
     {
         $updateInfo = $this->checkForUpdate();
 
-        if (! $updateInfo->hasUpdate) {
+        if (! $updateInfo->hasUpdate()) {
             throw UpdateException::noUpdateAvailable();
         }
 
