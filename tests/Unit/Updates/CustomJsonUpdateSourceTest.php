@@ -13,14 +13,14 @@ use Orchestra\Testbench\TestCase;
 /**
  * Custom JSON Update Source Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class CustomJsonUpdateSourceTest extends TestCase
 {
     /**
      * Test custom JSON source supports all URLs (fallback source).
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_supports_all_urls(): void
     {
@@ -35,7 +35,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source returns correct name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_returns_correct_name(): void
     {
@@ -47,7 +47,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source can check for updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_check_for_updates(): void
     {
@@ -74,7 +74,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source throws exception when version is missing.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_version_missing(): void
     {
@@ -95,7 +95,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source throws exception when download_url is missing.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_download_url_missing(): void
     {
@@ -116,7 +116,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source handles API errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_api_errors(): void
     {
@@ -135,7 +135,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source handles invalid JSON.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_invalid_json(): void
     {
@@ -154,7 +154,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source can set authentication with string token.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_authentication_with_string(): void
     {
@@ -176,7 +176,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source can set authentication with array.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_authentication_with_array(): void
     {
@@ -201,7 +201,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source handles URLs with existing query params.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_urls_with_existing_query_params(): void
     {
@@ -223,7 +223,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source parses all optional fields.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_parses_all_optional_fields(): void
     {
@@ -256,7 +256,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Test custom JSON source detects no update when versions match.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_detects_no_update_when_versions_match(): void
     {
@@ -276,7 +276,7 @@ class CustomJsonUpdateSourceTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

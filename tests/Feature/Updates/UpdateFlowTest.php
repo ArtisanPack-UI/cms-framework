@@ -18,7 +18,7 @@ use Orchestra\Testbench\TestCase;
  *
  * Tests the complete update workflow.
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class UpdateFlowTest extends TestCase
 {
@@ -27,7 +27,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test complete update check flow.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_complete_update_check_flow(): void
     {
@@ -54,7 +54,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test update check command.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_update_check_command(): void
     {
@@ -69,7 +69,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test scheduled update check command.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_scheduled_update_check_command(): void
     {
@@ -85,7 +85,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test rollback command with no backups.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_rollback_command_with_no_backups(): void
     {
@@ -100,7 +100,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test that update commands are registered.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_update_commands_are_registered(): void
     {
@@ -115,7 +115,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test cache clearing.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_cache_clearing(): void
     {
@@ -139,7 +139,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Test configuration loading.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_configuration_is_loaded(): void
     {
@@ -152,7 +152,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Get package providers.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      *
@@ -168,7 +168,7 @@ class UpdateFlowTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

@@ -14,14 +14,14 @@ use Orchestra\Testbench\TestCase;
 /**
  * GitLab Update Source Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class GitLabUpdateSourceTest extends TestCase
 {
     /**
      * Test GitLab source supports GitLab URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_supports_gitlab_urls(): void
     {
@@ -61,7 +61,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source returns correct name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_returns_correct_name(): void
     {
@@ -73,7 +73,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source can check for updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_check_for_updates(): void
     {
@@ -101,7 +101,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source handles no releases.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_no_releases(): void
     {
@@ -120,7 +120,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source handles API errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_api_errors(): void
     {
@@ -139,7 +139,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source can set authentication.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_authentication(): void
     {
@@ -166,7 +166,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source parses repository URL correctly.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_parses_repository_url_correctly(): void
     {
@@ -190,7 +190,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source handles nested group paths.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_nested_group_paths(): void
     {
@@ -213,7 +213,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source throws exception for invalid URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_for_invalid_urls(): void
     {
@@ -226,7 +226,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source strips 'v' prefix from version tags.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_strips_v_prefix_from_version_tags(): void
     {
@@ -249,7 +249,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source generates correct download URL.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_generates_correct_download_url(): void
     {
@@ -273,7 +273,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source includes metadata.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_includes_metadata(): void
     {
@@ -297,7 +297,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

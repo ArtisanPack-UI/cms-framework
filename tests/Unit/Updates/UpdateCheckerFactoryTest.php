@@ -12,14 +12,14 @@ use Orchestra\Testbench\TestCase;
 /**
  * Update Checker Factory Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class UpdateCheckerFactoryTest extends TestCase
 {
     /**
      * Test factory detects GitHub source.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_detects_github_source(): void
     {
@@ -37,7 +37,7 @@ class UpdateCheckerFactoryTest extends TestCase
     /**
      * Test factory detects GitLab source.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_detects_gitlab_source(): void
     {
@@ -55,7 +55,7 @@ class UpdateCheckerFactoryTest extends TestCase
     /**
      * Test factory falls back to custom JSON source.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_falls_back_to_custom_json_source(): void
     {
@@ -73,7 +73,7 @@ class UpdateCheckerFactoryTest extends TestCase
     /**
      * Test factory auto-detects application version.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_auto_detects_application_version(): void
     {
@@ -89,7 +89,7 @@ class UpdateCheckerFactoryTest extends TestCase
     /**
      * Test factory returns correct update type.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_returns_correct_update_type(): void
     {
@@ -107,7 +107,7 @@ class UpdateCheckerFactoryTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

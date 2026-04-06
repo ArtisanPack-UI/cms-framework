@@ -14,14 +14,14 @@ use Orchestra\Testbench\TestCase;
 /**
  * GitHub Update Source Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class GitHubUpdateSourceTest extends TestCase
 {
     /**
      * Test GitHub source supports GitHub URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_supports_github_urls(): void
     {
@@ -37,7 +37,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source returns correct name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_returns_correct_name(): void
     {
@@ -49,7 +49,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source can check for updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_check_for_updates(): void
     {
@@ -87,7 +87,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source handles no releases.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_no_releases(): void
     {
@@ -106,7 +106,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source skips prerelease versions.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_skips_prerelease_versions(): void
     {
@@ -144,7 +144,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source falls back to zipball_url when no assets.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_falls_back_to_zipball_when_no_assets(): void
     {
@@ -172,7 +172,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source handles API errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_api_errors(): void
     {
@@ -191,7 +191,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source can set authentication.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_authentication(): void
     {
@@ -223,7 +223,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source parses repository owner and name correctly.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_parses_repository_url_correctly(): void
     {
@@ -251,7 +251,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source throws exception for invalid URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_for_invalid_urls(): void
     {
@@ -264,7 +264,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source strips 'v' prefix from version tags.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_strips_v_prefix_from_version_tags(): void
     {
@@ -291,7 +291,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

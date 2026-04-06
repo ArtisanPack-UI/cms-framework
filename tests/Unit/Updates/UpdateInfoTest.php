@@ -10,14 +10,14 @@ use PHPUnit\Framework\TestCase;
 /**
  * Update Info Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class UpdateInfoTest extends TestCase
 {
     /**
      * Test UpdateInfo can be instantiated.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_create_update_info(): void
     {
@@ -36,7 +36,7 @@ class UpdateInfoTest extends TestCase
     /**
      * Test UpdateInfo can be created from array.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_create_from_array(): void
     {
@@ -60,7 +60,7 @@ class UpdateInfoTest extends TestCase
     /**
      * Test UpdateInfo detects no update when versions match.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_detects_no_update_when_versions_match(): void
     {
@@ -77,7 +77,7 @@ class UpdateInfoTest extends TestCase
     /**
      * Test UpdateInfo detects no update when current is newer.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_detects_no_update_when_current_is_newer(): void
     {
@@ -94,7 +94,7 @@ class UpdateInfoTest extends TestCase
     /**
      * Test UpdateInfo can be converted to array.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_convert_to_array(): void
     {
