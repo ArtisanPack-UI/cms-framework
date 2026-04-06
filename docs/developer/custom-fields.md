@@ -42,14 +42,19 @@ posts table: id, title, content, rating, price, featured
 
 ## Available Field Types
 
+> **v1.1.0**: Field types and column types are now backed by the `FieldType` and `ColumnType` enums for type safety. You can use either string values (for backwards compatibility) or enum instances. See [[developer/enums]] for the complete reference.
+
 ### Text Field
 
 Single-line text input.
 
 ```php
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\FieldType;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ColumnType;
+
 [
-    'type' => 'text',
-    'column_type' => 'string',
+    'type' => FieldType::Text,          // or 'text'
+    'column_type' => ColumnType::String, // or 'string'
 ]
 ```
 
@@ -682,4 +687,5 @@ Deleting a custom field **permanently removes data**. Always backup before delet
 
 - [Content Types Developer Guide](Content-Types)
 - [Taxonomies Developer Guide](Taxonomies)
+- [Enums Reference](Enums) - FieldType and ColumnType enums
 - [Hooks Reference](Hooks-Reference)

@@ -32,6 +32,7 @@ Standard RESTful resource routes:
 | GET | `/users/{id}` | show | `UserController@show` | Show a specific user |
 | PUT/PATCH | `/users/{id}` | update | `UserController@update` | Update a user |
 | DELETE | `/users/{id}` | destroy | `UserController@destroy` | Delete a user |
+| POST | `/users/bulk` | bulk | `UserController@bulk` | Bulk user actions |
 
 ### Role Management
 
@@ -75,6 +76,7 @@ Standard RESTful resource routes:
 | GET | `/posts/{id}` | `PostController@show` | Show a specific post |
 | PUT | `/posts/{id}` | `PostController@update` | Update a post |
 | DELETE | `/posts/{id}` | `PostController@destroy` | Delete a post |
+| POST | `/posts/bulk` | `PostController@bulk` | Bulk post actions |
 
 ### Post Archives
 
@@ -117,6 +119,7 @@ Special archive routes for filtering posts:
 Structure identical to Blog module with pages instead of posts:
 
 - `/pages` - Standard CRUD operations
+- `/pages/bulk` - Bulk page actions (delete, publish, draft)
 - `/page-categories` - Category management
 - `/page-tags` - Tag management
 

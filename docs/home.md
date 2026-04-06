@@ -16,7 +16,12 @@ The CMS Framework is designed to help developers quickly build content managemen
 - **Settings Management**: Application-wide configuration with type casting and sanitization
 - **Admin Framework**: Menu system, widgets, and authorization helpers
 - **Theme & Plugin Architecture**: Extensible system for themes and plugins
-- **RESTful API**: Clean API endpoints for all operations
+- **RESTful API**: Clean API endpoints for all operations with standardized error responses
+- **Bulk Actions**: Bulk operations for posts, pages, and users
+- **On-Demand Relationships**: Control eager loading via the `include` query parameter
+- **OpenAPI Documentation**: Auto-generated API documentation with Swagger UI
+- **TypeScript Types**: Publishable type definitions for frontend integration
+- **Type-Safe Enums**: ContentStatus, FieldType, ColumnType, SettingType, and UpdateType enums
 - **Laravel Integration**: Seamless integration with Laravel applications
 
 ---
@@ -117,6 +122,8 @@ Custom content type builder for extensible content.
 - [[developer/content types]] - Creating custom content types
 - [[developer/custom fields]] - Adding custom fields to content
 - [[developer/taxonomies]] - Creating custom taxonomies
+- [[developer/enums]] - ContentStatus, FieldType, and ColumnType enums
+- [[developer/traits]] - HasContentStatus and HasContentFilters traits
 
 ---
 
@@ -153,6 +160,11 @@ System update management for keeping the CMS current.
 ### API Documentation
 
 - [[api/README]] - REST API overview and authentication
+- [[api/Error Responses]] - Standardized JSON error response format
+- [[api/Bulk Actions]] - Bulk action endpoints for posts, pages, and users
+- [[api/Includable Relationships]] - On-demand relationship loading
+- [[api/OpenAPI]] - OpenAPI specification and Swagger UI
+- [[api/TypeScript Types]] - TypeScript type definitions for frontend
 - [[Routes]] - Complete route registry
 - [[Relationships]] - Model relationship documentation
 
@@ -160,6 +172,8 @@ System update management for keeping the CMS current.
 
 - [[Helpers]] - Helper functions reference (ap-prefixed)
 - [[Exceptions]] - Exception hierarchy and error handling
+- [[developer/enums]] - Type-safe enums reference
+- [[developer/traits]] - Shared traits reference
 
 ---
 
@@ -188,12 +202,15 @@ All API endpoints use the `/api/cms` prefix with Sanctum authentication.
 ### User Management
 - `GET/POST /users` - List/create users
 - `GET/PUT/DELETE /users/{id}` - User operations
+- `POST /users/bulk` - Bulk user actions (delete, activate, deactivate)
 - `GET/POST /roles` - Role management
 - `GET/POST /permissions` - Permission management
 
 ### Content
 - `GET/POST /posts` - Blog post management
+- `POST /posts/bulk` - Bulk post actions (delete, publish, draft)
 - `GET/POST /pages` - Page management
+- `POST /pages/bulk` - Bulk page actions (delete, publish, draft)
 - `GET/POST /content-types` - Content type management
 
 ### System
@@ -201,6 +218,10 @@ All API endpoints use the `/api/cms` prefix with Sanctum authentication.
 - `GET/POST /notifications` - Notification operations
 - `GET/POST /themes` - Theme management
 - `GET/POST /plugins` - Plugin management (experimental)
+
+### Documentation
+- `GET /docs/api/cms` - Swagger UI (when OpenAPI enabled)
+- `GET /docs/api/cms.json` - Raw OpenAPI specification
 
 See [[api/README]] for complete API documentation.
 
@@ -230,4 +251,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers CMS Framework v1.0.0*
+*This documentation covers CMS Framework v1.1.0*

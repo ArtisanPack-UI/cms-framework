@@ -41,14 +41,32 @@ $token = $user->createToken('token-name')->plainTextToken;
 
 ### Error Response
 
+All CMS Framework exceptions render in a standardized JSON format:
+
 ```json
 {
-  "message": "Error message",
-  "errors": {
-    "field": ["Validation error"]
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Model Post with ID 999 not found."
   }
 }
 ```
+
+Validation errors include field-level details:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The given data was invalid.",
+    "errors": {
+      "title": ["The title field is required."]
+    }
+  }
+}
+```
+
+See [[api/Error Responses]] for the complete error response reference.
 
 ## HTTP Status Codes
 
@@ -82,6 +100,14 @@ $token = $user->createToken('token-name')->plainTextToken;
 - **[Plugins API](Plugins)** - Plugin lifecycle management (Experimental)
 - **[Themes API](Themes)** - Theme management (Experimental)
 - **[Core Updates API](Core-Updates)** - System update management
+
+### API Features (v1.1.0)
+
+- **[Error Responses](Error-Responses)** - Standardized JSON error format
+- **[Bulk Actions](Bulk-Actions)** - Bulk operations for posts, pages, and users
+- **[Includable Relationships](Includable-Relationships)** - On-demand relationship loading
+- **[OpenAPI Specification](OpenAPI)** - Auto-generated API documentation
+- **[TypeScript Types](TypeScript-Types)** - Publishable type definitions for frontend
 
 ## Common Patterns
 
@@ -140,6 +166,8 @@ Load related data using the `include` parameter:
 ```http
 GET /api/cms/posts?include=author,categories,tags
 ```
+
+Only whitelisted relationships can be included. When no `include` parameter is provided, default relationships are loaded for backwards compatibility. See [[api/Includable Relationships]] for full details.
 
 ## Rate Limiting
 
@@ -237,31 +265,42 @@ class PostApiTest extends TestCase
 
 ## Error Handling
 
-### Validation Errors
+All CMS Framework exceptions use a standardized JSON format. See [[api/Error Responses]] for full documentation.
+
+### Validation Errors (422)
 
 ```json
 {
-  "message": "The given data was invalid.",
-  "errors": {
-    "title": ["The title field is required."],
-    "email": ["The email must be a valid email address."]
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The given data was invalid.",
+    "errors": {
+      "title": ["The title field is required."],
+      "email": ["The email must be a valid email address."]
+    }
   }
 }
 ```
 
-### Authorization Errors
+### Authorization Errors (403)
 
 ```json
 {
-  "message": "This action is unauthorized."
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "You are not authorized to delete posts."
+  }
 }
 ```
 
-### Not Found Errors
+### Not Found Errors (404)
 
 ```json
 {
-  "message": "Model User with ID 999 not found."
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "Model User with ID 999 not found."
+  }
 }
 ```
 
