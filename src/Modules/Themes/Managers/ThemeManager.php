@@ -8,11 +8,12 @@
  * @since      1.0.0
  */
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use Exception;
@@ -34,6 +35,8 @@ use Illuminate\Support\Facades\View;
  */
 class ThemeManager
 {
+    use HasManifestParsing;
+
     /**
      * Constructs the ThemeManager instance.
      *
@@ -43,8 +46,7 @@ class ThemeManager
      */
     public function __construct(
         private SettingsManager $settingsManager,
-    ) {
-    }
+    ) {}
 
     /**
      * Discovers all themes in the themes directory.
@@ -58,43 +60,43 @@ class ThemeManager
      */
     public function discoverThemes(): array
     {
-        $cacheEnabled = config( 'cms.themes.cacheEnabled', true );
-        $cacheKey     = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
-        $cacheTtl     = config( 'cms.themes.cacheTtl', 3600 );
+        $cacheEnabled = config('cms.themes.cacheEnabled', true);
+        $cacheKey     = config('cms.themes.cacheKey', 'cms.themes.discovered');
+        $cacheTtl     = config('cms.themes.cacheTtl', 3600);
 
-        if ( $cacheEnabled ) {
-            $themes = Cache::get( $cacheKey );
+        if ($cacheEnabled) {
+            $themes = Cache::get($cacheKey);
 
-            if ( null !== $themes ) {
-                return $this->markActiveTheme( $themes );
+            if (null !== $themes) {
+                return $this->markActiveTheme($themes);
             }
         }
 
         $themesPath = $this->getThemesPath();
         $themes     = [];
 
-        if ( ! File::isDirectory( $themesPath ) ) {
+        if (! File::isDirectory($themesPath)) {
             return $themes;
         }
 
-        $directories = File::directories( $themesPath );
+        $directories = File::directories($themesPath);
 
-        foreach ( $directories as $directory ) {
-            if ( $this->validateTheme( $directory ) ) {
-                $manifestPath = $directory . '/theme.json';
-                $manifest     = $this->parseManifest( $manifestPath );
+        foreach ($directories as $directory) {
+            if ($this->validateTheme($directory)) {
+                $manifestPath = $directory.'/theme.json';
+                $manifest     = $this->parseManifest($manifestPath);
 
-                if ( ! empty( $manifest ) ) {
+                if (null !== $manifest) {
                     $themes[] = $manifest;
                 }
             }
         }
 
-        if ( $cacheEnabled ) {
-            Cache::put( $cacheKey, $themes, $cacheTtl );
+        if ($cacheEnabled) {
+            Cache::put($cacheKey, $themes, $cacheTtl);
         }
 
-        return $this->markActiveTheme( $themes );
+        return $this->markActiveTheme($themes);
     }
 
     /**
@@ -111,14 +113,14 @@ class ThemeManager
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront' ),
+            config('cms.themes.default', 'digital-shopfront'),
         );
 
-        if ( empty( $activeSlug ) ) {
+        if (empty($activeSlug)) {
             return null;
         }
 
-        return $this->getTheme( $activeSlug );
+        return $this->getTheme($activeSlug);
     }
 
     /**
@@ -135,29 +137,29 @@ class ThemeManager
      *
      * @return bool True on successful activation.
      */
-    public function activateTheme( string $slug ): bool
+    public function activateTheme(string $slug): bool
     {
-        $theme = $this->getTheme( $slug );
+        $theme = $this->getTheme($slug);
 
-        if ( null === $theme ) {
-            throw ThemeNotFoundException::forSlug( $slug );
+        if (null === $theme) {
+            throw ThemeNotFoundException::forSlug($slug);
         }
 
-        $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
+        $this->settingsManager->updateSetting('themes.activeTheme', $slug);
 
         // Clear theme cache
-        $cacheKey = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
-        Cache::forget( $cacheKey );
+        $cacheKey = config('cms.themes.cacheKey', 'cms.themes.discovered');
+        Cache::forget($cacheKey);
 
         // Clear view cache
         try {
-            Artisan::call( 'view:clear' );
-        } catch ( Exception $e ) {
+            Artisan::call('view:clear');
+        } catch (Exception $e) {
             // Log the error but don't fail activation
-            if ( function_exists( 'logger' ) ) {
-                logger()->warning( 'Failed to clear view cache during theme activation', [
+            if (function_exists('logger')) {
+                logger()->warning('Failed to clear view cache during theme activation', [
                     'error' => $e->getMessage(),
-                ] );
+                ]);
             }
         }
 
@@ -177,38 +179,29 @@ class ThemeManager
      *
      * @return array|null Theme manifest array, or null if not found, invalid, or contains invalid characters.
      */
-    public function getTheme( string $slug ): ?array
+    public function getTheme(string $slug): ?array
     {
         // Validate slug to prevent path traversal attacks
-        // Only allow alphanumeric characters, hyphens, and underscores
-        if ( ! preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ) ) {
+        if (! $this->validateSlug($slug)) {
             return null;
         }
 
+        // Resolve and validate path within themes directory
         $themesBasePath = $this->getThemesPath();
-        $themePath      = $themesBasePath . '/' . $slug;
+        $realThemePath  = $this->resolveSecurePath($themesBasePath.'/'.$slug, $themesBasePath);
 
-        // Resolve real path and verify it's within the themes directory
-        $realThemePath = realpath( $themePath );
-
-        if ( false === $realThemePath ) {
-            return null;
-        }
-
-        $realBasePath = realpath( $themesBasePath );
-
-        if ( false === $realBasePath || 0 !== strpos( $realThemePath, $realBasePath . DIRECTORY_SEPARATOR ) ) {
+        if (null === $realThemePath) {
             return null;
         }
 
         // Now safe to proceed with validation and manifest parsing
-        $manifestPath = $realThemePath . '/theme.json';
+        $manifestPath = $realThemePath.'/theme.json';
 
-        if ( ! $this->validateTheme( $realThemePath ) ) {
+        if (! $this->validateTheme($realThemePath)) {
             return null;
         }
 
-        return $this->parseManifest( $manifestPath );
+        return $this->parseManifest($manifestPath);
     }
 
     /**
@@ -223,20 +216,20 @@ class ThemeManager
     {
         $activeTheme = $this->getActiveTheme();
 
-        if ( null === $activeTheme ) {
+        if (null === $activeTheme) {
             return;
         }
 
         // Defensive check: ensure slug key exists in the manifest
-        if ( ! is_array( $activeTheme ) || empty( $activeTheme['slug'] ) ) {
+        if (! is_array($activeTheme) || empty($activeTheme['slug'])) {
             return;
         }
 
-        $themePath = $this->getThemesPath() . '/' . $activeTheme['slug'];
+        $themePath = $this->getThemesPath().'/'.$activeTheme['slug'];
 
-        if ( File::isDirectory( $themePath ) ) {
+        if (File::isDirectory($themePath)) {
             // Prepend the theme path to give it priority
-            View::getFinder()->prependLocation( $themePath );
+            View::getFinder()->prependLocation($themePath);
         }
     }
 
@@ -260,20 +253,20 @@ class ThemeManager
      *
      * @return string Template name without .blade.php extension.
      */
-    public function resolveTemplate( string $contentType, ?string $slug = null ): string
+    public function resolveTemplate(string $contentType, ?string $slug = null): string
     {
         // Sanitize inputs to prevent path traversal
-        if ( ! preg_match( '/^[a-zA-Z0-9_-]+$/', $contentType ) ) {
+        if (! $this->validateSlug($contentType)) {
             return 'index';
         }
 
-        if ( null !== $slug && ! preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ) ) {
+        if (null !== $slug && ! $this->validateSlug($slug)) {
             $slug = null;
         }
 
         $templates = [];
 
-        if ( null !== $slug ) {
+        if (null !== $slug) {
             $templates[] = "single-{$contentType}-{$slug}";
         }
 
@@ -281,8 +274,8 @@ class ThemeManager
         $templates[] = 'single';
         $templates[] = 'index';
 
-        foreach ( $templates as $template ) {
-            if ( $this->templateExists( $template ) ) {
+        foreach ($templates as $template) {
+            if ($this->templateExists($template)) {
                 return $template;
             }
         }
@@ -301,18 +294,23 @@ class ThemeManager
      *
      * @return bool True if template exists, false otherwise.
      */
-    public function templateExists( string $template ): bool
+    public function templateExists(string $template): bool
     {
-        $activeTheme = $this->getActiveTheme();
-
-        if ( null === $activeTheme ) {
+        // Validate template name to prevent path traversal
+        if (! $this->validateSlug($template)) {
             return false;
         }
 
-        $themePath    = $this->getThemesPath() . '/' . $activeTheme['slug'];
-        $templatePath = $themePath . '/' . $template . '.blade.php';
+        $activeTheme = $this->getActiveTheme();
 
-        return File::exists( $templatePath );
+        if (null === $activeTheme) {
+            return false;
+        }
+
+        $themePath    = $this->getThemesPath().'/'.$activeTheme['slug'];
+        $templatePath = $themePath.'/'.$template.'.blade.php';
+
+        return File::exists($templatePath);
     }
 
     /**
@@ -327,49 +325,21 @@ class ThemeManager
      *
      * @return bool True if theme is valid, false otherwise.
      */
-    protected function validateTheme( string $themePath ): bool
+    protected function validateTheme(string $themePath): bool
     {
-        if ( ! File::isDirectory( $themePath ) ) {
+        if (! File::isDirectory($themePath)) {
             return false;
         }
 
-        $requiredFiles = config( 'cms.themes.requiredFiles', ['theme.json'] );
+        $requiredFiles = config('cms.themes.requiredFiles', ['theme.json']);
 
-        foreach ( $requiredFiles as $file ) {
-            if ( ! File::exists( $themePath . '/' . $file ) ) {
+        foreach ($requiredFiles as $file) {
+            if (! File::exists($themePath.'/'.$file)) {
                 return false;
             }
         }
 
         return true;
-    }
-
-    /**
-     * Parses a theme.json manifest file.
-     *
-     * Reads and decodes the theme manifest JSON file, returning an empty array
-     * if the file doesn't exist or contains invalid JSON.
-     *
-     * @since 1.0.0
-     *
-     * @param  string  $manifestPath  Absolute path to theme.json file.
-     *
-     * @return array Parsed manifest data, or empty array on error.
-     */
-    protected function parseManifest( string $manifestPath ): array
-    {
-        if ( ! File::exists( $manifestPath ) ) {
-            return [];
-        }
-
-        $content = File::get( $manifestPath );
-        $data    = json_decode( $content, true );
-
-        if ( JSON_ERROR_NONE !== json_last_error() ) {
-            return [];
-        }
-
-        return $data;
     }
 
     /**
@@ -384,9 +354,9 @@ class ThemeManager
      */
     protected function getThemesPath(): string
     {
-        $directory = config( 'cms.themes.directory', 'themes' );
+        $directory = config('cms.themes.directory', 'themes');
 
-        return base_path( $directory );
+        return base_path($directory);
     }
 
     /**
@@ -402,16 +372,16 @@ class ThemeManager
      *
      * @return array Themes array with is_active flag added to each theme.
      */
-    protected function markActiveTheme( array $themes ): array
+    protected function markActiveTheme(array $themes): array
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront' ),
+            config('cms.themes.default', 'digital-shopfront'),
         );
 
-        return array_map( function ( $theme ) use ( $activeSlug ) {
+        return array_map(function ($theme) use ($activeSlug) {
             // Defensive check: ensure slug key exists before comparing
-            $theme['is_active'] = isset( $theme['slug'] ) && $theme['slug'] === $activeSlug;
+            $theme['is_active'] = isset($theme['slug']) && $theme['slug'] === $activeSlug;
 
             return $theme;
         }, $themes);
