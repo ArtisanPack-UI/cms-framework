@@ -233,7 +233,8 @@ class UserController extends Controller
                 $this->executeBulkAction($action, $user);
                 $processed++;
             } catch (Throwable $e) {
-                $errors[$id] = $e->getMessage();
+                report($e);
+                $errors[$id] = __('Failed to :action user.', ['action' => $action]);
             }
         }
 

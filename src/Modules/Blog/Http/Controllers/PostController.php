@@ -262,7 +262,8 @@ class PostController extends Controller
                 $this->executeBulkAction($action, $post);
                 $processed++;
             } catch (Throwable $e) {
-                $errors[$id] = $e->getMessage();
+                report($e);
+                $errors[$id] = __('Failed to :action post.', ['action' => $action]);
             }
         }
 
@@ -376,7 +377,7 @@ class PostController extends Controller
             'delete'  => $post->delete(),
             'publish' => $post->update([
                 'status'       => ContentStatus::Published->value,
-                'published_at' => $post->published_at ?? now(),
+                'published_at' => now(),
             ]),
             'draft'   => $post->update([
                 'status'       => ContentStatus::Draft->value,

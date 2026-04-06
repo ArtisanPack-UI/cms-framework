@@ -337,7 +337,8 @@ class PageController extends Controller
                 $this->executeBulkAction($action, $page);
                 $processed++;
             } catch (Throwable $e) {
-                $errors[$id] = $e->getMessage();
+                report($e);
+                $errors[$id] = __('Failed to :action page.', ['action' => $action]);
             }
         }
 
@@ -381,7 +382,7 @@ class PageController extends Controller
             'delete'  => $page->delete(),
             'publish' => $page->update([
                 'status'       => ContentStatus::Published->value,
-                'published_at' => $page->published_at ?? now(),
+                'published_at' => now(),
             ]),
             'draft'   => $page->update([
                 'status'       => ContentStatus::Draft->value,
