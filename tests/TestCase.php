@@ -56,8 +56,9 @@ class TestCase extends \Orchestra\Testbench\TestCase
      */
     protected function getEnvironmentSetUp($app): void
     {
-        // 1. Set the configurable user model to our test user model.
+        // 1. Set the configurable user model and enable OpenAPI for testing.
         $app['config']->set('artisanpack.cms-framework.user_model', TestUser::class);
+        $app['config']->set('artisanpack.cms-framework.openapi.enabled', true);
         $app['config']->set('auth.providers.users.model', TestUser::class);
 
         // 2. Set up database configuration

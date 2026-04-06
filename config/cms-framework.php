@@ -28,7 +28,7 @@ return [
     |
     */
     'openapi' => [
-        'enabled' => true,
+        'enabled' => env('CMS_OPENAPI_ENABLED', false),
 
         'info' => [
             'title'       => 'ArtisanPack CMS Framework API',

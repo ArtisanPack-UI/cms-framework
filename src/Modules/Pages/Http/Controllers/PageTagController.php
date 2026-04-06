@@ -89,9 +89,8 @@ class PageTagController extends Controller
      */
     public function show(int $id): PageTagResource
     {
-        $this->authorize('view', PageTag::class);
-
         $tag = PageTag::findOrFail($id);
+        $this->authorize('view', $tag);
 
         return new PageTagResource($tag);
     }

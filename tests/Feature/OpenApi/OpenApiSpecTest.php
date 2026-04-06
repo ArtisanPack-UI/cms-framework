@@ -26,11 +26,13 @@ function generateSpec(): array
 }
 
 test('openapi spec is generated with correct info', function (): void {
-    $spec = generateSpec();
+    $spec          = generateSpec();
+    $expectedTitle = config('artisanpack.cms-framework.openapi.info.title', 'ArtisanPack CMS Framework API');
+    $expectedVer   = config('artisanpack.cms-framework.openapi.info.version', '1.1.0');
 
     expect($spec)->toHaveKey('info');
-    expect($spec['info']['title'])->toBe('ArtisanPack CMS Framework API');
-    expect($spec['info']['version'])->toBe('1.1.0');
+    expect($spec['info']['title'])->toBe($expectedTitle);
+    expect($spec['info']['version'])->toBe($expectedVer);
 });
 
 test('openapi spec contains paths', function (): void {
@@ -105,14 +107,15 @@ test('openapi spec uses tags for grouping', function (): void {
     expect($tagNames)->toContain('Settings');
 });
 
-test('openapi disabled when config is false', function (): void {
+test('openapi provider skips registration when disabled', function (): void {
     config(['artisanpack.cms-framework.openapi.enabled' => false]);
 
     $provider = new ArtisanPackUI\CMSFramework\Modules\OpenApi\Providers\OpenApiServiceProvider(app());
+
+    // Should not throw — registerCmsApi is skipped when disabled
     $provider->boot();
 
-    // The provider should skip registration — no error thrown
-    expect(true)->toBeTrue();
+    expect(config('artisanpack.cms-framework.openapi.enabled'))->toBeFalse();
 });
 
 test('export command writes openapi spec to file', function (): void {

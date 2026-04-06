@@ -74,11 +74,19 @@ class ExportOpenApiSpecCommand extends Command
         }
 
         $directory = dirname($path);
-        if (! is_dir($directory)) {
-            mkdir($directory, 0755, true);
+        if (! is_dir($directory) && ! mkdir($directory, 0755, true)) {
+            $error = error_get_last();
+            $this->error("Failed to create directory: {$directory} — ".($error['message'] ?? 'unknown error'));
+
+            return self::FAILURE;
         }
 
-        file_put_contents($path, $json."\n");
+        if (false === file_put_contents($path, $json."\n")) {
+            $error = error_get_last();
+            $this->error("Failed to write file: {$path} — ".($error['message'] ?? 'unknown error'));
+
+            return self::FAILURE;
+        }
 
         $this->info("OpenAPI specification exported to: {$path}");
 

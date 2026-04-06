@@ -141,11 +141,12 @@ class ContentTypeController extends Controller
      */
     public function update(ContentTypeRequest $request, string $slug): ContentTypeResource
     {
-        $contentType = ContentType::where('slug', sanitizeText($slug))->firstOrFail();
+        $sanitizedSlug = sanitizeText($slug);
+        $contentType   = ContentType::where('slug', $sanitizedSlug)->firstOrFail();
         $this->authorize('update', $contentType);
 
         $validated   = $request->validated();
-        $contentType = $this->contentTypeManager->updateContentType($slug, $validated);
+        $contentType = $this->contentTypeManager->updateContentType($sanitizedSlug, $validated);
 
         return new ContentTypeResource($contentType);
     }
@@ -164,10 +165,11 @@ class ContentTypeController extends Controller
      */
     public function destroy(string $slug): Response
     {
-        $contentType = ContentType::where('slug', sanitizeText($slug))->firstOrFail();
+        $sanitizedSlug = sanitizeText($slug);
+        $contentType   = ContentType::where('slug', $sanitizedSlug)->firstOrFail();
         $this->authorize('delete', $contentType);
 
-        $this->contentTypeManager->deleteContentType($slug);
+        $this->contentTypeManager->deleteContentType($sanitizedSlug);
 
         return response()->noContent();
     }

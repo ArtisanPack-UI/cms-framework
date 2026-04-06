@@ -112,14 +112,22 @@ class ThemesController extends Controller
         try {
             $success = $this->themeManager->activateTheme($slug);
 
+            if (! $success) {
+                return response()->json([
+                    'message' => __('Failed to activate theme.'),
+                ], 422);
+            }
+
             return response()->json([
-                'message' => 'Theme activated successfully',
+                'message' => __('Theme activated successfully.'),
                 'theme'   => $this->themeManager->getTheme($slug),
             ]);
         } catch (Exception $e) {
+            report($e);
+
             return response()->json([
-                'message' => $e->getMessage(),
-            ], 400);
+                'message' => __('An unexpected error occurred while activating the theme.'),
+            ], 500);
         }
     }
 }

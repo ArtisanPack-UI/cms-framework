@@ -93,9 +93,8 @@ class SettingController extends Controller
      */
     public function show(string|int $id): SettingResource
     {
-        $this->authorize('view', Setting::class);
-
         $setting = Setting::findOrFail($id);
+        $this->authorize('view', $setting);
 
         return new SettingResource($setting);
     }
