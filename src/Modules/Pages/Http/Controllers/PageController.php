@@ -309,10 +309,11 @@ class PageController extends Controller
      */
     public function bulk(BulkPageRequest $request): JsonResponse
     {
-        $action    = $request->validated('action');
-        $ids       = $request->validated('ids');
-        $processed = 0;
-        $errors    = [];
+        $action       = $request->validated('action');
+        $ids          = $request->validated('ids');
+        $policyMethod = $this->getBulkPolicyMethod($action);
+        $processed    = 0;
+        $errors       = [];
 
         $pages = Page::whereIn('id', $ids)->get()->keyBy('id');
 
@@ -324,8 +325,6 @@ class PageController extends Controller
 
                 continue;
             }
-
-            $policyMethod = $this->getBulkPolicyMethod($action);
 
             if (! $request->user()->can($policyMethod, $page)) {
                 $errors[$id] = __('You do not have permission to :action this page.', ['action' => $action]);

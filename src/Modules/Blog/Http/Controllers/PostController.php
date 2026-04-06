@@ -234,10 +234,11 @@ class PostController extends Controller
      */
     public function bulk(BulkPostRequest $request): JsonResponse
     {
-        $action    = $request->validated('action');
-        $ids       = $request->validated('ids');
-        $processed = 0;
-        $errors    = [];
+        $action       = $request->validated('action');
+        $ids          = $request->validated('ids');
+        $policyMethod = $this->getBulkPolicyMethod($action);
+        $processed    = 0;
+        $errors       = [];
 
         $posts = Post::whereIn('id', $ids)->get()->keyBy('id');
 
@@ -249,8 +250,6 @@ class PostController extends Controller
 
                 continue;
             }
-
-            $policyMethod = $this->getBulkPolicyMethod($action);
 
             if (! $request->user()->can($policyMethod, $post)) {
                 $errors[$id] = __('You do not have permission to :action this post.', ['action' => $action]);

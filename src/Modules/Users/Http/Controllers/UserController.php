@@ -197,10 +197,11 @@ class UserController extends Controller
      */
     public function bulk(BulkUserRequest $request): JsonResponse
     {
-        $action    = $request->validated('action');
-        $ids       = $request->validated('ids');
-        $processed = 0;
-        $errors    = [];
+        $action     = $request->validated('action');
+        $ids        = $request->validated('ids');
+        $permission = $this->getBulkPermission($action);
+        $processed  = 0;
+        $errors     = [];
 
         $userModel = config('artisanpack.cms-framework.user_model');
         $users     = $userModel::whereIn('id', $ids)->get()->keyBy('id');
@@ -221,9 +222,7 @@ class UserController extends Controller
                 continue;
             }
 
-            $permission = $this->getBulkPermission($action);
-
-            if (! Gate::forUser($request->user())->allows($permission)) {
+            if (! Gate::forUser($request->user())->allows($permission, $user)) {
                 $errors[$id] = __('You do not have permission to :action this user.', ['action' => $action]);
 
                 continue;
