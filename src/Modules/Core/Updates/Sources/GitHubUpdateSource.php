@@ -68,7 +68,9 @@ class GitHubUpdateSource implements UpdateSourceInterface
      */
     public function supports(string $url): bool
     {
-        return Str::contains($url, 'github.com');
+        $host = parse_url($url, PHP_URL_HOST);
+
+        return 'github.com' === $host || str_ends_with((string) $host, '.github.com');
     }
 
     /**
@@ -209,7 +211,8 @@ class GitHubUpdateSource implements UpdateSourceInterface
         // Supports: https://github.com/owner/repo
         if (preg_match('#github\.com/([^/]+)/([^/]+)#', $url, $matches)) {
             $this->owner = $matches[1];
-            $this->repo  = rtrim($matches[2], '.git');
+            $repo        = $matches[2];
+            $this->repo  = str_ends_with($repo, '.git') ? substr($repo, 0, -4) : $repo;
         } else {
             throw new InvalidArgumentException('Invalid GitHub URL');
         }

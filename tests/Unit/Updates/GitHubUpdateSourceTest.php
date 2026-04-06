@@ -31,6 +31,7 @@ class GitHubUpdateSourceTest extends TestCase
         $this->assertTrue($source->supports('https://github.com/another-user/another-repo'));
         $this->assertFalse($source->supports('https://gitlab.com/user/repo'));
         $this->assertFalse($source->supports('https://example.com/updates.json'));
+        $this->assertFalse($source->supports('https://example.com/github.com/user/repo'));
     }
 
     /**

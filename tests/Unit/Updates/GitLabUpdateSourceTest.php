@@ -31,6 +31,31 @@ class GitLabUpdateSourceTest extends TestCase
         $this->assertTrue($source->supports('https://gitlab.com/another-user/another-repo'));
         $this->assertFalse($source->supports('https://github.com/user/repo'));
         $this->assertFalse($source->supports('https://example.com/updates.json'));
+        $this->assertFalse($source->supports('https://example.com/gitlab.com/user/repo'));
+    }
+
+    /**
+     * Test GitLab source excludes query strings from project ID.
+     *
+     * @since 1.1.0
+     */
+    public function test_excludes_query_strings_from_project_id(): void
+    {
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo?ref=main', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
+        $this->assertEquals('2.0.0', $updateInfo->latestVersion);
     }
 
     /**
