@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * User Controller for the CMS Framework Users Module.
@@ -14,6 +14,7 @@ declare( strict_types = 1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
 use App\Models\User;
+use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -30,6 +31,26 @@ use Illuminate\Routing\Controller;
  */
 class UserController extends Controller
 {
+    use HasIncludableRelationships;
+
+    /**
+     * The relationships that can be included via the include query parameter.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $includableRelationships = ['roles'];
+
+    /**
+     * The default relationships to load when no include parameter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $defaultIncludes = ['roles'];
+
     /**
      * Display a listing of users.
      *
@@ -40,12 +61,13 @@ class UserController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of user resources.
      */
-    public function index(): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
-        $users     = $userModel::with( 'roles' )->paginate( 15 );
+        $userModel = config('artisanpack.cms-framework.user_model');
+        $includes  = $this->getRequestedIncludes($request);
+        $users     = $userModel::with($includes)->paginate(15);
 
-        return UserResource::collection( $users );
+        return UserResource::collection($users);
     }
 
     /**
@@ -60,22 +82,22 @@ class UserController extends Controller
      *
      * @return UserResource The created user resource with loaded roles.
      */
-    public function store( Request $request ): UserResource
+    public function store(Request $request): UserResource
     {
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $userModel = config('artisanpack.cms-framework.user_model');
 
-        $validated = $request->validate( [
+        $validated = $request->validate([
             'name'     => 'required|string|max:255',
             'email'    => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-        ] );
+        ]);
 
-        $validated['password'] = bcrypt( $validated['password'] );
+        $validated['password'] = bcrypt($validated['password']);
 
-        $user = $userModel::create( $validated );
-        $user->load( 'roles' );
+        $user = $userModel::create($validated);
+        $user->load($this->getRequestedIncludes($request));
 
-        return new UserResource( $user );
+        return new UserResource($user);
     }
 
     /**
@@ -90,12 +112,13 @@ class UserController extends Controller
      *
      * @return UserResource The user resource with loaded roles.
      */
-    public function show( string|int $id ): UserResource
+    public function show(Request $request, string|int $id): UserResource
     {
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
-        $user      = $userModel::with( 'roles' )->findOrFail( $id );
+        $userModel = config('artisanpack.cms-framework.user_model');
+        $includes  = $this->getRequestedIncludes($request);
+        $user      = $userModel::with($includes)->findOrFail($id);
 
-        return new UserResource( $user );
+        return new UserResource($user);
     }
 
     /**
@@ -112,24 +135,24 @@ class UserController extends Controller
      *
      * @return UserResource The updated user resource with loaded roles.
      */
-    public function update( Request $request, string|int $id ): UserResource
+    public function update(Request $request, string|int $id): UserResource
     {
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
-        $user      = $userModel::findOrFail( $id );
-        $validated = $request->validate( [
+        $userModel = config('artisanpack.cms-framework.user_model');
+        $user      = $userModel::findOrFail($id);
+        $validated = $request->validate([
             'name'     => 'sometimes|required|string|max:255',
-            'email'    => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
+            'email'    => 'sometimes|required|string|email|max:255|unique:users,email,'.$user->id,
             'password' => 'sometimes|required|string|min:8',
-        ] );
+        ]);
 
-        if ( isset( $validated['password'] ) ) {
-            $validated['password'] = bcrypt( $validated['password'] );
+        if (isset($validated['password'])) {
+            $validated['password'] = bcrypt($validated['password']);
         }
 
-        $user->update( $validated );
-        $user->load( 'roles' );
+        $user->update($validated);
+        $user->load($this->getRequestedIncludes($request));
 
-        return new UserResource( $user );
+        return new UserResource($user);
     }
 
     /**
@@ -144,12 +167,12 @@ class UserController extends Controller
      *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy( string|int $id ): JsonResponse
+    public function destroy(string|int $id): JsonResponse
     {
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
-        $user      = $userModel::findOrFail( $id );
+        $userModel = config('artisanpack.cms-framework.user_model');
+        $user      = $userModel::findOrFail($id);
         $user->delete();
 
-        return response()->json( [], 204 );
+        return response()->json([], 204);
     }
 }
