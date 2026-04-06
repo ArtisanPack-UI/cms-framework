@@ -14,6 +14,18 @@ declare(strict_types=1);
 use Dedoc\Scramble\Generator;
 use Dedoc\Scramble\Scramble;
 
+beforeEach(function (): void {
+    $this->tempFiles = [];
+});
+
+afterEach(function (): void {
+    foreach ($this->tempFiles as $file) {
+        if (file_exists($file)) {
+            unlink($file);
+        }
+    }
+});
+
 /**
  * Helper to generate the OpenAPI spec array for the CMS API.
  */
@@ -119,7 +131,8 @@ test('openapi provider skips registration when disabled', function (): void {
 });
 
 test('export command writes openapi spec to file', function (): void {
-    $outputPath = sys_get_temp_dir().'/cms-openapi-test-'.uniqid().'.json';
+    $outputPath          = sys_get_temp_dir().'/cms-openapi-test-'.uniqid().'.json';
+    $this->tempFiles[]   = $outputPath;
 
     $this->artisan('cms:openapi:export', [
         'path' => $outputPath,
@@ -134,12 +147,11 @@ test('export command writes openapi spec to file', function (): void {
     expect($spec)->toHaveKey('openapi');
     expect($spec)->toHaveKey('info');
     expect($spec)->toHaveKey('paths');
-
-    unlink($outputPath);
 });
 
 test('export command supports pretty print', function (): void {
-    $outputPath = sys_get_temp_dir().'/cms-openapi-pretty-test-'.uniqid().'.json';
+    $outputPath          = sys_get_temp_dir().'/cms-openapi-pretty-test-'.uniqid().'.json';
+    $this->tempFiles[]   = $outputPath;
 
     $this->artisan('cms:openapi:export', [
         'path'     => $outputPath,
@@ -150,6 +162,4 @@ test('export command supports pretty print', function (): void {
 
     // Pretty-printed JSON contains newlines
     expect($content)->toContain("\n");
-
-    unlink($outputPath);
 });

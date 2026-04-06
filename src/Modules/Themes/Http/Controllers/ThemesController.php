@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Dedoc\Scramble\Attributes\Group;
 use Exception;
@@ -110,18 +111,16 @@ class ThemesController extends Controller
     public function activate(string $slug): JsonResponse
     {
         try {
-            $success = $this->themeManager->activateTheme($slug);
-
-            if (! $success) {
-                return response()->json([
-                    'message' => __('Failed to activate theme.'),
-                ], 422);
-            }
+            $this->themeManager->activateTheme($slug);
 
             return response()->json([
                 'message' => __('Theme activated successfully.'),
                 'theme'   => $this->themeManager->getTheme($slug),
             ]);
+        } catch (ThemeNotFoundException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+            ], 404);
         } catch (Exception $e) {
             report($e);
 
