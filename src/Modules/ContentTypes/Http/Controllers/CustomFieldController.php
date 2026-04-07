@@ -156,7 +156,7 @@ class CustomFieldController extends Controller
         $customField = CustomField::findOrFail( $id );
         $this->authorize( 'delete', $customField );
 
-        $this->customFieldManager->deleteField( $id);
+        $this->customFieldManager->deleteField( $id );
 
         return response()->noContent();
     }

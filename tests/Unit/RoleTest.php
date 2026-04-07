@@ -99,4 +99,4 @@ test( 'role can have multiple permissions', function (): void {
     expect( $role->permissions->pluck( 'slug' )->toArray() )->toContain( 'create-posts' );
     expect( $role->permissions->pluck( 'slug' )->toArray() )->toContain( 'edit-posts' );
     expect( $role->permissions->pluck( 'slug' )->toArray() )->toContain( 'delete-posts' );
-});
+} );

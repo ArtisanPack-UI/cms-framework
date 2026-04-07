@@ -61,6 +61,6 @@ trait HasContentStatus
     public function isPublished(): bool
     {
         return ContentStatus::Published === $this->status &&
-            ( null === $this->published_at || $this->published_at->isPast());
+            ( null === $this->published_at || $this->published_at->isPast() );
     }
 }

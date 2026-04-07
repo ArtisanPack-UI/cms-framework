@@ -145,7 +145,7 @@ class CustomFieldRequest extends FormRequest
             'options'       => __( 'options' ),
             'order'         => __( 'order' ),
             'required'      => __( 'required' ),
-            'default_value' => __( 'default value'),
+            'default_value' => __( 'default value' ),
         ];
     }
 }

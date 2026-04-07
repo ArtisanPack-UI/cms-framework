@@ -281,8 +281,8 @@ test( 'bulk post action returns mixed results when some items fail authorization
     $response->assertSuccessful();
     expect( $response->json( 'processed' ) )->toBe( 1 );
     expect( $response->json( 'failed' ) )->toBe( 1 );
-    expect( $response->json( 'errors' ))->toHaveKey( (string) $otherPost->id);
-});
+    expect( $response->json( 'errors' ) )->toHaveKey( (string) $otherPost->id );
+} );
 
 // --- Response structure ---
 
@@ -290,13 +290,13 @@ test( 'bulk post action returns correct response structure', function (): void {
     grantAllPostPermissions();
     $user = TestUser::factory()->create();
 
-    $post = createTestPost( ['author_id' => $user->id]);
+    $post = createTestPost( ['author_id' => $user->id] );
 
-    $response = $this->actingAs( $user)->postJson( '/api/v1/posts/bulk', [
+    $response = $this->actingAs( $user )->postJson( '/api/v1/posts/bulk', [
         'action' => 'delete',
         'ids'    => [$post->id],
-    ]);
+    ] );
 
     $response->assertSuccessful();
-    $response->assertJsonStructure( ['processed', 'failed', 'errors']);
-});
+    $response->assertJsonStructure( ['processed', 'failed', 'errors'] );
+} );

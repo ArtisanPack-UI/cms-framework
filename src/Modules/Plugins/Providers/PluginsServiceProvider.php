@@ -55,7 +55,7 @@ class PluginsServiceProvider extends ServiceProvider
             }
         } catch ( Exception $e ) {
             // Silently fail during installation/migration
-            logger()->debug( 'Plugin loading skipped: ' . $e->getMessage());
+            logger()->debug( 'Plugin loading skipped: ' . $e->getMessage() );
         }
     }
 }

@@ -89,7 +89,7 @@ trait HasContentFilters
     protected function applyAuthorFilter( Builder $query, array $filters ): void
     {
         if ( isset( $filters['author'] ) ) {
-            $query->byAuthor( $filters['author']);
+            $query->byAuthor( $filters['author'] );
         }
     }
 }

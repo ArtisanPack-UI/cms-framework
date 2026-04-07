@@ -177,7 +177,7 @@ class PageFactory extends Factory
      */
     public function withOrder( int $order ): static
     {
-        return $this->state( fn ( array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'order' => $order,
         ]);
     }

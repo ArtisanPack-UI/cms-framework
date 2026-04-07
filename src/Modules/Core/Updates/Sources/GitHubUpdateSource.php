@@ -304,9 +304,9 @@ class GitHubUpdateSource implements UpdateSourceInterface
     {
         // Find ZIP asset
         $zipAsset = collect( $release['assets'] ?? [] )
-            ->first( fn ( $asset) => Str::endsWith( $asset['name'], '.zip'));
+            ->first( fn ( $asset ) => Str::endsWith( $asset['name'], '.zip' ) );
 
-        if ( $zipAsset) {
+        if ( $zipAsset ) {
             return $zipAsset['browser_download_url'];
         }
 

@@ -58,8 +58,8 @@ test( 'apUpdateSetting helper', function (): void {
         ->with( 'test-key', 'new-value' )
         ->once();
 
-    apUpdateSetting( 'test-key', 'new-value');
+    apUpdateSetting( 'test-key', 'new-value' );
 
     // Mockery assertions are checked automatically in afterEach.
-    expect( true)->toBeTrue();
-});
+    expect( true )->toBeTrue();
+} );

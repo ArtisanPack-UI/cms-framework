@@ -115,4 +115,4 @@ test( 'permission manager registers permissions with long names', function (): v
     expect( $permission )->toBeInstanceOf( Permission::class );
     expect( $permission->slug )->toBe( 'long-permission' );
     expect( $permission->name )->toBe( $longName );
-});
+} );

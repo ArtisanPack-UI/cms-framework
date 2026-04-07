@@ -137,6 +137,6 @@ class PermissionController extends Controller
         $permission = Permission::findOrFail( $id );
         $permission->delete();
 
-        return response()->json( [], 204);
+        return response()->json( [], 204 );
     }
 }

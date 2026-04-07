@@ -377,12 +377,12 @@ class ThemeManager
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront'),
+            config( 'cms.themes.default', 'digital-shopfront' ),
         );
 
-        return array_map( function ( $theme) use ( $activeSlug) {
+        return array_map( function ( $theme ) use ( $activeSlug ) {
             // Defensive check: ensure slug key exists before comparing
-            $theme['is_active'] = isset( $theme['slug']) && $theme['slug'] === $activeSlug;
+            $theme['is_active'] = isset( $theme['slug'] ) && $theme['slug'] === $activeSlug;
 
             return $theme;
         }, $themes);

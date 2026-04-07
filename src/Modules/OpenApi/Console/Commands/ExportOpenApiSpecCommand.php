@@ -88,7 +88,7 @@ class ExportOpenApiSpecCommand extends Command
             return self::FAILURE;
         }
 
-        $this->info( "OpenAPI specification exported to: {$path}");
+        $this->info( "OpenAPI specification exported to: {$path}" );
 
         return self::SUCCESS;
     }

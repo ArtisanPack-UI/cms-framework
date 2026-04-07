@@ -98,4 +98,4 @@ test( 'permission relationship works both ways', function (): void {
     // Check both sides of the relationship
     expect( $permission->roles->first()->slug )->toBe( 'publisher' );
     expect( $role->fresh()->permissions->first()->slug )->toBe( 'publish-content' );
-});
+} );

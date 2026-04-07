@@ -167,10 +167,10 @@ class RoleController extends Controller
     public function destroy( string|int $id ): JsonResponse
     {
         $role = Role::findOrFail( $id );
-        $this->authorize( 'delete', $role);
+        $this->authorize( 'delete', $role );
 
         $role->delete();
 
-        return response()->json( [], 204);
+        return response()->json( [], 204 );
     }
 }

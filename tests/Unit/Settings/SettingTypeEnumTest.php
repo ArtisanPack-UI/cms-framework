@@ -84,19 +84,19 @@ test( 'serialize handles null values', function (): void {
     expect( SettingType::Boolean->serialize( null ) )->toBe( '0' );
     expect( SettingType::Integer->serialize( null ) )->toBe( '' );
     expect( SettingType::Float->serialize( null ) )->toBe( '' );
-    expect( SettingType::Json->serialize( null))->toBe( 'null');
-});
+    expect( SettingType::Json->serialize( null ) )->toBe( 'null' );
+} );
 
 test( 'cast throws JsonException for malformed json', function (): void {
-    SettingType::Json->cast( '{invalid json}');
-})->throws( JsonException::class);
+    SettingType::Json->cast( '{invalid json}' );
+} )->throws( JsonException::class );
 
 test( 'serialize throws JsonException for unencodable value', function (): void {
-    $resource = fopen( 'php://memory', 'r');
+    $resource = fopen( 'php://memory', 'r' );
 
     try {
-        SettingType::Json->serialize( $resource);
+        SettingType::Json->serialize( $resource );
     } finally {
-        fclose( $resource);
+        fclose( $resource );
     }
-})->throws( JsonException::class);
+} )->throws( JsonException::class );

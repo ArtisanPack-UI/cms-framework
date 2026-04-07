@@ -80,7 +80,7 @@ class CheckForUpdateCommand extends Command
             return self::SUCCESS;
         } catch ( Exception $e ) {
             $this->error( '✗ Failed to check for updates:' );
-            $this->error( $e->getMessage());
+            $this->error( $e->getMessage() );
 
             return self::FAILURE;
         }

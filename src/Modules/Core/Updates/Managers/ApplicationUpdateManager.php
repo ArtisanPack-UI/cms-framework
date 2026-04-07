@@ -608,20 +608,20 @@ class ApplicationUpdateManager
             'trace'     => $exception->getTraceAsString(),
             'file'      => $exception->getFile(),
             'line'      => $exception->getLine(),
-        ]);
+        ] );
 
         // Attempt to disable maintenance mode
         try {
             $this->disableMaintenanceMode();
-        } catch ( Exception $e) {
+        } catch ( Exception $e ) {
             // Maintenance mode failure is not critical during rollback
         }
 
         // If we have a backup, attempt rollback
-        if ( $this->backupPath && File::exists( $this->backupPath)) {
+        if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {
-                $this->rollback( $this->backupPath);
-            } catch ( Exception $e) {
+                $this->rollback( $this->backupPath );
+            } catch ( Exception $e ) {
                 // Rollback failed - this is critical
                 throw UpdateException::rollbackFailed( $e->getMessage());
             }

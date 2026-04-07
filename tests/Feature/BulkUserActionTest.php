@@ -216,11 +216,11 @@ test( 'bulk user action returns correct response structure', function (): void {
     $actor = TestUser::factory()->create();
     $user  = TestUser::factory()->create();
 
-    $response = $this->actingAs( $actor)->postJson( '/api/v1/users/bulk', [
+    $response = $this->actingAs( $actor )->postJson( '/api/v1/users/bulk', [
         'action' => 'delete',
         'ids'    => [$user->id],
-    ]);
+    ] );
 
     $response->assertSuccessful();
-    $response->assertJsonStructure( ['processed', 'failed', 'errors']);
-});
+    $response->assertJsonStructure( ['processed', 'failed', 'errors'] );
+} );

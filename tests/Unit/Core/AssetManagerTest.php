@@ -92,4 +92,4 @@ test( 'auth: enqueuing assets registers and lists them', function (): void {
             'path'     => '/auth/app.js',
             'inFooter' => true,
         ] );
-});
+} );

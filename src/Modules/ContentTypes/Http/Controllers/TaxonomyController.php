@@ -172,8 +172,8 @@ class TaxonomyController extends Controller
     {
         $this->authorize( 'viewAny', Taxonomy::class );
 
-        $taxonomies = $this->taxonomyManager->getTaxonomiesForContentType( $contentTypeSlug);
+        $taxonomies = $this->taxonomyManager->getTaxonomiesForContentType( $contentTypeSlug );
 
-        return TaxonomyResource::collection( $taxonomies);
+        return TaxonomyResource::collection( $taxonomies );
     }
 }

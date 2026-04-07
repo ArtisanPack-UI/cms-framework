@@ -5,5 +5,8 @@ vendor/
 tests/coverage/
 .phpunit.cache/
 
+# PHP-CS-Fixer cache
+.php-cs-fixer.cache
+
 # Claude local settings
 .claude/settings.local.json

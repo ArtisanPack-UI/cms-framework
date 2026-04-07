@@ -126,8 +126,8 @@ class ThemesController extends Controller
             report( $e );
 
             return response()->json( [
-                'message' => __( 'An unexpected error occurred while activating the theme.'),
-            ], 500);
+                'message' => __( 'An unexpected error occurred while activating the theme.' ),
+            ], 500 );
         }
     }
 }

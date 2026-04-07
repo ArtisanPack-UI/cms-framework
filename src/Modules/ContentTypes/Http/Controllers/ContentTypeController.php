@@ -186,10 +186,10 @@ class ContentTypeController extends Controller
     public function customFields( string $slug ): JsonResponse
     {
         $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
-        $this->authorize( 'view', $contentType);
+        $this->authorize( 'view', $contentType );
 
         $customFields = $contentType->getCustomFields();
 
-        return response()->json( $customFields);
+        return response()->json( $customFields );
     }
 }

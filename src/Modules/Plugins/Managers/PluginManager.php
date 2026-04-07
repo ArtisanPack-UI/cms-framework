@@ -543,7 +543,7 @@ class PluginManager
      */
     protected function getPluginsPath(): string
     {
-        return base_path( config( 'cms.plugins.directory', 'plugins'));
+        return base_path( config( 'cms.plugins.directory', 'plugins' ) );
     }
 
     /**
@@ -551,7 +551,7 @@ class PluginManager
      */
     protected function clearCaches(): void
     {
-        Cache::forget( config( 'cms.plugins.cacheKey'));
+        Cache::forget( config( 'cms.plugins.cacheKey' ) );
     }
 
     /**
@@ -562,8 +562,8 @@ class PluginManager
      */
     private function getComposerClassLoader(): ClassLoader
     {
-        foreach ( spl_autoload_functions() as $autoloader) {
-            if ( is_array( $autoloader) && $autoloader[0] instanceof ClassLoader) {
+        foreach ( spl_autoload_functions() as $autoloader ) {
+            if ( is_array( $autoloader ) && $autoloader[0] instanceof ClassLoader ) {
                 return $autoloader[0];
             }
         }

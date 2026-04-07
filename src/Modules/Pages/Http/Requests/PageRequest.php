@@ -91,7 +91,7 @@ class PageRequest extends FormRequest
             'slug.unique'        => __( 'A page with this slug already exists.' ),
             'author_id.required' => __( 'The author is required.' ),
             'status.required'    => __( 'The page status is required.' ),
-            'parent_id.exists'   => __( 'The selected parent page does not exist.'),
+            'parent_id.exists'   => __( 'The selected parent page does not exist.' ),
         ];
     }
 }

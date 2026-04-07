@@ -159,7 +159,7 @@ class PostCategoryController extends Controller
     public function destroy( int $id ): Response
     {
         $category = PostCategory::findOrFail( $id );
-        $this->authorize( 'delete', $category);
+        $this->authorize( 'delete', $category );
 
         $category->delete();
 

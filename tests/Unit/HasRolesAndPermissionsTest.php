@@ -168,4 +168,4 @@ test( 'hasPermissionTo works with role that has multiple permissions', function 
     expect( $user->hasPermissionTo( 'edit-posts' ) )->toBeTrue();
     expect( $user->hasPermissionTo( 'delete-posts' ) )->toBeTrue();
     expect( $user->hasPermissionTo( 'non-existent-permission' ) )->toBeFalse();
-});
+} );

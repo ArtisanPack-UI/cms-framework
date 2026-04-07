@@ -382,11 +382,11 @@ class PageController extends Controller
             'publish' => $page->update( [
                 'status'       => ContentStatus::Published->value,
                 'published_at' => now(),
-            ]),
+            ] ),
             'draft'   => $page->update( [
                 'status'       => ContentStatus::Draft->value,
                 'published_at' => null,
-            ]),
+            ] ),
             default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action])),
         };
     }

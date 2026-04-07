@@ -188,7 +188,7 @@ class UpdateCheckerFactory
             }
 
             return $manifest['version'] ?? '0.0.0';
-        } catch ( Exception $e) {
+        } catch ( Exception $e ) {
             return '0.0.0';
         }
     }

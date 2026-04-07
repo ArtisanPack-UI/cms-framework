@@ -365,4 +365,4 @@ test( 'getUnreadCount returns correct unread count', function (): void {
     $count = $manager->getUnreadCount( $user->id );
 
     expect( $count )->toBe( 2 );
-});
+} );

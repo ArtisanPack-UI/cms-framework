@@ -156,7 +156,7 @@ class OpenApiServiceProvider extends ServiceProvider
     protected function addSecuritySchemes( OpenApi $openApi ): void
     {
         $openApi->secure(
-            SecurityScheme::http( 'bearer', 'JWT'),
+            SecurityScheme::http( 'bearer', 'JWT' ),
         );
     }
 }

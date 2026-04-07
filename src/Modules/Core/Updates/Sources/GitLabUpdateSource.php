@@ -286,11 +286,11 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string Download URL
      */
-    protected function extractDownloadUrl( array $release): string
+    protected function extractDownloadUrl( array $release ): string
     {
         // Get download link for source code
-        if ( ! isset( $release['tag_name'])) {
-            throw UpdateException::downloadFailed( 'No tag_name found in release');
+        if ( ! isset( $release['tag_name'] ) ) {
+            throw UpdateException::downloadFailed( 'No tag_name found in release' );
         }
 
         return "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$release['tag_name']}";

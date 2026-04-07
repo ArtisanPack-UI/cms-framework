@@ -94,7 +94,7 @@ class CheckForUpdateScheduled extends Command
                 'error' => $e->getMessage(),
             ] );
 
-            $this->error( "Failed: {$e->getMessage()}");
+            $this->error( "Failed: {$e->getMessage()}" );
 
             return self::FAILURE;
         }
