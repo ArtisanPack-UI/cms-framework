@@ -110,9 +110,9 @@ test( 'permission manager registers permissions with long names', function (): v
 
     $longName = 'This is a very long permission name that contains multiple words and describes a complex permission that might be used in a real application with detailed requirements and specifications';
 
-    $permission = $permissionManager->register( 'long-permission', $longName);
+    $permission = $permissionManager->register( 'long-permission', $longName );
 
-    expect( $permission)->toBeInstanceOf( Permission::class);
-    expect( $permission->slug)->toBe( 'long-permission');
-    expect( $permission->name)->toBe( $longName);
-});
+    expect( $permission )->toBeInstanceOf( Permission::class );
+    expect( $permission->slug )->toBe( 'long-permission' );
+    expect( $permission->name )->toBe( $longName );
+} );

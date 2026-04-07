@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
@@ -48,7 +48,7 @@ class PerformUpdateCommand extends Command
             // Check for updates first
             $updateInfo = $manager->checkForUpdate();
 
-            if ( ! $updateInfo->hasUpdate ) {
+            if ( ! $updateInfo->hasUpdate() ) {
                 $this->info( '✓ You are already running the latest version.' );
 
                 return self::SUCCESS;

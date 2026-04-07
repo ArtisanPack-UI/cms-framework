@@ -410,18 +410,18 @@ test( 'update field handles content type changes', function (): void {
         'content_types' => ['posts'],
         'order'         => 1,
         'required'      => false,
-    ]);
+    ] );
 
-    $manager->addColumnToTable( $field, 'test_posts_ct');
+    $manager->addColumnToTable( $field, 'test_posts_ct' );
 
     // Update to also include pages
     $manager->updateField( $field->id, [
         'content_types' => ['posts', 'pages'],
-    ]);
+    ] );
 
-    expect( Schema::hasColumn( 'test_posts_ct', 'custom_field'))->toBeTrue();
-    expect( Schema::hasColumn( 'test_pages_ct', 'custom_field'))->toBeTrue();
+    expect( Schema::hasColumn( 'test_posts_ct', 'custom_field' ) )->toBeTrue();
+    expect( Schema::hasColumn( 'test_pages_ct', 'custom_field' ) )->toBeTrue();
 
-    Schema::dropIfExists( 'test_posts_ct');
+    Schema::dropIfExists( 'test_posts_ct' );
     Schema::dropIfExists( 'test_pages_ct');
 });

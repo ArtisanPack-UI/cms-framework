@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * CustomField Controller for the CMS Framework ContentTypes Module.
@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests\CustomFieldReq
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Resources\CustomFieldResource;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,6 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Custom Fields', weight: 8 )]
 class CustomFieldController extends Controller
 {
     use AuthorizesRequests;

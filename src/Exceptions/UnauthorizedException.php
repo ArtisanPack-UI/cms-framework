@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Unauthorized exception for the CMS Framework.
@@ -20,46 +20,54 @@ namespace ArtisanPackUI\CMSFramework\Exceptions;
  */
 class UnauthorizedException extends CMSFrameworkException
 {
-	/**
-	 * Create an unauthorized exception for an action.
-	 *
-	 * @param  string  $action  The action that was attempted.
-	 *
-	 * @return self
-	 *
-	 * @since 1.0.0
-	 */
-	public static function forAction( string $action ): self
-	{
-		return new self( "You are not authorized to {$action}." );
-	}
+    /**
+     * The machine-readable error code for this exception.
+     *
+     * @since 1.1.0
+     */
+    protected string $errorCode = 'FORBIDDEN';
 
-	/**
-	 * Create an unauthorized exception for a resource.
-	 *
-	 * @param  string  $resource  The resource type.
-	 * @param  string  $action  The action that was attempted.
-	 *
-	 * @return self
-	 *
-	 * @since 1.0.0
-	 */
-	public static function forResource( string $resource, string $action ): self
-	{
-		return new self( "You are not authorized to {$action} {$resource}." );
-	}
+    /**
+     * The HTTP status code for this exception.
+     *
+     * @since 1.1.0
+     */
+    protected int $statusCode = 403;
 
-	/**
-	 * Create an unauthorized exception for permission requirement.
-	 *
-	 * @param  string  $permission  The required permission.
-	 *
-	 * @return self
-	 *
-	 * @since 1.0.0
-	 */
-	public static function requiresPermission( string $permission ): self
-	{
-		return new self( "This action requires the '{$permission}' permission." );
-	}
+    /**
+     * Create an unauthorized exception for an action.
+     *
+     * @param  string  $action  The action that was attempted.
+     *
+     * @since 1.0.0
+     */
+    public static function forAction( string $action ): self
+    {
+        return new self( "You are not authorized to {$action}." );
+    }
+
+    /**
+     * Create an unauthorized exception for a resource.
+     *
+     * @param  string  $resource  The resource type.
+     * @param  string  $action  The action that was attempted.
+     *
+     * @since 1.0.0
+     */
+    public static function forResource( string $resource, string $action ): self
+    {
+        return new self( "You are not authorized to {$action} {$resource}." );
+    }
+
+    /**
+     * Create an unauthorized exception for permission requirement.
+     *
+     * @param  string  $permission  The required permission.
+     *
+     * @since 1.0.0
+     */
+    public static function requiresPermission( string $permission ): self
+    {
+        return new self( "This action requires the '{$permission}' permission." );
+    }
 }

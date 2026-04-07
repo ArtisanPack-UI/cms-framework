@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
@@ -53,7 +53,7 @@ class CheckForUpdateCommand extends Command
         try {
             $updateInfo = $manager->checkForUpdate();
 
-            if ( $updateInfo->hasUpdate ) {
+            if ( $updateInfo->hasUpdate() ) {
                 $this->newLine();
                 $this->info( '✓ Update available!' );
                 $this->line( "Current version: {$updateInfo->currentVersion}" );

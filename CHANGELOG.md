@@ -19,6 +19,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [1.1.0] - 2026-04-06
+
+### Added
+
+- Bulk action API endpoints for posts, pages, and users (publish, unpublish, trash, restore, delete)
+- OpenAPI specification generation for all API endpoints via Scramble
+- `include` query parameter for on-demand relationship loading across API endpoints
+- TypeScript type definitions for all API responses and models
+- GitHub Actions CI workflow with lint and test jobs
+- GitHub Actions release workflow with changelog-based release notes and Packagist integration
+- Claude Code and Claude Code Review GitHub Actions workflows
+- Auto-assign milestone workflow for new issues
+- GitHub issue and pull request templates
+
+### Changed
+
+- Standardized JSON error response format across all API endpoints
+- Extracted shared manifest parsing and discovery logic into `HasManifestParsing` trait
+- Extracted shared content query and filter logic into reusable traits
+- Converted `UpdateInfo::hasUpdate` from stored state to a computed method
+- Replaced magic strings with enums: `ContentStatus`, `SettingType`, `FieldType`, `ColumnType`, `UpdateType`
+- Hoisted policy and permission resolution before loops in bulk actions
+- Added php-cs-fixer and ran code style formatting across the package
+- Updated PHP version requirement to 8.4 for CI
+- Migrated repository from GitLab to GitHub
+
+### Fixed
+
+- Sanitized error responses and normalized `published_at` in bulk actions
+- Corrected LIKE wildcard escaping order and added ESCAPE clause
+- Hardened URL parsing and cache serialization in update sources
+- Fixed incorrect `@since 2.0.0` tags to `@since 1.0.0` in update test files
+
 ## [1.0.1] - 2026-01-09
 
 ### Added

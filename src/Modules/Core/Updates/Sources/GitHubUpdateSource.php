@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
@@ -68,7 +68,9 @@ class GitHubUpdateSource implements UpdateSourceInterface
      */
     public function supports( string $url ): bool
     {
-        return Str::contains( $url, 'github.com' );
+        $host = parse_url( $url, PHP_URL_HOST );
+
+        return 'github.com' === $host || str_ends_with( (string) $host, '.github.com' );
     }
 
     /**
@@ -111,7 +113,6 @@ class GitHubUpdateSource implements UpdateSourceInterface
         return new UpdateInfo(
             currentVersion: $this->currentVersion,
             latestVersion: ltrim( $latest['tag_name'], 'v' ),
-            hasUpdate: version_compare( ltrim( $latest['tag_name'], 'v' ), $this->currentVersion, '>' ),
             downloadUrl: $zipAsset['browser_download_url'],
             changelog: $latest['body'] ?? null,
             releaseDate: $latest['published_at'] ?? null,
@@ -146,7 +147,7 @@ class GitHubUpdateSource implements UpdateSourceInterface
             $downloadUrl = $this->extractDownloadUrl( $release );
         }
 
-        $tempPath = storage_path( 'app/temp/update-' . time() . '.zip' );
+        $tempPath = storage_path( 'app/temp/update-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
 
         // Ensure temp directory exists
         if ( ! File::exists( dirname( $tempPath ) ) ) {
@@ -210,7 +211,8 @@ class GitHubUpdateSource implements UpdateSourceInterface
         // Supports: https://github.com/owner/repo
         if ( preg_match( '#github\.com/([^/]+)/([^/]+)#', $url, $matches ) ) {
             $this->owner = $matches[1];
-            $this->repo  = rtrim( $matches[2], '.git' );
+            $repo        = $matches[2];
+            $this->repo  = str_ends_with( $repo, '.git' ) ? substr( $repo, 0, -4 ) : $repo;
         } else {
             throw new InvalidArgumentException( 'Invalid GitHub URL' );
         }

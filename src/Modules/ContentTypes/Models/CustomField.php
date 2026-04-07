@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * CustomField Model
@@ -12,6 +12,8 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ColumnType;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\FieldType;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -22,8 +24,8 @@ use Illuminate\Support\Collection;
  * @property int $id
  * @property string $name
  * @property string $key
- * @property string $type
- * @property string $column_type
+ * @property FieldType $type
+ * @property ColumnType $column_type
  * @property string|null $description
  * @property array $content_types
  * @property array|null $options
@@ -66,7 +68,7 @@ class CustomField extends Model
      */
     public function getMigrationColumnDefinition(): string
     {
-        $definition = "\$table->{$this->column_type}('{$this->key}')";
+        $definition = "\$table->{$this->column_type->value}('{$this->key}')";
 
         // Add nullable if not required
         if ( ! $this->required ) {
@@ -104,6 +106,8 @@ class CustomField extends Model
     protected function casts(): array
     {
         return [
+            'type'          => FieldType::class,
+            'column_type'   => ColumnType::class,
             'content_types' => 'array',
             'options'       => 'array',
             'required'      => 'boolean',

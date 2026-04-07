@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Post Request for the CMS Framework Blog Module.
@@ -13,6 +13,7 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -65,7 +66,7 @@ class PostRequest extends FormRequest
             'content'      => ['nullable', 'string'],
             'excerpt'      => ['nullable', 'string'],
             'author_id'    => ['required', 'integer', 'exists:users,id'],
-            'status'       => ['required', 'string', 'in:draft,published,scheduled,private'],
+            'status'       => ['required', 'string', ContentStatus::validationRule()],
             'published_at' => ['nullable', 'date'],
             'metadata'     => ['nullable', 'array'],
             'categories'   => ['nullable', 'array'],

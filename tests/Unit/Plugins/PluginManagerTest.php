@@ -201,5 +201,5 @@ describe( 'Manifest Parsing', function (): void {
         expect( $manifest )->toBeNull();
 
         File::delete( $tempFile );
-    });
-});
+    } );
+} );

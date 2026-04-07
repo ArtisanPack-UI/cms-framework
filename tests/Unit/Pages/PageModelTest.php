@@ -567,14 +567,14 @@ test( 'page has tags relationship', function (): void {
 
     expect( $page->tags )->toHaveCount( 1 );
     expect( $page->tags->first()->name )->toBe( 'Important' );
-});
+} );
 
 test( 'page uses soft deletes', function (): void {
     $user = TestUser::create( [
         'name'     => 'Test Author',
         'email'    => 'author@example.com',
         'password' => 'password',
-    ]);
+    ] );
 
     $page = Page::create( [
         'title'     => 'Test Page',
@@ -582,12 +582,12 @@ test( 'page uses soft deletes', function (): void {
         'author_id' => $user->id,
         'status'    => 'published',
         'order'     => 1,
-    ]);
+    ] );
 
     $pageId = $page->id;
 
     $page->delete();
 
-    expect( Page::find( $pageId))->toBeNull();
-    expect( Page::withTrashed()->find( $pageId))->not->toBeNull();
-});
+    expect( Page::find( $pageId ) )->toBeNull();
+    expect( Page::withTrashed()->find( $pageId ) )->not->toBeNull();
+} );

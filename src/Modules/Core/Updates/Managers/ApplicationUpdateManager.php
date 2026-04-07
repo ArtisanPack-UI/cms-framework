@@ -1,9 +1,10 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
@@ -70,7 +71,7 @@ class ApplicationUpdateManager
     {
         $updateInfo = $this->checkForUpdate();
 
-        if ( ! $updateInfo->hasUpdate ) {
+        if ( ! $updateInfo->hasUpdate() ) {
             throw UpdateException::noUpdateAvailable();
         }
 
@@ -197,7 +198,7 @@ class ApplicationUpdateManager
 
         $this->checker = UpdateCheckerFactory::buildUpdateChecker(
             url: $updateUrl,
-            type: 'application',
+            type: UpdateType::Application,
             slug: 'digital-shopfront-cms',
         );
 

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Post Controller for the CMS Framework Blog Module.
@@ -13,16 +13,22 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\BulkPostRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\PostRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Resources\PostResource;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use InvalidArgumentException;
+use Throwable;
 
 /**
  * API controller for managing posts.
@@ -32,9 +38,29 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Posts', weight: 1 )]
 class PostController extends Controller
 {
     use AuthorizesRequests;
+    use HasIncludableRelationships;
+
+    /**
+     * The relationships that can be included via the include query parameter.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $includableRelationships = ['author', 'categories', 'tags'];
+
+    /**
+     * The default relationships to load when no include parameter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $defaultIncludes = ['author', 'categories', 'tags'];
 
     /**
      * The blog manager instance.
@@ -66,8 +92,9 @@ class PostController extends Controller
     {
         $this->authorize( 'viewAny', Post::class );
 
-        $filters = $request->only( ['status', 'category', 'tag', 'author', 'year', 'month', 'search'] );
-        $posts   = $this->blogManager->getArchiveQuery( $filters )->paginate( 15 );
+        $filters  = $request->only( ['status', 'category', 'tag', 'author', 'year', 'month', 'search'] );
+        $includes = $this->getRequestedIncludes( $request );
+        $posts    = $this->blogManager->getArchiveQuery( $filters )->with( $includes )->paginate( 15 );
 
         return PostResource::collection( $posts );
     }
@@ -105,7 +132,7 @@ class PostController extends Controller
             $post->tags()->sync( $tags );
         }
 
-        $post->load( ['author', 'categories', 'tags'] );
+        $post->load( $this->getRequestedIncludes( $request ) );
 
         return response()->json( new PostResource( $post ), 201 );
     }
@@ -121,10 +148,12 @@ class PostController extends Controller
      *
      * @return PostResource The post resource.
      */
-    public function show( int $id ): PostResource
+    public function show( Request $request, int $id ): PostResource
     {
-        $post = Post::with( ['author', 'categories', 'tags'] )->findOrFail( $id );
+        $post = Post::findOrFail( $id );
         $this->authorize( 'view', $post );
+
+        $post->load( $this->getRequestedIncludes( $request ) );
 
         return new PostResource( $post );
     }
@@ -164,7 +193,7 @@ class PostController extends Controller
             $post->tags()->sync( $tags );
         }
 
-        $post->load( ['author', 'categories', 'tags'] );
+        $post->load( $this->getRequestedIncludes( $request ) );
 
         return new PostResource( $post );
     }
@@ -192,6 +221,59 @@ class PostController extends Controller
     }
 
     /**
+     * Perform a bulk action on multiple posts.
+     *
+     * Processes the requested action on each post individually, respecting
+     * authorization policies. Returns a summary of successes and failures.
+     *
+     * @since 1.1.0
+     *
+     * @param  BulkPostRequest  $request  The validated bulk action request.
+     *
+     * @return JsonResponse Summary with processed count, failed count, and error details.
+     */
+    public function bulk( BulkPostRequest $request ): JsonResponse
+    {
+        $action       = $request->validated( 'action' );
+        $ids          = $request->validated( 'ids' );
+        $policyMethod = $this->getBulkPolicyMethod( $action );
+        $processed    = 0;
+        $errors       = [];
+
+        $posts = Post::whereIn( 'id', $ids )->get()->keyBy( 'id' );
+
+        foreach ( $ids as $id ) {
+            $post = $posts->get( $id );
+
+            if ( null === $post ) {
+                $errors[ $id ] = __( 'Post not found.' );
+
+                continue;
+            }
+
+            if ( ! $request->user()->can( $policyMethod, $post ) ) {
+                $errors[ $id ] = __( 'You do not have permission to :action this post.', ['action' => $action] );
+
+                continue;
+            }
+
+            try {
+                $this->executeBulkAction( $action, $post );
+                $processed++;
+            } catch ( Throwable $e ) {
+                report( $e );
+                $errors[ $id ] = __( 'Failed to :action post.', ['action' => $action] );
+            }
+        }
+
+        return response()->json( [
+            'processed' => $processed,
+            'failed'    => count( $errors ),
+            'errors'    => $errors,
+        ] );
+    }
+
+    /**
      * Get posts by date archive.
      *
      * @since 1.0.0
@@ -200,11 +282,12 @@ class PostController extends Controller
      * @param  int|null  $month  Month to filter by (optional).
      * @param  int|null  $day  Day to filter by (optional).
      */
-    public function archiveByDate( int $year, ?int $month = null, ?int $day = null ): AnonymousResourceCollection
+    public function archiveByDate( Request $request, int $year, ?int $month = null, ?int $day = null ): AnonymousResourceCollection
     {
         $this->authorize( 'viewAny', Post::class );
 
         $posts = $this->blogManager->getPostsByDate( $year, $month, $day );
+        $posts->load( $this->getRequestedIncludes( $request ) );
 
         return PostResource::collection( $posts );
     }
@@ -216,11 +299,12 @@ class PostController extends Controller
      *
      * @param  int  $authorId  Author ID to filter by.
      */
-    public function archiveByAuthor( int $authorId ): AnonymousResourceCollection
+    public function archiveByAuthor( Request $request, int $authorId ): AnonymousResourceCollection
     {
         $this->authorize( 'viewAny', Post::class );
 
         $posts = $this->blogManager->getPostsByAuthor( $authorId );
+        $posts->load( $this->getRequestedIncludes( $request ) );
 
         return PostResource::collection( $posts );
     }
@@ -232,11 +316,12 @@ class PostController extends Controller
      *
      * @param  string  $slug  Category slug to filter by.
      */
-    public function archiveByCategory( string $slug ): AnonymousResourceCollection
+    public function archiveByCategory( Request $request, string $slug ): AnonymousResourceCollection
     {
         $this->authorize( 'viewAny', Post::class );
 
         $posts = $this->blogManager->getPostsByCategory( $slug );
+        $posts->load( $this->getRequestedIncludes( $request ) );
 
         return PostResource::collection( $posts );
     }
@@ -248,12 +333,56 @@ class PostController extends Controller
      *
      * @param  string  $slug  Tag slug to filter by.
      */
-    public function archiveByTag( string $slug ): AnonymousResourceCollection
+    public function archiveByTag( Request $request, string $slug ): AnonymousResourceCollection
     {
         $this->authorize( 'viewAny', Post::class );
 
         $posts = $this->blogManager->getPostsByTag( $slug );
+        $posts->load( $this->getRequestedIncludes( $request ) );
 
-        return PostResource::collection( $posts);
+        return PostResource::collection( $posts );
+    }
+
+    /**
+     * Get the policy method for a bulk action.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action name.
+     *
+     * @return string The policy method name.
+     */
+    protected function getBulkPolicyMethod( string $action ): string
+    {
+        return match ( $action ) {
+            'delete'  => 'delete',
+            'publish' => 'publish',
+            'draft'   => 'update',
+            default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action] ) ),
+        };
+    }
+
+    /**
+     * Execute a bulk action on a single post.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action to perform.
+     * @param  Post  $post  The post to perform the action on.
+     */
+    protected function executeBulkAction( string $action, Post $post ): void
+    {
+        match ( $action ) {
+            'delete'  => $post->delete(),
+            'publish' => $post->update( [
+                'status'       => ContentStatus::Published->value,
+                'published_at' => now(),
+            ] ),
+            'draft'   => $post->update( [
+                'status'       => ContentStatus::Draft->value,
+                'published_at' => null,
+            ] ),
+            default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action])),
+        };
     }
 }

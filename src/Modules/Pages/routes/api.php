@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Pages Module API Routes
@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix( 'pages' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/', [PageController::class, 'index'] );
     Route::post( '/', [PageController::class, 'store'] );
+    Route::post( '/bulk', [PageController::class, 'bulk'] );
     Route::get( '/tree', [PageController::class, 'tree'] );
     Route::post( '/reorder', [PageController::class, 'reorder'] );
     Route::post( '/{id}/move', [PageController::class, 'move'] );

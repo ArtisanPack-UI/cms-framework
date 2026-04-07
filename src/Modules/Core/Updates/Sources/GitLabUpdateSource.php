@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
@@ -9,7 +9,6 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -61,7 +60,9 @@ class GitLabUpdateSource implements UpdateSourceInterface
      */
     public function supports( string $url ): bool
     {
-        return Str::contains( $url, 'gitlab.com' );
+        $host = parse_url( $url, PHP_URL_HOST );
+
+        return 'gitlab.com' === $host;
     }
 
     /**
@@ -96,7 +97,6 @@ class GitLabUpdateSource implements UpdateSourceInterface
         return new UpdateInfo(
             currentVersion: $this->currentVersion,
             latestVersion: ltrim( $latest['tag_name'], 'v' ),
-            hasUpdate: version_compare( ltrim( $latest['tag_name'], 'v' ), $this->currentVersion, '>' ),
             downloadUrl: $downloadUrl,
             changelog: $latest['description'] ?? null,
             releaseDate: $latest['created_at'] ?? null,
@@ -129,7 +129,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
             $downloadUrl = $this->extractDownloadUrl( $release );
         }
 
-        $tempPath = storage_path( 'app/temp/update-' . time() . '.zip' );
+        $tempPath = storage_path( 'app/temp/update-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
 
         if ( ! File::exists( dirname( $tempPath ) ) ) {
             File::makeDirectory( dirname( $tempPath ), 0755, true );
@@ -188,14 +188,20 @@ class GitLabUpdateSource implements UpdateSourceInterface
      */
     protected function parseUrl( string $url ): void
     {
-        // Extract project path and convert to project ID
-        // Supports: https://gitlab.com/group/subgroup/project
-        if ( preg_match( '#gitlab\.com/(.+)$#', $url, $matches ) ) {
-            // URL-encode the project path for API
-            $this->projectId = urlencode( trim( $matches[1], '/' ) );
-        } else {
+        $host = parse_url( $url, PHP_URL_HOST );
+
+        if ( 'gitlab.com' !== $host ) {
             throw new InvalidArgumentException( 'Invalid GitLab URL' );
         }
+
+        $path = parse_url( $url, PHP_URL_PATH );
+
+        if ( ! $path || '' === trim( $path, '/' ) ) {
+            throw new InvalidArgumentException( 'Invalid GitLab URL' );
+        }
+
+        // URL-encode the project path for API
+        $this->projectId = urlencode( trim( $path, '/' ) );
     }
 
     /**

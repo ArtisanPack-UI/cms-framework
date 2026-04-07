@@ -130,4 +130,4 @@ it( 'checks if has service provider', function (): void {
 
     expect( $pluginWithSP->hasServiceProvider() )->toBeTrue()
         ->and( $pluginWithoutSP->hasServiceProvider() )->toBeFalse();
-});
+} );

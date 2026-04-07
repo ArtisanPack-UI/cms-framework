@@ -86,10 +86,10 @@ test( 'auth: enqueuing assets registers and lists them', function (): void {
     $result = $assets->authAssets();
 
     expect( $result )->toBeArray();
-    expect( $result)->toHaveKey( 'auth-js');
-    expect( $result['auth-js'])
+    expect( $result )->toHaveKey( 'auth-js' );
+    expect( $result['auth-js'] )
         ->toMatchArray( [
             'path'     => '/auth/app.js',
             'inFooter' => true,
-        ]);
-});
+        ] );
+} );

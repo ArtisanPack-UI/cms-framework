@@ -302,5 +302,5 @@ describe( 'File System Security', function (): void {
         // When extracting, paths should be validated
         // This is tested implicitly through the ZIP extraction process
         expect( true )->toBeTrue();
-    });
-});
+    } );
+} );

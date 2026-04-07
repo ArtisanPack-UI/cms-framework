@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * PostTag Controller for the CMS Framework Blog Module.
@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Requests\PostTagRequest;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Resources\PostTagResource;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Post Tags', weight: 3 )]
 class PostTagController extends Controller
 {
     use AuthorizesRequests;

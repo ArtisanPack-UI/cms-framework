@@ -225,10 +225,10 @@ test( 'registered content types merges database and filtered content types', fun
         'slug'        => 'custom',
         'table_name'  => 'custom',
         'model_class' => 'App\\Models\\Custom',
-    ]);
+    ] );
 
     $registeredTypes = $manager->getRegisteredContentTypes();
 
-    expect( $registeredTypes)->toHaveKey( 'posts');
-    expect( $registeredTypes)->toHaveKey( 'custom');
-});
+    expect( $registeredTypes )->toHaveKey( 'posts' );
+    expect( $registeredTypes )->toHaveKey( 'custom' );
+} );

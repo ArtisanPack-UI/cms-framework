@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * ContentType Controller for the CMS Framework ContentTypes Module.
@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests\ContentTypeReq
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Resources\ContentTypeResource;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,6 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Content Types', weight: 7 )]
 class ContentTypeController extends Controller
 {
     use AuthorizesRequests;
@@ -139,11 +141,12 @@ class ContentTypeController extends Controller
      */
     public function update( ContentTypeRequest $request, string $slug ): ContentTypeResource
     {
-        $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
+        $sanitizedSlug = sanitizeText( $slug );
+        $contentType   = ContentType::where( 'slug', $sanitizedSlug )->firstOrFail();
         $this->authorize( 'update', $contentType );
 
         $validated   = $request->validated();
-        $contentType = $this->contentTypeManager->updateContentType( $slug, $validated );
+        $contentType = $this->contentTypeManager->updateContentType( $sanitizedSlug, $validated );
 
         return new ContentTypeResource( $contentType );
     }
@@ -162,10 +165,11 @@ class ContentTypeController extends Controller
      */
     public function destroy( string $slug ): Response
     {
-        $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
+        $sanitizedSlug = sanitizeText( $slug );
+        $contentType   = ContentType::where( 'slug', $sanitizedSlug )->firstOrFail();
         $this->authorize( 'delete', $contentType );
 
-        $this->contentTypeManager->deleteContentType( $slug );
+        $this->contentTypeManager->deleteContentType( $sanitizedSlug );
 
         return response()->noContent();
     }
@@ -186,6 +190,6 @@ class ContentTypeController extends Controller
 
         $customFields = $contentType->getCustomFields();
 
-        return response()->json( $customFields);
+        return response()->json( $customFields );
     }
 }

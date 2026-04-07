@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Setting Controller for the CMS Framework Settings Module.
@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests\SettingRequest;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources\SettingResource;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Settings', weight: 13 )]
 class SettingController extends Controller
 {
     use AuthorizesRequests;
@@ -91,9 +93,8 @@ class SettingController extends Controller
      */
     public function show( string|int $id ): SettingResource
     {
-        $this->authorize( 'view', Setting::class );
-
         $setting = Setting::findOrFail( $id );
+        $this->authorize( 'view', $setting );
 
         return new SettingResource( $setting );
     }

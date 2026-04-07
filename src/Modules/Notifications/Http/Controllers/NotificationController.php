@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Notification API Controller
@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Notifications\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Http\Resources\NotificationResource;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Managers\NotificationManager;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -25,6 +26,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Notifications', weight: 14 )]
 class NotificationController extends Controller
 {
     /**

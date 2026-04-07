@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 /**
  * Base test case for the CMS Framework.
  *
@@ -12,6 +14,7 @@ use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use ArtisanPackUI\Security\SecurityServiceProvider;
+use Dedoc\Scramble\ScrambleServiceProvider;
 use Illuminate\Foundation\Application;
 
 /**
@@ -40,6 +43,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
     {
         return [
             SecurityServiceProvider::class,
+            ScrambleServiceProvider::class,
             CMSFrameworkServiceProvider::class,
             HooksServiceProvider::class,
         ];
@@ -52,8 +56,9 @@ class TestCase extends \Orchestra\Testbench\TestCase
      */
     protected function getEnvironmentSetUp( $app ): void
     {
-        // 1. Set the configurable user model to our test user model.
+        // 1. Set the configurable user model and enable OpenAPI for testing.
         $app['config']->set( 'artisanpack.cms-framework.user_model', TestUser::class );
+        $app['config']->set( 'artisanpack.cms-framework.openapi.enabled', true );
         $app['config']->set( 'auth.providers.users.model', TestUser::class );
 
         // 2. Set up database configuration
@@ -63,6 +68,6 @@ class TestCase extends \Orchestra\Testbench\TestCase
             'driver'   => 'sqlite',
             'database' => ':memory:',
             'prefix'   => '',
-        ]);
+        ] );
     }
 }

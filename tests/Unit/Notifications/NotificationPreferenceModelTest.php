@@ -116,5 +116,5 @@ test( 'factory emailEnabled state enables email notifications', function (): voi
 test( 'factory emailDisabled state disables email notifications', function (): void {
     $preference = NotificationPreference::factory()->emailDisabled()->create();
 
-    expect( $preference->email_enabled)->toBeFalse();
-});
+    expect( $preference->email_enabled )->toBeFalse();
+} );

@@ -120,10 +120,10 @@ test( 'role manager addPermissionToRole method works with app container', functi
     $roleManager = app( RoleManager::class );
 
     $role       = Role::create( ['slug' => 'author', 'name' => 'Author'] );
-    $permission = Permission::create( ['slug' => 'publish-posts', 'name' => 'Publish Posts']);
+    $permission = Permission::create( ['slug' => 'publish-posts', 'name' => 'Publish Posts'] );
 
-    $roleManager->addPermissionToRole( 'author', 'publish-posts');
+    $roleManager->addPermissionToRole( 'author', 'publish-posts' );
 
     $role->refresh();
-    expect( $role->permissions->first()->slug)->toBe( 'publish-posts');
-});
+    expect( $role->permissions->first()->slug )->toBe( 'publish-posts' );
+} );

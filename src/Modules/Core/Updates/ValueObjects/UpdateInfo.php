@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects;
 
@@ -22,7 +22,6 @@ class UpdateInfo
      *
      * @param  string  $currentVersion  Current installed version
      * @param  string  $latestVersion  Latest available version
-     * @param  bool  $hasUpdate  Whether an update is available
      * @param  string  $downloadUrl  URL to download the update
      * @param  string|null  $changelog  Release notes/changelog
      * @param  string|null  $releaseDate  ISO 8601 release date
@@ -35,7 +34,6 @@ class UpdateInfo
     public function __construct(
         public readonly string $currentVersion,
         public readonly string $latestVersion,
-        public readonly bool $hasUpdate,
         public readonly string $downloadUrl,
         public readonly ?string $changelog = null,
         public readonly ?string $releaseDate = null,
@@ -45,6 +43,19 @@ class UpdateInfo
         public readonly ?int $fileSize = null,
         public readonly array $metadata = [],
     ) {
+    }
+
+    /**
+     * Whether an update is available.
+     *
+     * Computed from version comparison rather than stored state
+     * to prevent inconsistency.
+     *
+     * @since 1.1.0
+     */
+    public function hasUpdate(): bool
+    {
+        return version_compare( $this->latestVersion, $this->currentVersion, '>' );
     }
 
     /**
@@ -64,7 +75,6 @@ class UpdateInfo
         return new self(
             currentVersion: $currentVersion,
             latestVersion: $data['version'],
-            hasUpdate: version_compare( $data['version'], $currentVersion, '>' ),
             downloadUrl: $data['download_url'],
             changelog: $data['changelog'] ?? null,
             releaseDate: $data['release_date'] ?? null,
@@ -86,7 +96,7 @@ class UpdateInfo
         return [
             'current'               => $this->currentVersion,
             'latest'                => $this->latestVersion,
-            'hasUpdate'             => $this->hasUpdate,
+            'hasUpdate'             => $this->hasUpdate(),
             'download_url'          => $this->downloadUrl,
             'changelog'             => $this->changelog,
             'release_date'          => $this->releaseDate,

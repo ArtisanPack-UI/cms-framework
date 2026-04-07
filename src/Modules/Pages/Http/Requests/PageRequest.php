@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Page Request for the CMS Framework Pages Module.
@@ -13,6 +13,7 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -64,7 +65,7 @@ class PageRequest extends FormRequest
             'parent_id'    => ['nullable', 'integer', 'exists:pages,id'],
             'order'        => ['nullable', 'integer', 'min:0'],
             'template'     => ['nullable', 'string', 'max:255'],
-            'status'       => ['required', 'string', 'in:draft,published,scheduled,private'],
+            'status'       => ['required', 'string', ContentStatus::validationRule()],
             'published_at' => ['nullable', 'date'],
             'metadata'     => ['nullable', 'array'],
             'categories'   => ['nullable', 'array'],

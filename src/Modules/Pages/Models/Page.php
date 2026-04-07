@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Page Model
@@ -12,6 +12,8 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Models;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\MediaLibrary\Models\Media;
@@ -37,7 +39,7 @@ use Illuminate\Support\Collection;
  * @property int|null $parent_id
  * @property int $order
  * @property string|null $template
- * @property string $status
+ * @property ContentStatus $status
  * @property Carbon|null $published_at
  * @property array|null $metadata
  * @property \Illuminate\Support\Carbon $created_at
@@ -48,6 +50,7 @@ use Illuminate\Support\Collection;
  */
 class Page extends Model
 {
+    use HasContentStatus;
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
@@ -184,45 +187,11 @@ class Page extends Model
     }
 
     /**
-     * Scope a query to only include published pages.
-     *
-     * @since 1.0.0
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
-     */
-    public function scopePublished( Builder $query )
-    {
-        return $query->where( 'status', 'published' )
-            ->where( function ( $q ): void {
-                $q->whereNull( 'published_at' )
-                    ->orWhere( 'published_at', '<=', now() );
-            } );
-    }
-
-    /**
-     * Scope a query to only include draft pages.
-     *
-     * @since 1.0.0
-     *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
-     */
-    public function scopeDraft( Builder $query )
-    {
-        return $query->where( 'status', 'draft' );
-    }
-
-    /**
      * Scope a query to pages by a specific author.
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeByAuthor( Builder $query, int $authorId )
     {
@@ -234,9 +203,7 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeTopLevel( Builder $query )
     {
@@ -248,24 +215,11 @@ class Page extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
-     *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeByTemplate( Builder $query, string $template )
     {
         return $query->where( 'template', sanitizeText( $template ) );
-    }
-
-    /**
-     * Check if the page is published.
-     *
-     * @since 1.0.0
-     */
-    public function isPublished(): bool
-    {
-        return 'published' === $this->status &&
-            ( null === $this->published_at || $this->published_at->isPast() );
     }
 
     /**
@@ -333,6 +287,7 @@ class Page extends Model
             'published_at' => 'datetime',
             'metadata'     => 'array',
             'order'        => 'integer',
+            'status'       => ContentStatus::class,
         ];
     }
 }

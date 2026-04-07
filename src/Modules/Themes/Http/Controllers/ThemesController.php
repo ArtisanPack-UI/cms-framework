@@ -8,11 +8,13 @@
  * @since      1.0.0
  */
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use Dedoc\Scramble\Attributes\Group;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
@@ -27,6 +29,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Themes', weight: 16 )]
 class ThemesController extends Controller
 {
     /**
@@ -84,7 +87,7 @@ class ThemesController extends Controller
 
         if ( ! $theme ) {
             return response()->json( [
-                'message' => 'Theme not found',
+                'message' => __( 'Theme not found.' ),
             ], 404 );
         }
 
@@ -109,16 +112,22 @@ class ThemesController extends Controller
     public function activate( string $slug ): JsonResponse
     {
         try {
-            $success = $this->themeManager->activateTheme( $slug );
+            $this->themeManager->activateTheme( $slug );
 
             return response()->json( [
-                'message' => 'Theme activated successfully',
+                'message' => __( 'Theme activated successfully.' ),
                 'theme'   => $this->themeManager->getTheme( $slug ),
             ] );
-        } catch ( Exception $e ) {
+        } catch ( ThemeNotFoundException ) {
             return response()->json( [
-                'message' => $e->getMessage(),
-            ], 400 );
+                'message' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
+            ], 404 );
+        } catch ( Exception $e ) {
+            report( $e );
+
+            return response()->json( [
+                'message' => __( 'An unexpected error occurred while activating the theme.' ),
+            ], 500 );
         }
     }
 }

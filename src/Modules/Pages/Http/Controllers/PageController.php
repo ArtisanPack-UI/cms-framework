@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Page Controller for the CMS Framework Pages Module.
@@ -14,10 +14,14 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\BulkPageRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\PageRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Resources\PageResource;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +29,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * API controller for managing pages.
@@ -34,9 +39,29 @@ use InvalidArgumentException;
  *
  * @since 1.0.0
  */
+#[Group( 'Pages', weight: 4 )]
 class PageController extends Controller
 {
     use AuthorizesRequests;
+    use HasIncludableRelationships;
+
+    /**
+     * The relationships that can be included via the include query parameter.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $includableRelationships = ['author', 'categories', 'tags', 'parent', 'children'];
+
+    /**
+     * The default relationships to load when no include parameter is provided.
+     *
+     * @since 1.1.0
+     *
+     * @var array<int, string>
+     */
+    protected array $defaultIncludes = ['author', 'categories', 'tags', 'parent', 'children'];
 
     /**
      * The page manager instance.
@@ -68,8 +93,9 @@ class PageController extends Controller
     {
         $this->authorize( 'viewAny', Page::class );
 
-        $filters = $request->only( ['status', 'author', 'template', 'search'] );
-        $pages   = $this->pageManager->getPageQuery( $filters )->paginate( 15 );
+        $filters  = $request->only( ['status', 'author', 'template', 'search'] );
+        $includes = $this->getRequestedIncludes( $request );
+        $pages    = $this->pageManager->getPageQuery( $filters )->with( $includes )->paginate( 15 );
 
         return PageResource::collection( $pages );
     }
@@ -181,7 +207,7 @@ class PageController extends Controller
             $page->tags()->sync( $tags );
         }
 
-        $page->load( ['author', 'categories', 'tags', 'parent', 'children'] );
+        $page->load( $this->getRequestedIncludes( $request ) );
 
         return response()->json( new PageResource( $page ), 201 );
     }
@@ -197,10 +223,12 @@ class PageController extends Controller
      *
      * @return PageResource The page resource.
      */
-    public function show( int $id ): PageResource
+    public function show( Request $request, int $id ): PageResource
     {
-        $page = Page::with( ['author', 'categories', 'tags', 'parent', 'children'] )->findOrFail( $id );
+        $page = Page::findOrFail( $id );
         $this->authorize( 'view', $page );
+
+        $page->load( $this->getRequestedIncludes( $request ) );
 
         return new PageResource( $page );
     }
@@ -240,7 +268,7 @@ class PageController extends Controller
             $page->tags()->sync( $tags );
         }
 
-        $page->load( ['author', 'categories', 'tags', 'parent', 'children'] );
+        $page->load( $this->getRequestedIncludes( $request ) );
 
         return new PageResource( $page );
     }
@@ -265,5 +293,101 @@ class PageController extends Controller
         $page->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Perform a bulk action on multiple pages.
+     *
+     * Processes the requested action on each page individually, respecting
+     * authorization policies. Returns a summary of successes and failures.
+     *
+     * @since 1.1.0
+     *
+     * @param  BulkPageRequest  $request  The validated bulk action request.
+     *
+     * @return JsonResponse Summary with processed count, failed count, and error details.
+     */
+    public function bulk( BulkPageRequest $request ): JsonResponse
+    {
+        $action       = $request->validated( 'action' );
+        $ids          = $request->validated( 'ids' );
+        $policyMethod = $this->getBulkPolicyMethod( $action );
+        $processed    = 0;
+        $errors       = [];
+
+        $pages = Page::whereIn( 'id', $ids )->get()->keyBy( 'id' );
+
+        foreach ( $ids as $id ) {
+            $page = $pages->get( $id );
+
+            if ( null === $page ) {
+                $errors[ $id ] = __( 'Page not found.' );
+
+                continue;
+            }
+
+            if ( ! $request->user()->can( $policyMethod, $page ) ) {
+                $errors[ $id ] = __( 'You do not have permission to :action this page.', ['action' => $action] );
+
+                continue;
+            }
+
+            try {
+                $this->executeBulkAction( $action, $page );
+                $processed++;
+            } catch ( Throwable $e ) {
+                report( $e );
+                $errors[ $id ] = __( 'Failed to :action page.', ['action' => $action] );
+            }
+        }
+
+        return response()->json( [
+            'processed' => $processed,
+            'failed'    => count( $errors ),
+            'errors'    => $errors,
+        ] );
+    }
+
+    /**
+     * Get the policy method for a bulk action.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action name.
+     *
+     * @return string The policy method name.
+     */
+    protected function getBulkPolicyMethod( string $action ): string
+    {
+        return match ( $action ) {
+            'delete'  => 'delete',
+            'publish' => 'publish',
+            'draft'   => 'update',
+            default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action] ) ),
+        };
+    }
+
+    /**
+     * Execute a bulk action on a single page.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $action  The bulk action to perform.
+     * @param  Page  $page  The page to perform the action on.
+     */
+    protected function executeBulkAction( string $action, Page $page ): void
+    {
+        match ( $action ) {
+            'delete'  => $page->delete(),
+            'publish' => $page->update( [
+                'status'       => ContentStatus::Published->value,
+                'published_at' => now(),
+            ] ),
+            'draft'   => $page->update( [
+                'status'       => ContentStatus::Draft->value,
+                'published_at' => null,
+            ] ),
+            default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action])),
+        };
     }
 }

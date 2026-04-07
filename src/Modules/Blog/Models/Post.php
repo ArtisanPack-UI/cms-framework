@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Post Model
@@ -12,6 +12,8 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Models;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\MediaLibrary\Models\Media;
@@ -32,7 +34,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string|null $content
  * @property string|null $excerpt
  * @property int $author_id
- * @property string $status
+ * @property ContentStatus $status
  * @property Carbon|null $published_at
  * @property array|null $metadata
  * @property \Illuminate\Support\Carbon $created_at
@@ -43,6 +45,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Post extends Model
 {
+    use HasContentStatus;
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
@@ -108,43 +111,9 @@ class Post extends Model
     }
 
     /**
-     * Scope a query to only include published posts.
-     *
-     * @since 1.0.0
-     *
-     * @param  Builder  $query
-     *
-     * @return Builder
-     */
-    public function scopePublished( Builder $query )
-    {
-        return $query->where( 'status', 'published' )
-            ->where( function ( $q ): void {
-                $q->whereNull( 'published_at' )
-                    ->orWhere( 'published_at', '<=', now() );
-            } );
-    }
-
-    /**
-     * Scope a query to only include draft posts.
-     *
-     * @since 1.0.0
-     *
-     * @param  Builder  $query
-     *
-     * @return Builder
-     */
-    public function scopeDraft( Builder $query )
-    {
-        return $query->where( 'status', 'draft' );
-    }
-
-    /**
      * Scope a query to posts by a specific author.
      *
      * @since 1.0.0
-     *
-     * @param  Builder  $query
      *
      * @return Builder
      */
@@ -157,8 +126,6 @@ class Post extends Model
      * Scope a query to posts in a specific category.
      *
      * @since 1.0.0
-     *
-     * @param  Builder  $query
      *
      * @return Builder
      */
@@ -174,8 +141,6 @@ class Post extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
     public function scopeByTag( Builder $query, int $tagId )
@@ -190,8 +155,6 @@ class Post extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
     public function scopeByYear( Builder $query, int $year )
@@ -203,8 +166,6 @@ class Post extends Model
      * Scope a query to posts by month and year.
      *
      * @since 1.0.0
-     *
-     * @param  Builder  $query
      *
      * @return Builder
      */
@@ -219,24 +180,11 @@ class Post extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
     public function scopeByDate( Builder $query, Carbon $date )
     {
         return $query->whereDate( 'published_at', $date );
-    }
-
-    /**
-     * Check if the post is published.
-     *
-     * @since 1.0.0
-     */
-    public function isPublished(): bool
-    {
-        return 'published' === $this->status &&
-            ( null === $this->published_at || $this->published_at->isPast() );
     }
 
     /**
@@ -261,6 +209,7 @@ class Post extends Model
         return [
             'published_at' => 'datetime',
             'metadata'     => 'array',
+            'status'       => ContentStatus::class,
         ];
     }
 }

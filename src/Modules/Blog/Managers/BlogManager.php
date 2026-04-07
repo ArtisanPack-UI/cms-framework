@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Blog Manager
@@ -13,6 +13,7 @@ declare( strict_types = 1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\Concerns\HasContentFilters;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
@@ -23,6 +24,8 @@ use Illuminate\Support\Collection;
  */
 class BlogManager
 {
+    use HasContentFilters;
+
     /**
      * Build an archive query with filters.
      *
@@ -34,16 +37,10 @@ class BlogManager
     {
         $query = Post::query()->with( ['author', 'categories', 'tags'] );
 
-        // Apply status filter (default to published)
-        if ( isset( $filters['status'] ) ) {
-            if ( 'published' === $filters['status'] ) {
-                $query->published();
-            } else {
-                $query->where( 'status', sanitizeText( $filters['status'] ) );
-            }
-        } else {
-            $query->published();
-        }
+        // Apply shared filters
+        $this->applyStatusFilter( $query, $filters );
+        $this->applyAuthorFilter( $query, $filters );
+        $this->applySearchFilter( $query, $filters );
 
         // Apply category filter
         if ( isset( $filters['category'] ) ) {
@@ -53,11 +50,6 @@ class BlogManager
         // Apply tag filter
         if ( isset( $filters['tag'] ) ) {
             $query->byTag( $filters['tag'] );
-        }
-
-        // Apply author filter
-        if ( isset( $filters['author'] ) ) {
-            $query->byAuthor( $filters['author'] );
         }
 
         // Apply date filters
@@ -70,16 +62,6 @@ class BlogManager
             } else {
                 $query->byYear( $filters['year'] );
             }
-        }
-
-        // Apply search filter
-        if ( isset( $filters['search'] ) ) {
-            $search = $filters['search'];
-            $query->where( function ( $q ) use ( $search ): void {
-                $q->where( 'title', 'like', "%{$search}%" )
-                    ->orWhere( 'content', 'like', "%{$search}%" )
-                    ->orWhere( 'excerpt', 'like', "%{$search}%" );
-            } );
         }
 
         // Order by published date descending

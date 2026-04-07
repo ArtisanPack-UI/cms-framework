@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * API Routes for the CMS Framework Users Module.
@@ -19,3 +19,7 @@ use Illuminate\Support\Facades\Route;
 Route::apiResource( 'users', UserController::class );
 Route::apiResource( 'roles', RoleController::class );
 Route::apiResource( 'permissions', PermissionController::class );
+
+Route::middleware( 'auth' )->group( function (): void {
+    Route::post( 'users/bulk', [UserController::class, 'bulk'] );
+} );

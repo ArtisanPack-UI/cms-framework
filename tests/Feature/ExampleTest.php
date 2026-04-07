@@ -12,5 +12,5 @@ test( 'service provider is loaded', function (): void {
 
 test( 'application has basic configuration', function (): void {
     expect( config( 'app.key' ) )->not()->toBeNull();
-    expect( config( 'database.default' ) )->toBe( 'testing');
-});
+    expect( config( 'database.default' ) )->toBe( 'testing' );
+} );

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Helper functions for the CMS Framework Settings Module.
@@ -10,6 +10,7 @@ declare( strict_types = 1 );
  * @since 1.0.0
  */
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 
 if ( ! function_exists( 'apGetSetting' ) ) {
@@ -41,9 +42,9 @@ if ( ! function_exists( 'apRegisterSetting' ) ) {
      * @param  string  $key  Unique key for the setting.
      * @param  mixed  $defaultValue  Default value if none stored.
      * @param  callable  $callback  Sanitization callback to clean values on update.
-     * @param  string  $type  Data type of the setting.
+     * @param  SettingType  $type  Data type of the setting.
      */
-    function apRegisterSetting( string $key, mixed $defaultValue, callable $callback, string $type = 'string' ): void
+    function apRegisterSetting( string $key, mixed $defaultValue, callable $callback, SettingType $type = SettingType::String ): void
     {
         app( SettingsManager::class )->registerSetting( $key, $defaultValue, $callback, $type );
     }

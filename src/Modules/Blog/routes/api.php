@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Blog Module API Routes
@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Route;
 Route::prefix( 'posts' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/', [PostController::class, 'index'] );
     Route::post( '/', [PostController::class, 'store'] );
+    Route::post( '/bulk', [PostController::class, 'bulk'] );
     Route::get( '/{id}', [PostController::class, 'show'] );
     Route::put( '/{id}', [PostController::class, 'update'] );
     Route::delete( '/{id}', [PostController::class, 'destroy'] );

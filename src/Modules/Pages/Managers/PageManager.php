@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Page Manager
@@ -12,6 +12,8 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\Concerns\HasContentFilters;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -24,6 +26,8 @@ use InvalidArgumentException;
  */
 class PageManager
 {
+    use HasContentFilters;
+
     /**
      * Get a hierarchical page tree structure.
      *
@@ -218,7 +222,7 @@ class PageManager
      */
     public function getRecentPages( int $limit = 10 ): Collection
     {
-        return $this->getPageQuery( ['status' => 'published'] )
+        return $this->getPageQuery( ['status' => ContentStatus::Published] )
             ->limit( $limit )
             ->get();
     }
@@ -252,33 +256,14 @@ class PageManager
      */
     protected function applyFilters( Builder $query, array $filters ): void
     {
-        // Apply status filter
-        if ( isset( $filters['status'] ) ) {
-            if ( 'published' === $filters['status'] ) {
-                $query->published();
-            } else {
-                $query->where( 'status', sanitizeText( $filters['status'] ) );
-            }
-        }
+        // Apply shared content filters
+        $this->applyStatusFilter( $query, $filters, false );
+        $this->applyAuthorFilter( $query, $filters );
+        $this->applySearchFilter( $query, $filters );
 
-        // Apply author filter
-        if ( isset( $filters['author'] ) ) {
-            $query->byAuthor( $filters['author'] );
-        }
-
-        // Apply template filter
+        // Apply template filter (page-specific)
         if ( isset( $filters['template'] ) ) {
-            $query->byTemplate( $filters['template'] );
-        }
-
-        // Apply search filter
-        if ( isset( $filters['search'] ) ) {
-            $search = $filters['search'];
-            $query->where( function ( $q ) use ( $search ): void {
-                $q->where( 'title', 'like', "%{$search}%" )
-                    ->orWhere( 'content', 'like', "%{$search}%" )
-                    ->orWhere( 'excerpt', 'like', "%{$search}%");
-            });
+            $query->byTemplate( $filters['template']);
         }
     }
 }

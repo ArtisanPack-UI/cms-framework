@@ -1,10 +1,11 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\CustomJsonUpdateSource;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitHubUpdateSource;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitLabUpdateSource;
@@ -40,13 +41,13 @@ class UpdateCheckerFactory
      * @since 1.0.0
      *
      * @param  string  $url  Update source URL (GitHub, GitLab, custom JSON, etc.)
-     * @param  string  $type  Update type: 'application', 'plugin', 'theme'
+     * @param  UpdateType  $type  Update type
      * @param  string  $slug  Unique identifier (e.g., 'digital-shopfront-cms')
      * @param  string|null  $currentVersion  Current version (auto-detected if null)
      */
     public static function buildUpdateChecker(
         string $url,
-        string $type,
+        UpdateType $type,
         string $slug,
         ?string $currentVersion = null,
     ): UpdateChecker {
@@ -112,18 +113,17 @@ class UpdateCheckerFactory
      *
      * @since 1.0.0
      *
-     * @param  string  $type  Update type
+     * @param  UpdateType  $type  Update type
      * @param  string  $slug  Item slug
      *
      * @return string Current version
      */
-    protected static function detectCurrentVersion( string $type, string $slug ): string
+    protected static function detectCurrentVersion( UpdateType $type, string $slug ): string
     {
         return match ( $type ) {
-            'application' => config( 'app.version', '0.0.0' ),
-            'plugin'      => static::getPluginVersion( $slug ),
-            'theme'       => static::getThemeVersion( $slug ),
-            default       => '0.0.0',
+            UpdateType::Application => config( 'app.version', '0.0.0' ),
+            UpdateType::Plugin      => static::getPluginVersion( $slug ),
+            UpdateType::Theme       => static::getThemeVersion( $slug ),
         };
     }
 

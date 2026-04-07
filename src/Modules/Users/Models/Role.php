@@ -43,16 +43,6 @@ class Role extends Model
     ];
 
     /**
-     * Create a new factory instance for the model.
-     *
-     * @since 1.0.0
-     */
-    protected static function newFactory()
-    {
-        return \ArtisanPackUI\Database\Factories\RoleFactory::new();
-    }
-
-    /**
      * Get the users that belong to the role.
      *
      * Defines a many-to-many relationship between roles and users using
@@ -133,5 +123,15 @@ class Role extends Model
         $this->permissions()->syncWithoutDetaching( $permissionsToGive );
 
         return $this;
+    }
+
+    /**
+     * Create a new factory instance for the model.
+     *
+     * @since 1.0.0
+     */
+    protected static function newFactory()
+    {
+        return \ArtisanPackUI\Database\Factories\RoleFactory::new();
     }
 }

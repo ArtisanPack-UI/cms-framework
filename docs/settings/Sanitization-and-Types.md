@@ -78,6 +78,31 @@ The Setting model persists a `type` along with `value` and casts automatically w
 
 Tip: Keep your sanitizer consistent with the declared `type`.
 
+### SettingType Enum (v1.1.0)
+
+Type handling is centralized in the `SettingType` enum, which provides:
+
+- **Auto-detection**: `SettingType::fromValue($value)` detects the type from a PHP value
+- **Casting**: `$type->cast($dbValue)` converts stored strings back to native PHP types
+- **Serialization**: `$type->serialize($value)` converts PHP values for database storage
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
+
+// Auto-detect type
+$type = SettingType::fromValue(true);      // SettingType::Boolean
+$type = SettingType::fromValue(['a', 'b']); // SettingType::Json
+
+// Cast from database
+$value = SettingType::Boolean->cast('1');   // true
+$value = SettingType::Json->cast('{"k":"v"}'); // ['k' => 'v']
+
+// Serialize for storage
+$stored = SettingType::Boolean->serialize(true); // '1'
+```
+
+See [[developer/enums]] for the complete SettingType reference.
+
 ## Nulls and Empty Values
 
 - If your sanitizer returns null for a non-string type, the model may read back null.

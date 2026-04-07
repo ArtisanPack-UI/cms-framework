@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -14,14 +14,14 @@ use ReflectionClass;
 /**
  * Application Update Manager Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class ApplicationUpdateManagerTest extends TestCase
 {
     /**
      * Test manager can check for updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_check_for_update(): void
     {
@@ -30,7 +30,6 @@ class ApplicationUpdateManagerTest extends TestCase
         $updateInfo = new UpdateInfo(
             currentVersion: '1.0.0',
             latestVersion: '2.0.0',
-            hasUpdate: true,
             downloadUrl: 'https://example.com/update.zip',
         );
 
@@ -42,14 +41,14 @@ class ApplicationUpdateManagerTest extends TestCase
         $result = $manager->checkForUpdate();
 
         $this->assertInstanceOf( UpdateInfo::class, $result );
-        $this->assertTrue( $result->hasUpdate );
+        $this->assertTrue( $result->hasUpdate() );
         $this->assertEquals( '2.0.0', $result->latestVersion );
     }
 
     /**
      * Test manager throws exception when no update URL configured.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_no_update_url(): void
     {
@@ -66,7 +65,7 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Test manager throws exception when no update available.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_no_update_available(): void
     {
@@ -75,7 +74,6 @@ class ApplicationUpdateManagerTest extends TestCase
         $updateInfo = new UpdateInfo(
             currentVersion: '1.0.0',
             latestVersion: '1.0.0',
-            hasUpdate: false,
             downloadUrl: 'https://example.com/update.zip',
         );
 
@@ -93,7 +91,7 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Test manager can clear cache.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_clear_cache(): void
     {
@@ -111,7 +109,7 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Test path exclusion logic.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_path_exclusion_logic(): void
     {
@@ -137,7 +135,7 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Test rollback throws exception when backup not found.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_rollback_throws_exception_when_backup_not_found(): void
     {
@@ -152,7 +150,7 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Test manager sets custom update checker.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_custom_update_checker(): void
     {
@@ -161,7 +159,6 @@ class ApplicationUpdateManagerTest extends TestCase
         $updateInfo = new UpdateInfo(
             currentVersion: '1.0.0',
             latestVersion: '2.0.0',
-            hasUpdate: true,
             downloadUrl: 'https://example.com/update.zip',
         );
 
@@ -178,7 +175,7 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

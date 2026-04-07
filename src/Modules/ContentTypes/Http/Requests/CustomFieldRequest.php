@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * CustomField Request for the CMS Framework ContentTypes Module.
@@ -13,6 +13,8 @@ declare( strict_types = 1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ColumnType;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\FieldType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -66,12 +68,12 @@ class CustomFieldRequest extends FormRequest
             'type' => [
                 'required',
                 'string',
-                'in:text,textarea,number,select,checkbox,radio,boolean,date,datetime,time,email,url,tel,color,file,image',
+                FieldType::validationRule(),
             ],
             'column_type' => [
                 'required',
                 'string',
-                'in:string,text,integer,bigInteger,decimal,float,double,boolean,date,dateTime,time,json,binary',
+                ColumnType::validationRule(),
             ],
             'description' => [
                 'nullable',

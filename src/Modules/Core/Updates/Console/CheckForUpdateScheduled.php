@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
@@ -47,9 +47,9 @@ class CheckForUpdateScheduled extends Command
         try {
             $updateInfo = $manager->checkForUpdate();
 
-            if ( $updateInfo->hasUpdate ) {
+            if ( $updateInfo->hasUpdate() ) {
                 // Store in cache for admin panel notification
-                Cache::put( 'cms.update_available', $updateInfo->toArray(), now()->addDays( 1 ) );
+                Cache::put( 'cms.update_available', $updateInfo, now()->addDays( 1 ) );
 
                 // Log the available update
                 Log::info( 'Update available', [

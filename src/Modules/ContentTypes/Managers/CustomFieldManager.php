@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * CustomField Manager
@@ -231,7 +231,7 @@ class CustomFieldManager
         }
 
         Schema::table( $tableName, function ( $table ) use ( $field ): void {
-            $column = $table->{$field->column_type}( $field->key );
+            $column = $table->{$field->column_type->value}( $field->key );
 
             if ( ! $field->required ) {
                 $column->nullable();

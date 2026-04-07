@@ -16,6 +16,28 @@ try {
 }
 ```
 
+### Standardized JSON Rendering (v1.1.0)
+
+All framework exceptions automatically render as JSON when the request expects JSON (API requests). Each exception defines an `$errorCode` and `$statusCode`:
+
+```json
+{
+  "error": {
+    "code": "SERVER_ERROR",
+    "message": "Something went wrong."
+  }
+}
+```
+
+| Exception | Error Code | HTTP Status |
+|-----------|-----------|-------------|
+| `CMSFrameworkException` | `SERVER_ERROR` | 500 |
+| `NotFoundException` | `NOT_FOUND` | 404 |
+| `UnauthorizedException` | `FORBIDDEN` | 403 |
+| `ValidationException` | `VALIDATION_ERROR` | 422 |
+
+See [[api/Error Responses]] for complete error response documentation.
+
 ## Common Exceptions
 
 ### ValidationException
@@ -248,7 +270,19 @@ class YourModuleException extends CMSFrameworkException
 
 ## Exception Handling in Controllers
 
-In controllers, catch framework exceptions and return appropriate responses:
+Since v1.1.0, all CMS Framework exceptions automatically render as JSON when the request expects JSON. You no longer need to manually catch exceptions to format error responses — simply let the exception propagate:
+
+```php
+public function update(Request $request, int $id)
+{
+    // Exceptions auto-render as standardized JSON responses.
+    // NotFoundException → 404, UnauthorizedException → 403, etc.
+    $post = $this->manager->update($id, $request->all());
+    return response()->json($post);
+}
+```
+
+If you need custom handling, you can still catch exceptions:
 
 ```php
 use ArtisanPackUI\CMSFramework\Exceptions\NotFoundException;
@@ -261,14 +295,9 @@ public function update(Request $request, int $id)
         $post = $this->manager->update($id, $request->all());
         return response()->json($post);
     } catch (NotFoundException $e) {
-        return response()->json(['error' => $e->getMessage()], 404);
-    } catch (UnauthorizedException $e) {
-        return response()->json(['error' => $e->getMessage()], 403);
-    } catch (ValidationException $e) {
-        return response()->json([
-            'message' => $e->getMessage(),
-            'errors' => $e->getErrors(),
-        ], 422);
+        // Custom handling — the auto-rendered JSON is available via:
+        // $e->getErrorCode()  → 'NOT_FOUND'
+        // $e->getStatusCode() → 404
     }
 }
 ```

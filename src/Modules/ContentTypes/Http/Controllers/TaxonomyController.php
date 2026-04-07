@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Taxonomy Controller for the CMS Framework ContentTypes Module.
@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests\TaxonomyReques
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Resources\TaxonomyResource;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\TaxonomyManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Taxonomy;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -31,6 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Taxonomies', weight: 9 )]
 class TaxonomyController extends Controller
 {
     use AuthorizesRequests;
@@ -172,6 +174,6 @@ class TaxonomyController extends Controller
 
         $taxonomies = $this->taxonomyManager->getTaxonomiesForContentType( $contentTypeSlug );
 
-        return TaxonomyResource::collection( $taxonomies);
+        return TaxonomyResource::collection( $taxonomies );
     }
 }

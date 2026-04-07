@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 /**
  * Unit Tests for the SettingsManager.
  *
@@ -8,6 +10,7 @@
  * @since      2.0.0
  */
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 
@@ -24,14 +27,14 @@ test( 'it registers setting via filter', function (): void {
         'test-key',
         'default-value',
         fn ( $value ) => trim( $value ), // Using a placeholder string for the callable
-        'string',
+        SettingType::String,
     );
 
     $settings = applyFilters( $this->filterTag, [] );
 
     expect( $settings )->toHaveKey( 'test-key' );
     expect( $settings['test-key']['default'] )->toBe( 'default-value' );
-    expect( $settings['test-key']['type'] )->toBe( 'string' );
+    expect( $settings['test-key']['type'] )->toBe( SettingType::String );
 } );
 
 test( 'it gets setting from database', function (): void {
@@ -43,7 +46,7 @@ test( 'it gets setting from database', function (): void {
 } );
 
 test( 'it gets registered default setting', function (): void {
-    $this->manager->registerSetting( 'reg-key', 'reg-default', 'trim', 'string' );
+    $this->manager->registerSetting( 'reg-key', 'reg-default', 'trim', SettingType::String );
 
     $value = $this->manager->getSetting( 'reg-key' );
 
@@ -51,7 +54,7 @@ test( 'it gets registered default setting', function (): void {
 } );
 
 test( 'it gets user provided default setting', function (): void {
-    $this->manager->registerSetting( 'reg-key', 'reg-default', 'trim', 'string' );
+    $this->manager->registerSetting( 'reg-key', 'reg-default', 'trim', SettingType::String );
 
     // The user-provided default takes precedence (based on current logic).
     $value = $this->manager->getSetting( 'reg-key', 'user-default' );
@@ -69,7 +72,7 @@ test( 'it updates setting and creates new', function (): void {
         'new-key',
         '',
         fn ( $value ) => trim( $value ), // Use a real callable
-        'string',
+        SettingType::String,
     );
 
     $this->manager->updateSetting( 'new-key', '  new-value  ' );
@@ -88,13 +91,13 @@ test( 'it updates setting and updates existing', function (): void {
         'existing-key',
         '',
         fn ( $value ) => (string) ( (int) $value * 2 ), // Dummy sanitization
-        'string',
+        SettingType::String,
     );
 
-    $this->manager->updateSetting( 'existing-key', '100');
+    $this->manager->updateSetting( 'existing-key', '100' );
 
     $this->assertDatabaseHas( 'settings', [
         'key'   => 'existing-key',
         'value' => '200', // Value should be "sanitized"
-    ]);
+    ] );
 });

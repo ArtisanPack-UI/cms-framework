@@ -1,10 +1,11 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Support\Facades\Cache;
 
@@ -23,12 +24,12 @@ class UpdateChecker
      * @since 1.0.0
      *
      * @param  UpdateSourceInterface  $source  The update source
-     * @param  string  $type  Update type (application, plugin, theme)
+     * @param  UpdateType  $type  Update type (application, plugin, theme)
      * @param  string  $slug  Unique identifier
      */
     public function __construct(
         protected UpdateSourceInterface $source,
-        protected string $type,
+        protected UpdateType $type,
         protected string $slug,
     ) {
     }
@@ -42,7 +43,7 @@ class UpdateChecker
      */
     public function checkForUpdate(): UpdateInfo
     {
-        $cacheKey = "cms.{$this->type}.{$this->slug}.update_check";
+        $cacheKey = "cms.{$this->type->value}.{$this->slug}.update_check";
         $cacheTtl = config( 'cms.updates.cache_ttl', 43200 );
 
         if ( config( 'cms.updates.cache_enabled', true ) ) {
@@ -110,7 +111,7 @@ class UpdateChecker
      */
     public function clearCache(): void
     {
-        $cacheKey = "cms.{$this->type}.{$this->slug}.update_check";
+        $cacheKey = "cms.{$this->type->value}.{$this->slug}.update_check";
         Cache::forget( $cacheKey );
     }
 
@@ -119,9 +120,9 @@ class UpdateChecker
      *
      * @since 1.0.0
      *
-     * @return string Update type
+     * @return UpdateType Update type
      */
-    public function getType(): string
+    public function getType(): UpdateType
     {
         return $this->type;
     }

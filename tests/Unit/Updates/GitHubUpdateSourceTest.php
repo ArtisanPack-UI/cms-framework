@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -14,14 +14,14 @@ use Orchestra\Testbench\TestCase;
 /**
  * GitHub Update Source Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class GitHubUpdateSourceTest extends TestCase
 {
     /**
      * Test GitHub source supports GitHub URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_supports_github_urls(): void
     {
@@ -31,12 +31,13 @@ class GitHubUpdateSourceTest extends TestCase
         $this->assertTrue( $source->supports( 'https://github.com/another-user/another-repo' ) );
         $this->assertFalse( $source->supports( 'https://gitlab.com/user/repo' ) );
         $this->assertFalse( $source->supports( 'https://example.com/updates.json' ) );
+        $this->assertFalse( $source->supports( 'https://example.com/github.com/user/repo' ) );
     }
 
     /**
      * Test GitHub source returns correct name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_returns_correct_name(): void
     {
@@ -48,7 +49,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source can check for updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_check_for_updates(): void
     {
@@ -78,7 +79,7 @@ class GitHubUpdateSourceTest extends TestCase
         $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
         $this->assertEquals( '1.0.0', $updateInfo->currentVersion );
         $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
-        $this->assertTrue( $updateInfo->hasUpdate );
+        $this->assertTrue( $updateInfo->hasUpdate() );
         $this->assertStringContainsString( 'github.com', $updateInfo->downloadUrl );
         $this->assertEquals( 'Release notes here', $updateInfo->changelog );
     }
@@ -86,7 +87,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source handles no releases.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_no_releases(): void
     {
@@ -105,7 +106,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source skips prerelease versions.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_skips_prerelease_versions(): void
     {
@@ -143,7 +144,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source falls back to zipball_url when no assets.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_falls_back_to_zipball_when_no_assets(): void
     {
@@ -171,7 +172,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source handles API errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_api_errors(): void
     {
@@ -190,21 +191,39 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source can set authentication.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_authentication(): void
     {
+        Http::fake( [
+            'api.github.com/repos/user/repo/releases' => Http::response( [
+                [
+                    'tag_name'     => 'v2.0.0',
+                    'prerelease'   => false,
+                    'body'         => 'Release',
+                    'published_at' => '2024-12-15T10:00:00Z',
+                    'html_url'     => 'https://github.com/user/repo/releases/tag/v2.0.0',
+                    'id'           => 123,
+                    'assets'       => [],
+                    'zipball_url'  => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
+                ],
+            ], 200 ),
+        ] );
+
         $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
         $source->setAuthentication( 'ghp_test_token' );
 
-        // We can't directly test the token is used, but we can verify the method doesn't throw
-        $this->assertTrue( true );
+        $source->checkForUpdate();
+
+        Http::assertSent( function ( $request ) {
+            return $request->hasHeader( 'Authorization', 'token ghp_test_token' );
+        } );
     }
 
     /**
      * Test GitHub source parses repository owner and name correctly.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_parses_repository_url_correctly(): void
     {
@@ -232,7 +251,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source throws exception for invalid URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_for_invalid_urls(): void
     {
@@ -245,7 +264,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Test GitHub source strips 'v' prefix from version tags.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_strips_v_prefix_from_version_tags(): void
     {
@@ -272,7 +291,7 @@ class GitHubUpdateSourceTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

@@ -33,7 +33,7 @@ test( 'apSendNotification helper sends notification to users', function (): void
 } );
 
 test( 'apSendNotificationByRole helper sends by role', function (): void {
-    $role   = \ArtisanPackUI\CMSFramework\Modules\Users\Models\Role::factory()->create( ['name' => 'Admin'] );
+    $role   = ArtisanPackUI\CMSFramework\Modules\Users\Models\Role::factory()->create( ['name' => 'Admin'] );
     $user1  = User::factory()->create();
     $user2  = User::factory()->create();
     $user3  = User::factory()->create();
@@ -139,11 +139,11 @@ test( 'apGetUnreadNotificationCount helper returns unread count', function (): v
 } );
 
 test( 'apGetRegisteredNotifications helper returns all registered notifications', function (): void {
-    apRegisterNotification( 'test.one', 'Test One', 'Content One');
-    apRegisterNotification( 'test.two', 'Test Two', 'Content Two');
+    apRegisterNotification( 'test.one', 'Test One', 'Content One' );
+    apRegisterNotification( 'test.two', 'Test Two', 'Content Two' );
 
     $registered = apGetRegisteredNotifications();
 
-    expect( $registered)->toHaveKey( 'test.one')
-        ->and( $registered)->toHaveKey( 'test.two');
-});
+    expect( $registered )->toHaveKey( 'test.one' )
+        ->and( $registered )->toHaveKey( 'test.two' );
+} );

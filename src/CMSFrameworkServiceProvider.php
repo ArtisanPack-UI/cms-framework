@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Service provider for the CMS Framework.
@@ -20,6 +20,7 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Providers\BlogServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\OpenApi\Providers\OpenApiServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Providers\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Providers\PluginsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
@@ -54,13 +55,17 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->validateConfiguration();
 
-        if ($this->app->runningInConsole()) {
-            $this->publishes([
-                __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
-            ], 'artisanpack-package-config');
+        if ( $this->app->runningInConsole() ) {
+            $this->publishes( [
+                __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
+            ], 'artisanpack-package-config' );
+
+            $this->publishes( [
+                __DIR__ . '/../resources/types' => resource_path( 'types/cms-framework' ),
+            ], 'cms-types' );
         }
 
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
     }
 
     /**
@@ -75,20 +80,21 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__.'/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
+            __DIR__ . '/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
         );
 
-        $this->app->register(UserServiceProvider::class);
-        $this->app->register(AdminServiceProvider::class);
-        $this->app->register(AdminWidgetServiceProvider::class);
-        $this->app->register(CoreServiceProvider::class);
-        $this->app->register(SettingsServiceProvider::class);
-        $this->app->register(NotificationServiceProvider::class);
-        $this->app->register(ContentTypesServiceProvider::class);
-        $this->app->register(BlogServiceProvider::class);
-        $this->app->register(PagesServiceProvider::class);
-        $this->app->register(ThemesServiceProvider::class);
-        $this->app->register(PluginsServiceProvider::class);
+        $this->app->register( UserServiceProvider::class );
+        $this->app->register( AdminServiceProvider::class );
+        $this->app->register( AdminWidgetServiceProvider::class );
+        $this->app->register( CoreServiceProvider::class );
+        $this->app->register( SettingsServiceProvider::class );
+        $this->app->register( NotificationServiceProvider::class );
+        $this->app->register( ContentTypesServiceProvider::class );
+        $this->app->register( BlogServiceProvider::class );
+        $this->app->register( PagesServiceProvider::class );
+        $this->app->register( ThemesServiceProvider::class );
+        $this->app->register( PluginsServiceProvider::class );
+        $this->app->register( OpenApiServiceProvider::class );
     }
 
     /**
@@ -102,16 +108,16 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     protected function mergeConfiguration(): void
     {
         // Get the package's default configuration.
-        $packageDefaults = config('artisanpack-cms-framework-temp', []);
+        $packageDefaults = config( 'artisanpack-cms-framework-temp', [] );
 
         // Get the user's custom configuration from config/artisanpack.php.
-        $userConfig = config('artisanpack.cms-framework', []);
+        $userConfig = config( 'artisanpack.cms-framework', [] );
 
         // Merge them, with the user's config overwriting the defaults.
-        $mergedConfig = array_replace_recursive($packageDefaults, $userConfig);
+        $mergedConfig = array_replace_recursive( $packageDefaults, $userConfig );
 
         // Set the final, correctly merged configuration.
-        config(['artisanpack.cms-framework' => $mergedConfig]);
+        config( ['artisanpack.cms-framework' => $mergedConfig] );
     }
 
     /**
@@ -129,18 +135,18 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     {
         // Skip validation in console mode to allow setup commands (vendor:publish,
         // package:discover, etc.) to run before the config has been published.
-        if ($this->app->runningInConsole()) {
+        if ( $this->app->runningInConsole() ) {
             return;
         }
 
-        $userModel = config('artisanpack.cms-framework.user_model');
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
 
-        if (null === $userModel) {
+        if ( null === $userModel ) {
             throw new InvalidArgumentException(
-                'The CMS Framework user_model configuration is not set. '.
-                'Please publish the configuration file using: '.
-                'php artisan vendor:publish --tag=artisanpack-package-config '.
-                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. '.
+                'The CMS Framework user_model configuration is not set. ' .
+                'Please publish the configuration file using: ' .
+                'php artisan vendor:publish --tag=artisanpack-package-config ' .
+                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. ' .
                 'Example: \'user_model\' => \\App\\Models\\User::class',
             );
         }

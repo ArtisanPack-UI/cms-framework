@@ -12,7 +12,7 @@ if ( ! function_exists( 'invokeMethod' ) ) {
      *
      * @return mixed The method's return value
      */
-    function invokeMethod( $object, string $methodName, array $parameters = [] ): mixed
+    function invokeMethod( object $object, string $methodName, array $parameters = [] ): mixed
     {
         $reflection = new ReflectionClass( get_class( $object ) );
         $method     = $reflection->getMethod( $methodName );

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * PageTag Controller for the CMS Framework Pages Module.
@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Pages\Http\Controllers;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Requests\PageTagRequest;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Http\Resources\PageTagResource;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\PageTag;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -30,6 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Page Tags', weight: 6 )]
 class PageTagController extends Controller
 {
     use AuthorizesRequests;
@@ -87,9 +89,8 @@ class PageTagController extends Controller
      */
     public function show( int $id ): PageTagResource
     {
-        $this->authorize( 'view', PageTag::class );
-
         $tag = PageTag::findOrFail( $id );
+        $this->authorize( 'view', $tag );
 
         return new PageTagResource( $tag );
     }

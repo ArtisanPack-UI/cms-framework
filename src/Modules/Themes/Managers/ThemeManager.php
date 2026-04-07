@@ -8,11 +8,12 @@
  * @since      1.0.0
  */
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use Exception;
@@ -34,6 +35,8 @@ use Illuminate\Support\Facades\View;
  */
 class ThemeManager
 {
+    use HasManifestParsing;
+
     /**
      * Constructs the ThemeManager instance.
      *
@@ -84,7 +87,7 @@ class ThemeManager
                 $manifestPath = $directory . '/theme.json';
                 $manifest     = $this->parseManifest( $manifestPath );
 
-                if ( ! empty( $manifest ) ) {
+                if ( null !== $manifest ) {
                     $themes[] = $manifest;
                 }
             }
@@ -180,24 +183,15 @@ class ThemeManager
     public function getTheme( string $slug ): ?array
     {
         // Validate slug to prevent path traversal attacks
-        // Only allow alphanumeric characters, hyphens, and underscores
-        if ( ! preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ) ) {
+        if ( ! $this->validateSlug( $slug ) ) {
             return null;
         }
 
+        // Resolve and validate path within themes directory
         $themesBasePath = $this->getThemesPath();
-        $themePath      = $themesBasePath . '/' . $slug;
+        $realThemePath  = $this->resolveSecurePath( $themesBasePath . '/' . $slug, $themesBasePath );
 
-        // Resolve real path and verify it's within the themes directory
-        $realThemePath = realpath( $themePath );
-
-        if ( false === $realThemePath ) {
-            return null;
-        }
-
-        $realBasePath = realpath( $themesBasePath );
-
-        if ( false === $realBasePath || 0 !== strpos( $realThemePath, $realBasePath . DIRECTORY_SEPARATOR ) ) {
+        if ( null === $realThemePath ) {
             return null;
         }
 
@@ -263,11 +257,11 @@ class ThemeManager
     public function resolveTemplate( string $contentType, ?string $slug = null ): string
     {
         // Sanitize inputs to prevent path traversal
-        if ( ! preg_match( '/^[a-zA-Z0-9_-]+$/', $contentType ) ) {
+        if ( ! $this->validateSlug( $contentType ) ) {
             return 'index';
         }
 
-        if ( null !== $slug && ! preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ) ) {
+        if ( null !== $slug && ! $this->validateSlug( $slug ) ) {
             $slug = null;
         }
 
@@ -303,6 +297,11 @@ class ThemeManager
      */
     public function templateExists( string $template ): bool
     {
+        // Validate template name to prevent path traversal
+        if ( ! $this->validateSlug( $template ) ) {
+            return false;
+        }
+
         $activeTheme = $this->getActiveTheme();
 
         if ( null === $activeTheme ) {
@@ -342,34 +341,6 @@ class ThemeManager
         }
 
         return true;
-    }
-
-    /**
-     * Parses a theme.json manifest file.
-     *
-     * Reads and decodes the theme manifest JSON file, returning an empty array
-     * if the file doesn't exist or contains invalid JSON.
-     *
-     * @since 1.0.0
-     *
-     * @param  string  $manifestPath  Absolute path to theme.json file.
-     *
-     * @return array Parsed manifest data, or empty array on error.
-     */
-    protected function parseManifest( string $manifestPath ): array
-    {
-        if ( ! File::exists( $manifestPath ) ) {
-            return [];
-        }
-
-        $content = File::get( $manifestPath );
-        $data    = json_decode( $content, true );
-
-        if ( JSON_ERROR_NONE !== json_last_error() ) {
-            return [];
-        }
-
-        return $data;
     }
 
     /**

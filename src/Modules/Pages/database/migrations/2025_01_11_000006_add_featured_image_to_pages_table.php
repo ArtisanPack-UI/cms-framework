@@ -23,6 +23,6 @@ return new class extends Migration {
         Schema::table( 'pages', function ( Blueprint $table ): void {
             $table->dropForeign( ['featured_image_id'] );
             $table->dropColumn( 'featured_image_id' );
-        });
+        } );
     }
 };

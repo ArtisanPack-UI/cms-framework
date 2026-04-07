@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 /**
  * Unit Tests for the Settings Helper Functions.
  *
@@ -8,6 +10,7 @@
  * @since      2.0.0
  */
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 
 beforeEach( function (): void {
@@ -39,11 +42,11 @@ test( 'apRegisterSetting helper', function (): void {
     $this->managerMock
         ->shouldReceive( 'registerSetting' )
         // --- FIX: Correct argument order ---
-        ->with( 'test-key', 'default', $callback, 'string' )
+        ->with( 'test-key', 'default', $callback, SettingType::String )
         ->once();
 
     // The actual call matches the helper and manager signature
-    apRegisterSetting( 'test-key', 'default', $callback, 'string' );
+    apRegisterSetting( 'test-key', 'default', $callback, SettingType::String );
 
     // Mockery assertions are checked automatically in afterEach.
     expect( true )->toBeTrue();
@@ -58,5 +61,5 @@ test( 'apUpdateSetting helper', function (): void {
     apUpdateSetting( 'test-key', 'new-value' );
 
     // Mockery assertions are checked automatically in afterEach.
-    expect( true)->toBeTrue();
-});
+    expect( true )->toBeTrue();
+} );

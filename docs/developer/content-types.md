@@ -408,8 +408,34 @@ if ($contentType->supportsFeature('featured_image')) {
 }
 ```
 
+## Content Status Enum (v1.1.0)
+
+Content types that support publishing (posts, pages) use the `ContentStatus` enum instead of plain strings:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+
+// Query with enum
+$posts = Post::where('status', ContentStatus::Published)->get();
+
+// Use scopes via HasContentStatus trait
+$published = Post::published()->get();
+$drafts = Post::draft()->get();
+
+// Check status
+if ($post->isPublished()) {
+    // ...
+}
+```
+
+Available statuses: `Draft`, `Published`, `Scheduled`, `Private`.
+
+See [[developer/enums]] for the complete enum reference and [[developer/traits]] for the `HasContentStatus` and `HasContentFilters` traits.
+
 ## See Also
 
 - [Custom Fields Developer Guide](Custom-Fields)
 - [Taxonomies Developer Guide](Taxonomies)
+- [Enums Reference](Enums)
+- [Traits Reference](Traits)
 - [Hooks Reference](Hooks-Reference)

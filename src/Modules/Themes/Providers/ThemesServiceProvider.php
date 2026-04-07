@@ -8,10 +8,11 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Support\ServiceProvider;
@@ -41,15 +42,15 @@ class ThemesServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Register ThemeManager as singleton
-        $this->app->singleton(ThemeManager::class, function ($app) {
+        $this->app->singleton( ThemeManager::class, function ( $app ) {
             return new ThemeManager(
-                $app->make(SettingsManager::class),
+                $app->make( SettingsManager::class ),
             );
-        });
+        } );
 
         // Merge config
         $this->mergeConfigFrom(
-            __DIR__.'/../config/themes.php',
+            __DIR__ . '/../config/themes.php',
             'cms.themes',
         );
     }
@@ -67,24 +68,24 @@ class ThemesServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Publish config
-        $this->publishes([
-            __DIR__.'/../config/themes.php' => config_path('cms/themes.php'),
-        ], 'cms-themes-config');
+        $this->publishes( [
+            __DIR__ . '/../config/themes.php' => config_path( 'cms/themes.php' ),
+        ], 'cms-themes-config' );
 
         // Register theme view paths early in the boot cycle
-        $themeManager = $this->app->make(ThemeManager::class);
+        $themeManager = $this->app->make( ThemeManager::class );
         $themeManager->registerThemeViewPath();
 
         // Load API routes
-        $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
+        $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
 
         // Register default setting
-        $settingsManager = $this->app->make(SettingsManager::class);
+        $settingsManager = $this->app->make( SettingsManager::class );
         $settingsManager->registerSetting(
             'themes.activeTheme',
-            config('cms.themes.default', 'digital-shopfront'),
-            fn ($value) => is_string($value) ? sanitizeText($value) : '',
-            'string',
+            config( 'cms.themes.default', 'digital-shopfront' ),
+            fn ( $value ) => is_string( $value ) ? sanitizeText( $value ) : '',
+            SettingType::String,
         );
     }
 }

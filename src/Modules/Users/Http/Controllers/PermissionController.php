@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Permission Controller for the CMS Framework Users Module.
@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\PermissionResource;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
+use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -28,6 +29,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
+#[Group( 'Permissions', weight: 12 )]
 class PermissionController extends Controller
 {
     /**

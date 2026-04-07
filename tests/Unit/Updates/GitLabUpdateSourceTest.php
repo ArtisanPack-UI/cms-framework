@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -14,14 +14,14 @@ use Orchestra\Testbench\TestCase;
 /**
  * GitLab Update Source Tests
  *
- * @since 2.0.0
+ * @since 1.0.0
  */
 class GitLabUpdateSourceTest extends TestCase
 {
     /**
      * Test GitLab source supports GitLab URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_supports_gitlab_urls(): void
     {
@@ -31,12 +31,37 @@ class GitLabUpdateSourceTest extends TestCase
         $this->assertTrue( $source->supports( 'https://gitlab.com/another-user/another-repo' ) );
         $this->assertFalse( $source->supports( 'https://github.com/user/repo' ) );
         $this->assertFalse( $source->supports( 'https://example.com/updates.json' ) );
+        $this->assertFalse( $source->supports( 'https://example.com/gitlab.com/user/repo' ) );
+    }
+
+    /**
+     * Test GitLab source excludes query strings from project ID.
+     *
+     * @since 1.1.0
+     */
+    public function test_excludes_query_strings_from_project_id(): void
+    {
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200 ),
+        ] );
+
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo?ref=main', '1.0.0' );
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
+        $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
     }
 
     /**
      * Test GitLab source returns correct name.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_returns_correct_name(): void
     {
@@ -48,7 +73,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source can check for updates.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_check_for_updates(): void
     {
@@ -68,7 +93,7 @@ class GitLabUpdateSourceTest extends TestCase
         $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
         $this->assertEquals( '1.0.0', $updateInfo->currentVersion );
         $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
-        $this->assertTrue( $updateInfo->hasUpdate );
+        $this->assertTrue( $updateInfo->hasUpdate() );
         $this->assertStringContainsString( 'gitlab.com', $updateInfo->downloadUrl );
         $this->assertEquals( 'Release notes here', $updateInfo->changelog );
     }
@@ -76,7 +101,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source handles no releases.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_when_no_releases(): void
     {
@@ -95,7 +120,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source handles API errors.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_api_errors(): void
     {
@@ -114,21 +139,34 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source can set authentication.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_can_set_authentication(): void
     {
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200 ),
+        ] );
+
         $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $source->setAuthentication( 'glpat-test_token' );
 
-        // We can't directly test the token is used, but we can verify the method doesn't throw
-        $this->assertTrue( true );
+        $source->checkForUpdate();
+
+        Http::assertSent( function ( $request ) {
+            return $request->hasHeader( 'PRIVATE-TOKEN', 'glpat-test_token' );
+        } );
     }
 
     /**
      * Test GitLab source parses repository URL correctly.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_parses_repository_url_correctly(): void
     {
@@ -152,7 +190,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source handles nested group paths.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_handles_nested_group_paths(): void
     {
@@ -175,7 +213,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source throws exception for invalid URLs.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_throws_exception_for_invalid_urls(): void
     {
@@ -188,7 +226,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source strips 'v' prefix from version tags.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_strips_v_prefix_from_version_tags(): void
     {
@@ -211,7 +249,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source generates correct download URL.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_generates_correct_download_url(): void
     {
@@ -235,7 +273,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Test GitLab source includes metadata.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      */
     public function test_includes_metadata(): void
     {
@@ -259,7 +297,7 @@ class GitLabUpdateSourceTest extends TestCase
     /**
      * Define environment setup.
      *
-     * @since 2.0.0
+     * @since 1.0.0
      *
      * @param  \Illuminate\Foundation\Application  $app
      */

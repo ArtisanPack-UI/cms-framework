@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Post Factory for the CMS Framework Blog Module.
@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Blog\Database\Factories;
 
 use App\Models\User;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -58,7 +59,7 @@ class PostFactory extends Factory
             'content'      => fake()->paragraphs( 5, true ),
             'excerpt'      => fake()->paragraph(),
             'author_id'    => User::factory(),
-            'status'       => 'published',
+            'status'       => ContentStatus::Published->value,
             'published_at' => now(),
             'metadata'     => [
                 'seo_title'       => $title,
@@ -79,7 +80,7 @@ class PostFactory extends Factory
     public function draft(): static
     {
         return $this->state( fn ( array $attributes ) => [
-            'status'       => 'draft',
+            'status'       => ContentStatus::Draft->value,
             'published_at' => null,
         ] );
     }
@@ -96,7 +97,7 @@ class PostFactory extends Factory
     public function scheduled(): static
     {
         return $this->state( fn ( array $attributes ) => [
-            'status'       => 'published',
+            'status'       => ContentStatus::Published->value,
             'published_at' => now()->addDays( rand( 1, 30 ) ),
         ] );
     }
@@ -113,7 +114,7 @@ class PostFactory extends Factory
     public function published(): static
     {
         return $this->state( fn ( array $attributes ) => [
-            'status'       => 'published',
+            'status'       => ContentStatus::Published->value,
             'published_at' => now()->subDays( rand( 0, 365 ) ),
         ] );
     }
@@ -130,7 +131,7 @@ class PostFactory extends Factory
     public function publishedAt( $date ): static
     {
         return $this->state( fn ( array $attributes ) => [
-            'status'       => 'published',
+            'status'       => ContentStatus::Published->value,
             'published_at' => $date,
         ] );
     }

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Page Factory for the CMS Framework Pages Module.
@@ -14,6 +14,7 @@ declare( strict_types = 1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Database\Factories;
 
 use App\Models\User;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -60,7 +61,7 @@ class PageFactory extends Factory
             'parent_id'    => null,
             'order'        => fake()->numberBetween( 0, 100 ),
             'template'     => 'default',
-            'status'       => 'published',
+            'status'       => ContentStatus::Published->value,
             'published_at' => now(),
             'metadata'     => [
                 'seo_title'       => $title,
@@ -81,7 +82,7 @@ class PageFactory extends Factory
     public function draft(): static
     {
         return $this->state( fn ( array $attributes ) => [
-            'status'       => 'draft',
+            'status'       => ContentStatus::Draft->value,
             'published_at' => null,
         ] );
     }
@@ -98,7 +99,7 @@ class PageFactory extends Factory
     public function published(): static
     {
         return $this->state( fn ( array $attributes ) => [
-            'status'       => 'published',
+            'status'       => ContentStatus::Published->value,
             'published_at' => now()->subDays( rand( 0, 365 ) ),
         ] );
     }
