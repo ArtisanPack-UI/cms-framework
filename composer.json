@@ -3,7 +3,7 @@
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
   "license": "MIT",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\CMSFramework\\": "src/",
@@ -78,10 +78,10 @@
     "test:feature": "vendor/bin/pest tests/Feature",
     "lint": [
       "./vendor/bin/php-cs-fixer fix --dry-run --diff",
-      "./vendor/bin/phpcs"
+      "./vendor/bin/phpcs src/ database/ tests/ config/"
     ],
     "fix": "./vendor/bin/php-cs-fixer fix",
-    "cs": "./vendor/bin/phpcs",
+    "cs": "./vendor/bin/phpcs src/ database/ tests/ config/",
     "cs:fix": "./vendor/bin/phpcbf"
   }
 }

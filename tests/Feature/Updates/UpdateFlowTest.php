@@ -175,7 +175,7 @@ class UpdateFlowTest extends TestCase
     protected function defineEnvironment( $app ): void
     {
         $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
-        $app['config']->set( 'cms.updates.backup_enabled', false); // Disable for tests
-        $app['config']->set( 'cms.updates.verify_checksum', false);
+        $app['config']->set( 'cms.updates.backup_enabled', false ); // Disable for tests
+        $app['config']->set( 'cms.updates.verify_checksum', false );
     }
 }

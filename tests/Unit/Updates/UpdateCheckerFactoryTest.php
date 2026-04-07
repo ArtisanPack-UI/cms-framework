@@ -114,6 +114,6 @@ class UpdateCheckerFactoryTest extends TestCase
     protected function defineEnvironment( $app ): void
     {
         // Set app version for testing
-        $app['config']->set( 'app.version', '1.0.0');
+        $app['config']->set( 'app.version', '1.0.0' );
     }
 }
