@@ -10,6 +10,7 @@
       "ArtisanPackUI\\Database\\": "database/"
     },
     "files": [
+      "src/Compatibility/visual-editor.php",
       "src/Modules/Users/helpers.php",
       "src/Modules/Admin/helpers.php",
       "src/Modules/Core/helpers.php",
