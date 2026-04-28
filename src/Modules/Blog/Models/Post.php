@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentSt
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\MediaLibrary\Models\Media;
+use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -32,6 +33,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $title
  * @property string $slug
  * @property string|null $content
+ * @property array<int, array<string, mixed>>|null $block_content
  * @property string|null $excerpt
  * @property int $author_id
  * @property ContentStatus $status
@@ -45,11 +47,21 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Post extends Model
 {
+    use HasBlockContent;
     use HasContentStatus;
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
     use SoftDeletes;
+
+    /**
+     * The column that stores the visual editor block tree JSON.
+     *
+     * @since 1.2.0
+     *
+     * @var string
+     */
+    protected string $blockContentColumn = 'block_content';
 
     /**
      * The attributes that are mass assignable.
@@ -62,6 +74,7 @@ class Post extends Model
         'title',
         'slug',
         'content',
+        'block_content',
         'excerpt',
         'featured_image_id',
         'author_id',

@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `block_content` JSON column on the `posts` and `pages` tables for visual editor block trees, alongside the existing `content` longText column
+- `Post` and `Page` models adopt `ArtisanPackUI\VisualEditor\Concerns\HasBlockContent` with a polyfill stub so visual-editor remains an optional integration rather than a hard composer dependency
+
 ### Changed
 
 ### Deprecated
