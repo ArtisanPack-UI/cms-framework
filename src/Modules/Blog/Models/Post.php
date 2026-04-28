@@ -74,7 +74,6 @@ class Post extends Model
         'title',
         'slug',
         'content',
-        'block_content',
         'excerpt',
         'featured_image_id',
         'author_id',

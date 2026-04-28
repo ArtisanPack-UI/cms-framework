@@ -30,16 +30,39 @@ test( 'post block_content round-trips an array through the cast', function (): v
     ];
 
     $post = Post::create( [
-        'title'         => 'Block Post',
-        'slug'          => 'block-post',
-        'block_content' => $blocks,
-        'author_id'     => $user->id,
-        'status'        => 'draft',
+        'title'     => 'Block Post',
+        'slug'      => 'block-post',
+        'author_id' => $user->id,
+        'status'    => 'draft',
     ] );
+
+    $post->setBlockContent( $blocks );
+    $post->save();
 
     $fresh = Post::find( $post->id );
 
     expect( $fresh->block_content )->toBe( $blocks );
+} );
+
+test( 'post block_content is excluded from mass assignment', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    $post = Post::create( [
+        'title'         => 'Mass Assign',
+        'slug'          => 'mass-assign',
+        'author_id'     => $user->id,
+        'status'        => 'draft',
+        'block_content' => [
+            [ 'blockName' => 'core/paragraph', 'attrs' => [], 'innerHTML' => '<p>nope</p>' ],
+        ],
+    ] );
+
+    expect( $post->block_content )->toBeNull();
+    expect( $post->fresh()->block_content )->toBeNull();
 } );
 
 test( 'post exposes block_content via HasBlockContent helpers', function (): void {

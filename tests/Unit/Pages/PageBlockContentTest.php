@@ -30,17 +30,41 @@ test( 'page block_content round-trips an array through the cast', function (): v
     ];
 
     $page = Page::create( [
-        'title'         => 'Block Page',
-        'slug'          => 'block-page',
-        'block_content' => $blocks,
-        'author_id'     => $user->id,
-        'status'        => 'draft',
-        'order'         => 0,
+        'title'     => 'Block Page',
+        'slug'      => 'block-page',
+        'author_id' => $user->id,
+        'status'    => 'draft',
+        'order'     => 0,
     ] );
+
+    $page->setBlockContent( $blocks );
+    $page->save();
 
     $fresh = Page::find( $page->id );
 
     expect( $fresh->block_content )->toBe( $blocks );
+} );
+
+test( 'page block_content is excluded from mass assignment', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    $page = Page::create( [
+        'title'         => 'Mass Assign Page',
+        'slug'          => 'mass-assign-page',
+        'author_id'     => $user->id,
+        'status'        => 'draft',
+        'order'         => 0,
+        'block_content' => [
+            [ 'blockName' => 'core/paragraph', 'attrs' => [], 'innerHTML' => '<p>nope</p>' ],
+        ],
+    ] );
+
+    expect( $page->block_content )->toBeNull();
+    expect( $page->fresh()->block_content )->toBeNull();
 } );
 
 test( 'page exposes block_content via HasBlockContent helpers', function (): void {
