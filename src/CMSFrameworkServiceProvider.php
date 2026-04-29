@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Providers\BlogServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
@@ -28,7 +29,10 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Providers\PluginsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
+use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -106,6 +110,10 @@ class CMSFrameworkServiceProvider extends ServiceProvider
                 'pages' => Page::class,
             ], $resources );
         } );
+
+        addFilter( 'ap.visual-editor.resources', function ( array $resources ): array {
+            return $this->autoRegisterCustomContentTypes( $resources );
+        } );
     }
 
     /**
@@ -135,6 +143,65 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->register( ThemesServiceProvider::class );
         $this->app->register( PluginsServiceProvider::class );
         $this->app->register( OpenApiServiceProvider::class );
+    }
+
+    /**
+     * Auto-registers custom content types whose models use `HasBlockContent`.
+     *
+     * Iterates everything `ContentTypeManager` knows about (DB-stored types
+     * plus filter-registered types) and adds any whose `model_class` applies
+     * the trait into the resource map. The trait is the opt-in: a content
+     * type that omits it is silently skipped, with one exception — if the
+     * type also declares `'editor'` in its `supports` array we emit a
+     * warning, since that combination is almost always an oversight.
+     *
+     * The DB lookup is gated on `Schema::hasTable('content_types')` so the
+     * filter does not blow up during a fresh-install `php artisan migrate`
+     * before the content_types table exists.
+     *
+     * @since 1.2.0
+     *
+     * @param  array<string, class-string>  $resources
+     *
+     * @return array<string, class-string>
+     */
+    protected function autoRegisterCustomContentTypes( array $resources ): array
+    {
+        if ( ! Schema::hasTable( 'content_types' ) ) {
+            return $resources;
+        }
+
+        /** @var ContentTypeManager $manager */
+        $manager = $this->app->make( ContentTypeManager::class );
+
+        foreach ( $manager->getRegisteredContentTypes() as $type ) {
+            $slug       = is_array( $type ) ? ( $type['slug'] ?? null ) : null;
+            $modelClass = is_array( $type ) ? ( $type['model_class'] ?? null ) : null;
+            $supports   = is_array( $type ) && is_array( $type['supports'] ?? null ) ? $type['supports'] : [];
+
+            if ( ! is_string( $slug ) || ! is_string( $modelClass ) ) {
+                continue;
+            }
+
+            $usesBlockContent = class_exists( $modelClass )
+                && in_array( HasBlockContent::class, class_uses_recursive( $modelClass ), true );
+
+            if ( ! $usesBlockContent ) {
+                if ( in_array( 'editor', $supports, true ) ) {
+                    Log::warning( sprintf(
+                        'Content type [%s] declares editor support but its model [%s] does not use HasBlockContent.',
+                        $slug,
+                        $modelClass,
+                    ) );
+                }
+
+                continue;
+            }
+
+            $resources[ $slug ] = $modelClass;
+        }
+
+        return $resources;
     }
 
     /**
