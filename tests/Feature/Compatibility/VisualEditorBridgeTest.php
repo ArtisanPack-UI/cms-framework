@@ -6,6 +6,7 @@ use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestBlockContentTypeModel;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestPlainContentTypeModel;
 use Illuminate\Support\Facades\Log;
@@ -103,6 +104,50 @@ test( 'auto-register: a content type without HasBlockContent is silently skipped
 
     expect( $resources )->not->toHaveKey( 'tags' );
     Log::shouldNotHaveReceived( 'warning' );
+} );
+
+test( 'permissions: registerVisualEditorBridge seeds the eight visual_editor.* permission slugs', function (): void {
+    require_once __DIR__ . '/../../Support/VisualEditorClassStub.php';
+
+    ( new CMSFrameworkServiceProvider( app() ) )->registerVisualEditorBridge();
+
+    $expectedSlugs = [
+        'visual_editor.access',
+        'visual_editor.posts.edit',
+        'visual_editor.pages.edit',
+        'visual_editor.templates.edit',
+        'visual_editor.template-parts.edit',
+        'visual_editor.patterns.edit',
+        'visual_editor.global-styles.edit',
+        'visual_editor.navigation.edit',
+    ];
+
+    $registered = Permission::query()
+        ->whereIn( 'slug', $expectedSlugs )
+        ->pluck( 'slug' )
+        ->all();
+
+    expect( $registered )->toEqualCanonicalizing( $expectedSlugs );
+
+    // Each row also has a human-readable name so admin UI doesn't
+    // have to invent one — confirm a representative example.
+    expect( Permission::where( 'slug', 'visual_editor.access' )->value( 'name' ) )
+        ->toBe( 'Access Visual Editor' );
+} );
+
+test( 'permissions: rerunning the bridge does not double-insert', function (): void {
+    require_once __DIR__ . '/../../Support/VisualEditorClassStub.php';
+
+    $provider = new CMSFrameworkServiceProvider( app() );
+
+    $provider->registerVisualEditorBridge();
+    $firstCount = Permission::where( 'slug', 'like', 'visual_editor.%' )->count();
+
+    $provider->registerVisualEditorBridge();
+    $secondCount = Permission::where( 'slug', 'like', 'visual_editor.%' )->count();
+
+    expect( $firstCount )->toBe( 8 );
+    expect( $secondCount )->toBe( 8 );
 } );
 
 test( 'auto-register: a content type that declares editor support but lacks the trait surfaces a warning', function (): void {

@@ -28,6 +28,7 @@ use ArtisanPackUI\CMSFramework\Modules\Pages\Providers\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Providers\PluginsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
@@ -47,6 +48,30 @@ use InvalidArgumentException;
  */
 class CMSFrameworkServiceProvider extends ServiceProvider
 {
+    /**
+     * Permission slugs and human-readable names registered into
+     * cms-framework's RBAC tables when visual-editor is detected.
+     *
+     * Plan 12 §4.6: seed only — visual-editor's policies remain on
+     * the "any authenticated user" baseline for V1. Apps adopting
+     * the editor can build admin UI against these stable slugs
+     * without waiting for V1.1's policy delegation.
+     *
+     * @since 1.2.0
+     *
+     * @var array<string, string>
+     */
+    protected const VISUAL_EDITOR_PERMISSIONS = [
+        'visual_editor.access'              => 'Access Visual Editor',
+        'visual_editor.posts.edit'          => 'Edit Posts in Visual Editor',
+        'visual_editor.pages.edit'          => 'Edit Pages in Visual Editor',
+        'visual_editor.templates.edit'      => 'Edit Templates in Visual Editor',
+        'visual_editor.template-parts.edit' => 'Edit Template Parts in Visual Editor',
+        'visual_editor.patterns.edit'       => 'Edit Patterns in Visual Editor',
+        'visual_editor.global-styles.edit'  => 'Edit Global Styles in Visual Editor',
+        'visual_editor.navigation.edit'     => 'Edit Navigation in Visual Editor',
+    ];
+
     /**
      * Boots the CMS framework and loads database migration files.
      *
@@ -114,6 +139,8 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         addFilter( 'ap.visual-editor.resources', function ( array $resources ): array {
             return $this->autoRegisterCustomContentTypes( $resources );
         } );
+
+        $this->registerVisualEditorPermissions();
     }
 
     /**
@@ -143,6 +170,38 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->register( ThemesServiceProvider::class );
         $this->app->register( PluginsServiceProvider::class );
         $this->app->register( OpenApiServiceProvider::class );
+    }
+
+    /**
+     * Seeds the `visual_editor.*` permission slugs into cms-framework's
+     * RBAC tables.
+     *
+     * Plan 12 §2.6 / §4.6: seed only — visual-editor's policies remain
+     * on the "any authenticated user" baseline through V1. Registering
+     * the slugs early lets apps build admin UI against stable names
+     * without waiting for V1.1's policy delegation. Idempotent via
+     * {@see PermissionManager::register()} (`firstOrCreate`), so a
+     * second boot doesn't double-insert.
+     *
+     * The `Schema::hasTable( 'permissions' )` guard mirrors the one on
+     * {@see self::autoRegisterCustomContentTypes()}: it lets a fresh
+     * `php artisan migrate` run before the permissions table exists
+     * without tripping the bridge.
+     *
+     * @since 1.2.0
+     */
+    protected function registerVisualEditorPermissions(): void
+    {
+        if ( ! Schema::hasTable( 'permissions' ) ) {
+            return;
+        }
+
+        /** @var PermissionManager $manager */
+        $manager = $this->app->make( PermissionManager::class );
+
+        foreach ( self::VISUAL_EDITOR_PERMISSIONS as $slug => $name ) {
+            $manager->register( $slug, $name );
+        }
     }
 
     /**
