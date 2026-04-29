@@ -16,16 +16,19 @@ namespace ArtisanPackUI\CMSFramework;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Providers\BlogServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\OpenApi\Providers\OpenApiServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Providers\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Providers\PluginsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
+use ArtisanPackUI\VisualEditor\VisualEditor;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 
@@ -66,6 +69,43 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         }
 
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+
+        $this->registerVisualEditorBridge();
+    }
+
+    /**
+     * Registers Post + Page into visual-editor's resource map when both
+     * packages are installed.
+     *
+     * Detection is `class_exists` against the main VisualEditor class
+     * (not the `HasBlockContent` trait — that one is polyfilled in
+     * `src/Compatibility/visual-editor.php` so models load standalone).
+     * When the gate evaluates to false the callback is never added, so
+     * cms-framework boots cleanly without visual-editor in `composer.json`.
+     *
+     * The callback returns defaults *first* and merges the existing
+     * `$resources` array on top, so anything a host app puts in
+     * `config('artisanpack.visual-editor.resources')` keeps winning on
+     * key collision (visual-editor itself merges static config over
+     * filter results — see plan 12 §4.1).
+     *
+     * Public so tests (and other runtime callers) can re-trigger the
+     * registration after stubbing the gate or mutating filter callbacks.
+     *
+     * @since 1.2.0
+     */
+    public function registerVisualEditorBridge(): void
+    {
+        if ( ! class_exists( VisualEditor::class ) ) {
+            return;
+        }
+
+        addFilter( 'ap.visual-editor.resources', function ( array $resources ): array {
+            return array_merge( [
+                'posts' => Post::class,
+                'pages' => Page::class,
+            ], $resources );
+        } );
     }
 
     /**
