@@ -159,3 +159,21 @@ test( 'PUT rejects an invalid URL', function (): void {
         ->assertStatus( 422 )
         ->assertJsonValidationErrors( [ 'url' ] );
 } );
+
+test( 'PUT does not re-run viewAny authorization when capabilities are split', function (): void {
+    // Diverge the policy filters so view and update bind to separate
+    // caps — a host can plausibly do this when delegating settings
+    // admin to a write-only role. The user holds the write cap but
+    // not the read cap; PUT must still return the updated payload
+    // rather than 403'ing on an internal viewAny re-check.
+    addFilter( 'settings.viewAny', fn () => 'settings.read' );
+    addFilter( 'settings.update',  fn () => 'settings.write' );
+
+    Gate::define( 'settings.write', fn ( User $user ) => true );
+    Gate::define( 'settings.read',  fn ( User $user ) => false );
+
+    actingAs( $this->user )
+        ->putJson( '/api/v1/settings/site', [ 'title' => 'Write-only Title' ] )
+        ->assertOk()
+        ->assertJsonFragment( [ 'title' => 'Write-only Title' ] );
+} );

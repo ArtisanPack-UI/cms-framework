@@ -67,13 +67,7 @@ class SiteSettingController extends Controller
     {
         $this->authorize( 'viewAny', Setting::class );
 
-        $payload = [];
-
-        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
-            $payload[ $envelopeKey ] = $this->settings->getSetting( $settingKey );
-        }
-
-        return response()->json( $payload );
+        return response()->json( $this->buildPayload() );
     }
 
     /**
@@ -97,6 +91,31 @@ class SiteSettingController extends Controller
             }
         }
 
-        return $this->show();
+        // Return the freshly-built payload directly rather than calling
+        // show(): the user has already cleared the `update` policy, and
+        // hosts that bind separate capabilities for view-vs-update would
+        // otherwise see a successful write turn into a 403 here.
+        return response()->json( $this->buildPayload() );
+    }
+
+    /**
+     * Reads the five site.* settings and shapes them as the WP envelope.
+     *
+     * Pure data access — does not authorize, so safe to call from any
+     * action that has already cleared its own policy check.
+     *
+     * @since 1.2.0
+     *
+     * @return array<string, mixed>
+     */
+    protected function buildPayload(): array
+    {
+        $payload = [];
+
+        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
+            $payload[ $envelopeKey ] = $this->settings->getSetting( $settingKey );
+        }
+
+        return $payload;
     }
 }
