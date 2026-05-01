@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\TemplatePartRequ
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\TemplateResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\TemplatePart;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Database\QueryException;
@@ -108,6 +109,16 @@ class TemplatePartsController extends Controller
             return response()->json( [ 'message' => 'No active theme.' ], 409 );
         }
 
+        // The Form Request only validates `slug` when present in the payload.
+        // For PUT, the route slug is canonical and may be the only slug in
+        // play, so guard it directly against the same canonical pattern.
+        if ( ! SlugValidator::isValid( $slug ) ) {
+            return response()->json( [
+                'message' => 'URL slug is not in canonical kebab-case form.',
+                'errors'  => [ 'slug' => [ 'Slug must be lowercase letters, numbers, and hyphens only.' ] ],
+            ], 422 );
+        }
+
         $validated = $request->validated();
 
         if ( array_key_exists( 'slug', $validated ) && $validated['slug'] !== $slug ) {
@@ -119,19 +130,7 @@ class TemplatePartsController extends Controller
 
         unset( $validated['slug'] );
 
-        $existing = TemplatePart::query()
-            ->where( 'theme', $theme )
-            ->where( 'slug', $slug )
-            ->first();
-
-        if ( null !== $existing ) {
-            $existing->update( $validated );
-            $part = $existing->refresh();
-        } else {
-            $attributes         = $this->normalizeAttributes( $theme, $validated );
-            $attributes['slug'] = $slug;
-            $part               = TemplatePart::create( $attributes );
-        }
+        $part = $this->upsertForTheme( $theme, $slug, $validated );
 
         $entity = $this->resolver->resolve( $part->slug );
 
@@ -152,6 +151,51 @@ class TemplatePartsController extends Controller
         }
 
         return response()->json( null, 204 );
+    }
+
+    /**
+     * Race-safe upsert for the active theme + route slug.
+     *
+     * See {@see TemplatesController::upsertForTheme()} for the rationale —
+     * this mirror exists because Templates and TemplateParts each have
+     * their own model class.
+     *
+     * @since 1.2.0
+     *
+     * @param  array<string, mixed>  $validated
+     */
+    protected function upsertForTheme( string $theme, string $slug, array $validated ): TemplatePart
+    {
+        $existing = TemplatePart::query()
+            ->where( 'theme', $theme )
+            ->where( 'slug', $slug )
+            ->first();
+
+        if ( null !== $existing ) {
+            $existing->update( $validated );
+
+            return $existing->refresh();
+        }
+
+        $attributes         = $this->normalizeAttributes( $theme, $validated );
+        $attributes['slug'] = $slug;
+
+        try {
+            return TemplatePart::create( $attributes );
+        } catch ( QueryException $e ) {
+            if ( ! $this->isUniqueViolation( $e ) ) {
+                throw $e;
+            }
+
+            $existing = TemplatePart::query()
+                ->where( 'theme', $theme )
+                ->where( 'slug', $slug )
+                ->firstOrFail();
+
+            $existing->update( $validated );
+
+            return $existing->refresh();
+        }
     }
 
     /**

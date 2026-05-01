@@ -223,6 +223,18 @@ describe( 'PUT slug semantics', function (): void {
             ->and( $existing->is_custom )->toBeTrue()
             ->and( $existing->author_id )->toBe( $this->user->id );
     } );
+
+    it( 'returns 422 when the URL slug is not canonical kebab-case', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->putJson( '/api/v1/templates/Invalid_Slug', [
+            'title' => 'X',
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
+        expect( Template::where( 'slug', 'Invalid_Slug' )->exists() )->toBeFalse();
+    } );
 } );
 
 describe( 'PUT /api/v1/templates/{slug}', function (): void {

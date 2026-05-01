@@ -15,6 +15,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Support\Facades\File;
 
@@ -138,18 +139,15 @@ class TemplateResolver implements EntityResolver
     }
 
     /**
-     * Validate a slug against the canonical pattern enforced at the request
-     * layer. Mirrors the regex in `TemplateRequest::rules()` so any input that
-     * could not have been written through the API is rejected here too —
-     * blocks path-traversal segments (`..`), separators (`/`, `\`), null
-     * bytes, and any character outside the kebab-case alphanumeric set
-     * before the slug is interpolated into a filesystem path.
+     * Defense-in-depth slug guard, delegating to {@see SlugValidator} so the
+     * pattern lives in one place across resolvers, controllers, and Form
+     * Requests.
      *
      * @since 1.2.0
      */
     protected function isValidSlug( string $slug ): bool
     {
-        return (bool) preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug );
+        return SlugValidator::isValid( $slug );
     }
 
     /**

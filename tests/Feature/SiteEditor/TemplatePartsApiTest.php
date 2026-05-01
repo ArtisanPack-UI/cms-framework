@@ -130,6 +130,19 @@ describe( 'PUT slug semantics for parts', function (): void {
         $response->assertStatus( 422 );
         expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
     } );
+
+    it( 'returns 422 when the URL slug is not canonical kebab-case', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->putJson( '/api/v1/template-parts/Invalid_Slug', [
+            'title' => 'X',
+            'area'  => 'header',
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
+        expect( TemplatePart::where( 'slug', 'Invalid_Slug' )->exists() )->toBeFalse();
+    } );
 } );
 
 describe( 'DELETE /api/v1/template-parts/{slug}', function (): void {

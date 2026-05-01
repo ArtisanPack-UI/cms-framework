@@ -12,6 +12,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -40,7 +41,7 @@ class TemplateRequest extends FormRequest
         $slugPresence = $this->isMethod( 'post' ) ? 'required' : 'sometimes';
 
         return [
-            'slug'          => [ $slugPresence, 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/' ],
+            'slug'          => [ $slugPresence, 'string', 'max:255', 'regex:' . SlugValidator::PATTERN ],
             'title'         => [ 'required', 'string', 'max:255' ],
             'description'   => [ 'nullable', 'string' ],
             'status'        => [ 'nullable', 'string', 'in:auto-draft,publish,draft' ],
