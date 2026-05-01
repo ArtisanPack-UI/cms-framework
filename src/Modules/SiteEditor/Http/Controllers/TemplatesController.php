@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Dedoc\Scramble\Attributes\Group;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 
@@ -76,7 +77,18 @@ class TemplatesController extends Controller
             return response()->json( [ 'message' => 'No active theme.' ], 409 );
         }
 
-        $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
+        try {
+            $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
+        } catch ( QueryException $e ) {
+            if ( $this->isUniqueViolation( $e ) ) {
+                return response()->json( [
+                    'message' => 'A template with this slug already exists for the active theme.',
+                    'errors'  => [ 'slug' => [ 'Slug must be unique within the theme.' ] ],
+                ], 409 );
+            }
+
+            throw $e;
+        }
 
         $entity = $this->resolver->resolve( $template->slug );
 
@@ -96,9 +108,19 @@ class TemplatesController extends Controller
             return response()->json( [ 'message' => 'No active theme.' ], 409 );
         }
 
-        $attributes = $this->normalizeAttributes( $theme, $request->validated() );
-        // The slug from the route always wins over any slug in the payload —
-        // PUT identifies the resource.
+        $validated = $request->validated();
+
+        // PUT identifies the resource via the route slug. If the body also
+        // carries a slug it must match, so a client that mistakenly tries to
+        // rename the resource gets a 422 instead of silently being ignored.
+        if ( array_key_exists( 'slug', $validated ) && $validated['slug'] !== $slug ) {
+            return response()->json( [
+                'message' => 'Body slug does not match URL slug.',
+                'errors'  => [ 'slug' => [ 'Slug in the request body must match the URL slug.' ] ],
+            ], 422 );
+        }
+
+        $attributes         = $this->normalizeAttributes( $theme, $validated );
         $attributes['slug'] = $slug;
 
         $template = Template::updateOrCreate(
@@ -137,6 +159,26 @@ class TemplatesController extends Controller
         $theme = $this->themeManager->getActiveTheme();
 
         return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+    }
+
+    /**
+     * Detect a unique-constraint violation on a {@see QueryException}.
+     *
+     * MySQL/MariaDB report SQLSTATE 23000 + driver code 1062; PostgreSQL
+     * reports SQLSTATE 23505; SQLite (used in tests) raises 23000 with
+     * 'UNIQUE constraint failed' in the message.
+     *
+     * @since 1.2.0
+     */
+    protected function isUniqueViolation( QueryException $e ): bool
+    {
+        $sqlState = $e->getCode();
+
+        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+            return true;
+        }
+
+        return str_contains( strtolower( $e->getMessage() ), 'unique' );
     }
 
     /**

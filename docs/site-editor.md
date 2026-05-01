@@ -51,6 +51,7 @@ Response shape mirrors WordPress's `/wp/v2/templates`:
     "origin": null,
     "content": {
         "raw": "<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->",
+        "blocks": [],
         "block_version": 1
     },
     "title": { "raw": "Page", "rendered": "Page" },
@@ -64,7 +65,14 @@ Response shape mirrors WordPress's `/wp/v2/templates`:
 }
 ```
 
-`wp_id` is the DB-row integer ID (0 when only a theme file backs the slug). `id` uses the `theme//slug` form for theme-backed templates and the integer DB ID for purely custom ones.
+`id` is always the `theme//slug` form, matching WP exactly. `wp_id` carries the DB row's integer ID separately (0 when only a theme file backs the slug).
+
+`content.raw` carries the file contents for theme-file-sourced entities and is the empty string `''` for DB-stored entities. `content.blocks` carries the parsed block array for DB-stored entities and is empty `[]` for theme-file-sourced entities. cms-framework's `HasBlockContent` trait stores only the parsed block array — never a raw HTML mirror — so consumers requiring HTML render through the matching renderer package, and consumers needing the parsed tree read from `content.blocks`. This mirrors the visual-editor adapter convention in `Adapters\CmsFramework\WpEntityResource`.
+
+### Conflict and validation behavior
+
+- `POST` returns **409 Conflict** when a `(theme, slug)` row already exists, with `errors.slug` set.
+- `PUT` accepts a body without a slug (route slug is canonical) and returns **422** when a body slug is present but does not match the URL slug.
 
 ## Template parts
 

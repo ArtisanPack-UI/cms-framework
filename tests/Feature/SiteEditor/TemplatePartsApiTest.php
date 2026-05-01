@@ -95,6 +95,41 @@ describe( 'POST /api/v1/template-parts', function (): void {
             'title' => 'Orphan',
         ] )->assertStatus( 422 );
     } );
+
+    it( 'returns 409 when posting a duplicate (theme, slug)', function (): void {
+        TemplatePart::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'header',
+            'title' => 'Existing Header',
+            'area'  => 'header',
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->postJson( '/api/v1/template-parts', [
+            'slug'  => 'header',
+            'title' => 'New Header',
+            'area'  => 'header',
+        ] );
+
+        $response->assertStatus( 409 );
+        expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
+    } );
+} );
+
+describe( 'PUT slug semantics for parts', function (): void {
+    it( 'returns 422 when body slug does not match URL slug', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->putJson( '/api/v1/template-parts/header', [
+            'slug'  => 'sidebar',
+            'title' => 'Header',
+            'area'  => 'header',
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
+    } );
 } );
 
 describe( 'DELETE /api/v1/template-parts/{slug}', function (): void {

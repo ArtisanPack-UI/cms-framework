@@ -40,7 +40,7 @@ afterEach( function (): void {
 } );
 
 describe( 'TemplateResolver::resolve()', function (): void {
-    it( 'returns the theme file when only the file exists', function (): void {
+    it( 'returns the theme file with raw content populated and blocks empty', function (): void {
         File::put( $this->themeFiles . '/page.html', '<!-- wp:paragraph --><p>Page</p><!-- /wp:paragraph -->' );
 
         $result = $this->resolver->resolve( 'page' );
@@ -50,13 +50,14 @@ describe( 'TemplateResolver::resolve()', function (): void {
             ->and( $result->source )->toBe( 'theme' )
             ->and( $result->slug )->toBe( 'page' )
             ->and( $result->theme )->toBe( $this->themeSlug )
-            ->and( $result->content )->toContain( 'wp:paragraph' )
+            ->and( $result->raw )->toContain( 'wp:paragraph' )
+            ->and( $result->blocks )->toBe( [] )
             ->and( $result->hasThemeFile )->toBeTrue()
             ->and( $result->isCustom )->toBeFalse()
             ->and( $result->wpId() )->toBe( 0 );
     } );
 
-    it( 'returns the DB row when only a DB row exists (custom template)', function (): void {
+    it( 'returns the DB row with blocks populated and raw empty (custom template)', function (): void {
         $row = Template::create( [
             'theme'         => $this->themeSlug,
             'slug'          => 'custom-page',
@@ -70,6 +71,8 @@ describe( 'TemplateResolver::resolve()', function (): void {
         expect( $result->source )->toBe( 'db' )
             ->and( $result->isCustom )->toBeTrue()
             ->and( $result->hasThemeFile )->toBeFalse()
+            ->and( $result->raw )->toBe( '' )
+            ->and( $result->blocks )->toBe( [ [ 'blockName' => 'core/paragraph' ] ] )
             ->and( $result->wpId() )->toBe( $row->id );
     } );
 

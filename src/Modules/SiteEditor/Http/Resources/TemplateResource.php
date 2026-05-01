@@ -30,20 +30,24 @@ final class TemplateResource
      */
     public static function toArray( ResolvedEntity $entity ): array
     {
-        $wpId = $entity->wpId();
-        $id   = $wpId > 0 && ! $entity->hasThemeFile
-            ? (string) $wpId
-            : $entity->theme . '//' . $entity->slug;
-
         $payload = [
-            'id'             => $id,
+            // `id` is always `theme//slug` form, matching WP REST behavior. The integer
+            // DB row id (when one exists) is exposed separately as `wp_id`.
+            'id'             => $entity->theme . '//' . $entity->slug,
             'slug'           => $entity->slug,
             'theme'          => $entity->theme,
             'type'           => 'wp_template',
             'source'         => $entity->source,
             'origin'         => null,
             'content'        => [
-                'raw'           => $entity->content,
+                // `raw` is populated for theme files (the file contents) and empty
+                // for DB-stored entities — cms-framework's HasBlockContent trait stores
+                // only the parsed block array, never a raw HTML mirror. Consumers
+                // requiring HTML render through the matching renderer package; consumers
+                // requiring blocks read from `content.blocks`. Mirrors the existing
+                // visual-editor adapter convention (`Adapters\CmsFramework\WpEntityResource`).
+                'raw'           => $entity->raw,
+                'blocks'        => $entity->blocks,
                 'block_version' => 1,
             ],
             'title'          => [
@@ -52,7 +56,7 @@ final class TemplateResource
             ],
             'description'    => $entity->description ?? '',
             'status'         => $entity->status,
-            'wp_id'          => $wpId,
+            'wp_id'          => $entity->wpId(),
             'has_theme_file' => $entity->hasThemeFile,
             'is_custom'      => $entity->isCustom,
             'author'         => null !== $entity->model ? (int) ( $entity->model->author_id ?? 0 ) : 0,

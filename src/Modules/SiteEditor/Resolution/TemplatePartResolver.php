@@ -51,7 +51,8 @@ class TemplatePartResolver implements EntityResolver
                 slug         : $row->slug,
                 theme        : $row->theme,
                 source       : 'db',
-                content      : $this->blockContentToString( $row->block_content ),
+                raw          : '',
+                blocks       : is_array( $row->block_content ) ? $row->block_content : [],
                 title        : $row->title,
                 description  : $row->description,
                 status       : $row->status,
@@ -66,13 +67,12 @@ class TemplatePartResolver implements EntityResolver
             return null;
         }
 
-        $content = File::get( $themeFile );
-
         return new ResolvedEntity(
             slug         : $slug,
             theme        : $theme,
             source       : 'theme',
-            content      : $content,
+            raw          : File::get( $themeFile ),
+            blocks       : [],
             title        : $this->humanizeSlug( $slug ),
             description  : null,
             status       : 'publish',
@@ -173,20 +173,6 @@ class TemplatePartResolver implements EntityResolver
         }
 
         return $slugs;
-    }
-
-    /**
-     * @since 1.2.0
-     *
-     * @param  array<int, array<string, mixed>>|null  $blockContent
-     */
-    protected function blockContentToString( ?array $blockContent ): string
-    {
-        if ( null === $blockContent || [] === $blockContent ) {
-            return '';
-        }
-
-        return (string) json_encode( $blockContent );
     }
 
     /**

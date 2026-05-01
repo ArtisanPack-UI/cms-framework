@@ -34,8 +34,13 @@ class TemplateRequest extends FormRequest
      */
     public function rules(): array
     {
+        // POST identifies the resource by payload — slug required.
+        // PUT identifies the resource by route — slug optional, but if present
+        // the controller enforces it equals the route slug.
+        $slugPresence = $this->isMethod( 'post' ) ? 'required' : 'sometimes';
+
         return [
-            'slug'          => [ 'required', 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/' ],
+            'slug'          => [ $slugPresence, 'string', 'max:255', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/' ],
             'title'         => [ 'required', 'string', 'max:255' ],
             'description'   => [ 'nullable', 'string' ],
             'status'        => [ 'nullable', 'string', 'in:auto-draft,publish,draft' ],

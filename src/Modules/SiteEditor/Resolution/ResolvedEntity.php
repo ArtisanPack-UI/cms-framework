@@ -28,7 +28,8 @@ final class ResolvedEntity
      * @param  string  $slug  The entity slug.
      * @param  string  $theme  The active theme slug at resolution time.
      * @param  'db'|'theme'  $source  Whether the resolved content came from a DB row or a theme file.
-     * @param  string  $content  The block-content as a serialized block string (raw `<!-- wp:... /-->` markup).
+     * @param  string  $raw  The raw block markup string. Populated for theme files (the file contents) and empty for DB rows — cms-framework stores only the parsed block array, never a raw HTML mirror, to match the visual-editor adapter convention (`Adapters\CmsFramework\WpEntityResource`).
+     * @param  array<int, array<string, mixed>>  $blocks  The parsed block tree. Populated for DB rows; empty for theme files (we don't parse `.html` on the fly in V1).
      * @param  string|null  $title  Display title; null when only a theme file exists and the file has no title metadata.
      * @param  string|null  $description  Display description.
      * @param  string  $status  WP status (`'publish'` by default).
@@ -41,7 +42,8 @@ final class ResolvedEntity
         public readonly string $slug,
         public readonly string $theme,
         public readonly string $source,
-        public readonly string $content,
+        public readonly string $raw,
+        public readonly array $blocks,
         public readonly ?string $title,
         public readonly ?string $description,
         public readonly string $status,

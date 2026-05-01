@@ -61,7 +61,7 @@ describe( 'GET /api/v1/templates', function (): void {
                 'theme',
                 'type',
                 'source',
-                'content' => [ 'raw', 'block_version' ],
+                'content' => [ 'raw', 'blocks', 'block_version' ],
                 'title'   => [ 'raw', 'rendered' ],
                 'has_theme_file',
                 'is_custom',
@@ -71,6 +71,23 @@ describe( 'GET /api/v1/templates', function (): void {
 
         $slugs = collect( $response->json() )->pluck( 'slug' )->all();
         expect( $slugs )->toContain( 'page' )->toContain( 'archive' );
+    } );
+
+    it( 'always emits id in theme//slug form (even for custom templates)', function (): void {
+        Template::create( [
+            'theme'     => $this->themeSlug,
+            'slug'      => 'custom-only',
+            'title'     => 'Custom Only',
+            'is_custom' => true,
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/templates/custom-only' );
+
+        $response->assertOk();
+        expect( $response->json( 'id' ) )->toBe( $this->themeSlug . '//custom-only' );
+        expect( $response->json( 'wp_id' ) )->toBeInt()->toBeGreaterThan( 0 );
     } );
 } );
 
@@ -87,6 +104,25 @@ describe( 'GET /api/v1/templates/{slug}', function (): void {
         expect( $response->json( 'has_theme_file' ) )->toBeTrue();
         expect( $response->json( 'wp_id' ) )->toBe( 0 );
         expect( $response->json( 'content.raw' ) )->toContain( 'wp:heading' );
+        expect( $response->json( 'content.blocks' ) )->toBe( [] );
+    } );
+
+    it( 'returns DB-stored templates with empty content.raw and populated content.blocks', function (): void {
+        Template::create( [
+            'theme'         => $this->themeSlug,
+            'slug'          => 'db-only',
+            'title'         => 'DB Only',
+            'is_custom'     => true,
+            'block_content' => [ [ 'blockName' => 'core/paragraph' ] ],
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/templates/db-only' );
+
+        $response->assertOk();
+        expect( $response->json( 'content.raw' ) )->toBe( '' );
+        expect( $response->json( 'content.blocks' ) )->toBe( [ [ 'blockName' => 'core/paragraph' ] ] );
     } );
 
     it( '404s when the slug exists in neither file nor DB', function (): void {
@@ -120,6 +156,48 @@ describe( 'POST /api/v1/templates', function (): void {
             'slug'  => 'Invalid Slug!',
             'title' => 'X',
         ] )->assertStatus( 422 );
+    } );
+
+    it( 'returns 409 when posting a duplicate (theme, slug)', function (): void {
+        Template::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'page',
+            'title' => 'Existing',
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->postJson( '/api/v1/templates', [
+            'slug'  => 'page',
+            'title' => 'New',
+        ] );
+
+        $response->assertStatus( 409 );
+        expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
+    } );
+} );
+
+describe( 'PUT slug semantics', function (): void {
+    it( 'accepts a body without a slug (route slug is canonical)', function (): void {
+        File::put( $this->themeFiles . '/index.html', '<!-- file -->' );
+
+        $this->actingAs( $this->user );
+
+        $this->putJson( '/api/v1/templates/index', [
+            'title' => 'DB Index',
+        ] )->assertOk();
+    } );
+
+    it( 'returns 422 when the body slug does not match the URL slug', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->putJson( '/api/v1/templates/index', [
+            'slug'  => 'home',
+            'title' => 'DB Index',
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
     } );
 } );
 
