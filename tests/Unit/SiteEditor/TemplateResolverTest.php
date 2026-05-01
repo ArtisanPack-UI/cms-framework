@@ -161,3 +161,46 @@ describe( 'theme isolation', function (): void {
         expect( $result )->toBeNull();
     } );
 } );
+
+describe( 'slug sanitization', function (): void {
+    it( 'rejects path-traversal slugs', function (): void {
+        // Drop a real file at the would-be traversal target so a missing-file
+        // null doesn't mask a successful traversal.
+        File::ensureDirectoryExists( $this->themesPath . '/' . $this->themeSlug );
+        File::put( $this->themesPath . '/' . $this->themeSlug . '/secret.html', '<!-- secret -->' );
+
+        $result = $this->resolver->resolve( '../secret' );
+
+        expect( $result )->toBeNull();
+    } );
+
+    it( 'rejects slugs containing slashes', function (): void {
+        expect( $this->resolver->resolve( 'a/b' ) )->toBeNull();
+        expect( $this->resolver->resolve( 'a\\b' ) )->toBeNull();
+    } );
+
+    it( 'rejects slugs containing null bytes', function (): void {
+        expect( $this->resolver->resolve( "page\0evil" ) )->toBeNull();
+    } );
+
+    it( 'rejects uppercase slugs', function (): void {
+        File::put( $this->themeFiles . '/lowercase.html', '<!-- ok -->' );
+
+        expect( $this->resolver->resolve( 'Lowercase' ) )->toBeNull();
+    } );
+
+    it( 'rejects empty slugs', function (): void {
+        expect( $this->resolver->resolve( '' ) )->toBeNull();
+    } );
+
+    it( 'returns false from revert() for invalid slugs without touching the database', function (): void {
+        Template::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'page',
+            'title' => 'Page',
+        ] );
+
+        expect( $this->resolver->revert( '../page' ) )->toBeFalse()
+            ->and( Template::where( 'slug', 'page' )->exists() )->toBeTrue();
+    } );
+} );

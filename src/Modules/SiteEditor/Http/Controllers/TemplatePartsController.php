@@ -117,13 +117,21 @@ class TemplatePartsController extends Controller
             ], 422 );
         }
 
-        $attributes         = $this->normalizeAttributes( $theme, $validated );
-        $attributes['slug'] = $slug;
+        unset( $validated['slug'] );
 
-        $part = TemplatePart::updateOrCreate(
-            [ 'theme' => $theme, 'slug' => $slug ],
-            $attributes,
-        );
+        $existing = TemplatePart::query()
+            ->where( 'theme', $theme )
+            ->where( 'slug', $slug )
+            ->first();
+
+        if ( null !== $existing ) {
+            $existing->update( $validated );
+            $part = $existing->refresh();
+        } else {
+            $attributes         = $this->normalizeAttributes( $theme, $validated );
+            $attributes['slug'] = $slug;
+            $part               = TemplatePart::create( $attributes );
+        }
 
         $entity = $this->resolver->resolve( $part->slug );
 

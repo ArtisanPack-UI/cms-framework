@@ -199,6 +199,30 @@ describe( 'PUT slug semantics', function (): void {
         $response->assertStatus( 422 );
         expect( $response->json( 'errors.slug' ) )->not->toBeEmpty();
     } );
+
+    it( 'preserves omitted is_custom and author_id on partial updates', function (): void {
+        $existing = Template::create( [
+            'theme'     => $this->themeSlug,
+            'slug'      => 'page',
+            'title'     => 'Original',
+            'is_custom' => true,
+            'author_id' => $this->user->id,
+        ] );
+
+        $this->actingAs( $this->user );
+
+        // Update only the title — omitted fields should keep their values.
+        $response = $this->putJson( '/api/v1/templates/page', [
+            'title' => 'Renamed',
+        ] );
+
+        $response->assertOk();
+
+        $existing->refresh();
+        expect( $existing->title )->toBe( 'Renamed' )
+            ->and( $existing->is_custom )->toBeTrue()
+            ->and( $existing->author_id )->toBe( $this->user->id );
+    } );
 } );
 
 describe( 'PUT /api/v1/templates/{slug}', function (): void {

@@ -120,13 +120,29 @@ class TemplatesController extends Controller
             ], 422 );
         }
 
-        $attributes         = $this->normalizeAttributes( $theme, $validated );
-        $attributes['slug'] = $slug;
+        // Strip slug from the validated attributes — the route slug is
+        // canonical for both branches below.
+        unset( $validated['slug'] );
 
-        $template = Template::updateOrCreate(
-            [ 'theme' => $theme, 'slug' => $slug ],
-            $attributes,
-        );
+        $existing = Template::query()
+            ->where( 'theme', $theme )
+            ->where( 'slug', $slug )
+            ->first();
+
+        if ( null !== $existing ) {
+            // Update path: apply only the fields the client supplied. Don't
+            // run normalizeAttributes — its `author_id` and `is_custom`
+            // defaults would silently overwrite values the client didn't
+            // intend to change. Matches WP REST `/wp/v2/templates` PUT
+            // semantics (omitted fields keep their existing values).
+            $existing->update( $validated );
+            $template = $existing->refresh();
+        } else {
+            // Create path: stamp theme + author + is_custom defaults.
+            $attributes         = $this->normalizeAttributes( $theme, $validated );
+            $attributes['slug'] = $slug;
+            $template           = Template::create( $attributes );
+        }
 
         $entity = $this->resolver->resolve( $template->slug );
 

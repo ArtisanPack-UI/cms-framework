@@ -36,6 +36,10 @@ class TemplateResolver implements EntityResolver
      */
     public function resolve( string $slug ): ?ResolvedEntity
     {
+        if ( ! $this->isValidSlug( $slug ) ) {
+            return null;
+        }
+
         $theme = $this->activeThemeSlug();
 
         if ( null === $theme ) {
@@ -120,6 +124,10 @@ class TemplateResolver implements EntityResolver
      */
     public function revert( string $slug ): bool
     {
+        if ( ! $this->isValidSlug( $slug ) ) {
+            return false;
+        }
+
         $theme = $this->activeThemeSlug();
 
         if ( null === $theme ) {
@@ -127,6 +135,21 @@ class TemplateResolver implements EntityResolver
         }
 
         return Template::query()->where( 'theme', $theme )->where( 'slug', $slug )->delete() > 0;
+    }
+
+    /**
+     * Validate a slug against the canonical pattern enforced at the request
+     * layer. Mirrors the regex in `TemplateRequest::rules()` so any input that
+     * could not have been written through the API is rejected here too —
+     * blocks path-traversal segments (`..`), separators (`/`, `\`), null
+     * bytes, and any character outside the kebab-case alphanumeric set
+     * before the slug is interpolated into a filesystem path.
+     *
+     * @since 1.2.0
+     */
+    protected function isValidSlug( string $slug ): bool
+    {
+        return (bool) preg_match( '/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $slug );
     }
 
     /**
