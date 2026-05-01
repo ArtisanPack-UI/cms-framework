@@ -170,6 +170,49 @@ describe( 'menus.locations cms-framework extension', function (): void {
             ->and( $result->offendingKey )->toBe( 'menus' );
     } );
 
+    it( 'rejects menus when it is a list (numeric keys)', function (): void {
+        $manifest = [
+            'slug'  => 'broken-menus',
+            'menus' => [ 'primary', 'footer' ],
+        ];
+
+        $result = $this->validator->validate( $manifest );
+
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' );
+    } );
+
+    it( 'rejects unknown sibling keys under menus', function (): void {
+        $manifest = [
+            'slug'  => 'broken-menus',
+            'menus' => [
+                'locations' => [ 'primary' => 'Primary Menu' ],
+                'colors'    => [ 'red', 'blue' ],
+            ],
+        ];
+
+        $result = $this->validator->validate( $manifest );
+
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' )
+            ->and( $result->message )->toContain( 'colors' );
+    } );
+
+    it( 'rejects menus with only unknown keys (no locations)', function (): void {
+        $manifest = [
+            'slug'  => 'broken-menus',
+            'menus' => [
+                'fonts' => [ 'Inter' ],
+            ],
+        ];
+
+        $result = $this->validator->validate( $manifest );
+
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' )
+            ->and( $result->message )->toContain( 'fonts' );
+    } );
+
     it( 'rejects menus.locations when it is a list (numeric keys)', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',

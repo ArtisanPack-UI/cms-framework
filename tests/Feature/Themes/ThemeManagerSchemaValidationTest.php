@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 beforeEach( function (): void {
     $this->manager    = app( ThemeManager::class );
     $this->themesPath = base_path( 'themes' );
+    $this->testSlugs  = [];
 
     File::ensureDirectoryExists( $this->themesPath );
 
@@ -18,17 +19,32 @@ beforeEach( function (): void {
 } );
 
 afterEach( function (): void {
-    foreach ( File::directories( $this->themesPath ) as $directory ) {
-        File::deleteDirectory( $directory );
+    // Only delete subdirectories created by this test, not anything else
+    // that may live under base_path('themes').
+    foreach ( $this->testSlugs as $slug ) {
+        $path = $this->themesPath . '/' . $slug;
+
+        if ( File::exists( $path ) ) {
+            File::deleteDirectory( $path );
+        }
     }
 } );
 
 /**
  * Write a theme.json file into a fresh test theme directory and return its path.
+ *
+ * Tracks the slug into $slugs (passed by reference) so afterEach() can clean up
+ * only the directories this test created.
+ *
+ * @param  string  $themesPath  Themes base path.
+ * @param  string  $slug  Theme slug (also the subdirectory name).
+ * @param  array  $manifest  theme.json contents.
+ * @param  array  $slugs  Reference to a slug-tracking array.
  */
-function writeTheme( string $themesPath, string $slug, array $manifest ): string
+function writeTheme( string $themesPath, string $slug, array $manifest, array &$slugs ): string
 {
-    $path = $themesPath . '/' . $slug;
+    $slugs[] = $slug;
+    $path    = $themesPath . '/' . $slug;
     File::ensureDirectoryExists( $path );
     File::put( $path . '/theme.json', json_encode( $manifest, JSON_PRETTY_PRINT ) );
 
@@ -46,7 +62,7 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
             'description' => 'Legacy.',
             'author'      => 'Test',
             'screenshot'  => 'screenshot.png',
-        ] );
+        ], $this->testSlugs );
 
         $themes = $this->manager->discoverThemes();
         $slugs  = array_column( $themes, 'slug' );
@@ -77,7 +93,7 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
                 [ 'name' => 'header', 'title' => 'Header', 'area' => 'header' ],
             ],
             'patterns' => [ 'my-namespace/cta' ],
-        ] );
+        ], $this->testSlugs );
 
         $themes = $this->manager->discoverThemes();
         $slugs  = array_column( $themes, 'slug' );
@@ -96,7 +112,7 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
                     'footer'  => 'Footer Menu',
                 ],
             ],
-        ] );
+        ], $this->testSlugs );
 
         $themes = $this->manager->discoverThemes();
         $slugs  = array_column( $themes, 'slug' );
@@ -116,7 +132,7 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
                     'palette' => 'not-an-array',
                 ],
             ],
-        ] );
+        ], $this->testSlugs );
 
         $themes = $this->manager->discoverThemes();
         $slugs  = array_column( $themes, 'slug' );
@@ -135,7 +151,8 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
     it( 'rejects themes whose theme.json is malformed JSON', function (): void {
         Log::spy();
 
-        $path = $this->themesPath . '/malformed-theme';
+        $this->testSlugs[] = 'malformed-theme';
+        $path              = $this->themesPath . '/malformed-theme';
         File::ensureDirectoryExists( $path );
         File::put( $path . '/theme.json', '{not valid json' );
 

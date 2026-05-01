@@ -119,8 +119,9 @@ class WpThemeJsonValidator
     /**
      * Validate the cms-framework `menus.locations` extension shape.
      *
-     * `menus.locations` must be an object mapping string location keys to
-     * string display labels. Any other shape under `menus` is rejected.
+     * `menus` must be an object containing only `locations` (no other sibling
+     * keys are recognised). `menus.locations` must be an object mapping
+     * string location keys to string display labels.
      *
      * @since 1.2.0
      *
@@ -128,8 +129,17 @@ class WpThemeJsonValidator
      */
     protected function validateMenusExtension( mixed $menus ): WpThemeJsonValidationResult
     {
-        if ( ! is_array( $menus ) ) {
+        if ( ! is_array( $menus ) || ( [] !== $menus && array_is_list( $menus ) ) ) {
             return WpThemeJsonValidationResult::failure( 'menus', 'menus must be an object.' );
+        }
+
+        $unknownKeys = array_diff( array_keys( $menus ), [ 'locations' ] );
+
+        if ( [] !== $unknownKeys ) {
+            return WpThemeJsonValidationResult::failure(
+                'menus',
+                'menus may only contain the "locations" key; unknown keys: ' . implode( ', ', $unknownKeys ) . '.',
+            );
         }
 
         if ( ! array_key_exists( 'locations', $menus ) ) {
