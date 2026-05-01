@@ -16,9 +16,11 @@ use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
 
 /**
@@ -43,9 +45,11 @@ class ThemeManager
      * @since 1.0.0
      *
      * @param  SettingsManager  $settingsManager  Settings manager instance.
+     * @param  WpThemeJsonValidator  $wpThemeJsonValidator  Validator for the WP-shape subset of theme.json.
      */
     public function __construct(
         private SettingsManager $settingsManager,
+        private WpThemeJsonValidator $wpThemeJsonValidator,
     ) {
     }
 
@@ -317,8 +321,15 @@ class ThemeManager
     /**
      * Validates a theme's structure and manifest.
      *
-     * Checks that the theme directory exists and contains all required files
-     * as specified in the cms.themes.requiredFiles configuration.
+     * Performs three checks:
+     * 1. The theme directory exists.
+     * 2. All `cms.themes.requiredFiles` entries are present.
+     * 3. The `theme.json` manifest passes the pinned WP theme.json schema
+     *    (for any WP-shape keys it carries) and the cms-framework
+     *    `menus.locations` extension shape.
+     *
+     * Manifests that fail schema validation are skipped from discovery and
+     * a warning is logged naming the offending key.
      *
      * @since 1.0.0
      *
@@ -338,6 +349,28 @@ class ThemeManager
             if ( ! File::exists( $themePath . '/' . $file ) ) {
                 return false;
             }
+        }
+
+        $manifest = $this->parseManifest( $themePath . '/theme.json' );
+
+        if ( null === $manifest ) {
+            Log::warning( 'Theme has invalid theme.json (parse failed).', [
+                'path' => $themePath,
+            ] );
+
+            return false;
+        }
+
+        $result = $this->wpThemeJsonValidator->validate( $manifest );
+
+        if ( ! $result->valid ) {
+            Log::warning( 'Theme rejected: theme.json failed schema validation.', [
+                'path'         => $themePath,
+                'offendingKey' => $result->offendingKey,
+                'message'      => $result->message,
+            ] );
+
+            return false;
         }
 
         return true;
