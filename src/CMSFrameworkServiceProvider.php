@@ -27,6 +27,7 @@ use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Providers\PagesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Providers\PluginsServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Providers\SettingsServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Providers\SiteEditorServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
@@ -168,6 +169,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->register( BlogServiceProvider::class );
         $this->app->register( PagesServiceProvider::class );
         $this->app->register( ThemesServiceProvider::class );
+        $this->app->register( SiteEditorServiceProvider::class );
         $this->app->register( PluginsServiceProvider::class );
         $this->app->register( OpenApiServiceProvider::class );
     }
