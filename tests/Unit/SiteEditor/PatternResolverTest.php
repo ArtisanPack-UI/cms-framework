@@ -113,6 +113,59 @@ PHP );
 
         expect( $this->resolver->resolve( '../secret' ) )->toBeNull();
     } );
+
+    it( 'reads the leading docblock for headers, not a comment buried in the body', function (): void {
+        // The leading docblock is the real header; the docblock inside the
+        // <style> block is body content that incidentally uses the same
+        // doc-comment syntax. Without anchoring, the first non-greedy regex
+        // would still pick the leading block, but a file *missing* a leading
+        // docblock would fall through and parse the body comment as the
+        // header. Cover that explicitly with a no-leading-docblock fixture.
+        File::put( $this->themeFiles . '/leading-only.php', <<<'PHP'
+<?php
+/**
+ * Title: Real Hero
+ * Categories: featured
+ */
+?>
+<!-- wp:html -->
+<style>
+/**
+ * Title: Imposter
+ * Categories: malicious
+ */
+.x { color: red; }
+</style>
+<!-- /wp:html -->
+PHP );
+
+        $result = $this->resolver->resolve( 'leading-only' );
+
+        expect( $result->title )->toBe( 'Real Hero' )
+            ->and( $result->categories )->toEqual( [ 'featured' ] )
+            ->and( $result->rawContent )->toContain( 'wp:html' )
+            ->and( $result->rawContent )->toContain( 'Imposter' );
+    } );
+
+    it( 'does not parse a non-leading docblock as the header when the file has no leading one', function (): void {
+        File::put( $this->themeFiles . '/no-header.php', <<<'PHP'
+<?php
+$variable = 1;
+/**
+ * Title: Body Comment
+ * Categories: not-the-header
+ */
+?>
+<!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->
+PHP );
+
+        $result = $this->resolver->resolve( 'no-header' );
+
+        // Empty title falls back to humanized slug; categories stay empty —
+        // confirms the body docblock is not silently promoted to header.
+        expect( $result->title )->toBe( 'No Header' )
+            ->and( $result->categories )->toEqual( [ ] );
+    } );
 } );
 
 describe( 'PatternResolver::all()', function (): void {

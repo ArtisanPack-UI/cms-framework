@@ -44,7 +44,14 @@ final class PatternFileParser
     }
 
     /**
-     * Extract `Header: value` pairs from the leading doc-comment.
+     * Extract `Header: value` pairs from the *leading* doc-comment.
+     *
+     * The `\A` anchor + leading-noise allowance restricts the match to a
+     * docblock at the very top of the file (after an optional UTF-8 BOM,
+     * whitespace, and a single `<?php` tag — the only things that can
+     * legitimately precede the metadata block in a WP-style pattern file).
+     * Without anchoring, an earlier non-header `/* ... *\/` comment in the
+     * file body would be parsed as the header and shadow the real one.
      *
      * @since 1.2.0
      *
@@ -52,7 +59,7 @@ final class PatternFileParser
      */
     protected static function extractHeaders( string $contents ): array
     {
-        if ( ! preg_match( '/\/\*\*?(.*?)\*\//s', $contents, $match ) ) {
+        if ( ! preg_match( '/\A(?:\xEF\xBB\xBF)?\s*(?:<\?php\s+)?\/\*\*?(.*?)\*\//s', $contents, $match ) ) {
             return [];
         }
 
@@ -86,8 +93,15 @@ final class PatternFileParser
          * Strip a leading PHP-tag block surrounding a doc-comment, then return
          * the body that follows. WP block-pattern PHP files commonly close the
          * PHP tag right after the doc-comment so the body is plain HTML.
+         *
+         * Both branches are anchored to the start of the file (after an
+         * optional UTF-8 BOM and whitespace) so a docblock buried in the body
+         * is never mistaken for the leading header — its contents would
+         * otherwise be silently stripped along with the docblock itself.
          */
-        if ( preg_match( '/<\?php\s+\/\*\*?.*?\*\/\s*\?>(.*)$/s', $contents, $match ) ) {
+        $leading = '\A(?:\xEF\xBB\xBF)?\s*';
+
+        if ( preg_match( '/' . $leading . '<\?php\s+\/\*\*?.*?\*\/\s*\?>\s*(.*)$/s', $contents, $match ) ) {
             return $match[1];
         }
 
@@ -95,7 +109,7 @@ final class PatternFileParser
          * Doc-comment without surrounding PHP tags — return everything after
          * the closing of the comment.
          */
-        if ( preg_match( '/\/\*\*?.*?\*\/(.*)$/s', $contents, $match ) ) {
+        if ( preg_match( '/' . $leading . '\/\*\*?.*?\*\/\s*(.*)$/s', $contents, $match ) ) {
             return $match[1];
         }
 
