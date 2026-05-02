@@ -4,7 +4,7 @@ title: Site Editor
 
 # Site Editor Module
 
-The Site Editor module hosts the backends behind cms-framework's WordPress-style site-editor surface: templates, template parts, patterns, global styles, and menus. H1 ships templates and template parts; subsequent phases (H2–H4) add patterns, global styles, and menus to the same module.
+The Site Editor module hosts the backends behind cms-framework's WordPress-style site-editor surface: templates, template parts, patterns, global styles, and menus. H1 ships templates and template parts; H2 adds patterns; subsequent phases (H3–H4) add global styles and menus to the same module.
 
 ## Overview
 
@@ -93,6 +93,59 @@ The closed list is enforced at the application layer:
 
 Same shape as templates, but under `/api/v1/template-parts`. The response carries an additional `area` field and `type` is `wp_template_part`.
 
+## Patterns
+
+### Storage
+
+Patterns occupy two disjoint sources rather than a file/DB merge:
+
+- **Theme patterns** — PHP files at `themes/{active}/patterns/{slug}.php` with a leading WP-style header doc-comment (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`). Read-only at runtime; the body after the doc-comment becomes the pattern content.
+- **User patterns** — DB rows in `block_patterns` with columns `id`, `slug`, `theme` (nullable), `title`, `description`, `source`, `synced` (bool), `categories` (JSON), `block_types` (JSON), `block_content` (JSON via `HasBlockContent`), `author_id`, timestamps.
+
+User-pattern slugs carry a `user/` prefix at storage time per plan 14 §5.6 — this guarantees a theme pattern named `hero` and a user pattern named `hero` do not collide in the merged inserter map. The REST surface presents the unprefixed user-facing slug; the storage form is exposed as `name` on the unsynced response (mirroring WP's namespaced pattern names).
+
+### Sync semantics
+
+`synced` distinguishes the two pattern shapes Gutenberg recognizes:
+
+- `synced = true` — surfaced under `/blocks` (WP `wp_block` shape). Editing the pattern updates every occurrence in the editor.
+- `synced = false` — surfaced under `/block-patterns/patterns` (WP `wp_block_pattern` shape). Each insertion is a snapshot; later edits to the pattern do not propagate.
+
+Theme patterns are always `synced = false`. Cross-state conversion happens through dedicated POST flows on each endpoint, not via PUT (a PUT to one endpoint never flips a pattern's `synced` bit on the other endpoint).
+
+### REST endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET    | `/blocks` | List user-source synced patterns (`wp_block` shape). |
+| GET    | `/blocks/{slug}` | Show single synced pattern. |
+| POST   | `/blocks` | Create a synced user pattern. |
+| PUT    | `/blocks/{slug}` | Upsert a synced user pattern. |
+| DELETE | `/blocks/{slug}` | Delete a synced user pattern. |
+| GET    | `/block-patterns/patterns` | List theme + user-source unsynced patterns merged. |
+| GET    | `/block-patterns/patterns/{slug}` | Show single unsynced pattern (theme or user). |
+| POST   | `/block-patterns/patterns` | Create an unsynced user pattern. |
+| PUT    | `/block-patterns/patterns/{slug}` | Upsert an unsynced user pattern. **403** when targeting a theme slug. |
+| DELETE | `/block-patterns/patterns/{slug}` | Delete a user pattern. **403** when targeting a theme slug. |
+
+A theme pattern can be cloned to an editable user pattern via `PatternResolver::cloneToUser($slug)` — used by the admin "edit" affordance on theme patterns. The clone copies title, description, categories, and block types from the theme file into a new user-source DB row.
+
+### Resolver
+
+`PatternResolver` returns `ResolvedPattern` value objects. Unlike `EntityResolver` (templates / parts), it surfaces a `cloneToUser()` affordance and `toFilterMap()` for filter consumers, but does not implement `revert()` — patterns have no override-then-revert workflow.
+
+```php
+class PatternResolver
+{
+    public function resolve(string $slug): ?ResolvedPattern;
+    public function all(): array;                         // map<storage-slug, ResolvedPattern>
+    public function toFilterMap(): array;                 // map<storage-slug, array<string, mixed>>
+    public function cloneToUser(string $themeSlug): BlockPattern;
+}
+```
+
+The merged map keys use the storage form: theme patterns under their natural slug (`hero`), user patterns under `user/{slug}`. visual-editor's `ap.visual-editor.patterns` consumer expects this shape.
+
 ## Resolver contract
 
 Both entity types implement `ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\EntityResolver`:
@@ -108,22 +161,23 @@ interface EntityResolver
 
 `ResolvedEntity` is a value object carrying the merged source-of-truth: slug, theme, source (`'db'` or `'theme'`), content (block string), title, description, status, `hasThemeFile`, `isCustom`, `area` (parts only), and the backing model (when source is `'db'`).
 
-H2–H4 will add `PatternResolver`, `GlobalStylesResolver`, and `MenuResolver` against the same interface.
+`PatternResolver` (H2) does not implement `EntityResolver` — patterns have a different storage model and surface a `cloneToUser()` affordance instead of a slug-merge `revert()`. H3 (`GlobalStylesResolver`) and H4 (`MenuResolver`) will follow the same case-by-case shape decision.
 
 ## Permissions
 
-The slugs `visual_editor.templates.edit` and `visual_editor.template-parts.edit` are seeded by the parent `CMSFrameworkServiceProvider` via the G5 (#98) bridge. The SiteEditor module does not register additional permissions; routes use the `auth` middleware (V1 baseline of "any authenticated user", per plan 12 §2.6). V1.1 introduces fine-grained policies.
+The slugs `visual_editor.templates.edit`, `visual_editor.template-parts.edit`, and `visual_editor.patterns.edit` are seeded by the parent `CMSFrameworkServiceProvider` via the G5 (#98) bridge. The SiteEditor module does not register additional permissions; routes use the `auth` middleware (V1 baseline of "any authenticated user", per plan 12 §2.6). V1.1 introduces fine-grained policies.
 
 ## Service registration
 
 `SiteEditorServiceProvider` is registered from the parent `CMSFrameworkServiceProvider`. It:
 
-- Binds `TemplateResolver` and `TemplatePartResolver` as singletons.
+- Binds `TemplateResolver`, `TemplatePartResolver`, and `PatternResolver` as singletons.
 - Loads `routes/api.php` for the REST endpoints.
+- Registers `ap.visual-editor.patterns` filter under a `class_exists(VisualEditor::class)` guard so cms-framework boots cleanly without visual-editor installed.
 
 Migrations live at the package level (`database/migrations/`) and are loaded by the parent `CMSFrameworkServiceProvider`.
 
 ## Coordination with visual-editor
 
-- `#407` (H5 — site-editor resource filters): visual-editor reads the `/templates` and `/template-parts` endpoints to populate `addEntities()` at editor bootstrap.
+- `#407` (H5 — site-editor resource filters): visual-editor reads the `/templates`, `/template-parts`, `/blocks`, and `/block-patterns/patterns` endpoints to populate `addEntities()` at editor bootstrap. Patterns specifically surface through the `ap.visual-editor.patterns` filter that cms-framework registers behind a `class_exists` guard.
 - `#399` (G3 — editor entity adapter): visual-editor's WP-shape resource adapter maps the REST responses back into the editor's `useEntityRecord` / `useEntityRecords` selectors.

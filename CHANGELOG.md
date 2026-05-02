@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `block_content` JSON column on the `posts` and `pages` tables for visual editor block trees, alongside the existing `content` longText column
 - `Post` and `Page` models adopt `ArtisanPackUI\VisualEditor\Concerns\HasBlockContent` with a polyfill stub so visual-editor remains an optional integration rather than a hard composer dependency
+- H2 — Site editor patterns module: `BlockPattern` model + `block_patterns` table, `PatternResolver` merging theme `.php` pattern files with user-source DB rows, REST endpoints in WP `/wp/v2/blocks` (synced) + `/wp/v2/block-patterns/patterns` (unsynced) shape, and `ap.visual-editor.patterns` filter registration behind a `class_exists` guard
+- `PatternFileParser` for theme-shipped pattern files with WP-style header doc-comments (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`)
 
 ### Changed
 

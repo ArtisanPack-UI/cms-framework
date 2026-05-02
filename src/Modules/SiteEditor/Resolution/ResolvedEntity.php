@@ -65,4 +65,44 @@ final class ResolvedEntity
     {
         return null !== $this->model ? (int) $this->model->id : 0;
     }
+
+    /**
+     * Convert to the array shape consumed by visual-editor's
+     * {@see \ArtisanPackUI\VisualEditor\SiteEditor\Resolution\ResolvedTemplate::fromArray()}
+     * (and {@see \ArtisanPackUI\VisualEditor\SiteEditor\Resolution\ResolvedTemplatePart::fromArray()}
+     * when `area` is populated). Distinct from the WP REST `TemplateResource`
+     * shape: REST emits `id`, `content.{raw,blocks}`, and `title.{raw,rendered}`,
+     * while the filter expects `slug`, `theme`, top-level `raw_content`/`blocks`,
+     * and a plain string `title`.
+     *
+     * @since 1.2.0
+     *
+     * @return array<string, mixed>
+     */
+    public function toFilterEntry(): array
+    {
+        $entry = [
+            'slug'           => $this->slug,
+            'theme'          => $this->theme,
+            'title'          => $this->title ?? '',
+            'description'    => $this->description ?? '',
+            'status'         => $this->status,
+            'source'         => $this->source,
+            'raw_content'    => $this->raw,
+            'blocks'         => $this->blocks,
+            'has_theme_file' => $this->hasThemeFile,
+            'is_custom'      => $this->isCustom,
+            'wp_id'          => $this->wpId(),
+            'author_id'      => null !== $this->model ? (int) ( $this->model->author_id ?? 0 ) : null,
+            'modified_at'    => null !== $this->model
+                ? optional( $this->model->updated_at )->toIso8601String()
+                : null,
+        ];
+
+        if ( null !== $this->area ) {
+            $entry['area'] = $this->area;
+        }
+
+        return $entry;
+    }
 }
