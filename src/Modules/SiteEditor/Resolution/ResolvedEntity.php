@@ -93,7 +93,9 @@ final class ResolvedEntity
             'has_theme_file' => $this->hasThemeFile,
             'is_custom'      => $this->isCustom,
             'wp_id'          => $this->wpId(),
-            'author_id'      => null !== $this->model ? (int) ( $this->model->author_id ?? 0 ) : null,
+            'author_id'      => null !== $this->model && null !== $this->model->author_id
+                ? (int) $this->model->author_id
+                : null,
             'modified_at'    => null !== $this->model
                 ? optional( $this->model->updated_at )->toIso8601String()
                 : null,
