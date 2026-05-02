@@ -175,15 +175,21 @@ class GlobalStylesResolver
             return null;
         }
 
+        // Distinguish "key absent — leave the column alone" from "key present
+        // and null — clear the column." `array_filter(…, fn !== null)` would
+        // collapse the second case into the first, breaking the WP semantic
+        // where PUT `{"variation": null}` clears a stored variation.
+        $assignable = [];
+
+        foreach ( [ 'settings', 'styles', 'variation', 'title', 'author_id' ] as $key ) {
+            if ( array_key_exists( $key, $payload ) ) {
+                $assignable[ $key ] = $payload[ $key ];
+            }
+        }
+
         return GlobalStyles::query()->updateOrCreate(
             [ 'theme' => (string) $theme['slug'] ],
-            array_filter( [
-                'settings'  => $payload['settings'] ?? null,
-                'styles'    => $payload['styles'] ?? null,
-                'variation' => array_key_exists( 'variation', $payload ) ? $payload['variation'] : null,
-                'title'     => $payload['title'] ?? null,
-                'author_id' => $payload['author_id'] ?? null,
-            ], static fn ( $value ): bool => null !== $value ),
+            $assignable,
         );
     }
 

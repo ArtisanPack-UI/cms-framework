@@ -114,6 +114,20 @@ describe( 'PUT /api/v1/global-styles', function (): void {
             'variation' => '../traversal',
         ] )->assertUnprocessable();
     } );
+
+    it( 'allows PUT { variation: null } to clear a stored variation', function (): void {
+        GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'dark',
+            'styles'    => [ 'color' => [ 'background' => '#000000' ] ],
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $this->putJson( '/api/v1/global-styles', [ 'variation' => null ] )->assertOk();
+
+        expect( GlobalStyles::query()->where( 'theme', $this->themeSlug )->first()->variation )->toBeNull();
+    } );
 } );
 
 describe( 'DELETE /api/v1/global-styles', function (): void {
@@ -137,6 +151,18 @@ describe( 'DELETE /api/v1/global-styles', function (): void {
         $this->actingAs( $this->user );
 
         $this->deleteJson( '/api/v1/global-styles' )->assertNotFound();
+    } );
+
+    it( 'returns 409 when no theme is active', function (): void {
+        $this->mock( ThemeManager::class, function ( $mock ): void {
+            $mock->shouldReceive( 'getActiveTheme' )->andReturn( null );
+        } );
+
+        $this->actingAs( $this->user );
+
+        $this->deleteJson( '/api/v1/global-styles' )
+            ->assertStatus( 409 )
+            ->assertJson( [ 'message' => 'No active theme.' ] );
     } );
 } );
 

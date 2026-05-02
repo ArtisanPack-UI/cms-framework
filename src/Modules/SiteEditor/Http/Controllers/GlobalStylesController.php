@@ -93,9 +93,14 @@ class GlobalStylesController extends Controller
      */
     public function destroy(): JsonResponse
     {
-        $reverted = $this->resolver->revert();
+        // Active-theme check first — `revert()` returns false in two distinct
+        // cases (no active theme, no DB row to delete); separating the checks
+        // keeps the no-theme path on a 409 and the no-row path on a 404.
+        if ( null === $this->resolver->resolve() ) {
+            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        }
 
-        if ( ! $reverted ) {
+        if ( ! $this->resolver->revert() ) {
             return response()->json( [ 'message' => 'No user customization to revert.' ], 404 );
         }
 

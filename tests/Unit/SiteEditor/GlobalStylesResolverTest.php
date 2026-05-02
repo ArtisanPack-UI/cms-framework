@@ -208,6 +208,40 @@ describe( 'GlobalStylesResolver::update() / revert()', function (): void {
     it( 'returns false from revert when there is no row', function (): void {
         expect( $this->resolver->revert() )->toBeFalse();
     } );
+
+    it( 'preserves explicit null updates so PUT can clear stored fields', function (): void {
+        $row = GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'dark',
+            'styles'    => [ 'color' => [ 'background' => '#000000' ] ],
+        ] );
+
+        // Simulate the controller's PUT { variation: null } — `validated()` returns
+        // an array with the key present and the value null. The resolver must
+        // forward that null to clear the column, not strip it as "absent."
+        $this->resolver->update( [ 'variation' => null ] );
+
+        $row->refresh();
+
+        expect( $row->variation )->toBeNull()
+            // Keys not present in the payload must keep their existing values.
+            ->and( $row->styles['color']['background'] )->toBe( '#000000' );
+    } );
+
+    it( 'leaves keys absent from the payload untouched on update', function (): void {
+        $row = GlobalStyles::create( [
+            'theme'  => $this->themeSlug,
+            'styles' => [ 'color' => [ 'background' => '#000000' ] ],
+            'title'  => 'Original',
+        ] );
+
+        $this->resolver->update( [ 'styles' => [ 'color' => [ 'background' => '#abcdef' ] ] ] );
+
+        $row->refresh();
+
+        expect( $row->styles['color']['background'] )->toBe( '#abcdef' )
+            ->and( $row->title )->toBe( 'Original' );
+    } );
 } );
 
 describe( 'ResolvedGlobalStyles::contentHash()', function (): void {

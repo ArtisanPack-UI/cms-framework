@@ -145,8 +145,16 @@ class SiteEditorServiceProvider extends ServiceProvider
      */
     protected function registerGlobalStylesBladeDirective(): void
     {
+        // User-controlled values flow through the emitter as raw strings
+        // (palette colors, font names, custom property values). Neutralize
+        // any `</` sequence so a payload like `red;}</style><script>` cannot
+        // close the surrounding `<style>` block and execute markup. `<\/`
+        // is invalid CSS outside strings (where it parses as `</`) but the
+        // HTML5 raw-text parser only terminates `<style>` on the literal
+        // `</style`, so the escape neutralizes the breakout without altering
+        // CSS semantics for any well-formed input.
         Blade::directive( 'cmsGlobalStyles', function (): string {
-            return "<?php echo '<style id=\"cms-global-styles\">' . app( \\ArtisanPackUI\\CMSFramework\\Modules\\SiteEditor\\Emission\\GlobalStylesEmitter::class )->emit() . '</style>'; ?>";
+            return "<?php echo '<style id=\"cms-global-styles\">' . str_ireplace( '</', '<\\\\/', app( \\ArtisanPackUI\\CMSFramework\\Modules\\SiteEditor\\Emission\\GlobalStylesEmitter::class )->emit() ) . '</style>'; ?>";
         } );
     }
 
