@@ -18,12 +18,16 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission\GlobalStylesEmitter;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\EntityResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\GlobalStylesResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\PatternResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\VisualEditor\VisualEditor;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -47,6 +51,14 @@ class SiteEditorServiceProvider extends ServiceProvider
         $this->app->singleton( PatternResolver::class, function ( $app ) {
             return new PatternResolver( $app->make( ThemeManager::class ) );
         } );
+
+        $this->app->singleton( GlobalStylesResolver::class, function ( $app ) {
+            return new GlobalStylesResolver( $app->make( ThemeManager::class ) );
+        } );
+
+        $this->app->singleton( GlobalStylesEmitter::class, function ( $app ) {
+            return new GlobalStylesEmitter( $app->make( GlobalStylesResolver::class ) );
+        } );
     }
 
     /**
@@ -57,6 +69,8 @@ class SiteEditorServiceProvider extends ServiceProvider
         $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
 
         $this->registerVisualEditorSiteEditorFilters();
+        $this->registerGlobalStylesBladeDirective();
+        $this->registerGlobalStylesObserver();
     }
 
     /**
@@ -91,6 +105,16 @@ class SiteEditorServiceProvider extends ServiceProvider
         addFilter( 'ap.visual-editor.patterns', function ( array $patterns ): array {
             return array_merge( $this->app->make( PatternResolver::class )->toFilterMap(), $patterns );
         } );
+
+        // Singleton filter — `?ResolvedGlobalStyles` array shape (or null when no
+        // active theme). cms-framework's resolution always wins when present;
+        // the prior value (typically null from the default callback) only
+        // surfaces when there is no active theme.
+        addFilter( 'ap.visual-editor.global-styles', function ( $existing ) {
+            $resolved = $this->app->make( GlobalStylesResolver::class )->resolve();
+
+            return null !== $resolved ? $resolved->toFilterEntry() : $existing;
+        } );
     }
 
     /**
@@ -110,5 +134,35 @@ class SiteEditorServiceProvider extends ServiceProvider
         }
 
         return $map;
+    }
+
+    /**
+     * Register the `@cmsGlobalStyles` Blade directive. Themes opt in by
+     * including the directive in their root layout; it expands to a
+     * `<style>` block carrying the {@see GlobalStylesEmitter} output.
+     *
+     * @since 1.2.0
+     */
+    protected function registerGlobalStylesBladeDirective(): void
+    {
+        Blade::directive( 'cmsGlobalStyles', function (): string {
+            return "<?php echo '<style id=\"cms-global-styles\">' . app( \\ArtisanPackUI\\CMSFramework\\Modules\\SiteEditor\\Emission\\GlobalStylesEmitter::class )->emit() . '</style>'; ?>";
+        } );
+    }
+
+    /**
+     * Wire model-level cache invalidation: any save or delete on the
+     * `global_styles` table busts the emitter cache for the affected theme.
+     *
+     * @since 1.2.0
+     */
+    protected function registerGlobalStylesObserver(): void
+    {
+        $invalidate = function (): void {
+            $this->app->make( GlobalStylesEmitter::class )->invalidate();
+        };
+
+        GlobalStyles::saved( $invalidate );
+        GlobalStyles::deleted( $invalidate );
     }
 }

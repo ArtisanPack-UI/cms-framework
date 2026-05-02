@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\BlockPatternsController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\BlocksController;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\GlobalStylesController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\TemplatePartsController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\TemplatesController;
 use Illuminate\Support\Facades\Route;
@@ -41,5 +42,13 @@ Route::prefix( 'api/v1' )
             Route::get( '{slug}', [ BlockPatternsController::class, 'show' ] )->name( 'api.block-patterns.show' );
             Route::put( '{slug}', [ BlockPatternsController::class, 'update' ] )->name( 'api.block-patterns.update' );
             Route::delete( '{slug}', [ BlockPatternsController::class, 'destroy' ] )->name( 'api.block-patterns.destroy' );
+        } );
+
+        Route::prefix( 'global-styles' )->group( function (): void {
+            Route::get( 'variations', [ GlobalStylesController::class, 'variations' ] )->name( 'api.global-styles.variations' );
+            Route::get( 'css', [ GlobalStylesController::class, 'css' ] )->name( 'api.global-styles.css' );
+            Route::get( '/', [ GlobalStylesController::class, 'show' ] )->name( 'api.global-styles.show' );
+            Route::put( '/', [ GlobalStylesController::class, 'update' ] )->name( 'api.global-styles.update' );
+            Route::delete( '/', [ GlobalStylesController::class, 'destroy' ] )->name( 'api.global-styles.destroy' );
         } );
     } );
