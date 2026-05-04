@@ -29,6 +29,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\VisualEditor\VisualEditor;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -100,14 +101,26 @@ class SiteEditorServiceProvider extends ServiceProvider
         }
 
         addFilter( 'ap.visual-editor.templates', function ( array $templates ): array {
+            if ( ! Schema::hasTable( 'templates' ) ) {
+                return $templates;
+            }
+
             return array_merge( $this->buildTemplateFilterMap( $this->app->make( TemplateResolver::class ) ), $templates );
         } );
 
         addFilter( 'ap.visual-editor.template-parts', function ( array $parts ): array {
+            if ( ! Schema::hasTable( 'template_parts' ) ) {
+                return $parts;
+            }
+
             return array_merge( $this->buildTemplateFilterMap( $this->app->make( TemplatePartResolver::class ) ), $parts );
         } );
 
         addFilter( 'ap.visual-editor.patterns', function ( array $patterns ): array {
+            if ( ! Schema::hasTable( 'block_patterns' ) ) {
+                return $patterns;
+            }
+
             return array_merge( $this->app->make( PatternResolver::class )->toFilterMap(), $patterns );
         } );
 
@@ -116,6 +129,10 @@ class SiteEditorServiceProvider extends ServiceProvider
         // the prior value (typically null from the default callback) only
         // surfaces when there is no active theme.
         addFilter( 'ap.visual-editor.global-styles', function ( $existing ) {
+            if ( ! Schema::hasTable( 'global_styles' ) ) {
+                return $existing;
+            }
+
             $resolved = $this->app->make( GlobalStylesResolver::class )->resolve();
 
             return null !== $resolved ? $resolved->toFilterEntry() : $existing;
@@ -126,6 +143,10 @@ class SiteEditorServiceProvider extends ServiceProvider
         // resolved map goes *under* the existing map so app-level config
         // (or earlier filter contributors) wins on key collision.
         addFilter( 'ap.visual-editor.navigation', function ( array $existing ): array {
+            if ( ! Schema::hasTable( 'menus' ) ) {
+                return $existing;
+            }
+
             return array_merge( $this->app->make( MenuResolver::class )->all(), $existing );
         } );
     }
