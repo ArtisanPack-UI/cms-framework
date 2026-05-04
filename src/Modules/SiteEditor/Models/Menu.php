@@ -60,14 +60,19 @@ class Menu extends Model
     ];
 
     /**
-     * Items in this menu, ordered by `(parent_id, position)` so consumers
-     * receive a deterministic flat list ready to nest.
+     * Items in this menu, ordered by `(parent_id, position, id)` so consumers
+     * receive a deterministic flat list ready to nest. The `id` tiebreaker
+     * keeps ordering stable when two siblings share `position` (which can
+     * happen mid-edit before the client has resequenced positions).
      *
      * @since 1.2.0
      */
     public function items(): HasMany
     {
-        return $this->hasMany( MenuItem::class )->orderBy( 'parent_id' )->orderBy( 'position' );
+        return $this->hasMany( MenuItem::class )
+            ->orderBy( 'parent_id' )
+            ->orderBy( 'position' )
+            ->orderBy( 'id' );
     }
 
     /**

@@ -72,6 +72,72 @@ describe( 'GET /api/v1/menu-items', function (): void {
 
         $this->getJson( '/api/v1/menu-items?menus=abc' )->assertStatus( 422 );
     } );
+
+    it( 'rejects scientific-notation ?menus filters that pass is_numeric', function (): void {
+        $this->actingAs( $this->user );
+
+        // `is_numeric("1e3")` is true but `(int) "1e3"` is 1, not 1000.
+        // The strict positive-integer-string check rejects it.
+        $this->getJson( '/api/v1/menu-items?menus=1e3' )->assertStatus( 422 );
+    } );
+
+    it( 'does not surface items from menus in other themes', function (): void {
+        $foreign = Menu::create( [
+            'theme' => 'other-theme',
+            'slug'  => 'foreign',
+            'name'  => 'Foreign',
+        ] );
+
+        MenuItem::create( [
+            'menu_id'  => $foreign->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_LINK,
+            'label'    => 'Foreign Item',
+        ] );
+
+        MenuItem::create( [
+            'menu_id'  => $this->menu->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_LINK,
+            'label'    => 'Local Item',
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/menu-items' );
+
+        $response->assertOk();
+
+        $labels = collect( $response->json() )->pluck( 'title.raw' )->all();
+
+        expect( $labels )->toBe( [ 'Local Item' ] );
+    } );
+
+    it( 'tiebreaks equal positions by id for deterministic order', function (): void {
+        // Two siblings with the same `position` — without the `id` tiebreaker
+        // the relative order would be implementation-defined.
+        $first = MenuItem::create( [
+            'menu_id'  => $this->menu->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_LINK,
+            'label'    => 'First',
+        ] );
+
+        $second = MenuItem::create( [
+            'menu_id'  => $this->menu->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_LINK,
+            'label'    => 'Second',
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/menu-items?menus=' . $this->menu->id );
+
+        $ids = collect( $response->json() )->pluck( 'id' )->all();
+
+        expect( $ids )->toBe( [ $first->id, $second->id ] );
+    } );
 } );
 
 describe( 'POST /api/v1/menu-items', function (): void {
@@ -134,6 +200,99 @@ describe( 'POST /api/v1/menu-items', function (): void {
             'type'   => MenuItem::TYPE_LINK,
             'parent' => $alien->id,
         ] )->assertStatus( 422 );
+    } );
+
+    it( 'rejects items targeting menus in other themes', function (): void {
+        $foreign = Menu::create( [
+            'theme' => 'other-theme',
+            'slug'  => 'foreign',
+            'name'  => 'Foreign',
+        ] );
+
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/menu-items', [
+            'menus' => $foreign->id,
+            'title' => 'Sneaky',
+            'type'  => MenuItem::TYPE_LINK,
+        ] )->assertNotFound();
+    } );
+
+    it( 'normalizes WP sentinel parent=0 to a root item', function (): void {
+        $this->actingAs( $this->user );
+
+        // WP REST sends `parent: 0` for top-level items. Without the
+        // prepareForValidation() normalization, this would fail the
+        // `exists:menu_items,id` rule (no item has id 0).
+        $response = $this->postJson( '/api/v1/menu-items', [
+            'menus'  => $this->menu->id,
+            'title'  => 'Root',
+            'type'   => MenuItem::TYPE_LINK,
+            'parent' => 0,
+        ] );
+
+        $response->assertCreated();
+        expect( $response->json( 'parent' ) )->toBe( 0 );
+    } );
+
+    it( 'normalizes WP sentinel object="" + object_id=0 (custom-link payload)', function (): void {
+        $this->actingAs( $this->user );
+
+        // WP REST sends `object: ""` and `object_id: 0` for custom links.
+        // Without prepareForValidation() the pairing rule would fire
+        // because `0` is "filled" but `""` is not.
+        $response = $this->postJson( '/api/v1/menu-items', [
+            'menus'     => $this->menu->id,
+            'title'     => 'Custom',
+            'type'      => MenuItem::TYPE_LINK,
+            'object'    => '',
+            'object_id' => 0,
+        ] );
+
+        $response->assertCreated();
+        expect( $response->json( 'object' ) )->toBe( '' )
+            ->and( $response->json( 'object_id' ) )->toBe( 0 );
+    } );
+
+    it( 'rejects an unknown kind value', function (): void {
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/menu-items', [
+            'menus' => $this->menu->id,
+            'title' => 'Item',
+            'type'  => MenuItem::TYPE_LINK,
+            'kind'  => 'unknown-kind',
+        ] )->assertStatus( 422 );
+    } );
+
+    it( 'accepts known kind values', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->postJson( '/api/v1/menu-items', [
+            'menus' => $this->menu->id,
+            'title' => 'Post Link',
+            'type'  => MenuItem::TYPE_LINK,
+            'kind'  => 'post-type',
+        ] );
+
+        $response->assertCreated();
+        expect( $response->json( 'type' ) )->toBe( 'post_type' );
+    } );
+
+    it( 'normalizes whitespace in classes and xfn for the WP-shape response', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->postJson( '/api/v1/menu-items', [
+            'menus'   => $this->menu->id,
+            'title'   => 'Item',
+            'type'    => MenuItem::TYPE_LINK,
+            'classes' => 'foo  bar   baz',
+            'xfn'     => '  nofollow   noopener  ',
+        ] );
+
+        $response->assertCreated();
+        expect( $response->json( 'classes' ) )->toBe( [ 'foo', 'bar', 'baz' ] )
+            ->and( $response->json( 'xfn' ) )->toBe( [ 'nofollow', 'noopener' ] );
     } );
 } );
 

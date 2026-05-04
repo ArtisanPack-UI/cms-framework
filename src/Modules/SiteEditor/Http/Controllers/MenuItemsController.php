@@ -9,6 +9,10 @@
  * required on `store` and prohibited on `update` (items cannot be
  * reparented across menus — delete and recreate instead).
  *
+ * All read and write operations are scoped to menus belonging to the
+ * active theme — items in other themes' menus are unreachable through
+ * this controller (404 instead of cross-theme leakage).
+ *
  * @since      1.2.0
  */
 
@@ -20,7 +24,9 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\MenuItemRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\MenuItemResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Menu;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\MenuItem;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Dedoc\Scramble\Attributes\Group;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -32,25 +38,40 @@ use Illuminate\Routing\Controller;
 class MenuItemsController extends Controller
 {
     /**
+     * @since 1.2.0
+     */
+    public function __construct(
+        private ThemeManager $themeManager,
+    ) {
+    }
+
+    /**
      * GET /api/v1/menu-items?menus={id} — list items for a menu, ordered
-     * by `(parent_id, position)` so consumers receive a deterministic flat
-     * list ready to nest.
+     * by `(parent_id, position, id)` so consumers receive a deterministic
+     * flat list ready to nest. The `id` tiebreaker keeps ordering stable
+     * when two siblings share `position`.
      *
      * @since 1.2.0
      */
     public function index( Request $request ): JsonResponse
     {
-        $query = MenuItem::query()
-            ->orderBy( 'parent_id' )
-            ->orderBy( 'position' );
+        $query = $this->themeScopedQuery();
+
+        if ( null === $query ) {
+            return response()->json( [] );
+        }
+
+        $query->orderBy( 'parent_id' )
+            ->orderBy( 'position' )
+            ->orderBy( 'id' );
 
         $menusFilter = $request->query( 'menus' );
 
         if ( null !== $menusFilter ) {
-            if ( ! is_numeric( $menusFilter ) ) {
+            if ( ! self::isPositiveIntegerString( $menusFilter ) ) {
                 return response()->json( [
                     'message' => 'Invalid menus filter.',
-                    'errors'  => [ 'menus' => [ 'menus must be an integer menu id.' ] ],
+                    'errors'  => [ 'menus' => [ 'menus must be a positive integer menu id.' ] ],
                 ], 422 );
             }
 
@@ -67,7 +88,7 @@ class MenuItemsController extends Controller
      */
     public function show( int $id ): JsonResponse
     {
-        $item = MenuItem::query()->find( $id );
+        $item = $this->findItemForActiveTheme( $id );
 
         if ( null === $item ) {
             return response()->json( [ 'message' => 'Menu item not found.' ], 404 );
@@ -77,15 +98,24 @@ class MenuItemsController extends Controller
     }
 
     /**
-     * POST /api/v1/menu-items — create an item under a menu.
+     * POST /api/v1/menu-items — create an item under a menu in the active
+     * theme. Returns 404 when the menu belongs to another theme so this
+     * endpoint cannot be used to write into other themes' menus.
      *
      * @since 1.2.0
      */
     public function store( MenuItemRequest $request ): JsonResponse
     {
-        $validated = $request->validated();
+        $theme = $this->activeThemeSlug();
 
-        $menu = Menu::query()->find( (int) $validated['menus'] );
+        if ( null === $theme ) {
+            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        }
+
+        $validated = $request->validated();
+        $menu      = Menu::query()
+            ->where( 'theme', $theme )
+            ->find( (int) $validated['menus'] );
 
         if ( null === $menu ) {
             return response()->json( [ 'message' => 'Menu not found.' ], 404 );
@@ -97,13 +127,13 @@ class MenuItemsController extends Controller
     }
 
     /**
-     * PUT /api/v1/menu-items/{id} — update an item.
+     * PUT /api/v1/menu-items/{id} — update an item in the active theme.
      *
      * @since 1.2.0
      */
     public function update( MenuItemRequest $request, int $id ): JsonResponse
     {
-        $item = MenuItem::query()->find( $id );
+        $item = $this->findItemForActiveTheme( $id );
 
         if ( null === $item ) {
             return response()->json( [ 'message' => 'Menu item not found.' ], 404 );
@@ -124,7 +154,7 @@ class MenuItemsController extends Controller
      */
     public function destroy( int $id ): JsonResponse
     {
-        $item = MenuItem::query()->find( $id );
+        $item = $this->findItemForActiveTheme( $id );
 
         if ( null === $item ) {
             return response()->json( [ 'message' => 'Menu item not found.' ], 404 );
@@ -133,6 +163,65 @@ class MenuItemsController extends Controller
         $item->delete();
 
         return response()->json( null, 204 );
+    }
+
+    /**
+     * Build a base query that only sees items whose parent menu belongs to
+     * the active theme. Returns null when there is no active theme so the
+     * caller can short-circuit (typically by returning an empty list).
+     *
+     * @since 1.2.0
+     */
+    protected function themeScopedQuery(): ?Builder
+    {
+        $theme = $this->activeThemeSlug();
+
+        if ( null === $theme ) {
+            return null;
+        }
+
+        return MenuItem::query()->whereHas( 'menu', static function ( Builder $menu ) use ( $theme ): void {
+            $menu->where( 'theme', $theme );
+        } );
+    }
+
+    /**
+     * Look up a single item, verifying its parent menu belongs to the
+     * active theme.
+     *
+     * @since 1.2.0
+     */
+    protected function findItemForActiveTheme( int $id ): ?MenuItem
+    {
+        $query = $this->themeScopedQuery();
+
+        if ( null === $query ) {
+            return null;
+        }
+
+        return $query->find( $id );
+    }
+
+    /**
+     * @since 1.2.0
+     */
+    protected function activeThemeSlug(): ?string
+    {
+        $theme = $this->themeManager->getActiveTheme();
+
+        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+    }
+
+    /**
+     * Strict positive-integer-string check. Rejects `is_numeric` edge cases
+     * like `"1e3"` (which casts to 1, not 1000) and `"01"` (which casts to
+     * 1, masking the leading zero).
+     *
+     * @since 1.2.0
+     */
+    protected static function isPositiveIntegerString( mixed $value ): bool
+    {
+        return is_string( $value ) && '' !== $value && ctype_digit( $value );
     }
 
     /**

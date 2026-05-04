@@ -162,6 +162,12 @@ class MenusController extends Controller
     /**
      * Resolve `{id_or_slug}` to a {@see Menu} for the active theme.
      *
+     * Tries slug match first, then falls back to integer-id lookup. Slug-first
+     * order matters for numeric-only slugs (e.g. `"123"`), which `SlugValidator`
+     * accepts and which would otherwise be unreachable: an ID-first resolver
+     * would always shadow them with the row whose `id = 123`, which may belong
+     * to a different menu (or another theme).
+     *
      * @since 1.2.0
      */
     protected function resolveMenu( string $idOrSlug ): ?Menu
@@ -174,15 +180,19 @@ class MenusController extends Controller
 
         $query = Menu::query()->where( 'theme', $theme )->with( 'locationAssignments' );
 
+        if ( SlugValidator::isValid( $idOrSlug ) ) {
+            $bySlug = ( clone $query )->where( 'slug', $idOrSlug )->first();
+
+            if ( null !== $bySlug ) {
+                return $bySlug;
+            }
+        }
+
         if ( ctype_digit( $idOrSlug ) ) {
             return $query->find( (int) $idOrSlug );
         }
 
-        if ( ! SlugValidator::isValid( $idOrSlug ) ) {
-            return null;
-        }
-
-        return $query->where( 'slug', $idOrSlug )->first();
+        return null;
     }
 
     /**

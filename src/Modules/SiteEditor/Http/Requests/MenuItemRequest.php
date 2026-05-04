@@ -6,8 +6,13 @@
  * Validates store/update payloads for `/api/v1/menu-items`. Enforces:
  *
  * - `type` ∈ {link, submenu, page-list}
+ * - `kind` ∈ {post-type, taxonomy, custom} when present (allow-list)
  * - `(object_type, object_id)` paired (both present or both absent)
  * - `parent_id` references a `MenuItem` belonging to the same `Menu`
+ *
+ * Normalizes WP REST sentinel values (`parent: 0`, `object: ""` paired
+ * with `object_id: 0`) to nulls in {@see prepareForValidation()} so
+ * upstream WP-shape clients pass without rewriting their payloads.
  *
  * @since      1.2.0
  */
@@ -16,6 +21,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\MenuItemResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\MenuItem;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
@@ -57,7 +63,7 @@ class MenuItemRequest extends FormRequest
             'description' => [ 'nullable', 'string' ],
             'object'      => [ 'nullable', 'string', 'max:64', $this->objectPairing() ],
             'object_id'   => [ 'nullable', 'integer', $this->objectPairing() ],
-            'kind'        => [ 'nullable', 'string', 'max:32' ],
+            'kind'        => [ 'nullable', 'string', 'max:32', Rule::in( array_keys( MenuItemResource::KIND_TO_TYPE ) ) ],
         ];
     }
 
@@ -74,6 +80,56 @@ class MenuItemRequest extends FormRequest
             'type.in'           => __( 'Type must be one of link, submenu, or page-list.' ),
             'target.in'         => __( 'Target must be _self or _blank.' ),
         ];
+    }
+
+    /**
+     * Normalize WP REST sentinel values before validation runs:
+     *
+     * - `parent: 0` → `parent: null` (WP marks root items with id `0`,
+     *   which fails `exists:menu_items,id` since no item has id 0).
+     * - `object: ""` paired with `object_id: 0` → both null (WP marks
+     *   non-typed items this way; the pairing rule treats `""` as empty
+     *   on one side but `0` as filled on the other, raising a spurious
+     *   "must be provided together" error).
+     *
+     * @since 1.2.0
+     */
+    protected function prepareForValidation(): void
+    {
+        $merge = [];
+
+        if ( $this->has( 'parent' ) && self::isZeroSentinel( $this->input( 'parent' ) ) ) {
+            $merge['parent'] = null;
+        }
+
+        $object   = $this->input( 'object' );
+        $objectId = $this->input( 'object_id' );
+
+        if (
+            ( '' === $object || null === $object )
+            && ( null === $objectId || self::isZeroSentinel( $objectId ) )
+        ) {
+            $merge['object']    = null;
+            $merge['object_id'] = null;
+        }
+
+        if ( ! empty( $merge ) ) {
+            $this->merge( $merge );
+        }
+    }
+
+    /**
+     * Identify the WP sentinel zero (sent as `0` or `"0"`) without
+     * matching the literal string `"0"` other code paths might intend
+     * (e.g. an `object` whose value is the string `"0"`, which is not
+     * a sentinel — `object` is a non-numeric type vocabulary). Used by
+     * {@see prepareForValidation()} on integer-typed fields only.
+     *
+     * @since 1.2.0
+     */
+    protected static function isZeroSentinel( mixed $value ): bool
+    {
+        return 0 === $value || '0' === $value;
     }
 
     /**

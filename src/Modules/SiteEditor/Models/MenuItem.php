@@ -113,13 +113,14 @@ class MenuItem extends Model
     }
 
     /**
-     * Direct children of this item, ordered by position.
+     * Direct children of this item, ordered by `(position, id)`. The `id`
+     * tiebreaker keeps ordering stable when two siblings share `position`.
      *
      * @since 1.2.0
      */
     public function children(): HasMany
     {
-        return $this->hasMany( self::class, 'parent_id' )->orderBy( 'position' );
+        return $this->hasMany( self::class, 'parent_id' )->orderBy( 'position' )->orderBy( 'id' );
     }
 
     /**

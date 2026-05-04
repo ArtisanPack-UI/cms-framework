@@ -134,6 +134,34 @@ describe( 'GET /api/v1/menus/{id_or_slug}', function (): void {
 
         $this->getJson( '/api/v1/menus/main' )->assertNotFound();
     } );
+
+    it( 'prefers a slug match over a same-numbered id when both exist', function (): void {
+        // Two menus: one whose `id` happens to be 1, one whose `slug` is "1".
+        $first = Menu::create( [ 'theme' => $this->themeSlug, 'slug' => 'first', 'name' => 'First' ] );
+
+        $second = Menu::create( [ 'theme' => $this->themeSlug, 'slug' => (string) $first->id, 'name' => 'Slug Wins' ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/menus/' . $first->id );
+
+        // Slug match wins — `/menus/1` resolves to the menu with slug "1",
+        // not the menu with id 1, so a numeric-only slug stays reachable.
+        $response->assertOk();
+        expect( $response->json( 'id' ) )->toBe( $second->id )
+            ->and( $response->json( 'slug' ) )->toBe( (string) $first->id );
+    } );
+
+    it( 'falls back to id lookup when no slug matches', function (): void {
+        $menu = Menu::create( [ 'theme' => $this->themeSlug, 'slug' => 'main', 'name' => 'Main' ] );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/menus/' . $menu->id );
+
+        $response->assertOk();
+        expect( $response->json( 'id' ) )->toBe( $menu->id );
+    } );
 } );
 
 describe( 'PUT /api/v1/menus/{id_or_slug}', function (): void {
