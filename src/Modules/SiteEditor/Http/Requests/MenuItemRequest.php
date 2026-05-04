@@ -22,7 +22,9 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\MenuItemResource;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Menu;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\MenuItem;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -51,8 +53,8 @@ class MenuItemRequest extends FormRequest
         $required = $isPost ? 'required' : 'sometimes';
 
         return [
-            'menus'       => [ $isPost ? 'required' : 'prohibited', 'integer', 'exists:menus,id' ],
-            'parent'      => [ 'nullable', 'integer', 'exists:menu_items,id' ],
+            'menus'       => [ $isPost ? 'required' : 'prohibited', 'integer', $this->menuExistsRule() ],
+            'parent'      => [ 'nullable', 'integer', $this->parentExistsRule() ],
             'menu_order'  => [ 'nullable', 'integer', 'min:0' ],
             'type'        => [ $required, 'string', Rule::in( MenuItem::TYPES ) ],
             'title'       => [ $required, 'string', 'max:255' ],
@@ -130,6 +132,67 @@ class MenuItemRequest extends FormRequest
     protected static function isZeroSentinel( mixed $value ): bool
     {
         return 0 === $value || '0' === $value;
+    }
+
+    /**
+     * Theme-scoped existence rule for the `menus` field. Falls back to
+     * an unscoped `exists` when no theme is active so the `exists` step
+     * still rejects truly nonexistent ids consistently — the controller
+     * will surface the no-active-theme case as 409 once validation
+     * reaches it.
+     *
+     * Scoped existence prevents cross-theme leakage: `menus: <id>` for
+     * an id that lives in another theme now yields the same 422 as a
+     * truly-nonexistent id, instead of distinguishing the two through
+     * controller-level 404 vs validation-level 422.
+     *
+     * @since 1.2.0
+     */
+    protected function menuExistsRule(): mixed
+    {
+        $themeSlug = $this->activeThemeSlug();
+
+        if ( null === $themeSlug ) {
+            return 'exists:menus,id';
+        }
+
+        return Rule::exists( 'menus', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
+            $query->where( 'theme', $themeSlug );
+        } );
+    }
+
+    /**
+     * Theme-scoped existence rule for the `parent` field. The parent
+     * must reference a `menu_item` whose owning `Menu` belongs to the
+     * active theme. The further "same menu" constraint runs in
+     * {@see passedValidation()}.
+     *
+     * @since 1.2.0
+     */
+    protected function parentExistsRule(): mixed
+    {
+        $themeSlug = $this->activeThemeSlug();
+
+        if ( null === $themeSlug ) {
+            return 'exists:menu_items,id';
+        }
+
+        return Rule::exists( 'menu_items', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
+            $query->whereIn(
+                'menu_id',
+                Menu::query()->where( 'theme', $themeSlug )->select( 'id' ),
+            );
+        } );
+    }
+
+    /**
+     * @since 1.2.0
+     */
+    protected function activeThemeSlug(): ?string
+    {
+        $theme = app( ThemeManager::class )->getActiveTheme();
+
+        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
     }
 
     /**

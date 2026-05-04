@@ -60,17 +60,25 @@ class Menu extends Model
     ];
 
     /**
-     * Items in this menu, ordered by `(parent_id, position, id)` so consumers
-     * receive a deterministic flat list ready to nest. The `id` tiebreaker
-     * keeps ordering stable when two siblings share `position` (which can
-     * happen mid-edit before the client has resequenced positions).
+     * Items in this menu, ordered by `(COALESCE(parent_id, 0), position, id)`.
+     *
+     * `COALESCE(parent_id, 0)` normalizes NULL parent_id (root items) to a
+     * concrete value before ordering — without it, NULL ordering varies by
+     * SQL engine (MySQL/SQLite default to NULLs first, PostgreSQL to NULLs
+     * last). Coercing to 0 keeps the relation deterministic across drivers
+     * and matches the resolver's `parent_id ?? 0` grouping convention in
+     * {@see \ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\MenuResolver::projectItems()}.
+     *
+     * The `id` tiebreaker keeps ordering stable when two siblings share
+     * `position` (which can happen mid-edit before the client has
+     * resequenced positions).
      *
      * @since 1.2.0
      */
     public function items(): HasMany
     {
         return $this->hasMany( MenuItem::class )
-            ->orderBy( 'parent_id' )
+            ->orderByRaw( 'COALESCE(parent_id, 0)' )
             ->orderBy( 'position' )
             ->orderBy( 'id' );
     }

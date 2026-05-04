@@ -47,9 +47,11 @@ class MenuItemsController extends Controller
 
     /**
      * GET /api/v1/menu-items?menus={id} — list items for a menu, ordered
-     * by `(parent_id, position, id)` so consumers receive a deterministic
-     * flat list ready to nest. The `id` tiebreaker keeps ordering stable
-     * when two siblings share `position`.
+     * by `(COALESCE(parent_id, 0), position, id)` so consumers receive a
+     * deterministic flat list ready to nest. The `COALESCE` normalizes
+     * NULL ordering across SQL engines (MySQL/SQLite default NULLs first,
+     * PostgreSQL defaults NULLs last); the `id` tiebreaker keeps ordering
+     * stable when two siblings share `position`.
      *
      * @since 1.2.0
      */
@@ -61,7 +63,7 @@ class MenuItemsController extends Controller
             return response()->json( [] );
         }
 
-        $query->orderBy( 'parent_id' )
+        $query->orderByRaw( 'COALESCE(parent_id, 0)' )
             ->orderBy( 'position' )
             ->orderBy( 'id' );
 
@@ -213,15 +215,23 @@ class MenuItemsController extends Controller
     }
 
     /**
-     * Strict positive-integer-string check. Rejects `is_numeric` edge cases
-     * like `"1e3"` (which casts to 1, not 1000) and `"01"` (which casts to
-     * 1, masking the leading zero).
+     * Strict positive-integer-string check. Rejects:
+     *
+     * - `is_numeric` edge cases like `"1e3"` (would cast to 1, not 1000).
+     * - `"0"` (menu ids are 1-based; rejecting at the boundary surfaces
+     *   the bad input as 422 instead of an empty result set).
+     * - Leading-zero strings like `"01"` (would cast to 1, masking the
+     *   client's intent — surface as 422 so misformatted ids aren't
+     *   silently coerced).
      *
      * @since 1.2.0
      */
     protected static function isPositiveIntegerString( mixed $value ): bool
     {
-        return is_string( $value ) && '' !== $value && ctype_digit( $value );
+        return is_string( $value )
+            && '' !== $value
+            && ctype_digit( $value )
+            && '0' !== $value[0];
     }
 
     /**

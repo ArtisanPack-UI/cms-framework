@@ -81,6 +81,20 @@ describe( 'GET /api/v1/menu-items', function (): void {
         $this->getJson( '/api/v1/menu-items?menus=1e3' )->assertStatus( 422 );
     } );
 
+    it( 'rejects ?menus=0 (menu ids are 1-based)', function (): void {
+        $this->actingAs( $this->user );
+
+        $this->getJson( '/api/v1/menu-items?menus=0' )->assertStatus( 422 );
+    } );
+
+    it( 'rejects leading-zero ?menus filters that would silently miscast', function (): void {
+        $this->actingAs( $this->user );
+
+        // `(int) "01"` is 1, masking the client's intent. Surface as 422
+        // instead of silently coercing.
+        $this->getJson( '/api/v1/menu-items?menus=01' )->assertStatus( 422 );
+    } );
+
     it( 'does not surface items from menus in other themes', function (): void {
         $foreign = Menu::create( [
             'theme' => 'other-theme',
@@ -202,7 +216,7 @@ describe( 'POST /api/v1/menu-items', function (): void {
         ] )->assertStatus( 422 );
     } );
 
-    it( 'rejects items targeting menus in other themes', function (): void {
+    it( 'rejects items targeting menus in other themes (validation layer)', function (): void {
         $foreign = Menu::create( [
             'theme' => 'other-theme',
             'slug'  => 'foreign',
@@ -211,11 +225,50 @@ describe( 'POST /api/v1/menu-items', function (): void {
 
         $this->actingAs( $this->user );
 
+        // Foreign-theme menus and truly-nonexistent menus both yield 422
+        // through the theme-scoped `exists` rule on the `menus` field —
+        // unifying the response so existence in other themes isn't
+        // distinguishable from non-existence.
         $this->postJson( '/api/v1/menu-items', [
             'menus' => $foreign->id,
             'title' => 'Sneaky',
             'type'  => MenuItem::TYPE_LINK,
-        ] )->assertNotFound();
+        ] )->assertJsonValidationErrors( [ 'menus' ] );
+    } );
+
+    it( 'returns the same 422 for a truly-nonexistent menus id', function (): void {
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/menu-items', [
+            'menus' => 999_999,
+            'title' => 'Item',
+            'type'  => MenuItem::TYPE_LINK,
+        ] )->assertJsonValidationErrors( [ 'menus' ] );
+    } );
+
+    it( 'rejects parent referencing an item in another theme', function (): void {
+        $foreign = Menu::create( [
+            'theme' => 'other-theme',
+            'slug'  => 'foreign',
+            'name'  => 'Foreign',
+        ] );
+
+        $alien = MenuItem::create( [
+            'menu_id'  => $foreign->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_LINK,
+            'label'    => 'Alien',
+        ] );
+
+        $this->actingAs( $this->user );
+
+        // Same theme-scoped exists fix on the `parent` field.
+        $this->postJson( '/api/v1/menu-items', [
+            'menus'  => $this->menu->id,
+            'title'  => 'Bad Parent',
+            'type'   => MenuItem::TYPE_LINK,
+            'parent' => $alien->id,
+        ] )->assertJsonValidationErrors( [ 'parent' ] );
     } );
 
     it( 'normalizes WP sentinel parent=0 to a root item', function (): void {
