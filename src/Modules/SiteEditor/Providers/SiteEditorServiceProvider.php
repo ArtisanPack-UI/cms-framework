@@ -22,6 +22,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission\GlobalStylesEmitter;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\EntityResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\GlobalStylesResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\MenuResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\PatternResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
@@ -58,6 +59,10 @@ class SiteEditorServiceProvider extends ServiceProvider
 
         $this->app->singleton( GlobalStylesEmitter::class, function ( $app ) {
             return new GlobalStylesEmitter( $app->make( GlobalStylesResolver::class ) );
+        } );
+
+        $this->app->singleton( MenuResolver::class, function ( $app ) {
+            return new MenuResolver( $app->make( ThemeManager::class ) );
         } );
     }
 
@@ -114,6 +119,14 @@ class SiteEditorServiceProvider extends ServiceProvider
             $resolved = $this->app->make( GlobalStylesResolver::class )->resolve();
 
             return null !== $resolved ? $resolved->toFilterEntry() : $existing;
+        } );
+
+        // Navigation filter — `array<string, ResolvedMenu>` keyed by location.
+        // Same merge order as templates/parts/patterns: cms-framework's
+        // resolved map goes *under* the existing map so app-level config
+        // (or earlier filter contributors) wins on key collision.
+        addFilter( 'ap.visual-editor.navigation', function ( array $existing ): array {
+            return array_merge( $this->app->make( MenuResolver::class )->all(), $existing );
         } );
     }
 

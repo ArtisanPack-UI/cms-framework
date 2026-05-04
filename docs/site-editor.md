@@ -4,7 +4,7 @@ title: Site Editor
 
 # Site Editor Module
 
-The Site Editor module hosts the backends behind cms-framework's WordPress-style site-editor surface: templates, template parts, patterns, global styles, and menus. H1 ships templates and template parts; H2 adds patterns; subsequent phases (H3–H4) add global styles and menus to the same module.
+The Site Editor module hosts the backends behind cms-framework's WordPress-style site-editor surface: templates, template parts, patterns, global styles, and menus. H1 ships templates and template parts; H2 adds patterns; H3 adds global styles + CSS emission; H4 adds menus and the locations API.
 
 ## Overview
 
@@ -250,9 +250,130 @@ class GlobalStylesResolver
 
 `ResolvedGlobalStyles` carries `theme`, `settings`, `styles`, `variation`, `hasUserCustomization`, `model` (when DB-backed), plus a `contentHash()` accessor that the emitter uses for cache keying and a `toFilterEntry()` accessor that produces the `ap.visual-editor.global-styles` shape.
 
+## Menus
+
+H4 introduces navigation menus and the locations API. Unlike templates / parts / patterns / global styles, menus are **DB-only** — themes contribute *location names* via `theme.json` `menus.locations`, but never menu *content*. Switching themes leaves prior menus untouched (data preservation per plan 14 §5.5).
+
+### Storage
+
+- DB tables:
+  - `menus` — `id`, `theme`, `slug`, `name`, `description`, `auto_add_pages`, `author_id`, timestamps. Unique constraint on `(theme, slug)`.
+  - `menu_items` — `id`, `menu_id` (FK), `parent_id` (nullable, self-FK), `position`, `type` (`link` / `submenu` / `page-list`), `label`, `url`, `target`, `rel`, `classes`, `description`, `object_type`, `object_id`, `kind`, timestamps.
+  - `menu_location_assignments` — `id`, `theme`, `location`, `menu_id` (FK), timestamps. Unique constraint on `(theme, location)`.
+
+A separate `menu_location_assignments` table (rather than a `location` column on `menus`) lets one menu satisfy multiple locations and keeps location keys theme-scoped — switching themes leaves a menu unassigned without orphaning the menu itself.
+
+### Locations resolution
+
+Locations resolve through `ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\Menus`:
+
+```php
+Menus::locations();                    // array<string, string>
+Menus::assign( 'primary', $menuId );   // upsert assignment
+Menus::unassign( 'primary' );          // delete assignment
+Menus::assigned( 'primary' );          // ?Menu
+```
+
+Order:
+
+1. App default — `config('cms.menus.locations')`, e.g. `['primary' => 'Primary', 'footer' => 'Footer']`.
+2. Theme override — the active theme's `theme.json` `menus.locations` keys override the app defaults by key (theme wins per plan 14 §5.4); a warning is logged so app authors aren't confused.
+
+Themes that need a location no app has registered can declare it in `theme.json` and the location appears with the theme-provided label.
+
+### REST endpoints
+
+All endpoints live under `/api/v1/` and require authentication.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/menus` | List menus for the active theme |
+| POST | `/menus` | Create a menu |
+| GET | `/menus/{id_or_slug}` | Show one menu |
+| PUT | `/menus/{id_or_slug}` | Update menu metadata (slug renames not supported) |
+| DELETE | `/menus/{id_or_slug}` | Delete the menu (cascades to items and assignments) |
+| GET | `/menu-items?menus={id}` | List items for a menu, ordered by `(parent_id, position)` |
+| POST | `/menu-items` | Create item under a menu (`menus` field required) |
+| GET | `/menu-items/{id}` | Show one item |
+| PUT | `/menu-items/{id}` | Update item (the `menus` field is prohibited — items can't be reparented across menus) |
+| DELETE | `/menu-items/{id}` | Delete item (cascades to children) |
+| GET | `/menu-locations` | List declared locations + their assignments (`menu` is `0` when unassigned) |
+| PUT | `/menu-locations/{location}` | Assign a menu to a location (body: `{ "menu": <id> }`) |
+| DELETE | `/menu-locations/{location}` | Unassign |
+
+Menu response shape mirrors WP `/wp/v2/menus`:
+
+```json
+{
+    "id": 1,
+    "name": "Main Navigation",
+    "slug": "main",
+    "description": "",
+    "meta": [],
+    "locations": [ "primary" ],
+    "auto_add_pages": false,
+    "theme": "digital-shopfront"
+}
+```
+
+Menu-item response shape mirrors WP `/wp/v2/menu-items`. Note that `type` carries the WP-side vocabulary (`custom` / `post_type` / `taxonomy` derived from the model `kind`), while `link_type` carries the cms-side flag (`link` / `submenu` / `page-list`) for visual-editor's adapter:
+
+```json
+{
+    "id": 4,
+    "title":  { "raw": "Home", "rendered": "Home" },
+    "url":    "/",
+    "menus":  1,
+    "parent": 0,
+    "menu_order": 0,
+    "target": "_self",
+    "type":       "custom",
+    "type_label": "Custom Link",
+    "link_type":  "link",
+    "object":     "",
+    "object_id":  0,
+    "classes":    [],
+    "xfn":        [],
+    "attr_title": "",
+    "description": "",
+    "meta":       []
+}
+```
+
+### Resolver
+
+`MenuResolver::all()` powers the `ap.visual-editor.navigation` filter. It returns `array<string, ResolvedMenu>` keyed by location key. Locations the active theme declares but no menu is assigned to still appear with `wp_id => null` and an empty `items` array, so editor surfaces can render empty slots.
+
+The `items` field projects `MenuItem` rows into the upstream `core/navigation-link` / `core/navigation-submenu` / `core/page-list` shapes — children nest under parents by `(parent_id, position)`. Page-list items render as a dynamic placeholder (`'dynamic' => 'page-list'`) — the resolver does not enumerate pages here so cms-framework stays decoupled from Phase G content types. The navigation block performs the page enumeration at render time.
+
+```php
+class MenuResolver
+{
+    /** @return array<string, array{location: string, name: string, items: array, wp_id: int|null}> */
+    public function all(): array;
+
+    public function resolve( string $location ): ?array;
+    public function revert( string $location ): bool; // unassigns, preserves Menu
+}
+```
+
+### Item link types (kickoff decision)
+
+H4 ships all three link types per plan 14 §8 H4 row:
+
+- **`link`** — direct URL link (`core/navigation-link`).
+- **`submenu`** — container for nested items (`core/navigation-submenu`).
+- **`page-list`** — dynamic page enumeration at render time (`core/page-list`).
+
+The `(object_type, object_id)` pair is a soft polymorphic reference; items survive deletion of the linked resource and continue rendering with the stored `label` + `url`. Pruning dead links is deferred to V1.1.
+
+### Cascade behavior
+
+Deleting a `Menu` cascades to its `MenuItem`s and `MenuLocationAssignment`s; deleting a `MenuItem` cascades to its children. Cascade is implemented at the Eloquent layer (in each model's `booted()` method) on top of the migration's `cascadeOnDelete()` foreign-key declarations, so behavior is consistent regardless of whether the database driver enforces FK constraints (notably SQLite needs `PRAGMA foreign_keys`).
+
 ## Resolver contract
 
-Both entity types implement `ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\EntityResolver`:
+Templates and template parts implement `ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\EntityResolver`:
 
 ```php
 interface EntityResolver
@@ -265,19 +386,19 @@ interface EntityResolver
 
 `ResolvedEntity` is a value object carrying the merged source-of-truth: slug, theme, source (`'db'` or `'theme'`), content (block string), title, description, status, `hasThemeFile`, `isCustom`, `area` (parts only), and the backing model (when source is `'db'`).
 
-`PatternResolver` (H2) and `GlobalStylesResolver` (H3) do not implement `EntityResolver` — patterns surface `cloneToUser()` instead of slug-merge `revert()`, and global styles are a singleton-per-theme without a slug keyspace at all. H4 (`MenuResolver`) will follow the same case-by-case shape decision.
+`PatternResolver` (H2), `GlobalStylesResolver` (H3), and `MenuResolver` (H4) do not implement `EntityResolver` — patterns surface `cloneToUser()` instead of slug-merge `revert()`, global styles are a singleton-per-theme without a slug keyspace, and menus are keyed by location (not slug) and have no theme-file fallback.
 
 ## Permissions
 
-The slugs `visual_editor.templates.edit`, `visual_editor.template-parts.edit`, `visual_editor.patterns.edit`, and `visual_editor.global-styles.edit` are seeded by the parent `CMSFrameworkServiceProvider` via the G5 (#98) bridge. The SiteEditor module does not register additional permissions; routes use the `auth` middleware (V1 baseline of "any authenticated user", per plan 12 §2.6). V1.1 introduces fine-grained policies.
+The slugs `visual_editor.templates.edit`, `visual_editor.template-parts.edit`, `visual_editor.patterns.edit`, `visual_editor.global-styles.edit`, and `visual_editor.navigation.edit` are seeded by the parent `CMSFrameworkServiceProvider` via the G5 (#98) bridge. The SiteEditor module does not register additional permissions; routes use the `auth` middleware (V1 baseline of "any authenticated user", per plan 12 §2.6). V1.1 introduces fine-grained policies.
 
 ## Service registration
 
 `SiteEditorServiceProvider` is registered from the parent `CMSFrameworkServiceProvider`. It:
 
-- Binds `TemplateResolver`, `TemplatePartResolver`, `PatternResolver`, `GlobalStylesResolver`, and `GlobalStylesEmitter` as singletons.
+- Binds `TemplateResolver`, `TemplatePartResolver`, `PatternResolver`, `GlobalStylesResolver`, `GlobalStylesEmitter`, and `MenuResolver` as singletons.
 - Loads `routes/api.php` for the REST endpoints.
-- Registers `ap.visual-editor.{templates,template-parts,patterns,global-styles}` filters under a `class_exists(VisualEditor::class)` guard so cms-framework boots cleanly without visual-editor installed. The `global-styles` filter is a singleton (`?ResolvedGlobalStyles` array shape, not a keyed map).
+- Registers `ap.visual-editor.{templates,template-parts,patterns,global-styles,navigation}` filters under a `class_exists(VisualEditor::class)` guard so cms-framework boots cleanly without visual-editor installed. The `global-styles` filter is a singleton (`?ResolvedGlobalStyles` array shape); the others are keyed maps. cms-framework's resolved map merges *under* the existing map so app-level config / earlier filter contributors win on key collision.
 - Registers the `@cmsGlobalStyles` Blade directive.
 - Wires a `GlobalStyles` model observer that invalidates the emitter cache on save and delete.
 
@@ -285,5 +406,5 @@ Migrations live at the package level (`database/migrations/`) and are loaded by 
 
 ## Coordination with visual-editor
 
-- `#407` (H5 — site-editor resource filters): visual-editor reads the `/templates`, `/template-parts`, `/blocks`, and `/block-patterns/patterns` endpoints to populate `addEntities()` at editor bootstrap. Patterns specifically surface through the `ap.visual-editor.patterns` filter that cms-framework registers behind a `class_exists` guard.
+- `#407` (H5 — site-editor resource filters): visual-editor reads the `/templates`, `/template-parts`, `/blocks`, `/block-patterns/patterns`, `/global-styles`, `/menus`, `/menu-items`, and `/menu-locations` endpoints to populate `addEntities()` at editor bootstrap. Each entity surfaces through its corresponding `ap.visual-editor.*` filter that cms-framework registers behind a `class_exists` guard.
 - `#399` (G3 — editor entity adapter): visual-editor's WP-shape resource adapter maps the REST responses back into the editor's `useEntityRecord` / `useEntityRecords` selectors.

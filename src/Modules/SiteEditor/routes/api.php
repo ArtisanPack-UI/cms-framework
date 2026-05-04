@@ -5,6 +5,9 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\BlockPatternsController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\BlocksController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\GlobalStylesController;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\MenuItemsController;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\MenuLocationsController;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\MenusController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\TemplatePartsController;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\TemplatesController;
 use Illuminate\Support\Facades\Route;
@@ -50,5 +53,27 @@ Route::prefix( 'api/v1' )
             Route::get( '/', [ GlobalStylesController::class, 'show' ] )->name( 'api.global-styles.show' );
             Route::put( '/', [ GlobalStylesController::class, 'update' ] )->name( 'api.global-styles.update' );
             Route::delete( '/', [ GlobalStylesController::class, 'destroy' ] )->name( 'api.global-styles.destroy' );
+        } );
+
+        Route::prefix( 'menus' )->group( function (): void {
+            Route::get( '/', [ MenusController::class, 'index' ] )->name( 'api.menus.index' );
+            Route::post( '/', [ MenusController::class, 'store' ] )->name( 'api.menus.store' );
+            Route::get( '{idOrSlug}', [ MenusController::class, 'show' ] )->name( 'api.menus.show' );
+            Route::put( '{idOrSlug}', [ MenusController::class, 'update' ] )->name( 'api.menus.update' );
+            Route::delete( '{idOrSlug}', [ MenusController::class, 'destroy' ] )->name( 'api.menus.destroy' );
+        } );
+
+        Route::prefix( 'menu-items' )->group( function (): void {
+            Route::get( '/', [ MenuItemsController::class, 'index' ] )->name( 'api.menu-items.index' );
+            Route::post( '/', [ MenuItemsController::class, 'store' ] )->name( 'api.menu-items.store' );
+            Route::get( '{id}', [ MenuItemsController::class, 'show' ] )->name( 'api.menu-items.show' )->whereNumber( 'id' );
+            Route::put( '{id}', [ MenuItemsController::class, 'update' ] )->name( 'api.menu-items.update' )->whereNumber( 'id' );
+            Route::delete( '{id}', [ MenuItemsController::class, 'destroy' ] )->name( 'api.menu-items.destroy' )->whereNumber( 'id' );
+        } );
+
+        Route::prefix( 'menu-locations' )->group( function (): void {
+            Route::get( '/', [ MenuLocationsController::class, 'index' ] )->name( 'api.menu-locations.index' );
+            Route::put( '{location}', [ MenuLocationsController::class, 'update' ] )->name( 'api.menu-locations.update' );
+            Route::delete( '{location}', [ MenuLocationsController::class, 'destroy' ] )->name( 'api.menu-locations.destroy' );
         } );
     } );
