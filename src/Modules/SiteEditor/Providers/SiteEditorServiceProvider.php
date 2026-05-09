@@ -14,7 +14,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Providers;
 
@@ -42,29 +42,29 @@ class SiteEditorServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton( TemplateResolver::class, function ( $app ) {
-            return new TemplateResolver( $app->make( ThemeManager::class ) );
-        } );
+        $this->app->singleton(TemplateResolver::class, function ($app) {
+            return new TemplateResolver($app->make(ThemeManager::class));
+        });
 
-        $this->app->singleton( TemplatePartResolver::class, function ( $app ) {
-            return new TemplatePartResolver( $app->make( ThemeManager::class ) );
-        } );
+        $this->app->singleton(TemplatePartResolver::class, function ($app) {
+            return new TemplatePartResolver($app->make(ThemeManager::class));
+        });
 
-        $this->app->singleton( PatternResolver::class, function ( $app ) {
-            return new PatternResolver( $app->make( ThemeManager::class ) );
-        } );
+        $this->app->singleton(PatternResolver::class, function ($app) {
+            return new PatternResolver($app->make(ThemeManager::class));
+        });
 
-        $this->app->singleton( GlobalStylesResolver::class, function ( $app ) {
-            return new GlobalStylesResolver( $app->make( ThemeManager::class ) );
-        } );
+        $this->app->singleton(GlobalStylesResolver::class, function ($app) {
+            return new GlobalStylesResolver($app->make(ThemeManager::class));
+        });
 
-        $this->app->singleton( GlobalStylesEmitter::class, function ( $app ) {
-            return new GlobalStylesEmitter( $app->make( GlobalStylesResolver::class ) );
-        } );
+        $this->app->singleton(GlobalStylesEmitter::class, function ($app) {
+            return new GlobalStylesEmitter($app->make(GlobalStylesResolver::class));
+        });
 
-        $this->app->singleton( MenuResolver::class, function ( $app ) {
-            return new MenuResolver( $app->make( ThemeManager::class ) );
-        } );
+        $this->app->singleton(MenuResolver::class, function ($app) {
+            return new MenuResolver($app->make(ThemeManager::class));
+        });
     }
 
     /**
@@ -72,7 +72,7 @@ class SiteEditorServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
+        $this->loadRoutesFrom(__DIR__.'/../routes/api.php');
 
         $this->registerVisualEditorSiteEditorFilters();
         $this->registerGlobalStylesBladeDirective();
@@ -96,59 +96,59 @@ class SiteEditorServiceProvider extends ServiceProvider
      */
     public function registerVisualEditorSiteEditorFilters(): void
     {
-        if ( ! class_exists( VisualEditor::class ) ) {
+        if (! class_exists(VisualEditor::class)) {
             return;
         }
 
-        addFilter( 'ap.visual-editor.templates', function ( array $templates ): array {
-            if ( ! Schema::hasTable( 'templates' ) ) {
+        addFilter('ap.visual-editor.templates', function (array $templates): array {
+            if (! Schema::hasTable('templates')) {
                 return $templates;
             }
 
-            return array_merge( $this->buildTemplateFilterMap( $this->app->make( TemplateResolver::class ) ), $templates );
-        } );
+            return array_merge($this->buildTemplateFilterMap($this->app->make(TemplateResolver::class)), $templates);
+        });
 
-        addFilter( 'ap.visual-editor.template-parts', function ( array $parts ): array {
-            if ( ! Schema::hasTable( 'template_parts' ) ) {
+        addFilter('ap.visual-editor.template-parts', function (array $parts): array {
+            if (! Schema::hasTable('template_parts')) {
                 return $parts;
             }
 
-            return array_merge( $this->buildTemplateFilterMap( $this->app->make( TemplatePartResolver::class ) ), $parts );
-        } );
+            return array_merge($this->buildTemplateFilterMap($this->app->make(TemplatePartResolver::class)), $parts);
+        });
 
-        addFilter( 'ap.visual-editor.patterns', function ( array $patterns ): array {
-            if ( ! Schema::hasTable( 'block_patterns' ) ) {
+        addFilter('ap.visual-editor.patterns', function (array $patterns): array {
+            if (! Schema::hasTable('block_patterns')) {
                 return $patterns;
             }
 
-            return array_merge( $this->app->make( PatternResolver::class )->toFilterMap(), $patterns );
-        } );
+            return array_merge($this->app->make(PatternResolver::class)->toFilterMap(), $patterns);
+        });
 
         // Singleton filter — `?ResolvedGlobalStyles` array shape (or null when no
         // active theme). cms-framework's resolution always wins when present;
         // the prior value (typically null from the default callback) only
         // surfaces when there is no active theme.
-        addFilter( 'ap.visual-editor.global-styles', function ( $existing ) {
-            if ( ! Schema::hasTable( 'global_styles' ) ) {
+        addFilter('ap.visual-editor.global-styles', function ($existing) {
+            if (! Schema::hasTable('global_styles')) {
                 return $existing;
             }
 
-            $resolved = $this->app->make( GlobalStylesResolver::class )->resolve();
+            $resolved = $this->app->make(GlobalStylesResolver::class)->resolve();
 
             return null !== $resolved ? $resolved->toFilterEntry() : $existing;
-        } );
+        });
 
         // Navigation filter — `array<string, ResolvedMenu>` keyed by location.
         // Same merge order as templates/parts/patterns: cms-framework's
         // resolved map goes *under* the existing map so app-level config
         // (or earlier filter contributors) wins on key collision.
-        addFilter( 'ap.visual-editor.navigation', function ( array $existing ): array {
-            if ( ! Schema::hasTable( 'menus' ) ) {
+        addFilter('ap.visual-editor.navigation', function (array $existing): array {
+            if (! Schema::hasTable('menus')) {
                 return $existing;
             }
 
-            return array_merge( $this->app->make( MenuResolver::class )->all(), $existing );
-        } );
+            return array_merge($this->app->make(MenuResolver::class)->all(), $existing);
+        });
     }
 
     /**
@@ -159,12 +159,12 @@ class SiteEditorServiceProvider extends ServiceProvider
      *
      * @return array<string, array<string, mixed>>
      */
-    protected function buildTemplateFilterMap( EntityResolver $resolver ): array
+    protected function buildTemplateFilterMap(EntityResolver $resolver): array
     {
         $map = [];
 
-        foreach ( $resolver->all() as $entity ) {
-            $map[ $entity->slug ] = $entity->toFilterEntry();
+        foreach ($resolver->all() as $entity) {
+            $map[$entity->slug] = $entity->toFilterEntry();
         }
 
         return $map;
@@ -187,9 +187,9 @@ class SiteEditorServiceProvider extends ServiceProvider
         // HTML5 raw-text parser only terminates `<style>` on the literal
         // `</style`, so the escape neutralizes the breakout without altering
         // CSS semantics for any well-formed input.
-        Blade::directive( 'cmsGlobalStyles', function (): string {
+        Blade::directive('cmsGlobalStyles', function (): string {
             return "<?php echo '<style id=\"cms-global-styles\">' . str_ireplace( '</', '<\\\\/', app( \\ArtisanPackUI\\CMSFramework\\Modules\\SiteEditor\\Emission\\GlobalStylesEmitter::class )->emit() ) . '</style>'; ?>";
-        } );
+        });
     }
 
     /**
@@ -201,10 +201,10 @@ class SiteEditorServiceProvider extends ServiceProvider
     protected function registerGlobalStylesObserver(): void
     {
         $invalidate = function (): void {
-            $this->app->make( GlobalStylesEmitter::class )->invalidate();
+            $this->app->make(GlobalStylesEmitter::class)->invalidate();
         };
 
-        GlobalStyles::saved( $invalidate );
-        GlobalStyles::deleted( $invalidate );
+        GlobalStyles::saved($invalidate);
+        GlobalStyles::deleted($invalidate);
     }
 }

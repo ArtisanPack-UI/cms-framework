@@ -11,7 +11,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources;
 
@@ -28,7 +28,7 @@ final class BlockPatternResource
      *
      * @return array<string, mixed>
      */
-    public static function toArray( ResolvedPattern $pattern ): array
+    public static function toArray(ResolvedPattern $pattern): array
     {
         return [
             // WP's `name` field on block-pattern responses carries the
@@ -47,7 +47,7 @@ final class BlockPatternResource
             'theme'       => $pattern->theme,
             'wp_id'       => BlockPattern::SOURCE_USER === $pattern->source ? $pattern->wpId() : null,
             'modified'    => null !== $pattern->model
-                ? optional( $pattern->model->updated_at )->toIso8601String()
+                ? optional($pattern->model->updated_at)->toIso8601String()
                 : null,
         ];
     }
@@ -59,11 +59,11 @@ final class BlockPatternResource
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function collection( array $patterns ): array
+    public static function collection(array $patterns): array
     {
-        return array_values( array_map(
-            static fn ( ResolvedPattern $p ) => self::toArray( $p ),
+        return array_values(array_map(
+            static fn (ResolvedPattern $p) => self::toArray($p),
             $patterns,
-        ) );
+        ));
     }
 }

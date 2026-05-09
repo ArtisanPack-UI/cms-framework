@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PageTag Request for the CMS Framework Pages Module.
@@ -47,7 +47,7 @@ class PageTagRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route( 'id' );
+        $id = $this->route('id');
 
         return [
             'name' => ['required', 'string', 'max:255'],
@@ -56,7 +56,7 @@ class PageTagRequest extends FormRequest
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique( 'page_tags', 'slug' )->ignore( $id ),
+                Rule::unique('page_tags', 'slug')->ignore($id),
             ],
             'description' => ['nullable', 'string'],
             'order'       => ['integer', 'min:0'],
@@ -74,10 +74,10 @@ class PageTagRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => __( 'The tag name is required.' ),
-            'slug.required' => __( 'The tag slug is required.' ),
-            'slug.regex'    => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
-            'slug.unique'   => __( 'A tag with this slug already exists.' ),
+            'name.required' => __('The tag name is required.'),
+            'slug.required' => __('The tag slug is required.'),
+            'slug.regex'    => __('The slug must be lowercase letters, numbers, and hyphens only.'),
+            'slug.unique'   => __('A tag with this slug already exists.'),
         ];
     }
 }

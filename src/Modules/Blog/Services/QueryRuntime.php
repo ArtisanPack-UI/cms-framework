@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * QueryRuntime — resolves the V1 `core/query` attribute payload to a
@@ -77,20 +77,20 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes  Normalized `core/query` attributes.
      */
-    public function resolve( array $attributes ): LengthAwarePaginator
+    public function resolve(array $attributes): LengthAwarePaginator
     {
-        $postType = isset( $attributes['postType'] ) && is_string( $attributes['postType'] )
-            ? sanitizeText( $attributes['postType'] )
+        $postType = isset($attributes['postType']) && is_string($attributes['postType'])
+            ? sanitizeText($attributes['postType'])
             : 'post';
 
-        $query = $this->baseQuery( $postType, $attributes );
+        $query = $this->baseQuery($postType, $attributes);
 
-        $this->applyIdFilters( $query, $attributes );
-        $this->applyParentFilter( $query, $postType, $attributes );
-        $this->applyTaxQuery( $query, $postType, $attributes );
-        $this->applyOrdering( $query, $postType, $attributes );
+        $this->applyIdFilters($query, $attributes);
+        $this->applyParentFilter($query, $postType, $attributes);
+        $this->applyTaxQuery($query, $postType, $attributes);
+        $this->applyOrdering($query, $postType, $attributes);
 
-        return $this->paginate( $query, $attributes );
+        return $this->paginate($query, $attributes);
     }
 
     /**
@@ -104,14 +104,14 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes
      */
-    protected function baseQuery( string $postType, array $attributes ): Builder
+    protected function baseQuery(string $postType, array $attributes): Builder
     {
-        $managerFilters = $this->mapToManagerFilters( $attributes );
+        $managerFilters = $this->mapToManagerFilters($attributes);
 
-        return match ( $postType ) {
-            'post'  => $this->blogManager->getArchiveQuery( $managerFilters ),
-            'page'  => $this->pageManager->getPageQuery( $managerFilters ),
-            default => $this->customTypeQuery( $postType, $managerFilters ),
+        return match ($postType) {
+            'post'  => $this->blogManager->getArchiveQuery($managerFilters),
+            'page'  => $this->pageManager->getPageQuery($managerFilters),
+            default => $this->customTypeQuery($postType, $managerFilters),
         };
     }
 
@@ -125,21 +125,21 @@ class QueryRuntime
      *
      * @return array<string, mixed>
      */
-    protected function mapToManagerFilters( array $attributes ): array
+    protected function mapToManagerFilters(array $attributes): array
     {
         $filters = [];
 
-        if ( isset( $attributes['author'] ) ) {
+        if (isset($attributes['author'])) {
             $filters['author'] = (int) $attributes['author'];
         }
 
-        if ( isset( $attributes['search'] ) && is_string( $attributes['search'] ) ) {
+        if (isset($attributes['search']) && is_string($attributes['search'])) {
             $filters['search'] = $attributes['search'];
         }
 
         // Default the manager filter status pass-through to a forward
         // filter; the QueryRuntime caller can override per-payload.
-        if ( isset( $attributes['status'] ) ) {
+        if (isset($attributes['status'])) {
             $filters['status'] = $attributes['status'];
         }
 
@@ -157,24 +157,24 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $managerFilters
      */
-    protected function customTypeQuery( string $postType, array $managerFilters ): Builder
+    protected function customTypeQuery(string $postType, array $managerFilters): Builder
     {
-        $contentType = $this->contentTypeManager->getContentType( $postType );
+        $contentType = $this->contentTypeManager->getContentType($postType);
 
-        if ( null === $contentType ) {
-            throw new InvalidArgumentException( sprintf(
+        if (null === $contentType) {
+            throw new InvalidArgumentException(sprintf(
                 'QueryRuntime: unknown post type "%s". Register the content type before querying it.',
-                $postType
-            ) );
+                $postType,
+            ));
         }
 
         $instance = $contentType->getModelInstance();
 
-        if ( ! $instance instanceof Model ) {
-            throw new InvalidArgumentException( sprintf(
+        if (! $instance instanceof Model) {
+            throw new InvalidArgumentException(sprintf(
                 'QueryRuntime: content type "%s" has no resolvable model class.',
-                $postType
-            ) );
+                $postType,
+            ));
         }
 
         $query = $instance::query();
@@ -183,23 +183,23 @@ class QueryRuntime
         // model is likely to understand. Models that do not expose these
         // scopes simply ignore the corresponding filter (the underlying
         // builder still works since each branch is gated on isset()).
-        if ( isset( $managerFilters['author'] ) && method_exists( $instance, 'scopeByAuthor' ) ) {
-            $query->byAuthor( (int) $managerFilters['author'] );
+        if (isset($managerFilters['author']) && method_exists($instance, 'scopeByAuthor')) {
+            $query->byAuthor((int) $managerFilters['author']);
         }
 
-        if ( isset( $managerFilters['status'] ) && in_array( 'status', $instance->getFillable(), true ) ) {
-            $query->where( 'status', $managerFilters['status'] );
+        if (isset($managerFilters['status']) && in_array('status', $instance->getFillable(), true)) {
+            $query->where('status', $managerFilters['status']);
         }
 
-        if ( isset( $managerFilters['search'] ) && is_string( $managerFilters['search'] ) ) {
-            $escaped = str_replace( ['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $managerFilters['search'] );
+        if (isset($managerFilters['search']) && is_string($managerFilters['search'])) {
+            $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $managerFilters['search']);
             $pattern = "%{$escaped}%";
-            $query->where( function ( Builder $q ) use ( $pattern, $instance ): void {
-                $columns = array_intersect( ['title', 'content', 'excerpt'], $instance->getFillable() );
-                foreach ( $columns as $column ) {
-                    $q->orWhereRaw( "{$column} LIKE ? ESCAPE ?", [$pattern, '\\'] );
+            $query->where(function (Builder $q) use ($pattern, $instance): void {
+                $columns = array_intersect(['title', 'content', 'excerpt'], $instance->getFillable());
+                foreach ($columns as $column) {
+                    $q->orWhereRaw("{$column} LIKE ? ESCAPE ?", [$pattern, '\\']);
                 }
-            } );
+            });
         }
 
         return $query;
@@ -216,20 +216,20 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes
      */
-    protected function applyIdFilters( Builder $query, array $attributes ): void
+    protected function applyIdFilters(Builder $query, array $attributes): void
     {
-        $postIn = $this->normalizeIdList( $attributes['postIn'] ?? null );
-        if ( [] !== $postIn ) {
-            $query->whereIn( 'id', $postIn );
+        $postIn = $this->normalizeIdList($attributes['postIn'] ?? null);
+        if ([] !== $postIn) {
+            $query->whereIn('id', $postIn);
         }
 
-        $excluded = array_values( array_unique( array_merge(
-            $this->normalizeIdList( $attributes['postNotIn'] ?? null ),
-            $this->normalizeIdList( $attributes['exclude'] ?? null )
-        ) ) );
+        $excluded = array_values(array_unique(array_merge(
+            $this->normalizeIdList($attributes['postNotIn'] ?? null),
+            $this->normalizeIdList($attributes['exclude'] ?? null),
+        )));
 
-        if ( [] !== $excluded ) {
-            $query->whereNotIn( 'id', $excluded );
+        if ([] !== $excluded) {
+            $query->whereNotIn('id', $excluded);
         }
     }
 
@@ -241,16 +241,16 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes
      */
-    protected function applyParentFilter( Builder $query, string $postType, array $attributes ): void
+    protected function applyParentFilter(Builder $query, string $postType, array $attributes): void
     {
-        if ( 'page' !== $postType ) {
+        if ('page' !== $postType) {
             return;
         }
 
-        $parents = $this->normalizeIdList( $attributes['parents'] ?? null );
+        $parents = $this->normalizeIdList($attributes['parents'] ?? null);
 
-        if ( [] !== $parents ) {
-            $query->whereIn( 'parent_id', $parents );
+        if ([] !== $parents) {
+            $query->whereIn('parent_id', $parents);
         }
     }
 
@@ -266,32 +266,32 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes
      */
-    protected function applyTaxQuery( Builder $query, string $postType, array $attributes ): void
+    protected function applyTaxQuery(Builder $query, string $postType, array $attributes): void
     {
-        if ( ! isset( $attributes['taxQuery'] ) || ! is_array( $attributes['taxQuery'] ) ) {
+        if (! isset($attributes['taxQuery']) || ! is_array($attributes['taxQuery'])) {
             return;
         }
 
         $taxQuery = $attributes['taxQuery'];
-        $taxonomy = isset( $taxQuery['taxonomy'] ) && is_string( $taxQuery['taxonomy'] )
+        $taxonomy = isset($taxQuery['taxonomy']) && is_string($taxQuery['taxonomy'])
             ? $taxQuery['taxonomy']
             : null;
-        $operator = isset( $taxQuery['operator'] ) && is_string( $taxQuery['operator'] )
-            ? strtoupper( $taxQuery['operator'] )
+        $operator = isset($taxQuery['operator']) && is_string($taxQuery['operator'])
+            ? strtoupper($taxQuery['operator'])
             : 'IN';
-        $terms    = $this->normalizeIdList( $taxQuery['terms'] ?? null );
+        $terms    = $this->normalizeIdList($taxQuery['terms'] ?? null);
 
-        if ( null === $taxonomy || [] === $terms || 'IN' !== $operator ) {
+        if (null === $taxonomy || [] === $terms || 'IN' !== $operator) {
             return;
         }
 
-        $relation = match ( $taxonomy ) {
+        $relation = match ($taxonomy) {
             'category', 'post_category' => 'categories',
             'post_tag', 'tag'            => 'tags',
             default                      => null,
         };
 
-        if ( null === $relation ) {
+        if (null === $relation) {
             return;
         }
 
@@ -300,13 +300,13 @@ class QueryRuntime
         // throws `BadMethodCallException`. Drop the constraint silently
         // when the model can't satisfy it; the visual-editor caller
         // sees the unfiltered result and can decide how to surface it.
-        if ( ! method_exists( $query->getModel(), $relation ) ) {
+        if (! method_exists($query->getModel(), $relation)) {
             return;
         }
 
-        $query->whereHas( $relation, function ( Builder $q ) use ( $terms ): void {
-            $q->whereIn( 'id', $terms );
-        } );
+        $query->whereHas($relation, function (Builder $q) use ($terms): void {
+            $q->whereIn('id', $terms);
+        });
     }
 
     /**
@@ -323,17 +323,17 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes
      */
-    protected function applyOrdering( Builder $query, string $postType, array $attributes ): void
+    protected function applyOrdering(Builder $query, string $postType, array $attributes): void
     {
-        $orderBy = isset( $attributes['orderBy'] ) && is_string( $attributes['orderBy'] )
-            ? strtolower( $attributes['orderBy'] )
+        $orderBy = isset($attributes['orderBy']) && is_string($attributes['orderBy'])
+            ? strtolower($attributes['orderBy'])
             : 'date';
-        $order   = isset( $attributes['order'] ) && is_string( $attributes['order'] )
-            && 'asc' === strtolower( $attributes['order'] )
+        $order   = isset($attributes['order']) && is_string($attributes['order'])
+            && 'asc' === strtolower($attributes['order'])
             ? 'asc'
             : 'desc';
 
-        if ( ! in_array( $orderBy, self::SUPPORTED_ORDER_BY, true ) ) {
+        if (! in_array($orderBy, self::SUPPORTED_ORDER_BY, true)) {
             $orderBy = 'date';
         }
 
@@ -342,31 +342,31 @@ class QueryRuntime
         // the V1 `orderBy` payload is authoritative when present.
         $query->reorder();
 
-        switch ( $orderBy ) {
+        switch ($orderBy) {
             case 'title':
-                $query->orderBy( 'title', $order );
+                $query->orderBy('title', $order);
                 break;
             case 'menu_order':
-                if ( 'page' === $postType ) {
-                    $query->orderBy( 'order', $order );
+                if ('page' === $postType) {
+                    $query->orderBy('order', $order);
                 } else {
                     // Posts have no menu_order column — fall back to date.
-                    $query->orderBy( 'published_at', $order );
+                    $query->orderBy('published_at', $order);
                 }
                 break;
             case 'random':
-                $driver = $query->getModel()->getConnection()->getDriverName();
+                $driver     = $query->getModel()->getConnection()->getDriverName();
                 $expression = 'mysql' === $driver ? 'RAND()' : 'RANDOM()';
-                $query->orderByRaw( $expression );
+                $query->orderByRaw($expression);
                 break;
             case 'relevance':
                 // Without a search term `relevance` has no signal — fall
                 // through to a date sort so the result is stable.
-                $query->orderBy( 'published_at', $order );
+                $query->orderBy('published_at', $order);
                 break;
             case 'date':
             default:
-                $query->orderBy( 'published_at', $order );
+                $query->orderBy('published_at', $order);
                 break;
         }
     }
@@ -391,42 +391,42 @@ class QueryRuntime
      *
      * @param  array<string, mixed>  $attributes
      */
-    protected function paginate( Builder $query, array $attributes ): LengthAwarePaginator
+    protected function paginate(Builder $query, array $attributes): LengthAwarePaginator
     {
-        $perPage = isset( $attributes['perPage'] ) ? (int) $attributes['perPage'] : self::DEFAULT_PER_PAGE;
-        $perPage = max( 1, min( self::MAX_PER_PAGE, $perPage ) );
+        $perPage = isset($attributes['perPage']) ? (int) $attributes['perPage'] : self::DEFAULT_PER_PAGE;
+        $perPage = max(1, min(self::MAX_PER_PAGE, $perPage));
 
-        $offset = isset( $attributes['offset'] ) ? max( 0, (int) $attributes['offset'] ) : 0;
-        $cap    = isset( $attributes['pages'] ) ? max( 0, (int) $attributes['pages'] ) : 0;
+        $offset = isset($attributes['offset']) ? max(0, (int) $attributes['offset']) : 0;
+        $cap    = isset($attributes['pages']) ? max(0, (int) $attributes['pages']) : 0;
 
-        if ( 0 === $offset && 0 === $cap ) {
-            return $query->paginate( $perPage );
+        if (0 === $offset && 0 === $cap) {
+            return $query->paginate($perPage);
         }
 
-        if ( $cap > 0 ) {
-            $perPage = min( $perPage, $cap );
+        if ($cap > 0) {
+            $perPage = min($perPage, $cap);
         }
 
         // `count()` clones the query so the subsequent skip/take below
         // start from a clean builder.
-        $rawTotal       = ( clone $query )->toBase()->getCountForPagination();
-        $effectiveTotal = max( 0, $rawTotal - $offset );
+        $rawTotal       = (clone $query)->toBase()->getCountForPagination();
+        $effectiveTotal = max(0, $rawTotal - $offset);
 
-        if ( $cap > 0 ) {
-            $effectiveTotal = min( $effectiveTotal, $cap );
+        if ($cap > 0) {
+            $effectiveTotal = min($effectiveTotal, $cap);
         }
 
-        $page = max( 1, Paginator::resolveCurrentPage() );
-        $skip = $offset + ( $page - 1 ) * $perPage;
+        $page = max(1, Paginator::resolveCurrentPage());
+        $skip = $offset + ($page - 1) * $perPage;
         $take = $perPage;
 
-        if ( $cap > 0 ) {
-            $remaining = $cap - ( $page - 1 ) * $perPage;
-            $take      = max( 0, min( $perPage, $remaining ) );
+        if ($cap > 0) {
+            $remaining = $cap - ($page - 1) * $perPage;
+            $take      = max(0, min($perPage, $remaining));
         }
 
         $items = $take > 0
-            ? $query->skip( $skip )->take( $take )->get()
+            ? $query->skip($skip)->take($take)->get()
             : $query->getModel()->newCollection();
 
         return new ConcretePaginator(
@@ -437,7 +437,7 @@ class QueryRuntime
             [
                 'path'     => Paginator::resolveCurrentPath(),
                 'pageName' => 'page',
-            ]
+            ],
         );
     }
 
@@ -446,17 +446,17 @@ class QueryRuntime
      *
      * @since 1.2.0
      */
-    protected function normalizeIdList( mixed $value ): array
+    protected function normalizeIdList(mixed $value): array
     {
-        if ( ! is_array( $value ) ) {
+        if (! is_array($value)) {
             return [];
         }
 
         $ids = array_filter(
-            array_map( static fn ( mixed $id ): int => (int) $id, $value ),
-            static fn ( int $id ): bool => $id > 0
+            array_map(static fn (mixed $id): int => (int) $id, $value),
+            static fn (int $id): bool => $id > 0,
         );
 
-        return array_values( array_unique( $ids ) );
+        return array_values(array_unique($ids));
     }
 }

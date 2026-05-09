@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * OpenAPI Service Provider for the CMS Framework.
@@ -45,13 +45,13 @@ class OpenApiServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        if ( $this->app->runningInConsole() ) {
-            $this->commands( [
+        if ($this->app->runningInConsole()) {
+            $this->commands([
                 ExportOpenApiSpecCommand::class,
-            ] );
+            ]);
         }
 
-        if ( ! $this->isEnabled() ) {
+        if (! $this->isEnabled()) {
             return;
         }
 
@@ -67,7 +67,7 @@ class OpenApiServiceProvider extends ServiceProvider
      */
     protected function isEnabled(): bool
     {
-        return (bool) config( 'artisanpack.cms-framework.openapi.enabled', true );
+        return (bool) config('artisanpack.cms-framework.openapi.enabled', true);
     }
 
     /**
@@ -77,22 +77,22 @@ class OpenApiServiceProvider extends ServiceProvider
      */
     protected function registerCmsApi(): void
     {
-        $config = config( 'artisanpack.cms-framework.openapi', [] );
+        $config = config('artisanpack.cms-framework.openapi', []);
 
         $uiPath       = $config['ui_path'] ?? '/docs/api/cms';
         $documentPath = $config['document_path'] ?? '/docs/api/cms.json';
 
-        Scramble::registerApi( 'cms', $this->buildScrambleConfig( $config ) )
-            ->routes( function ( Route $route ) {
-                return $this->isCmsFrameworkRoute( $route );
-            } )
+        Scramble::registerApi('cms', $this->buildScrambleConfig($config))
+            ->routes(function (Route $route) {
+                return $this->isCmsFrameworkRoute($route);
+            })
             ->expose(
                 ui: $uiPath,
                 document: $documentPath,
             )
-            ->afterOpenApiGenerated( function ( OpenApi $openApi ): void {
-                $this->addSecuritySchemes( $openApi );
-            } );
+            ->afterOpenApiGenerated(function (OpenApi $openApi): void {
+                $this->addSecuritySchemes($openApi);
+            });
     }
 
     /**
@@ -104,7 +104,7 @@ class OpenApiServiceProvider extends ServiceProvider
      *
      * @return array<string, mixed> The Scramble-compatible configuration.
      */
-    protected function buildScrambleConfig( array $config ): array
+    protected function buildScrambleConfig(array $config): array
     {
         $info = $config['info'] ?? [];
 
@@ -131,19 +131,19 @@ class OpenApiServiceProvider extends ServiceProvider
      *
      * @return bool True if the route belongs to the CMS Framework.
      */
-    protected function isCmsFrameworkRoute( Route $route ): bool
+    protected function isCmsFrameworkRoute(Route $route): bool
     {
-        if ( ! Str::startsWith( $route->uri, 'api/v1' ) && ! Str::startsWith( $route->uri, 'v1' ) ) {
+        if (! Str::startsWith($route->uri, 'api/v1') && ! Str::startsWith($route->uri, 'v1')) {
             return false;
         }
 
-        $action = $route->getAction( 'controller' );
+        $action = $route->getAction('controller');
 
-        if ( null === $action || ! is_string( $action ) ) {
+        if (null === $action || ! is_string($action)) {
             return false;
         }
 
-        return Str::startsWith( $action, 'ArtisanPackUI\\CMSFramework\\' );
+        return Str::startsWith($action, 'ArtisanPackUI\\CMSFramework\\');
     }
 
     /**
@@ -153,10 +153,10 @@ class OpenApiServiceProvider extends ServiceProvider
      *
      * @param  OpenApi  $openApi  The OpenAPI specification instance.
      */
-    protected function addSecuritySchemes( OpenApi $openApi ): void
+    protected function addSecuritySchemes(OpenApi $openApi): void
     {
         $openApi->secure(
-            SecurityScheme::http( 'bearer', 'JWT' ),
+            SecurityScheme::http('bearer', 'JWT'),
         );
     }
 }

@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "72c516e40ec3e129b18b47fa14f1e49a",
+    "content-hash": "31f85eac5506d4f98f970391b3ac73e3",
     "packages": [
         {
             "name": "artisanpack-ui/accessibility",
@@ -211,6 +211,86 @@
                 "source": "https://gitlab.com/jacob-martella-web-design/artisanpack-ui/artisanpack-ui-hooks/-/tree/v1.2.0"
             },
             "time": "2025-11-22T23:15:16+00:00"
+        },
+        {
+            "name": "artisanpack-ui/rbac",
+            "version": "0.1.0",
+            "dist": {
+                "type": "path",
+                "url": "../rbac",
+                "reference": "449f9fecc4ddaa5eef79b235ec8031cb784111ae"
+            },
+            "require": {
+                "artisanpack-ui/core": "^1.0",
+                "illuminate/support": "^10.0|^11.0|^12.0",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "artisanpack-ui/code-style": "^1.1",
+                "artisanpack-ui/code-style-pint": "^1.1",
+                "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+                "friendsofphp/php-cs-fixer": "^3.75",
+                "laravel/pint": "^1.26",
+                "orchestra/testbench": "^10.2",
+                "pestphp/pest": "^3.8",
+                "pestphp/pest-plugin-laravel": "^3.2"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "ArtisanPackUI\\Rbac\\RbacServiceProvider"
+                    ],
+                    "aliases": {
+                        "Rbac": "ArtisanPackUI\\Rbac\\Facades\\Rbac"
+                    }
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "ArtisanPackUI\\Rbac\\": "src/"
+                },
+                "files": [
+                    "src/helpers.php"
+                ]
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "lint": [
+                    "./vendor/bin/php-cs-fixer fix --dry-run --diff",
+                    "./vendor/bin/phpcs"
+                ],
+                "fix": [
+                    "./vendor/bin/php-cs-fixer fix"
+                ],
+                "cs": [
+                    "./vendor/bin/phpcs"
+                ],
+                "cs:fix": [
+                    "./vendor/bin/phpcbf"
+                ],
+                "test": [
+                    "./vendor/bin/pest"
+                ]
+            },
+            "license": [
+                "GPL-3.0-or-later"
+            ],
+            "authors": [
+                {
+                    "name": "Jacob Martella",
+                    "email": "me@jacobmartella.com"
+                }
+            ],
+            "description": "Role-based access control for Laravel — roles with hierarchy, permissions, Blade directives, middleware, and Gate integration.",
+            "transport-options": {
+                "symlink": true,
+                "relative": true
+            }
         },
         {
             "name": "artisanpack-ui/security",
@@ -11941,9 +12021,9 @@
         }
     ],
     "aliases": [],
-    "minimum-stability": "stable",
+    "minimum-stability": "dev",
     "stability-flags": {},
-    "prefer-stable": false,
+    "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
         "php": "^8.2"

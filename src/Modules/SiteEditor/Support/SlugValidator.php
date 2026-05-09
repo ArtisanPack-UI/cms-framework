@@ -12,7 +12,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 
@@ -33,9 +33,9 @@ final class SlugValidator
     /**
      * @since 1.2.0
      */
-    public static function isValid( string $slug ): bool
+    public static function isValid(string $slug): bool
     {
-        return (bool) preg_match( self::PATTERN, $slug );
+        return (bool) preg_match(self::PATTERN, $slug);
     }
 
     /**

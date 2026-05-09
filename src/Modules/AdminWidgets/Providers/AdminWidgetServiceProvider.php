@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Service provider for the AdminWidgets module.
@@ -31,8 +31,8 @@ class AdminWidgetServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton( AdminWidgetManager::class, function ( $app ) {
+        $this->app->singleton(AdminWidgetManager::class, function ($app) {
             return new AdminWidgetManager;
-        } );
+        });
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * User Resource for the CMS Framework Users Module.
@@ -39,7 +39,7 @@ class UserResource extends JsonResource
      *
      * @return array<string, mixed> The transformed user data array.
      */
-    public function toArray( Request $request ): array
+    public function toArray(Request $request): array
     {
         return [
             'id'                => $this->id,
@@ -48,15 +48,15 @@ class UserResource extends JsonResource
             'email_verified_at' => $this->email_verified_at,
             'created_at'        => $this->created_at,
             'updated_at'        => $this->updated_at,
-            'roles'             => $this->whenLoaded( 'roles', function () {
-                return $this->roles->map( function ( $role ) {
+            'roles'             => $this->whenLoaded('roles', function () {
+                return $this->roles->map(function ($role) {
                     return [
                         'id'   => $role->id,
                         'name' => $role->name,
                         'slug' => $role->slug,
                     ];
-                } );
-            } ),
+                });
+            }),
         ];
     }
 }

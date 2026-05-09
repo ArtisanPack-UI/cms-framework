@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * HasFeaturedImage Trait
@@ -29,7 +29,7 @@ trait HasFeaturedImage
      */
     public function featuredImage(): MorphOne
     {
-        return $this->morphOne( Media::class, 'featurable', 'featurable_type', 'featurable_id' )
+        return $this->morphOne(Media::class, 'featurable', 'featurable_type', 'featurable_id')
             ->withTimestamps();
     }
 
@@ -40,16 +40,16 @@ trait HasFeaturedImage
      *
      * @param  int  $mediaId  The ID of the media to set as featured image.
      */
-    public function setFeaturedImage( int $mediaId ): void
+    public function setFeaturedImage(int $mediaId): void
     {
         // Remove existing featured image
         $this->removeFeaturedImage();
 
         // Create new featured image relationship
-        Media::where( 'id', sanitizeInt( $mediaId ) )->update( [
-            'featurable_type' => get_class( $this ),
+        Media::where('id', sanitizeInt($mediaId))->update([
+            'featurable_type' => get_class($this),
             'featurable_id'   => $this->id,
-        ] );
+        ]);
     }
 
     /**
@@ -59,12 +59,12 @@ trait HasFeaturedImage
      */
     public function removeFeaturedImage(): void
     {
-        Media::where( 'featurable_type', get_class( $this ) )
-            ->where( 'featurable_id', $this->id )
-            ->update( [
+        Media::where('featurable_type', get_class($this))
+            ->where('featurable_id', $this->id)
+            ->update([
                 'featurable_type' => null,
                 'featurable_id'   => null,
-            ] );
+            ]);
     }
 
     /**
@@ -74,11 +74,11 @@ trait HasFeaturedImage
      *
      * @param  string  $size  The size of the image (full, thumbnail, medium, large).
      */
-    public function getFeaturedImageUrl( string $size = 'full' ): ?string
+    public function getFeaturedImageUrl(string $size = 'full'): ?string
     {
         $featuredImage = $this->featuredImage;
 
-        if ( ! $featuredImage ) {
+        if (! $featuredImage) {
             return null;
         }
 

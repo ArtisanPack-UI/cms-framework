@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * ContentTypes Service Provider
@@ -41,13 +41,13 @@ class ContentTypesServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Register ContentTypeManager as singleton
-        $this->app->singleton( ContentTypeManager::class, fn () => new ContentTypeManager );
+        $this->app->singleton(ContentTypeManager::class, fn () => new ContentTypeManager);
 
         // Register CustomFieldManager as singleton
-        $this->app->singleton( CustomFieldManager::class, fn () => new CustomFieldManager );
+        $this->app->singleton(CustomFieldManager::class, fn () => new CustomFieldManager);
 
         // Register TaxonomyManager as singleton
-        $this->app->singleton( TaxonomyManager::class, fn () => new TaxonomyManager );
+        $this->app->singleton(TaxonomyManager::class, fn () => new TaxonomyManager);
 
         // Load helpers
         $this->loadHelpers();
@@ -58,20 +58,20 @@ class ContentTypesServiceProvider extends ServiceProvider
      *
      * @since 1.0.0
      */
-    public function boot( Router $router ): void
+    public function boot(Router $router): void
     {
         // Load migrations
-        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
         // Load API routes
-        Route::prefix( 'api/v1' )
-            ->middleware( 'api' )
-            ->group( __DIR__ . '/../routes/api.php' );
+        Route::prefix('api/v1')
+            ->middleware('api')
+            ->group(__DIR__.'/../routes/api.php');
 
         // Register policies
-        Gate::policy( ContentType::class, ContentTypePolicy::class );
-        Gate::policy( CustomField::class, CustomFieldPolicy::class );
-        Gate::policy( Taxonomy::class, TaxonomyPolicy::class );
+        Gate::policy(ContentType::class, ContentTypePolicy::class);
+        Gate::policy(CustomField::class, CustomFieldPolicy::class);
+        Gate::policy(Taxonomy::class, TaxonomyPolicy::class);
     }
 
     /**
@@ -81,9 +81,9 @@ class ContentTypesServiceProvider extends ServiceProvider
      */
     protected function loadHelpers(): void
     {
-        $helpersPath = __DIR__ . '/../helpers.php';
+        $helpersPath = __DIR__.'/../helpers.php';
 
-        if ( file_exists( $helpersPath ) ) {
+        if (file_exists($helpersPath)) {
             require_once $helpersPath;
         }
     }

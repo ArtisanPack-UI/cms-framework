@@ -11,7 +11,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
@@ -38,10 +38,10 @@ class GlobalStylesRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'settings'  => [ 'nullable', 'array' ],
-            'styles'    => [ 'nullable', 'array' ],
-            'variation' => [ 'nullable', 'string', 'max:255', 'regex:/^[a-zA-Z0-9_-]+$/' ],
-            'title'     => [ 'nullable', 'string', 'max:255' ],
+            'settings'  => ['nullable', 'array'],
+            'styles'    => ['nullable', 'array'],
+            'variation' => ['nullable', 'string', 'max:255', 'regex:/^[a-zA-Z0-9_-]+$/'],
+            'title'     => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -53,7 +53,7 @@ class GlobalStylesRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'variation.regex' => __( 'The variation slug must be alphanumeric, hyphens, or underscores.' ),
+            'variation.regex' => __('The variation slug must be alphanumeric, hyphens, or underscores.'),
         ];
     }
 }

@@ -12,7 +12,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 
@@ -28,18 +28,18 @@ final class PatternFileParser
      *
      * @return array{title: string, slug: string|null, description: string|null, categories: array<int, string>, block_types: array<int, string>, content: string}
      */
-    public static function parse( string $contents ): array
+    public static function parse(string $contents): array
     {
-        $headers = self::extractHeaders( $contents );
-        $content = self::extractContent( $contents );
+        $headers = self::extractHeaders($contents);
+        $content = self::extractContent($contents);
 
         return [
-            'title'       => trim( $headers['Title'] ?? '' ),
-            'slug'        => self::nullable( $headers['Slug'] ?? null ),
-            'description' => self::nullable( $headers['Description'] ?? null ),
-            'categories'  => self::splitList( $headers['Categories'] ?? '' ),
-            'block_types' => self::splitList( $headers['Block Types'] ?? '' ),
-            'content'     => trim( $content ),
+            'title'       => trim($headers['Title'] ?? ''),
+            'slug'        => self::nullable($headers['Slug'] ?? null),
+            'description' => self::nullable($headers['Description'] ?? null),
+            'categories'  => self::splitList($headers['Categories'] ?? ''),
+            'block_types' => self::splitList($headers['Block Types'] ?? ''),
+            'content'     => trim($content),
         ];
     }
 
@@ -57,24 +57,24 @@ final class PatternFileParser
      *
      * @return array<string, string>
      */
-    protected static function extractHeaders( string $contents ): array
+    protected static function extractHeaders(string $contents): array
     {
-        if ( ! preg_match( '/\A(?:\xEF\xBB\xBF)?\s*(?:<\?php\s+)?\/\*\*?(.*?)\*\//s', $contents, $match ) ) {
+        if (! preg_match('/\A(?:\xEF\xBB\xBF)?\s*(?:<\?php\s+)?\/\*\*?(.*?)\*\//s', $contents, $match)) {
             return [];
         }
 
         $headers = [];
 
-        foreach ( preg_split( '/\R/', $match[1] ) as $line ) {
+        foreach (preg_split('/\R/', $match[1]) as $line) {
             // Strip leading whitespace and asterisks from each doc-comment line.
-            $stripped = preg_replace( '/^\s*\*\s?/', '', $line );
+            $stripped = preg_replace('/^\s*\*\s?/', '', $line);
 
-            if ( null === $stripped ) {
+            if (null === $stripped) {
                 continue;
             }
 
-            if ( preg_match( '/^([A-Za-z][A-Za-z0-9 \-]+):\s*(.*)$/', $stripped, $headerMatch ) ) {
-                $headers[ trim( $headerMatch[1] ) ] = trim( $headerMatch[2] );
+            if (preg_match('/^([A-Za-z][A-Za-z0-9 \-]+):\s*(.*)$/', $stripped, $headerMatch)) {
+                $headers[trim($headerMatch[1])] = trim($headerMatch[2]);
             }
         }
 
@@ -87,7 +87,7 @@ final class PatternFileParser
      *
      * @since 1.2.0
      */
-    protected static function extractContent( string $contents ): string
+    protected static function extractContent(string $contents): string
     {
         /*
          * Strip a leading PHP-tag block surrounding a doc-comment, then return
@@ -101,7 +101,7 @@ final class PatternFileParser
          */
         $leading = '\A(?:\xEF\xBB\xBF)?\s*';
 
-        if ( preg_match( '/' . $leading . '<\?php\s+\/\*\*?.*?\*\/\s*\?>\s*(.*)$/s', $contents, $match ) ) {
+        if (preg_match('/'.$leading.'<\?php\s+\/\*\*?.*?\*\/\s*\?>\s*(.*)$/s', $contents, $match)) {
             return $match[1];
         }
 
@@ -109,7 +109,7 @@ final class PatternFileParser
          * Doc-comment without surrounding PHP tags — return everything after
          * the closing of the comment.
          */
-        if ( preg_match( '/' . $leading . '\/\*\*?.*?\*\/\s*(.*)$/s', $contents, $match ) ) {
+        if (preg_match('/'.$leading.'\/\*\*?.*?\*\/\s*(.*)$/s', $contents, $match)) {
             return $match[1];
         }
 
@@ -123,27 +123,27 @@ final class PatternFileParser
      *
      * @return array<int, string>
      */
-    protected static function splitList( string $value ): array
+    protected static function splitList(string $value): array
     {
-        $value = trim( $value );
+        $value = trim($value);
 
-        if ( '' === $value ) {
+        if ('' === $value) {
             return [];
         }
 
-        return array_values( array_filter( array_map( 'trim', explode( ',', $value ) ) ) );
+        return array_values(array_filter(array_map('trim', explode(',', $value))));
     }
 
     /**
      * @since 1.2.0
      */
-    protected static function nullable( ?string $value ): ?string
+    protected static function nullable(?string $value): ?string
     {
-        if ( null === $value ) {
+        if (null === $value) {
             return null;
         }
 
-        $trimmed = trim( $value );
+        $trimmed = trim($value);
 
         return '' === $trimmed ? null : $trimmed;
     }

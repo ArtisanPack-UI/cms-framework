@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * CustomField Policy for the CMS Framework ContentTypes Module.
@@ -35,7 +35,7 @@ class CustomFieldPolicy
      *
      * @return bool True if the user can view custom fields, false otherwise.
      */
-    public function viewAny( Authenticatable $user ): bool
+    public function viewAny(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any custom fields.
@@ -48,7 +48,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.viewAny', 'customFields.manage' ) );
+        return $user->can(applyFilters('customFields.viewAny', 'customFields.manage'));
     }
 
     /**
@@ -61,7 +61,7 @@ class CustomFieldPolicy
      *
      * @return bool True if the user can view the custom field, false otherwise.
      */
-    public function view( Authenticatable $user, CustomField $customField ): bool
+    public function view(Authenticatable $user, CustomField $customField): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a custom field.
@@ -75,7 +75,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.view', 'customFields.manage', $customField ) );
+        return $user->can(applyFilters('customFields.view', 'customFields.manage', $customField));
     }
 
     /**
@@ -87,7 +87,7 @@ class CustomFieldPolicy
      *
      * @return bool True if the user can create custom fields, false otherwise.
      */
-    public function create( Authenticatable $user ): bool
+    public function create(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can create custom fields.
@@ -100,7 +100,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.create', 'customFields.manage' ) );
+        return $user->can(applyFilters('customFields.create', 'customFields.manage'));
     }
 
     /**
@@ -113,7 +113,7 @@ class CustomFieldPolicy
      *
      * @return bool True if the user can update the custom field, false otherwise.
      */
-    public function update( Authenticatable $user, CustomField $customField ): bool
+    public function update(Authenticatable $user, CustomField $customField): bool
     {
         /**
          * Filters the capability used to determine whether a user can update custom fields.
@@ -127,7 +127,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.update', 'customFields.manage', $customField ) );
+        return $user->can(applyFilters('customFields.update', 'customFields.manage', $customField));
     }
 
     /**
@@ -140,7 +140,7 @@ class CustomFieldPolicy
      *
      * @return bool True if the user can delete the custom field, false otherwise.
      */
-    public function delete( Authenticatable $user, CustomField $customField ): bool
+    public function delete(Authenticatable $user, CustomField $customField): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete custom fields.
@@ -154,6 +154,6 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.delete', 'customFields.manage', $customField ) );
+        return $user->can(applyFilters('customFields.delete', 'customFields.manage', $customField));
     }
 }

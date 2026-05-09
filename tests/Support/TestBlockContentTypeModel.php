@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Test fixture: a content-type model that uses HasBlockContent.

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * PageCategory Controller for the CMS Framework Pages Module.
@@ -33,7 +33,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group( 'Page Categories', weight: 5 )]
+#[Group('Page Categories', weight: 5)]
 class PageCategoryController extends Controller
 {
     use AuthorizesRequests;
@@ -66,13 +66,13 @@ class PageCategoryController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of category resources.
      */
-    public function index( Request $request ): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', PageCategory::class );
+        $this->authorize('viewAny', PageCategory::class);
 
-        $categories = PageCategory::with( $this->getRequestedIncludes( $request ) )->orderBy( 'order' )->paginate( 15 );
+        $categories = PageCategory::with($this->getRequestedIncludes($request))->orderBy('order')->paginate(15);
 
-        return PageCategoryResource::collection( $categories );
+        return PageCategoryResource::collection($categories);
     }
 
     /**
@@ -87,15 +87,15 @@ class PageCategoryController extends Controller
      *
      * @return JsonResponse The JSON response containing the created category resource.
      */
-    public function store( PageCategoryRequest $request ): JsonResponse
+    public function store(PageCategoryRequest $request): JsonResponse
     {
-        $this->authorize( 'create', PageCategory::class );
+        $this->authorize('create', PageCategory::class);
 
         $validated = $request->validated();
-        $category  = PageCategory::create( $validated );
-        $category->load( $this->getRequestedIncludes( $request ) );
+        $category  = PageCategory::create($validated);
+        $category->load($this->getRequestedIncludes($request));
 
-        return response()->json( new PageCategoryResource( $category ), 201 );
+        return response()->json(new PageCategoryResource($category), 201);
     }
 
     /**
@@ -109,14 +109,14 @@ class PageCategoryController extends Controller
      *
      * @return PageCategoryResource The category resource.
      */
-    public function show( Request $request, int $id ): PageCategoryResource
+    public function show(Request $request, int $id): PageCategoryResource
     {
-        $category = PageCategory::findOrFail( $id );
-        $this->authorize( 'view', $category );
+        $category = PageCategory::findOrFail($id);
+        $this->authorize('view', $category);
 
-        $category->load( $this->getRequestedIncludes( $request ) );
+        $category->load($this->getRequestedIncludes($request));
 
-        return new PageCategoryResource( $category );
+        return new PageCategoryResource($category);
     }
 
     /**
@@ -132,16 +132,16 @@ class PageCategoryController extends Controller
      *
      * @return PageCategoryResource The updated category resource.
      */
-    public function update( PageCategoryRequest $request, int $id ): PageCategoryResource
+    public function update(PageCategoryRequest $request, int $id): PageCategoryResource
     {
-        $category = PageCategory::findOrFail( $id );
-        $this->authorize( 'update', $category );
+        $category = PageCategory::findOrFail($id);
+        $this->authorize('update', $category);
 
         $validated = $request->validated();
-        $category->update( $validated );
-        $category->load( $this->getRequestedIncludes( $request ) );
+        $category->update($validated);
+        $category->load($this->getRequestedIncludes($request));
 
-        return new PageCategoryResource( $category );
+        return new PageCategoryResource($category);
     }
 
     /**
@@ -156,10 +156,10 @@ class PageCategoryController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( int $id ): Response
+    public function destroy(int $id): Response
     {
-        $category = PageCategory::findOrFail( $id );
-        $this->authorize( 'delete', $category );
+        $category = PageCategory::findOrFail($id);
+        $this->authorize('delete', $category);
 
         $category->delete();
 

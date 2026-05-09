@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PostCategory Policy for the CMS Framework Blog Module.
@@ -35,7 +35,7 @@ class PostCategoryPolicy
      *
      * @return bool True if the user can view post categories, false otherwise.
      */
-    public function viewAny( Authenticatable $user ): bool
+    public function viewAny(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any post categories.
@@ -48,7 +48,7 @@ class PostCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postCategories.viewAny', 'postCategories.manage' ) );
+        return $user->can(applyFilters('postCategories.viewAny', 'postCategories.manage'));
     }
 
     /**
@@ -61,7 +61,7 @@ class PostCategoryPolicy
      *
      * @return bool True if the user can view the category, false otherwise.
      */
-    public function view( Authenticatable $user, PostCategory $category ): bool
+    public function view(Authenticatable $user, PostCategory $category): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a post category.
@@ -75,7 +75,7 @@ class PostCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postCategories.view', 'postCategories.manage', $category ) );
+        return $user->can(applyFilters('postCategories.view', 'postCategories.manage', $category));
     }
 
     /**
@@ -87,7 +87,7 @@ class PostCategoryPolicy
      *
      * @return bool True if the user can create post categories, false otherwise.
      */
-    public function create( Authenticatable $user ): bool
+    public function create(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can create post categories.
@@ -100,7 +100,7 @@ class PostCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postCategories.create', 'postCategories.manage' ) );
+        return $user->can(applyFilters('postCategories.create', 'postCategories.manage'));
     }
 
     /**
@@ -113,7 +113,7 @@ class PostCategoryPolicy
      *
      * @return bool True if the user can update the category, false otherwise.
      */
-    public function update( Authenticatable $user, PostCategory $category ): bool
+    public function update(Authenticatable $user, PostCategory $category): bool
     {
         /**
          * Filters the capability used to determine whether a user can update post categories.
@@ -127,7 +127,7 @@ class PostCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postCategories.update', 'postCategories.manage', $category ) );
+        return $user->can(applyFilters('postCategories.update', 'postCategories.manage', $category));
     }
 
     /**
@@ -140,7 +140,7 @@ class PostCategoryPolicy
      *
      * @return bool True if the user can delete the category, false otherwise.
      */
-    public function delete( Authenticatable $user, PostCategory $category ): bool
+    public function delete(Authenticatable $user, PostCategory $category): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete post categories.
@@ -154,6 +154,6 @@ class PostCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postCategories.delete', 'postCategories.manage', $category ) );
+        return $user->can(applyFilters('postCategories.delete', 'postCategories.manage', $category));
     }
 }

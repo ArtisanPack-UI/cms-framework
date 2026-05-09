@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Not found exception for the CMS Framework.
@@ -42,9 +42,9 @@ class NotFoundException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function model( string $model, int|string $id ): self
+    public static function model(string $model, int|string $id): self
     {
-        return new self( "Model {$model} with ID {$id} not found." );
+        return new self("Model {$model} with ID {$id} not found.");
     }
 
     /**
@@ -55,8 +55,8 @@ class NotFoundException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function resource( string $resource, string $identifier ): self
+    public static function resource(string $resource, string $identifier): self
     {
-        return new self( "{$resource} '{$identifier}' not found." );
+        return new self("{$resource} '{$identifier}' not found.");
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Blog Module Helper Functions for the CMS Framework.
@@ -17,7 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
 use Illuminate\Database\Eloquent\Collection;
 
-if ( ! function_exists( 'getPost' ) ) {
+if (! function_exists('getPost')) {
     /**
      * Get a post by ID.
      *
@@ -30,19 +30,19 @@ if ( ! function_exists( 'getPost' ) ) {
      *
      * @return Post|null The post instance or null if not found.
      */
-    function getPost( int $id, array|string $with = [] ): ?Post
+    function getPost(int $id, array|string $with = []): ?Post
     {
         $query = Post::query();
 
-        if ( ! empty( $with ) ) {
-            $query->with( $with );
+        if (! empty($with)) {
+            $query->with($with);
         }
 
-        return $query->find( $id );
+        return $query->find($id);
     }
 }
 
-if ( ! function_exists( 'getPostBySlug' ) ) {
+if (! function_exists('getPostBySlug')) {
     /**
      * Get a post by slug.
      *
@@ -55,19 +55,19 @@ if ( ! function_exists( 'getPostBySlug' ) ) {
      *
      * @return Post|null The post instance or null if not found.
      */
-    function getPostBySlug( string $slug, array|string $with = [] ): ?Post
+    function getPostBySlug(string $slug, array|string $with = []): ?Post
     {
         $query = Post::query();
 
-        if ( ! empty( $with ) ) {
-            $query->with( $with );
+        if (! empty($with)) {
+            $query->with($with);
         }
 
-        return $query->where( 'slug', sanitizeText( $slug ) )->first();
+        return $query->where('slug', sanitizeText($slug))->first();
     }
 }
 
-if ( ! function_exists( 'getPostCategory' ) ) {
+if (! function_exists('getPostCategory')) {
     /**
      * Get a post category by ID.
      *
@@ -80,19 +80,19 @@ if ( ! function_exists( 'getPostCategory' ) ) {
      *
      * @return PostCategory|null The category instance or null if not found.
      */
-    function getPostCategory( int $id, array|string $with = [] ): ?PostCategory
+    function getPostCategory(int $id, array|string $with = []): ?PostCategory
     {
         $query = PostCategory::query();
 
-        if ( ! empty( $with ) ) {
-            $query->with( $with );
+        if (! empty($with)) {
+            $query->with($with);
         }
 
-        return $query->find( $id );
+        return $query->find($id);
     }
 }
 
-if ( ! function_exists( 'getPostCategoryBySlug' ) ) {
+if (! function_exists('getPostCategoryBySlug')) {
     /**
      * Get a post category by slug.
      *
@@ -105,19 +105,19 @@ if ( ! function_exists( 'getPostCategoryBySlug' ) ) {
      *
      * @return PostCategory|null The category instance or null if not found.
      */
-    function getPostCategoryBySlug( string $slug, array|string $with = [] ): ?PostCategory
+    function getPostCategoryBySlug(string $slug, array|string $with = []): ?PostCategory
     {
         $query = PostCategory::query();
 
-        if ( ! empty( $with ) ) {
-            $query->with( $with );
+        if (! empty($with)) {
+            $query->with($with);
         }
 
-        return $query->where( 'slug', sanitizeText( $slug ) )->first();
+        return $query->where('slug', sanitizeText($slug))->first();
     }
 }
 
-if ( ! function_exists( 'getPostTag' ) ) {
+if (! function_exists('getPostTag')) {
     /**
      * Get a post tag by ID.
      *
@@ -130,19 +130,19 @@ if ( ! function_exists( 'getPostTag' ) ) {
      *
      * @return PostTag|null The tag instance or null if not found.
      */
-    function getPostTag( int $id, array|string $with = [] ): ?PostTag
+    function getPostTag(int $id, array|string $with = []): ?PostTag
     {
         $query = PostTag::query();
 
-        if ( ! empty( $with ) ) {
-            $query->with( $with );
+        if (! empty($with)) {
+            $query->with($with);
         }
 
-        return $query->find( $id );
+        return $query->find($id);
     }
 }
 
-if ( ! function_exists( 'getPostTagBySlug' ) ) {
+if (! function_exists('getPostTagBySlug')) {
     /**
      * Get a post tag by slug.
      *
@@ -155,19 +155,19 @@ if ( ! function_exists( 'getPostTagBySlug' ) ) {
      *
      * @return PostTag|null The tag instance or null if not found.
      */
-    function getPostTagBySlug( string $slug, array|string $with = [] ): ?PostTag
+    function getPostTagBySlug(string $slug, array|string $with = []): ?PostTag
     {
         $query = PostTag::query();
 
-        if ( ! empty( $with ) ) {
-            $query->with( $with );
+        if (! empty($with)) {
+            $query->with($with);
         }
 
-        return $query->where( 'slug', sanitizeText( $slug ) )->first();
+        return $query->where('slug', sanitizeText($slug))->first();
     }
 }
 
-if ( ! function_exists( 'getRecentPosts' ) ) {
+if (! function_exists('getRecentPosts')) {
     /**
      * Get recent published posts.
      *
@@ -180,13 +180,13 @@ if ( ! function_exists( 'getRecentPosts' ) ) {
      *
      * @return Collection<int, Post> Collection of recent posts.
      */
-    function getRecentPosts( int $limit = 10, array|string $with = [] ): Collection
+    function getRecentPosts(int $limit = 10, array|string $with = []): Collection
     {
-        return app( BlogManager::class )->getRecentPosts( $limit, $with );
+        return app(BlogManager::class)->getRecentPosts($limit, $with);
     }
 }
 
-if ( ! function_exists( 'getBlogArchive' ) ) {
+if (! function_exists('getBlogArchive')) {
     /**
      * Get blog posts with archive filters.
      *
@@ -208,21 +208,21 @@ if ( ! function_exists( 'getBlogArchive' ) ) {
      *
      * @return Collection<int, Post> Collection of filtered posts.
      */
-    function getBlogArchive( array $filters = [] ): Collection
+    function getBlogArchive(array $filters = []): Collection
     {
-        $query = app( BlogManager::class )->getArchiveQuery( $filters );
+        $query = app(BlogManager::class)->getArchiveQuery($filters);
 
         $limit = $filters['limit'] ?? null;
 
-        if ( $limit ) {
-            return $query->limit( $limit )->get();
+        if ($limit) {
+            return $query->limit($limit)->get();
         }
 
         return $query->get();
     }
 }
 
-if ( ! function_exists( 'postExists' ) ) {
+if (! function_exists('postExists')) {
     /**
      * Check if a post exists by ID or slug.
      *
@@ -232,17 +232,17 @@ if ( ! function_exists( 'postExists' ) ) {
      *
      * @return bool True if the post exists, false otherwise.
      */
-    function postExists( int|string $identifier ): bool
+    function postExists(int|string $identifier): bool
     {
-        if ( is_int( $identifier ) ) {
-            return Post::where( 'id', sanitizeInt( $identifier ) )->exists();
+        if (is_int($identifier)) {
+            return Post::where('id', sanitizeInt($identifier))->exists();
         }
 
-        return Post::where( 'slug', sanitizeText( $identifier ) )->exists();
+        return Post::where('slug', sanitizeText($identifier))->exists();
     }
 }
 
-if ( ! function_exists( 'postCategoryExists' ) ) {
+if (! function_exists('postCategoryExists')) {
     /**
      * Check if a post category exists by ID or slug.
      *
@@ -252,17 +252,17 @@ if ( ! function_exists( 'postCategoryExists' ) ) {
      *
      * @return bool True if the category exists, false otherwise.
      */
-    function postCategoryExists( int|string $identifier ): bool
+    function postCategoryExists(int|string $identifier): bool
     {
-        if ( is_int( $identifier ) ) {
-            return PostCategory::where( 'id', sanitizeInt( $identifier ) )->exists();
+        if (is_int($identifier)) {
+            return PostCategory::where('id', sanitizeInt($identifier))->exists();
         }
 
-        return PostCategory::where( 'slug', sanitizeText( $identifier ) )->exists();
+        return PostCategory::where('slug', sanitizeText($identifier))->exists();
     }
 }
 
-if ( ! function_exists( 'postTagExists' ) ) {
+if (! function_exists('postTagExists')) {
     /**
      * Check if a post tag exists by ID or slug.
      *
@@ -272,12 +272,12 @@ if ( ! function_exists( 'postTagExists' ) ) {
      *
      * @return bool True if the tag exists, false otherwise.
      */
-    function postTagExists( int|string $identifier ): bool
+    function postTagExists(int|string $identifier): bool
     {
-        if ( is_int( $identifier ) ) {
-            return PostTag::where( 'id', sanitizeInt( $identifier ) )->exists();
+        if (is_int($identifier)) {
+            return PostTag::where('id', sanitizeInt($identifier))->exists();
         }
 
-        return PostTag::where( 'slug', sanitizeText( $identifier ))->exists();
+        return PostTag::where('slug', sanitizeText($identifier))->exists();
     }
 }

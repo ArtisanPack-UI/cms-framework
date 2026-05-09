@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Service provider for the CMS Framework.
@@ -88,17 +88,17 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->validateConfiguration();
 
-        if ( $this->app->runningInConsole() ) {
-            $this->publishes( [
-                __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
-            ], 'artisanpack-package-config' );
+        if ($this->app->runningInConsole()) {
+            $this->publishes([
+                __DIR__.'/../config/cms-framework.php' => config_path('artisanpack/cms-framework.php'),
+            ], 'artisanpack-package-config');
 
-            $this->publishes( [
-                __DIR__ . '/../resources/types' => resource_path( 'types/cms-framework' ),
-            ], 'cms-types' );
+            $this->publishes([
+                __DIR__.'/../resources/types' => resource_path('types/cms-framework'),
+            ], 'cms-types');
         }
 
-        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
 
         $this->registerVisualEditorBridge();
     }
@@ -126,20 +126,20 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      */
     public function registerVisualEditorBridge(): void
     {
-        if ( ! class_exists( VisualEditor::class ) ) {
+        if (! class_exists(VisualEditor::class)) {
             return;
         }
 
-        addFilter( 'ap.visual-editor.resources', function ( array $resources ): array {
-            return array_merge( [
+        addFilter('ap.visual-editor.resources', function (array $resources): array {
+            return array_merge([
                 'posts' => Post::class,
                 'pages' => Page::class,
-            ], $resources );
-        } );
+            ], $resources);
+        });
 
-        addFilter( 'ap.visual-editor.resources', function ( array $resources ): array {
-            return $this->autoRegisterCustomContentTypes( $resources );
-        } );
+        addFilter('ap.visual-editor.resources', function (array $resources): array {
+            return $this->autoRegisterCustomContentTypes($resources);
+        });
 
         $this->registerVisualEditorPermissions();
     }
@@ -156,22 +156,22 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(
-            __DIR__ . '/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
+            __DIR__.'/../config/cms-framework.php', 'artisanpack-cms-framework-temp',
         );
 
-        $this->app->register( UserServiceProvider::class );
-        $this->app->register( AdminServiceProvider::class );
-        $this->app->register( AdminWidgetServiceProvider::class );
-        $this->app->register( CoreServiceProvider::class );
-        $this->app->register( SettingsServiceProvider::class );
-        $this->app->register( NotificationServiceProvider::class );
-        $this->app->register( ContentTypesServiceProvider::class );
-        $this->app->register( BlogServiceProvider::class );
-        $this->app->register( PagesServiceProvider::class );
-        $this->app->register( ThemesServiceProvider::class );
-        $this->app->register( SiteEditorServiceProvider::class );
-        $this->app->register( PluginsServiceProvider::class );
-        $this->app->register( OpenApiServiceProvider::class );
+        $this->app->register(UserServiceProvider::class);
+        $this->app->register(AdminServiceProvider::class);
+        $this->app->register(AdminWidgetServiceProvider::class);
+        $this->app->register(CoreServiceProvider::class);
+        $this->app->register(SettingsServiceProvider::class);
+        $this->app->register(NotificationServiceProvider::class);
+        $this->app->register(ContentTypesServiceProvider::class);
+        $this->app->register(BlogServiceProvider::class);
+        $this->app->register(PagesServiceProvider::class);
+        $this->app->register(ThemesServiceProvider::class);
+        $this->app->register(SiteEditorServiceProvider::class);
+        $this->app->register(PluginsServiceProvider::class);
+        $this->app->register(OpenApiServiceProvider::class);
     }
 
     /**
@@ -194,15 +194,15 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      */
     protected function registerVisualEditorPermissions(): void
     {
-        if ( ! Schema::hasTable( 'permissions' ) ) {
+        if (! Schema::hasTable('permissions')) {
             return;
         }
 
         /** @var PermissionManager $manager */
-        $manager = $this->app->make( PermissionManager::class );
+        $manager = $this->app->make(PermissionManager::class);
 
-        foreach ( self::VISUAL_EDITOR_PERMISSIONS as $slug => $name ) {
-            $manager->register( $slug, $name );
+        foreach (self::VISUAL_EDITOR_PERMISSIONS as $slug => $name) {
+            $manager->register($slug, $name);
         }
     }
 
@@ -226,40 +226,40 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      *
      * @return array<string, class-string>
      */
-    protected function autoRegisterCustomContentTypes( array $resources ): array
+    protected function autoRegisterCustomContentTypes(array $resources): array
     {
-        if ( ! Schema::hasTable( 'content_types' ) ) {
+        if (! Schema::hasTable('content_types')) {
             return $resources;
         }
 
         /** @var ContentTypeManager $manager */
-        $manager = $this->app->make( ContentTypeManager::class );
+        $manager = $this->app->make(ContentTypeManager::class);
 
-        foreach ( $manager->getRegisteredContentTypes() as $type ) {
-            $slug       = is_array( $type ) ? ( $type['slug'] ?? null ) : null;
-            $modelClass = is_array( $type ) ? ( $type['model_class'] ?? null ) : null;
-            $supports   = is_array( $type ) && is_array( $type['supports'] ?? null ) ? $type['supports'] : [];
+        foreach ($manager->getRegisteredContentTypes() as $type) {
+            $slug       = is_array($type) ? ($type['slug'] ?? null) : null;
+            $modelClass = is_array($type) ? ($type['model_class'] ?? null) : null;
+            $supports   = is_array($type) && is_array($type['supports'] ?? null) ? $type['supports'] : [];
 
-            if ( ! is_string( $slug ) || ! is_string( $modelClass ) ) {
+            if (! is_string($slug) || ! is_string($modelClass)) {
                 continue;
             }
 
-            $usesBlockContent = class_exists( $modelClass )
-                && in_array( HasBlockContent::class, class_uses_recursive( $modelClass ), true );
+            $usesBlockContent = class_exists($modelClass)
+                && in_array(HasBlockContent::class, class_uses_recursive($modelClass), true);
 
-            if ( ! $usesBlockContent ) {
-                if ( in_array( 'editor', $supports, true ) ) {
-                    Log::warning( sprintf(
+            if (! $usesBlockContent) {
+                if (in_array('editor', $supports, true)) {
+                    Log::warning(sprintf(
                         'Content type [%s] declares editor support but its model [%s] does not use HasBlockContent.',
                         $slug,
                         $modelClass,
-                    ) );
+                    ));
                 }
 
                 continue;
             }
 
-            $resources[ $slug ] = $modelClass;
+            $resources[$slug] = $modelClass;
         }
 
         return $resources;
@@ -276,16 +276,16 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     protected function mergeConfiguration(): void
     {
         // Get the package's default configuration.
-        $packageDefaults = config( 'artisanpack-cms-framework-temp', [] );
+        $packageDefaults = config('artisanpack-cms-framework-temp', []);
 
         // Get the user's custom configuration from config/artisanpack.php.
-        $userConfig = config( 'artisanpack.cms-framework', [] );
+        $userConfig = config('artisanpack.cms-framework', []);
 
         // Merge them, with the user's config overwriting the defaults.
-        $mergedConfig = array_replace_recursive( $packageDefaults, $userConfig );
+        $mergedConfig = array_replace_recursive($packageDefaults, $userConfig);
 
         // Set the final, correctly merged configuration.
-        config( ['artisanpack.cms-framework' => $mergedConfig] );
+        config(['artisanpack.cms-framework' => $mergedConfig]);
     }
 
     /**
@@ -303,18 +303,18 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     {
         // Skip validation in console mode to allow setup commands (vendor:publish,
         // package:discover, etc.) to run before the config has been published.
-        if ( $this->app->runningInConsole() ) {
+        if ($this->app->runningInConsole()) {
             return;
         }
 
-        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $userModel = config('artisanpack.cms-framework.user_model');
 
-        if ( null === $userModel ) {
+        if (null === $userModel) {
             throw new InvalidArgumentException(
-                'The CMS Framework user_model configuration is not set. ' .
-                'Please publish the configuration file using: ' .
-                'php artisan vendor:publish --tag=artisanpack-package-config ' .
-                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. ' .
+                'The CMS Framework user_model configuration is not set. '.
+                'Please publish the configuration file using: '.
+                'php artisan vendor:publish --tag=artisanpack-package-config '.
+                'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. '.
                 'Example: \'user_model\' => \\App\\Models\\User::class',
             );
         }

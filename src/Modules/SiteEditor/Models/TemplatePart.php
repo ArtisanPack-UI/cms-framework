@@ -10,7 +10,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -90,7 +90,7 @@ class TemplatePart extends Model
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
+        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
     }
 
     /**

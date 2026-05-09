@@ -10,7 +10,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources;
 
@@ -26,7 +26,7 @@ final class SyncedPatternResource
      *
      * @return array<string, mixed>
      */
-    public static function toArray( ResolvedPattern $pattern ): array
+    public static function toArray(ResolvedPattern $pattern): array
     {
         return [
             'id'                     => $pattern->wpId(),
@@ -46,9 +46,9 @@ final class SyncedPatternResource
             'wp_pattern_sync_status' => '',
             'categories'             => $pattern->categories,
             'block_types'            => $pattern->blockTypes,
-            'author'                 => null !== $pattern->model ? (int) ( $pattern->model->author_id ?? 0 ) : 0,
+            'author'                 => null !== $pattern->model ? (int) ($pattern->model->author_id ?? 0) : 0,
             'modified'               => null !== $pattern->model
-                ? optional( $pattern->model->updated_at )->toIso8601String()
+                ? optional($pattern->model->updated_at)->toIso8601String()
                 : null,
         ];
     }
@@ -60,11 +60,11 @@ final class SyncedPatternResource
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function collection( array $patterns ): array
+    public static function collection(array $patterns): array
     {
-        return array_values( array_map(
-            static fn ( ResolvedPattern $p ) => self::toArray( $p ),
+        return array_values(array_map(
+            static fn (ResolvedPattern $p) => self::toArray($p),
             $patterns,
-        ) );
+        ));
     }
 }

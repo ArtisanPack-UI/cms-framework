@@ -9,7 +9,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
@@ -36,7 +36,7 @@ class MenuLocationAssignmentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'menu' => [ 'required', 'integer', 'exists:menus,id' ],
+            'menu' => ['required', 'integer', 'exists:menus,id'],
         ];
     }
 
@@ -48,8 +48,8 @@ class MenuLocationAssignmentRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'menu.required' => __( 'The menu id is required.' ),
-            'menu.exists'   => __( 'The menu id does not match an existing menu.' ),
+            'menu.required' => __('The menu id is required.'),
+            'menu.exists'   => __('The menu id does not match an existing menu.'),
         ];
     }
 }

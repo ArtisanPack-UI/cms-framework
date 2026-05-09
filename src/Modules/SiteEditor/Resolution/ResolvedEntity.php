@@ -10,7 +10,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
@@ -51,8 +51,7 @@ final class ResolvedEntity
         public readonly bool $isCustom,
         public readonly ?string $area,
         public readonly Template|TemplatePart|null $model,
-    ) {
-    }
+    ) {}
 
     /**
      * The integer ID of the backing DB row, or 0 when none exists.
@@ -97,11 +96,11 @@ final class ResolvedEntity
                 ? (int) $this->model->author_id
                 : null,
             'modified_at'    => null !== $this->model
-                ? optional( $this->model->updated_at )->toIso8601String()
+                ? optional($this->model->updated_at)->toIso8601String()
                 : null,
         ];
 
-        if ( null !== $this->area ) {
+        if (null !== $this->area) {
             $entry['area'] = $this->area;
         }
 

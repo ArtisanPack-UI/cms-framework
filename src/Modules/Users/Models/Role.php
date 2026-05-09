@@ -1,134 +1,102 @@
 <?php
 
-declare( strict_types = 1 );
-
-/**
- * Role Model for the CMS Framework Users Module.
- *
- * This model represents user roles within the CMS framework and manages
- * relationships between roles, permissions, and users.
- *
- * @since   1.0.0
- */
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Models;
 
+use ArtisanPackUI\Rbac\Models\Role as RbacRole;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
- * Role model for managing user roles.
+ * CMS Framework Role model.
  *
- * Represents user roles within the system and defines relationships
- * with permissions and users through many-to-many relationships.
- *
- * @since 1.0.0
+ * Subclasses {@see RbacRole} so the framework inherits the rbac base
+ * (slug column, slug-aware helpers, parent/child hierarchy, observers,
+ * Gate integration). CMS-specific behavior — the configurable
+ * user-model relationship and the legacy `syncPermissions()` /
+ * `givePermissionTo()` helpers used by the package's own managers and
+ * tests — lives here on top of that.
  */
-class Role extends Model
+class Role extends RbacRole
 {
     use HasFactory;
 
     /**
-     * The attributes that are mass assignable.
-     *
-     * @since 1.0.0
-     *
-     * @var array<int, string>
-     */
-    protected $fillable = [
-        'name',
-        'slug',
-    ];
-
-    /**
-     * Get the users that belong to the role.
-     *
-     * Defines a many-to-many relationship between roles and users using
-     * the configurable user model from the cms-framework configuration.
-     *
-     * @since 1.0.0
-     *
-     * @return BelongsToMany The relationship instance.
+     * Override the user relationship to use the cms-framework
+     * configurable `user_model` setting instead of the default
+     * `auth.providers.users.model`.
      */
     public function users(): BelongsToMany
     {
-        return $this->belongsToMany( config( 'artisanpack.cms-framework.user_model' ), 'role_user', 'role_id', 'user_id' );
+        return $this->belongsToMany(
+            config('artisanpack.cms-framework.user_model'),
+            'role_user',
+            'role_id',
+            'user_id',
+        );
     }
 
     /**
-     * Synchronize the role's permissions with the provided list.
+     * Replace this role's permissions with the supplied set.
      *
-     * Replaces existing permissions with the provided set. Accepts an array or
-     * collection of Permission models or permission names.
+     * Accepts Permission models, slugs, or names — resolved via the
+     * configured rbac permission model.
      *
-     * @since 1.0.0
-     *
-     * @param  array|Collection  $permissions  Collection of Permission models or array of permission names.
+     * @param  array<int, Permission|string>|Collection  $permissions
      */
-    public function syncPermissions( Collection|array $permissions ): self
+    public function syncPermissions(Collection|array $permissions): self
     {
-        // If the items are Permission models, pluck their names.
-        // If they are already strings, this won't change them.
-        $permissionNames = collect( $permissions )->map( function ( $permission ) {
-            return $permission instanceof Permission ? $permission->name : $permission;
-        } );
-
-        // Find all the permission models for the given names.
-        $permissionsToSync = Permission::whereIn( 'name', $permissionNames )->get();
-
-        // Use Laravel's built-in sync() method on the relationship.
-        $this->permissions()->sync( $permissionsToSync );
+        $this->permissions()->sync($this->resolvePermissionKeys($permissions));
 
         return $this;
     }
 
     /**
-     * Get the permissions that belong to the role.
+     * Add the supplied permissions without detaching existing ones.
      *
-     * Defines a many-to-many relationship between roles and permissions.
-     *
-     * @since 1.0.0
-     *
-     * @return BelongsToMany The relationship instance.
+     * @param  array<int, Permission|string>|Collection  $permissions
      */
-    public function permissions(): BelongsToMany
+    public function givePermissionTo(Collection|array $permissions): self
     {
-        return $this->belongsToMany( Permission::class );
-    }
-
-    /**
-     * Gives one or more permissions to the role.
-     *
-     * This will not remove any existing permissions.
-     *
-     * @since 1.0.0
-     *
-     * @param  array|Collection  $permissions  A collection of Permission models or an array of
-     *                                         permission names.
-     */
-    public function givePermissionTo( Collection|array $permissions ): self
-    {
-        // If the items are Permission models, pluck their names.
-        // If they are already strings, this won't change them.
-        $permissionNames = collect( $permissions )->map( function ( $permission ) {
-            return $permission instanceof Permission ? $permission->name : $permission;
-        } );
-
-        // Find all the permission models for the given names.
-        $permissionsToGive = Permission::whereIn( 'name', $permissionNames )->get();
-
-        // Use syncWithoutDetaching() to add the new permissions without removing existing ones.
-        $this->permissions()->syncWithoutDetaching( $permissionsToGive );
+        $this->permissions()->syncWithoutDetaching($this->resolvePermissionKeys($permissions));
 
         return $this;
     }
 
     /**
-     * Create a new factory instance for the model.
+     * Resolve a mixed collection of Permission models / slugs / names
+     * into the primary keys the BelongsToMany helpers expect.
      *
-     * @since 1.0.0
+     * @param  array<int, Permission|string>|Collection  $permissions
+     *
+     * @return array<int, int|string>
+     */
+    protected function resolvePermissionKeys(Collection|array $permissions): array
+    {
+        $permissionModel = config('artisanpack.rbac.models.permission', Permission::class);
+
+        return collect($permissions)
+            ->map(function ($permission) use ($permissionModel) {
+                if ($permission instanceof Permission) {
+                    return $permission->getKey();
+                }
+
+                // Name first, slug fallback — same lookup order as
+                // rbac's HasRoles / HasPermissions helpers.
+                $resolved = $permissionModel::query()->where('name', $permission)->first()
+                    ?? $permissionModel::query()->where('slug', $permission)->first();
+
+                return $resolved?->getKey();
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return \ArtisanPackUI\Database\Factories\RoleFactory
      */
     protected static function newFactory()
     {

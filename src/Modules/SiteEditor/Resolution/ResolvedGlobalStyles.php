@@ -14,7 +14,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
@@ -42,8 +42,7 @@ final class ResolvedGlobalStyles
         public readonly ?string $variation,
         public readonly bool $hasUserCustomization,
         public readonly ?GlobalStyles $model,
-    ) {
-    }
+    ) {}
 
     /**
      * The integer ID of the backing DB row, or 0 when none exists.
@@ -66,12 +65,12 @@ final class ResolvedGlobalStyles
      */
     public function contentHash(): string
     {
-        return md5( (string) json_encode( [
+        return md5((string) json_encode([
             'theme'     => $this->theme,
             'variation' => $this->variation,
             'settings'  => $this->settings,
             'styles'    => $this->styles,
-        ] ) );
+        ]));
     }
 
     /**
@@ -94,7 +93,7 @@ final class ResolvedGlobalStyles
             'wp_id'                  => $this->wpId(),
             'content_hash'           => $this->contentHash(),
             'modified_at'            => null !== $this->model
-                ? optional( $this->model->updated_at )->toIso8601String()
+                ? optional($this->model->updated_at)->toIso8601String()
                 : null,
         ];
     }

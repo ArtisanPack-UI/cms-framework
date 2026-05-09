@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Post Request for the CMS Framework Blog Module.
@@ -48,7 +48,7 @@ class PostRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route( 'id' );
+        $id = $this->route('id');
 
         return [
             'title' => [
@@ -61,7 +61,7 @@ class PostRequest extends FormRequest
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique( 'posts', 'slug' )->ignore( $id ),
+                Rule::unique('posts', 'slug')->ignore($id),
             ],
             'content'      => ['nullable', 'string'],
             'excerpt'      => ['nullable', 'string'],
@@ -86,12 +86,12 @@ class PostRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'title.required'     => __( 'The post title is required.' ),
-            'slug.required'      => __( 'The post slug is required.' ),
-            'slug.regex'         => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
-            'slug.unique'        => __( 'A post with this slug already exists.' ),
-            'author_id.required' => __( 'The author is required.' ),
-            'status.required'    => __( 'The post status is required.' ),
+            'title.required'     => __('The post title is required.'),
+            'slug.required'      => __('The post slug is required.'),
+            'slug.regex'         => __('The slug must be lowercase letters, numbers, and hyphens only.'),
+            'slug.unique'        => __('A post with this slug already exists.'),
+            'author_id.required' => __('The author is required.'),
+            'status.required'    => __('The post status is required.'),
         ];
     }
 }

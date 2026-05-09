@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Blog Manager
@@ -33,39 +33,39 @@ class BlogManager
      *
      * @param  array  $filters  Array of filters to apply (category, tag, author, year, month, day, status).
      */
-    public function getArchiveQuery( array $filters = [] ): Builder
+    public function getArchiveQuery(array $filters = []): Builder
     {
-        $query = Post::query()->with( ['author', 'categories', 'tags'] );
+        $query = Post::query()->with(['author', 'categories', 'tags']);
 
         // Apply shared filters
-        $this->applyStatusFilter( $query, $filters );
-        $this->applyAuthorFilter( $query, $filters );
-        $this->applySearchFilter( $query, $filters );
+        $this->applyStatusFilter($query, $filters);
+        $this->applyAuthorFilter($query, $filters);
+        $this->applySearchFilter($query, $filters);
 
         // Apply category filter
-        if ( isset( $filters['category'] ) ) {
-            $query->byCategory( $filters['category'] );
+        if (isset($filters['category'])) {
+            $query->byCategory($filters['category']);
         }
 
         // Apply tag filter
-        if ( isset( $filters['tag'] ) ) {
-            $query->byTag( $filters['tag'] );
+        if (isset($filters['tag'])) {
+            $query->byTag($filters['tag']);
         }
 
         // Apply date filters
-        if ( isset( $filters['year'] ) ) {
-            if ( isset( $filters['month'] ) ) {
-                $query->byMonth( $filters['year'], $filters['month'] );
-                if ( isset( $filters['day'] ) ) {
-                    $query->whereDay( 'published_at', $filters['day'] );
+        if (isset($filters['year'])) {
+            if (isset($filters['month'])) {
+                $query->byMonth($filters['year'], $filters['month']);
+                if (isset($filters['day'])) {
+                    $query->whereDay('published_at', $filters['day']);
                 }
             } else {
-                $query->byYear( $filters['year'] );
+                $query->byYear($filters['year']);
             }
         }
 
         // Order by published date descending
-        $query->orderBy( 'published_at', 'desc' );
+        $query->orderBy('published_at', 'desc');
 
         return $query;
     }
@@ -79,19 +79,19 @@ class BlogManager
      * @param  int|null  $month  Month to filter by (optional).
      * @param  int|null  $day  Day to filter by (optional).
      */
-    public function getPostsByDate( int $year, ?int $month = null, ?int $day = null ): Collection
+    public function getPostsByDate(int $year, ?int $month = null, ?int $day = null): Collection
     {
         $filters = ['year' => $year];
 
-        if ( null !== $month ) {
+        if (null !== $month) {
             $filters['month'] = $month;
         }
 
-        if ( null !== $day ) {
+        if (null !== $day) {
             $filters['day'] = $day;
         }
 
-        return $this->getArchiveQuery( $filters )->get();
+        return $this->getArchiveQuery($filters)->get();
     }
 
     /**
@@ -101,9 +101,9 @@ class BlogManager
      *
      * @param  int  $authorId  Author ID to filter by.
      */
-    public function getPostsByAuthor( int $authorId ): Collection
+    public function getPostsByAuthor(int $authorId): Collection
     {
-        return $this->getArchiveQuery( ['author' => $authorId] )->get();
+        return $this->getArchiveQuery(['author' => $authorId])->get();
     }
 
     /**
@@ -113,19 +113,19 @@ class BlogManager
      *
      * @param  int|string  $category  Category ID or slug.
      */
-    public function getPostsByCategory( $category ): Collection
+    public function getPostsByCategory($category): Collection
     {
         // If category is a string (slug), find the category ID
-        if ( is_string( $category ) ) {
-            $categoryModel = \ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory::where( 'slug', sanitizeText( $category ) )->first();
-            if ( $categoryModel ) {
+        if (is_string($category)) {
+            $categoryModel = \ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory::where('slug', sanitizeText($category))->first();
+            if ($categoryModel) {
                 $category = $categoryModel->id;
             } else {
                 return collect();
             }
         }
 
-        return $this->getArchiveQuery( ['category' => $category] )->get();
+        return $this->getArchiveQuery(['category' => $category])->get();
     }
 
     /**
@@ -135,19 +135,19 @@ class BlogManager
      *
      * @param  int|string  $tag  Tag ID or slug.
      */
-    public function getPostsByTag( $tag ): Collection
+    public function getPostsByTag($tag): Collection
     {
         // If tag is a string (slug), find the tag ID
-        if ( is_string( $tag ) ) {
-            $tagModel = \ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag::where( 'slug', sanitizeText( $tag ) )->first();
-            if ( $tagModel ) {
+        if (is_string($tag)) {
+            $tagModel = \ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag::where('slug', sanitizeText($tag))->first();
+            if ($tagModel) {
                 $tag = $tagModel->id;
             } else {
                 return collect();
             }
         }
 
-        return $this->getArchiveQuery( ['tag' => $tag] )->get();
+        return $this->getArchiveQuery(['tag' => $tag])->get();
     }
 
     /**
@@ -158,15 +158,15 @@ class BlogManager
      * @param  int  $limit  Number of posts to retrieve.
      * @param  array|string  $with  Optional relationships to eager load.
      */
-    public function getRecentPosts( int $limit = 10, array|string $with = [] ): Collection
+    public function getRecentPosts(int $limit = 10, array|string $with = []): Collection
     {
         $query = $this->getArchiveQuery();
 
-        if ( ! empty( $with ) ) {
-            $query->with( (array) $with );
+        if (! empty($with)) {
+            $query->with((array) $with);
         }
 
-        return $query->limit( $limit )->get();
+        return $query->limit($limit)->get();
     }
 
     /**
@@ -176,11 +176,11 @@ class BlogManager
      *
      * @param  int  $limit  Number of posts to retrieve.
      */
-    public function getPopularPosts( int $limit = 10 ): Collection
+    public function getPopularPosts(int $limit = 10): Collection
     {
         return $this->getArchiveQuery()
-            ->orderByRaw( 'CAST(JSON_EXTRACT(metadata, "$.view_count") AS UNSIGNED) DESC' )
-            ->limit( $limit )
+            ->orderByRaw('CAST(JSON_EXTRACT(metadata, "$.view_count") AS UNSIGNED) DESC')
+            ->limit($limit)
             ->get();
     }
 }

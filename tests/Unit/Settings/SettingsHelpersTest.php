@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Unit Tests for the Settings Helper Functions.
@@ -13,53 +13,53 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 
-beforeEach( function (): void {
+beforeEach(function (): void {
     // Mock the manager and bind it to the service container
-    $this->artisan( 'migrate', ['--database' => 'testing'] );
-    $this->managerMock = Mockery::mock( SettingsManager::class );
-    $this->app->instance( SettingsManager::class, $this->managerMock );
-} );
+    $this->artisan('migrate', ['--database' => 'testing']);
+    $this->managerMock = Mockery::mock(SettingsManager::class);
+    $this->app->instance(SettingsManager::class, $this->managerMock);
+});
 
-afterEach( function (): void {
+afterEach(function (): void {
     Mockery::close();
-} );
+});
 
-test( 'apGetSetting helper', function (): void {
+test('apGetSetting helper', function (): void {
     $this->managerMock
-        ->shouldReceive( 'getSetting' )
-        ->with( 'test-key', 'default' )
+        ->shouldReceive('getSetting')
+        ->with('test-key', 'default')
         ->once()
-        ->andReturn( 'expected-value' );
+        ->andReturn('expected-value');
 
-    $value = apGetSetting( 'test-key', 'default' );
+    $value = apGetSetting('test-key', 'default');
 
-    expect( $value )->toBe( 'expected-value' );
-} );
+    expect($value)->toBe('expected-value');
+});
 
-test( 'apRegisterSetting helper', function (): void {
+test('apRegisterSetting helper', function (): void {
     $callback = fn () => 'test';
 
     $this->managerMock
-        ->shouldReceive( 'registerSetting' )
+        ->shouldReceive('registerSetting')
         // --- FIX: Correct argument order ---
-        ->with( 'test-key', 'default', $callback, SettingType::String )
+        ->with('test-key', 'default', $callback, SettingType::String)
         ->once();
 
     // The actual call matches the helper and manager signature
-    apRegisterSetting( 'test-key', 'default', $callback, SettingType::String );
+    apRegisterSetting('test-key', 'default', $callback, SettingType::String);
 
     // Mockery assertions are checked automatically in afterEach.
-    expect( true )->toBeTrue();
-} );
+    expect(true)->toBeTrue();
+});
 
-test( 'apUpdateSetting helper', function (): void {
+test('apUpdateSetting helper', function (): void {
     $this->managerMock
-        ->shouldReceive( 'updateSetting' )
-        ->with( 'test-key', 'new-value' )
+        ->shouldReceive('updateSetting')
+        ->with('test-key', 'new-value')
         ->once();
 
-    apUpdateSetting( 'test-key', 'new-value' );
+    apUpdateSetting('test-key', 'new-value');
 
     // Mockery assertions are checked automatically in afterEach.
-    expect( true )->toBeTrue();
-} );
+    expect(true)->toBeTrue();
+});

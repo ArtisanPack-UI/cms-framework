@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Core Service Provider.
@@ -33,13 +33,13 @@ class CoreServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton( AssetManager::class, function ( $app ) {
+        $this->app->singleton(AssetManager::class, function ($app) {
             return new AssetManager;
-        } );
+        });
 
         // Merge update configuration
         $this->mergeConfigFrom(
-            __DIR__ . '/../Updates/config/updates.php',
+            __DIR__.'/../Updates/config/updates.php',
             'cms.updates',
         );
     }
@@ -52,18 +52,18 @@ class CoreServiceProvider extends ServiceProvider
     public function boot(): void
     {
         // Publish update configuration
-        $this->publishes( [
-            __DIR__ . '/../Updates/config/updates.php' => config_path( 'cms/updates.php' ),
-        ], 'cms-updates-config' );
+        $this->publishes([
+            __DIR__.'/../Updates/config/updates.php' => config_path('cms/updates.php'),
+        ], 'cms-updates-config');
 
         // Register update commands
-        if ( $this->app->runningInConsole() ) {
-            $this->commands( [
+        if ($this->app->runningInConsole()) {
+            $this->commands([
                 CheckForUpdateCommand::class,
                 PerformUpdateCommand::class,
                 RollbackUpdateCommand::class,
                 CheckForUpdateScheduled::class,
-            ] );
+            ]);
         }
     }
 }

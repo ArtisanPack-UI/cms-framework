@@ -11,7 +11,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
@@ -29,7 +29,7 @@ interface EntityResolver
      *
      * @since 1.2.0
      */
-    public function resolve( string $slug ): ?ResolvedEntity;
+    public function resolve(string $slug): ?ResolvedEntity;
 
     /**
      * List all entities for the active theme (file + DB merged).
@@ -52,5 +52,5 @@ interface EntityResolver
      *
      * @since 1.2.0
      */
-    public function revert( string $slug ): bool;
+    public function revert(string $slug): bool;
 }

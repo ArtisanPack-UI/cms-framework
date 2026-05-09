@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Post Policy for the CMS Framework Blog Module.
@@ -35,7 +35,7 @@ class PostPolicy
      *
      * @return bool True if the user can view posts, false otherwise.
      */
-    public function viewAny( Authenticatable $user ): bool
+    public function viewAny(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any posts.
@@ -48,7 +48,7 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.viewAny', 'posts.view' ) );
+        return $user->can(applyFilters('posts.viewAny', 'posts.view'));
     }
 
     /**
@@ -61,7 +61,7 @@ class PostPolicy
      *
      * @return bool True if the user can view the post, false otherwise.
      */
-    public function view( Authenticatable $user, Post $post ): bool
+    public function view(Authenticatable $user, Post $post): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a post.
@@ -75,7 +75,7 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.view', 'posts.view', $post ) );
+        return $user->can(applyFilters('posts.view', 'posts.view', $post));
     }
 
     /**
@@ -87,7 +87,7 @@ class PostPolicy
      *
      * @return bool True if the user can create posts, false otherwise.
      */
-    public function create( Authenticatable $user ): bool
+    public function create(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can create posts.
@@ -100,7 +100,7 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.create', 'posts.create' ) );
+        return $user->can(applyFilters('posts.create', 'posts.create'));
     }
 
     /**
@@ -113,19 +113,19 @@ class PostPolicy
      *
      * @return bool True if the user can update the post, false otherwise.
      */
-    public function update( Authenticatable $user, Post $post ): bool
+    public function update(Authenticatable $user, Post $post): bool
     {
         // Check if user can edit any post
-        $canEditAny = $user->can( applyFilters( 'posts.update', 'posts.edit', $post ) );
+        $canEditAny = $user->can(applyFilters('posts.update', 'posts.edit', $post));
 
-        if ( $canEditAny ) {
+        if ($canEditAny) {
             return true;
         }
 
         // Check if user can edit their own posts
-        $canEditOwn = $user->can( applyFilters( 'posts.updateOwn', 'posts.editOwn', $post ) );
+        $canEditOwn = $user->can(applyFilters('posts.updateOwn', 'posts.editOwn', $post));
 
-        if ( $canEditOwn && $post->author_id === $user->id ) {
+        if ($canEditOwn && $post->author_id === $user->id) {
             return true;
         }
 
@@ -142,19 +142,19 @@ class PostPolicy
      *
      * @return bool True if the user can delete the post, false otherwise.
      */
-    public function delete( Authenticatable $user, Post $post ): bool
+    public function delete(Authenticatable $user, Post $post): bool
     {
         // Check if user can delete any post
-        $canDeleteAny = $user->can( applyFilters( 'posts.delete', 'posts.delete', $post ) );
+        $canDeleteAny = $user->can(applyFilters('posts.delete', 'posts.delete', $post));
 
-        if ( $canDeleteAny ) {
+        if ($canDeleteAny) {
             return true;
         }
 
         // Check if user can delete their own posts
-        $canDeleteOwn = $user->can( applyFilters( 'posts.deleteOwn', 'posts.deleteOwn', $post ) );
+        $canDeleteOwn = $user->can(applyFilters('posts.deleteOwn', 'posts.deleteOwn', $post));
 
-        if ( $canDeleteOwn && $post->author_id === $user->id ) {
+        if ($canDeleteOwn && $post->author_id === $user->id) {
             return true;
         }
 
@@ -171,7 +171,7 @@ class PostPolicy
      *
      * @return bool True if the user can publish the post, false otherwise.
      */
-    public function publish( Authenticatable $user, Post $post ): bool
+    public function publish(Authenticatable $user, Post $post): bool
     {
         /**
          * Filters the capability used to determine whether a user can publish posts.
@@ -185,6 +185,6 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.publish', 'posts.publish', $post ) );
+        return $user->can(applyFilters('posts.publish', 'posts.publish', $post));
     }
 }

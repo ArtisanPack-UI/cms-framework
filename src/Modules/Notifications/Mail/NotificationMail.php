@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Notification Mail
@@ -53,7 +53,7 @@ class NotificationMail extends Mailable
      * @param  Notification  $notification  The notification to send.
      * @param  mixed  $user  The user receiving the email.
      */
-    public function __construct( Notification $notification, $user )
+    public function __construct(Notification $notification, $user)
     {
         $this->notification = $notification;
         $this->user         = $user;

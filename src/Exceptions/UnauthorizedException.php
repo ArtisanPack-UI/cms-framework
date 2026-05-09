@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Unauthorized exception for the CMS Framework.
@@ -41,9 +41,9 @@ class UnauthorizedException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function forAction( string $action ): self
+    public static function forAction(string $action): self
     {
-        return new self( "You are not authorized to {$action}." );
+        return new self("You are not authorized to {$action}.");
     }
 
     /**
@@ -54,9 +54,9 @@ class UnauthorizedException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function forResource( string $resource, string $action ): self
+    public static function forResource(string $resource, string $action): self
     {
-        return new self( "You are not authorized to {$action} {$resource}." );
+        return new self("You are not authorized to {$action} {$resource}.");
     }
 
     /**
@@ -66,8 +66,8 @@ class UnauthorizedException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function requiresPermission( string $permission ): self
+    public static function requiresPermission(string $permission): self
     {
-        return new self( "This action requires the '{$permission}' permission." );
+        return new self("This action requires the '{$permission}' permission.");
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Validation exception for the CMS Framework.
@@ -60,9 +60,9 @@ class ValidationException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function withErrors( string $message, array $errors ): self
+    public static function withErrors(string $message, array $errors): self
     {
-        $exception         = new self( $message );
+        $exception         = new self($message);
         $exception->errors = $errors;
 
         return $exception;
@@ -87,9 +87,9 @@ class ValidationException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public function hasError( string $field ): bool
+    public function hasError(string $field): bool
     {
-        return isset( $this->errors[ $field ] );
+        return isset($this->errors[$field]);
     }
 
     /**
@@ -103,7 +103,7 @@ class ValidationException extends CMSFrameworkException
     {
         $payload = parent::buildErrorPayload();
 
-        if ( ! empty( $this->errors ) ) {
+        if (! empty($this->errors)) {
             $payload['error']['errors'] = $this->errors;
         }
 

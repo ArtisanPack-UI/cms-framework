@@ -12,7 +12,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -54,6 +54,6 @@ class MenuLocationAssignment extends Model
      */
     public function menu(): BelongsTo
     {
-        return $this->belongsTo( Menu::class );
+        return $this->belongsTo(Menu::class);
     }
 }

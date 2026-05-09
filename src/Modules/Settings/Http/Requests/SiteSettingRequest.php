@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Site Setting Request.
@@ -47,11 +47,11 @@ class SiteSettingRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'title'       => [ 'sometimes', 'string', 'max:255' ],
-            'description' => [ 'sometimes', 'string', 'max:255' ],
-            'url'         => [ 'sometimes', 'url', 'max:2048' ],
-            'site_logo'   => [ 'sometimes', 'nullable', 'integer' ],
-            'site_icon'   => [ 'sometimes', 'nullable', 'integer' ],
+            'title'       => ['sometimes', 'string', 'max:255'],
+            'description' => ['sometimes', 'string', 'max:255'],
+            'url'         => ['sometimes', 'url', 'max:2048'],
+            'site_logo'   => ['sometimes', 'nullable', 'integer'],
+            'site_icon'   => ['sometimes', 'nullable', 'integer'],
         ];
     }
 
@@ -65,11 +65,11 @@ class SiteSettingRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'title'       => __( 'site title' ),
-            'description' => __( 'site description' ),
-            'url'         => __( 'site URL' ),
-            'site_logo'   => __( 'site logo' ),
-            'site_icon'   => __( 'site icon' ),
+            'title'       => __('site title'),
+            'description' => __('site description'),
+            'url'         => __('site URL'),
+            'site_logo'   => __('site logo'),
+            'site_icon'   => __('site icon'),
         ];
     }
 }

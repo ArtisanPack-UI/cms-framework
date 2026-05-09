@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Taxonomy Controller for the CMS Framework ContentTypes Module.
@@ -32,7 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group( 'Taxonomies', weight: 9 )]
+#[Group('Taxonomies', weight: 9)]
 class TaxonomyController extends Controller
 {
     use AuthorizesRequests;
@@ -49,7 +49,7 @@ class TaxonomyController extends Controller
      *
      * @since 1.0.0
      */
-    public function __construct( TaxonomyManager $taxonomyManager )
+    public function __construct(TaxonomyManager $taxonomyManager)
     {
         $this->taxonomyManager = $taxonomyManager;
     }
@@ -65,11 +65,11 @@ class TaxonomyController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Taxonomy::class );
+        $this->authorize('viewAny', Taxonomy::class);
 
-        $taxonomies = Taxonomy::paginate( 15 );
+        $taxonomies = Taxonomy::paginate(15);
 
-        return TaxonomyResource::collection( $taxonomies );
+        return TaxonomyResource::collection($taxonomies);
     }
 
     /**
@@ -84,14 +84,14 @@ class TaxonomyController extends Controller
      *
      * @return JsonResponse The JSON response containing the created taxonomy resource.
      */
-    public function store( TaxonomyRequest $request ): JsonResponse
+    public function store(TaxonomyRequest $request): JsonResponse
     {
-        $this->authorize( 'create', Taxonomy::class );
+        $this->authorize('create', Taxonomy::class);
 
         $validated = $request->validated();
-        $taxonomy  = $this->taxonomyManager->createTaxonomy( $validated );
+        $taxonomy  = $this->taxonomyManager->createTaxonomy($validated);
 
-        return response()->json( new TaxonomyResource( $taxonomy ), 201 );
+        return response()->json(new TaxonomyResource($taxonomy), 201);
     }
 
     /**
@@ -105,12 +105,12 @@ class TaxonomyController extends Controller
      *
      * @return TaxonomyResource The taxonomy resource.
      */
-    public function show( string $slug ): TaxonomyResource
+    public function show(string $slug): TaxonomyResource
     {
-        $taxonomy = Taxonomy::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
-        $this->authorize( 'view', $taxonomy );
+        $taxonomy = Taxonomy::where('slug', sanitizeText($slug))->firstOrFail();
+        $this->authorize('view', $taxonomy);
 
-        return new TaxonomyResource( $taxonomy );
+        return new TaxonomyResource($taxonomy);
     }
 
     /**
@@ -126,15 +126,15 @@ class TaxonomyController extends Controller
      *
      * @return TaxonomyResource The updated taxonomy resource.
      */
-    public function update( TaxonomyRequest $request, string $slug ): TaxonomyResource
+    public function update(TaxonomyRequest $request, string $slug): TaxonomyResource
     {
-        $taxonomy = Taxonomy::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
-        $this->authorize( 'update', $taxonomy );
+        $taxonomy = Taxonomy::where('slug', sanitizeText($slug))->firstOrFail();
+        $this->authorize('update', $taxonomy);
 
         $validated = $request->validated();
-        $taxonomy  = $this->taxonomyManager->updateTaxonomy( $slug, $validated );
+        $taxonomy  = $this->taxonomyManager->updateTaxonomy($slug, $validated);
 
-        return new TaxonomyResource( $taxonomy );
+        return new TaxonomyResource($taxonomy);
     }
 
     /**
@@ -149,12 +149,12 @@ class TaxonomyController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( string $slug ): Response
+    public function destroy(string $slug): Response
     {
-        $taxonomy = Taxonomy::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
-        $this->authorize( 'delete', $taxonomy );
+        $taxonomy = Taxonomy::where('slug', sanitizeText($slug))->firstOrFail();
+        $this->authorize('delete', $taxonomy);
 
-        $this->taxonomyManager->deleteTaxonomy( $slug );
+        $this->taxonomyManager->deleteTaxonomy($slug);
 
         return response()->noContent();
     }
@@ -168,12 +168,12 @@ class TaxonomyController extends Controller
      *
      * @return AnonymousResourceCollection The collection of taxonomy resources.
      */
-    public function byContentType( string $contentTypeSlug ): AnonymousResourceCollection
+    public function byContentType(string $contentTypeSlug): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Taxonomy::class );
+        $this->authorize('viewAny', Taxonomy::class);
 
-        $taxonomies = $this->taxonomyManager->getTaxonomiesForContentType( $contentTypeSlug );
+        $taxonomies = $this->taxonomyManager->getTaxonomiesForContentType($contentTypeSlug);
 
-        return TaxonomyResource::collection( $taxonomies );
+        return TaxonomyResource::collection($taxonomies);
     }
 }

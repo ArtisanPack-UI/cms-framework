@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Permission Manager for the CMS Framework Users Module.
@@ -39,9 +39,9 @@ class PermissionManager
      *
      * @return Permission The created or existing permission instance.
      */
-    public function register( string $slug, string $name ): Permission
+    public function register(string $slug, string $name): Permission
     {
-        $permission = Permission::firstOrCreate( ['slug' => $slug], ['name' => $name] );
+        $permission = Permission::firstOrCreate(['slug' => $slug], ['name' => $name]);
 
         /**
          * Fires after a permission has been registered.
@@ -57,7 +57,7 @@ class PermissionManager
          *
          * @return void
          */
-        doAction( 'ap.permissionRegistered', $permission );
+        doAction('ap.permissionRegistered', $permission);
 
         return $permission;
     }

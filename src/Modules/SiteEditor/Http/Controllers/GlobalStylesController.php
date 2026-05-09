@@ -17,7 +17,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
@@ -33,7 +33,7 @@ use Illuminate\Routing\Controller;
 /**
  * @since 1.2.0
  */
-#[Group( 'Site Editor / Global Styles', weight: 36 )]
+#[Group('Site Editor / Global Styles', weight: 36)]
 class GlobalStylesController extends Controller
 {
     /**
@@ -42,8 +42,7 @@ class GlobalStylesController extends Controller
     public function __construct(
         private GlobalStylesResolver $resolver,
         private GlobalStylesEmitter $emitter,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /api/v1/global-styles — return the resolved styles for the active theme.
@@ -54,11 +53,11 @@ class GlobalStylesController extends Controller
     {
         $resolved = $this->resolver->resolve();
 
-        if ( null === $resolved ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $resolved) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
-        return response()->json( GlobalStylesResource::toArray( $resolved ) );
+        return response()->json(GlobalStylesResource::toArray($resolved));
     }
 
     /**
@@ -66,24 +65,24 @@ class GlobalStylesController extends Controller
      *
      * @since 1.2.0
      */
-    public function update( GlobalStylesRequest $request ): JsonResponse
+    public function update(GlobalStylesRequest $request): JsonResponse
     {
         $payload              = $request->validated();
-        $payload['author_id'] = optional( $request->user() )->id;
+        $payload['author_id'] = optional($request->user())->id;
 
-        $model = $this->resolver->update( $payload );
+        $model = $this->resolver->update($payload);
 
-        if ( null === $model ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $model) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
         $resolved = $this->resolver->resolve();
 
-        if ( null === $resolved ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $resolved) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
-        return response()->json( GlobalStylesResource::toArray( $resolved ) );
+        return response()->json(GlobalStylesResource::toArray($resolved));
     }
 
     /**
@@ -96,21 +95,21 @@ class GlobalStylesController extends Controller
         // Active-theme check first — `revert()` returns false in two distinct
         // cases (no active theme, no DB row to delete); separating the checks
         // keeps the no-theme path on a 409 and the no-row path on a 404.
-        if ( null === $this->resolver->resolve() ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $this->resolver->resolve()) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
-        if ( ! $this->resolver->revert() ) {
-            return response()->json( [ 'message' => 'No user customization to revert.' ], 404 );
+        if (! $this->resolver->revert()) {
+            return response()->json(['message' => 'No user customization to revert.'], 404);
         }
 
         $resolved = $this->resolver->resolve();
 
-        if ( null === $resolved ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $resolved) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
-        return response()->json( GlobalStylesResource::toArray( $resolved ) );
+        return response()->json(GlobalStylesResource::toArray($resolved));
     }
 
     /**
@@ -120,7 +119,7 @@ class GlobalStylesController extends Controller
      */
     public function variations(): JsonResponse
     {
-        return response()->json( $this->resolver->variations() );
+        return response()->json($this->resolver->variations());
     }
 
     /**
@@ -130,8 +129,8 @@ class GlobalStylesController extends Controller
      */
     public function css(): Response
     {
-        return response( $this->emitter->emit(), 200, [
+        return response($this->emitter->emit(), 200, [
             'Content-Type' => 'text/css; charset=UTF-8',
-        ] );
+        ]);
     }
 }

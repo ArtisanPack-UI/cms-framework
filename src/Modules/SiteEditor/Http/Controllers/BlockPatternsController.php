@@ -11,7 +11,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
@@ -29,7 +29,7 @@ use Illuminate\Routing\Controller;
 /**
  * @since 1.2.0
  */
-#[Group( 'Site Editor / Block Patterns (unsynced)', weight: 34 )]
+#[Group('Site Editor / Block Patterns (unsynced)', weight: 34)]
 class BlockPatternsController extends Controller
 {
     /**
@@ -37,8 +37,7 @@ class BlockPatternsController extends Controller
      */
     public function __construct(
         private PatternResolver $resolver,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /api/v1/block-patterns/patterns — list theme + user-source unsynced patterns.
@@ -49,10 +48,10 @@ class BlockPatternsController extends Controller
     {
         $unsynced = array_filter(
             $this->resolver->all(),
-            static fn ( ResolvedPattern $pattern ) => ! $pattern->synced,
+            static fn (ResolvedPattern $pattern) => ! $pattern->synced,
         );
 
-        return response()->json( BlockPatternResource::collection( $unsynced ) );
+        return response()->json(BlockPatternResource::collection($unsynced));
     }
 
     /**
@@ -60,15 +59,15 @@ class BlockPatternsController extends Controller
      *
      * @since 1.2.0
      */
-    public function show( string $slug ): JsonResponse
+    public function show(string $slug): JsonResponse
     {
-        $pattern = $this->resolver->resolve( $slug );
+        $pattern = $this->resolver->resolve($slug);
 
-        if ( null === $pattern || $pattern->synced ) {
-            return response()->json( [ 'message' => 'Pattern not found.' ], 404 );
+        if (null === $pattern || $pattern->synced) {
+            return response()->json(['message' => 'Pattern not found.'], 404);
         }
 
-        return response()->json( BlockPatternResource::toArray( $pattern ) );
+        return response()->json(BlockPatternResource::toArray($pattern));
     }
 
     /**
@@ -76,21 +75,21 @@ class BlockPatternsController extends Controller
      *
      * @since 1.2.0
      */
-    public function store( BlockPatternRequest $request ): JsonResponse
+    public function store(BlockPatternRequest $request): JsonResponse
     {
         try {
-            $pattern = BlockPattern::create( $this->createAttributes( $request->validated() ) );
-        } catch ( QueryException $e ) {
-            if ( $this->isUniqueViolation( $e ) ) {
+            $pattern = BlockPattern::create($this->createAttributes($request->validated()));
+        } catch (QueryException $e) {
+            if ($this->isUniqueViolation($e)) {
                 return $this->slugConflictResponse();
             }
 
             throw $e;
         }
 
-        $resolved = $this->resolver->resolve( $pattern->userFacingSlug() );
+        $resolved = $this->resolver->resolve($pattern->userFacingSlug());
 
-        return response()->json( BlockPatternResource::toArray( $resolved ), 201 );
+        return response()->json(BlockPatternResource::toArray($resolved), 201);
     }
 
     /**
@@ -103,34 +102,34 @@ class BlockPatternsController extends Controller
      *
      * @since 1.2.0
      */
-    public function update( BlockPatternRequest $request, string $slug ): JsonResponse
+    public function update(BlockPatternRequest $request, string $slug): JsonResponse
     {
-        if ( ! SlugValidator::isValid( $slug ) ) {
+        if (! SlugValidator::isValid($slug)) {
             return $this->invalidSlugResponse();
         }
 
-        $existing = $this->resolver->resolve( $slug );
+        $existing = $this->resolver->resolve($slug);
 
-        if ( null !== $existing && BlockPattern::SOURCE_THEME === $existing->source ) {
-            return response()->json( [
+        if (null !== $existing && BlockPattern::SOURCE_THEME === $existing->source) {
+            return response()->json([
                 'message' => 'Theme patterns are read-only. Clone the pattern to a user pattern before editing.',
-            ], 403 );
+            ], 403);
         }
 
         $validated = $request->validated();
 
-        if ( array_key_exists( 'slug', $validated ) && $validated['slug'] !== $slug ) {
-            return response()->json( [
+        if (array_key_exists('slug', $validated) && $validated['slug'] !== $slug) {
+            return response()->json([
                 'message' => 'Body slug does not match URL slug.',
-                'errors'  => [ 'slug' => [ 'Slug in the request body must match the URL slug.' ] ],
-            ], 422 );
+                'errors'  => ['slug' => ['Slug in the request body must match the URL slug.']],
+            ], 422);
         }
 
-        unset( $validated['slug'] );
+        unset($validated['slug']);
 
-        $pattern = $this->upsertUnsynced( $slug, $validated );
+        $pattern = $this->upsertUnsynced($slug, $validated);
 
-        return response()->json( BlockPatternResource::toArray( $this->resolver->resolve( $pattern->userFacingSlug() ) ) );
+        return response()->json(BlockPatternResource::toArray($this->resolver->resolve($pattern->userFacingSlug())));
     }
 
     /**
@@ -140,31 +139,31 @@ class BlockPatternsController extends Controller
      *
      * @since 1.2.0
      */
-    public function destroy( string $slug ): JsonResponse
+    public function destroy(string $slug): JsonResponse
     {
-        if ( ! SlugValidator::isValid( $slug ) ) {
+        if (! SlugValidator::isValid($slug)) {
             return $this->invalidSlugResponse();
         }
 
-        $existing = $this->resolver->resolve( $slug );
+        $existing = $this->resolver->resolve($slug);
 
-        if ( null !== $existing && BlockPattern::SOURCE_THEME === $existing->source ) {
-            return response()->json( [
+        if (null !== $existing && BlockPattern::SOURCE_THEME === $existing->source) {
+            return response()->json([
                 'message' => 'Theme patterns cannot be deleted.',
-            ], 403 );
+            ], 403);
         }
 
         $deleted = BlockPattern::query()
-            ->where( 'slug', BlockPattern::withUserPrefix( $slug ) )
-            ->where( 'source', BlockPattern::SOURCE_USER )
-            ->where( 'synced', false )
+            ->where('slug', BlockPattern::withUserPrefix($slug))
+            ->where('source', BlockPattern::SOURCE_USER)
+            ->where('synced', false)
             ->delete();
 
-        if ( $deleted < 1 ) {
-            return response()->json( [ 'message' => 'Pattern not found.' ], 404 );
+        if ($deleted < 1) {
+            return response()->json(['message' => 'Pattern not found.'], 404);
         }
 
-        return response()->json( null, 204 );
+        return response()->json(null, 204);
     }
 
     /**
@@ -174,38 +173,38 @@ class BlockPatternsController extends Controller
      *
      * @param  array<string, mixed>  $validated
      */
-    protected function upsertUnsynced( string $slug, array $validated ): BlockPattern
+    protected function upsertUnsynced(string $slug, array $validated): BlockPattern
     {
         $existing = BlockPattern::query()
-            ->where( 'slug', BlockPattern::withUserPrefix( $slug ) )
-            ->where( 'source', BlockPattern::SOURCE_USER )
+            ->where('slug', BlockPattern::withUserPrefix($slug))
+            ->where('source', BlockPattern::SOURCE_USER)
             ->first();
 
-        if ( null !== $existing ) {
+        if (null !== $existing) {
             $validated['synced'] = false;
-            $existing->update( $validated );
+            $existing->update($validated);
 
             return $existing->refresh();
         }
 
-        $attributes         = $this->createAttributes( $validated );
+        $attributes         = $this->createAttributes($validated);
         $attributes['slug'] = $slug;
 
         try {
-            return BlockPattern::create( $attributes );
-        } catch ( QueryException $e ) {
-            if ( ! $this->isUniqueViolation( $e ) ) {
+            return BlockPattern::create($attributes);
+        } catch (QueryException $e) {
+            if (! $this->isUniqueViolation($e)) {
                 throw $e;
             }
 
             $existing = BlockPattern::query()
-                ->where( 'slug', BlockPattern::withUserPrefix( $slug ) )
-                ->where( 'source', BlockPattern::SOURCE_USER )
+                ->where('slug', BlockPattern::withUserPrefix($slug))
+                ->where('source', BlockPattern::SOURCE_USER)
                 ->firstOrFail();
 
-            unset( $validated['slug'] );
+            unset($validated['slug']);
             $validated['synced'] = false;
-            $existing->update( $validated );
+            $existing->update($validated);
 
             return $existing->refresh();
         }
@@ -218,7 +217,7 @@ class BlockPatternsController extends Controller
      *
      * @return array<string, mixed>
      */
-    protected function createAttributes( array $validated ): array
+    protected function createAttributes(array $validated): array
     {
         $validated['source']    = BlockPattern::SOURCE_USER;
         $validated['synced']    = false;
@@ -233,10 +232,10 @@ class BlockPatternsController extends Controller
      */
     protected function slugConflictResponse(): JsonResponse
     {
-        return response()->json( [
+        return response()->json([
             'message' => 'A pattern with this slug already exists.',
-            'errors'  => [ 'slug' => [ 'Slug must be unique across user patterns.' ] ],
-        ], 409 );
+            'errors'  => ['slug' => ['Slug must be unique across user patterns.']],
+        ], 409);
     }
 
     /**
@@ -244,23 +243,23 @@ class BlockPatternsController extends Controller
      */
     protected function invalidSlugResponse(): JsonResponse
     {
-        return response()->json( [
+        return response()->json([
             'message' => 'URL slug is not in canonical kebab-case form.',
-            'errors'  => [ 'slug' => [ 'Slug must be lowercase letters, numbers, and hyphens only.' ] ],
-        ], 422 );
+            'errors'  => ['slug' => ['Slug must be lowercase letters, numbers, and hyphens only.']],
+        ], 422);
     }
 
     /**
      * @since 1.2.0
      */
-    protected function isUniqueViolation( QueryException $e ): bool
+    protected function isUniqueViolation(QueryException $e): bool
     {
         $sqlState = $e->getCode();
 
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ('23000' === $sqlState || '23505' === $sqlState) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique' );
+        return str_contains(strtolower($e->getMessage()), 'unique');
     }
 }

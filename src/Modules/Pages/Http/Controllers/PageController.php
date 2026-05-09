@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Page Controller for the CMS Framework Pages Module.
@@ -39,7 +39,7 @@ use Throwable;
  *
  * @since 1.0.0
  */
-#[Group( 'Pages', weight: 4 )]
+#[Group('Pages', weight: 4)]
 class PageController extends Controller
 {
     use AuthorizesRequests;
@@ -75,7 +75,7 @@ class PageController extends Controller
      *
      * @since 1.0.0
      */
-    public function __construct( PageManager $pageManager )
+    public function __construct(PageManager $pageManager)
     {
         $this->pageManager = $pageManager;
     }
@@ -89,15 +89,15 @@ class PageController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of page resources.
      */
-    public function index( Request $request ): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Page::class );
+        $this->authorize('viewAny', Page::class);
 
-        $filters  = $request->only( ['status', 'author', 'template', 'search'] );
-        $includes = $this->getRequestedIncludes( $request );
-        $pages    = $this->pageManager->getPageQuery( $filters )->with( $includes )->paginate( 15 );
+        $filters  = $request->only(['status', 'author', 'template', 'search']);
+        $includes = $this->getRequestedIncludes($request);
+        $pages    = $this->pageManager->getPageQuery($filters)->with($includes)->paginate(15);
 
-        return PageResource::collection( $pages );
+        return PageResource::collection($pages);
     }
 
     /**
@@ -109,14 +109,14 @@ class PageController extends Controller
      *
      * @return JsonResponse The page tree as JSON.
      */
-    public function tree( Request $request ): JsonResponse
+    public function tree(Request $request): JsonResponse
     {
-        $this->authorize( 'viewAny', Page::class );
+        $this->authorize('viewAny', Page::class);
 
-        $filters = $request->only( ['status', 'author', 'template'] );
-        $tree    = $this->pageManager->getPageTree( $filters );
+        $filters = $request->only(['status', 'author', 'template']);
+        $tree    = $this->pageManager->getPageTree($filters);
 
-        return response()->json( PageResource::collection( $tree ) );
+        return response()->json(PageResource::collection($tree));
     }
 
     /**
@@ -130,18 +130,18 @@ class PageController extends Controller
      *
      * @return JsonResponse Success response.
      */
-    public function reorder( Request $request ): JsonResponse
+    public function reorder(Request $request): JsonResponse
     {
-        $this->authorize( 'update', Page::class );
+        $this->authorize('update', Page::class);
 
-        $validated = $request->validate( [
+        $validated = $request->validate([
             'order'   => ['required', 'array'],
             'order.*' => ['required', 'integer', 'min:0'],
-        ] );
+        ]);
 
-        $this->pageManager->reorderPages( $validated['order'] );
+        $this->pageManager->reorderPages($validated['order']);
 
-        return response()->json( ['message' => 'Pages reordered successfully'] );
+        return response()->json(['message' => 'Pages reordered successfully']);
     }
 
     /**
@@ -156,21 +156,21 @@ class PageController extends Controller
      *
      * @return JsonResponse Success response.
      */
-    public function move( Request $request, int $id ): JsonResponse
+    public function move(Request $request, int $id): JsonResponse
     {
-        $page = Page::findOrFail( $id );
-        $this->authorize( 'update', $page );
+        $page = Page::findOrFail($id);
+        $this->authorize('update', $page);
 
-        $validated = $request->validate( [
+        $validated = $request->validate([
             'parent_id' => ['nullable', 'integer', 'exists:pages,id'],
-        ] );
+        ]);
 
         try {
-            $this->pageManager->movePage( $id, $validated['parent_id'] ?? null );
+            $this->pageManager->movePage($id, $validated['parent_id'] ?? null);
 
-            return response()->json( ['message' => 'Page moved successfully'] );
-        } catch ( InvalidArgumentException $e ) {
-            return response()->json( ['error' => $e->getMessage()], 422 );
+            return response()->json(['message' => 'Page moved successfully']);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
         }
     }
 
@@ -186,30 +186,30 @@ class PageController extends Controller
      *
      * @return JsonResponse The JSON response containing the created page resource.
      */
-    public function store( PageRequest $request ): JsonResponse
+    public function store(PageRequest $request): JsonResponse
     {
-        $this->authorize( 'create', Page::class );
+        $this->authorize('create', Page::class);
 
         $validated  = $request->validated();
         $categories = $validated['categories'] ?? [];
         $tags       = $validated['tags'] ?? [];
 
-        unset( $validated['categories'], $validated['tags'] );
+        unset($validated['categories'], $validated['tags']);
 
-        $page = Page::create( $validated );
+        $page = Page::create($validated);
 
         // Sync categories and tags
-        if ( ! empty( $categories ) ) {
-            $page->categories()->sync( $categories );
+        if (! empty($categories)) {
+            $page->categories()->sync($categories);
         }
 
-        if ( ! empty( $tags ) ) {
-            $page->tags()->sync( $tags );
+        if (! empty($tags)) {
+            $page->tags()->sync($tags);
         }
 
-        $page->load( $this->getRequestedIncludes( $request ) );
+        $page->load($this->getRequestedIncludes($request));
 
-        return response()->json( new PageResource( $page ), 201 );
+        return response()->json(new PageResource($page), 201);
     }
 
     /**
@@ -223,14 +223,14 @@ class PageController extends Controller
      *
      * @return PageResource The page resource.
      */
-    public function show( Request $request, int $id ): PageResource
+    public function show(Request $request, int $id): PageResource
     {
-        $page = Page::findOrFail( $id );
-        $this->authorize( 'view', $page );
+        $page = Page::findOrFail($id);
+        $this->authorize('view', $page);
 
-        $page->load( $this->getRequestedIncludes( $request ) );
+        $page->load($this->getRequestedIncludes($request));
 
-        return new PageResource( $page );
+        return new PageResource($page);
     }
 
     /**
@@ -246,31 +246,31 @@ class PageController extends Controller
      *
      * @return PageResource The updated page resource.
      */
-    public function update( PageRequest $request, int $id ): PageResource
+    public function update(PageRequest $request, int $id): PageResource
     {
-        $page = Page::findOrFail( $id );
-        $this->authorize( 'update', $page );
+        $page = Page::findOrFail($id);
+        $this->authorize('update', $page);
 
         $validated  = $request->validated();
         $categories = $validated['categories'] ?? null;
         $tags       = $validated['tags'] ?? null;
 
-        unset( $validated['categories'], $validated['tags'] );
+        unset($validated['categories'], $validated['tags']);
 
-        $page->update( $validated );
+        $page->update($validated);
 
         // Sync categories and tags if provided
-        if ( null !== $categories ) {
-            $page->categories()->sync( $categories );
+        if (null !== $categories) {
+            $page->categories()->sync($categories);
         }
 
-        if ( null !== $tags ) {
-            $page->tags()->sync( $tags );
+        if (null !== $tags) {
+            $page->tags()->sync($tags);
         }
 
-        $page->load( $this->getRequestedIncludes( $request ) );
+        $page->load($this->getRequestedIncludes($request));
 
-        return new PageResource( $page );
+        return new PageResource($page);
     }
 
     /**
@@ -285,10 +285,10 @@ class PageController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( int $id ): Response
+    public function destroy(int $id): Response
     {
-        $page = Page::findOrFail( $id );
-        $this->authorize( 'delete', $page );
+        $page = Page::findOrFail($id);
+        $this->authorize('delete', $page);
 
         $page->delete();
 
@@ -307,45 +307,45 @@ class PageController extends Controller
      *
      * @return JsonResponse Summary with processed count, failed count, and error details.
      */
-    public function bulk( BulkPageRequest $request ): JsonResponse
+    public function bulk(BulkPageRequest $request): JsonResponse
     {
-        $action       = $request->validated( 'action' );
-        $ids          = $request->validated( 'ids' );
-        $policyMethod = $this->getBulkPolicyMethod( $action );
+        $action       = $request->validated('action');
+        $ids          = $request->validated('ids');
+        $policyMethod = $this->getBulkPolicyMethod($action);
         $processed    = 0;
         $errors       = [];
 
-        $pages = Page::whereIn( 'id', $ids )->get()->keyBy( 'id' );
+        $pages = Page::whereIn('id', $ids)->get()->keyBy('id');
 
-        foreach ( $ids as $id ) {
-            $page = $pages->get( $id );
+        foreach ($ids as $id) {
+            $page = $pages->get($id);
 
-            if ( null === $page ) {
-                $errors[ $id ] = __( 'Page not found.' );
+            if (null === $page) {
+                $errors[$id] = __('Page not found.');
 
                 continue;
             }
 
-            if ( ! $request->user()->can( $policyMethod, $page ) ) {
-                $errors[ $id ] = __( 'You do not have permission to :action this page.', ['action' => $action] );
+            if (! $request->user()->can($policyMethod, $page)) {
+                $errors[$id] = __('You do not have permission to :action this page.', ['action' => $action]);
 
                 continue;
             }
 
             try {
-                $this->executeBulkAction( $action, $page );
+                $this->executeBulkAction($action, $page);
                 $processed++;
-            } catch ( Throwable $e ) {
-                report( $e );
-                $errors[ $id ] = __( 'Failed to :action page.', ['action' => $action] );
+            } catch (Throwable $e) {
+                report($e);
+                $errors[$id] = __('Failed to :action page.', ['action' => $action]);
             }
         }
 
-        return response()->json( [
+        return response()->json([
             'processed' => $processed,
-            'failed'    => count( $errors ),
+            'failed'    => count($errors),
             'errors'    => $errors,
-        ] );
+        ]);
     }
 
     /**
@@ -357,13 +357,13 @@ class PageController extends Controller
      *
      * @return string The policy method name.
      */
-    protected function getBulkPolicyMethod( string $action ): string
+    protected function getBulkPolicyMethod(string $action): string
     {
-        return match ( $action ) {
+        return match ($action) {
             'delete'  => 'delete',
             'publish' => 'publish',
             'draft'   => 'update',
-            default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action] ) ),
+            default   => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 
@@ -375,19 +375,19 @@ class PageController extends Controller
      * @param  string  $action  The bulk action to perform.
      * @param  Page  $page  The page to perform the action on.
      */
-    protected function executeBulkAction( string $action, Page $page ): void
+    protected function executeBulkAction(string $action, Page $page): void
     {
-        match ( $action ) {
+        match ($action) {
             'delete'  => $page->delete(),
-            'publish' => $page->update( [
+            'publish' => $page->update([
                 'status'       => ContentStatus::Published->value,
                 'published_at' => now(),
-            ] ),
-            'draft'   => $page->update( [
+            ]),
+            'draft'   => $page->update([
                 'status'       => ContentStatus::Draft->value,
                 'published_at' => null,
-            ] ),
-            default   => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action])),
+            ]),
+            default   => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 }

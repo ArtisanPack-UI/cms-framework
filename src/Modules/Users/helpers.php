@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Helper Functions for the CMS Framework Users Module.
@@ -16,7 +16,7 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Managers\RoleManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 
-if ( ! function_exists( 'ap_register_role' ) ) {
+if (! function_exists('ap_register_role')) {
     /**
      * Register a new role in the system.
      *
@@ -30,13 +30,13 @@ if ( ! function_exists( 'ap_register_role' ) ) {
      *
      * @return Role The created or existing role instance.
      */
-    function ap_register_role( string $slug, string $name ): Role
+    function ap_register_role(string $slug, string $name): Role
     {
-        return app( RoleManager::class )->register( $slug, $name );
+        return app(RoleManager::class)->register($slug, $name);
     }
 }
 
-if ( ! function_exists( 'ap_register_permission' ) ) {
+if (! function_exists('ap_register_permission')) {
     /**
      * Register a new permission in the system.
      *
@@ -50,13 +50,13 @@ if ( ! function_exists( 'ap_register_permission' ) ) {
      *
      * @return Permission The created or existing permission instance.
      */
-    function ap_register_permission( string $slug, string $name ): Permission
+    function ap_register_permission(string $slug, string $name): Permission
     {
-        return app( PermissionManager::class )->register( $slug, $name );
+        return app(PermissionManager::class)->register($slug, $name);
     }
 }
 
-if ( ! function_exists( 'ap_add_permission_to_role' ) ) {
+if (! function_exists('ap_add_permission_to_role')) {
     /**
      * Add a permission to an existing role.
      *
@@ -68,13 +68,13 @@ if ( ! function_exists( 'ap_add_permission_to_role' ) ) {
      * @param  string  $roleSlug  The slug of the role to add permission to.
      * @param  string  $permissionSlug  The slug of the permission to add.
      */
-    function ap_add_permission_to_role( string $roleSlug, string $permissionSlug ): void
+    function ap_add_permission_to_role(string $roleSlug, string $permissionSlug): void
     {
-        app( RoleManager::class )->addPermissionToRole( $roleSlug, $permissionSlug );
+        app(RoleManager::class)->addPermissionToRole($roleSlug, $permissionSlug);
     }
 }
 
-if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
+if (! function_exists('apRegisterUserSettingsSection')) {
     /**
      * Register a new section (tab) on the User Edit page.
      *
@@ -87,7 +87,7 @@ if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
      * @param  string  $label  The human-readable label for the tab (e.g., 'Business Hours').
      * @param  int  $order  The display order for the tab.
      */
-    function apRegisterUserSettingsSection( string $key, string $label, int $order = 50 ): void
+    function apRegisterUserSettingsSection(string $key, string $label, int $order = 50): void
     {
         /**
          * Filters the available sections on the User Settings page.
@@ -103,10 +103,10 @@ if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
          *
          * @return array<string,array{label:string,order:int}> Modified sections array.
          */
-        addFilter( 'ap.users.settings.sections', function ( array $sections ) use ( $key, $label, $order ) {
-            $sections[ $key ] = compact( 'label', 'order' );
+        addFilter('ap.users.settings.sections', function (array $sections) use ($key, $label, $order) {
+            $sections[$key] = compact('label', 'order');
 
             return $sections;
-        } );
+        });
     }
 }

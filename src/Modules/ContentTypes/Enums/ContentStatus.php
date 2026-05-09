@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Content Status Enum
@@ -31,11 +31,11 @@ enum ContentStatus: string
      */
     public function label(): string
     {
-        return match ( $this ) {
-            self::Draft     => __( 'Draft' ),
-            self::Published => __( 'Published' ),
-            self::Scheduled => __( 'Scheduled' ),
-            self::Private   => __( 'Private' ),
+        return match ($this) {
+            self::Draft     => __('Draft'),
+            self::Published => __('Published'),
+            self::Scheduled => __('Scheduled'),
+            self::Private   => __('Private'),
         };
     }
 
@@ -48,7 +48,7 @@ enum ContentStatus: string
      */
     public static function validationRule(): Enum
     {
-        return Rule::enum( self::class );
+        return Rule::enum(self::class);
     }
     case Draft     = 'draft';
     case Published = 'published';
