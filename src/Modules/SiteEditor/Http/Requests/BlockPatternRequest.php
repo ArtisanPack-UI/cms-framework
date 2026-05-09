@@ -11,7 +11,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
@@ -40,18 +40,18 @@ class BlockPatternRequest extends FormRequest
     {
         // POST identifies the resource by payload — slug required.
         // PUT identifies the resource by route — slug optional.
-        $slugPresence = $this->isMethod( 'post' ) ? 'required' : 'sometimes';
+        $slugPresence = $this->isMethod('post') ? 'required' : 'sometimes';
 
         return [
-            'slug'          => [ $slugPresence, 'string', 'max:255', 'regex:' . SlugValidator::PATTERN ],
-            'title'         => [ 'required', 'string', 'max:255' ],
-            'description'   => [ 'nullable', 'string' ],
-            'synced'        => [ 'nullable', 'boolean' ],
-            'categories'    => [ 'nullable', 'array' ],
-            'categories.*'  => [ 'string' ],
-            'block_types'   => [ 'nullable', 'array' ],
-            'block_types.*' => [ 'string' ],
-            'block_content' => [ 'nullable', 'array' ],
+            'slug'          => [$slugPresence, 'string', 'max:255', 'regex:'.SlugValidator::PATTERN],
+            'title'         => ['required', 'string', 'max:255'],
+            'description'   => ['nullable', 'string'],
+            'synced'        => ['nullable', 'boolean'],
+            'categories'    => ['nullable', 'array'],
+            'categories.*'  => ['string'],
+            'block_types'   => ['nullable', 'array'],
+            'block_types.*' => ['string'],
+            'block_content' => ['nullable', 'array'],
         ];
     }
 
@@ -63,9 +63,9 @@ class BlockPatternRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'slug.required'  => __( 'The pattern slug is required.' ),
-            'slug.regex'     => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
-            'title.required' => __( 'The pattern title is required.' ),
+            'slug.required'  => __('The pattern slug is required.'),
+            'slug.regex'     => __('The slug must be lowercase letters, numbers, and hyphens only.'),
+            'title.required' => __('The pattern title is required.'),
         ];
     }
 }

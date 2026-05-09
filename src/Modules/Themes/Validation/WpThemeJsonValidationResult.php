@@ -6,7 +6,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Validation;
 
@@ -31,8 +31,7 @@ final class WpThemeJsonValidationResult
         public readonly bool $valid,
         public readonly ?string $offendingKey,
         public readonly ?string $message,
-    ) {
-    }
+    ) {}
 
     /**
      * Build a passing result.
@@ -41,7 +40,7 @@ final class WpThemeJsonValidationResult
      */
     public static function success(): self
     {
-        return new self( true, null, null );
+        return new self(true, null, null);
     }
 
     /**
@@ -52,8 +51,8 @@ final class WpThemeJsonValidationResult
      * @param  string  $offendingKey  Dotted path of the failing property (e.g. `settings.color`).
      * @param  string  $message  Description of why the property failed.
      */
-    public static function failure( string $offendingKey, string $message ): self
+    public static function failure(string $offendingKey, string $message): self
     {
-        return new self( false, $offendingKey, $message );
+        return new self(false, $offendingKey, $message);
     }
 }

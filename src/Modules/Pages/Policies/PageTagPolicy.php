@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PageTag Policy for the CMS Framework Pages Module.
@@ -35,7 +35,7 @@ class PageTagPolicy
      *
      * @return bool True if the user can view page tags, false otherwise.
      */
-    public function viewAny( Authenticatable $user ): bool
+    public function viewAny(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any page tags.
@@ -48,7 +48,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.viewAny', 'pageTags.manage' ) );
+        return $user->can(applyFilters('pageTags.viewAny', 'pageTags.manage'));
     }
 
     /**
@@ -61,7 +61,7 @@ class PageTagPolicy
      *
      * @return bool True if the user can view the tag, false otherwise.
      */
-    public function view( Authenticatable $user, PageTag $tag ): bool
+    public function view(Authenticatable $user, PageTag $tag): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a page tag.
@@ -75,7 +75,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.view', 'pageTags.manage', $tag ) );
+        return $user->can(applyFilters('pageTags.view', 'pageTags.manage', $tag));
     }
 
     /**
@@ -87,7 +87,7 @@ class PageTagPolicy
      *
      * @return bool True if the user can create page tags, false otherwise.
      */
-    public function create( Authenticatable $user ): bool
+    public function create(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can create page tags.
@@ -100,7 +100,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.create', 'pageTags.manage' ) );
+        return $user->can(applyFilters('pageTags.create', 'pageTags.manage'));
     }
 
     /**
@@ -113,7 +113,7 @@ class PageTagPolicy
      *
      * @return bool True if the user can update the tag, false otherwise.
      */
-    public function update( Authenticatable $user, PageTag $tag ): bool
+    public function update(Authenticatable $user, PageTag $tag): bool
     {
         /**
          * Filters the capability used to determine whether a user can update page tags.
@@ -127,7 +127,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.update', 'pageTags.manage', $tag ) );
+        return $user->can(applyFilters('pageTags.update', 'pageTags.manage', $tag));
     }
 
     /**
@@ -140,7 +140,7 @@ class PageTagPolicy
      *
      * @return bool True if the user can delete the tag, false otherwise.
      */
-    public function delete( Authenticatable $user, PageTag $tag ): bool
+    public function delete(Authenticatable $user, PageTag $tag): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete page tags.
@@ -154,6 +154,6 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.delete', 'pageTags.manage', $tag ) );
+        return $user->can(applyFilters('pageTags.delete', 'pageTags.manage', $tag));
     }
 }

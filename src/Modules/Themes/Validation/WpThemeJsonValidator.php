@@ -10,7 +10,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Validation;
 
@@ -58,26 +58,26 @@ class WpThemeJsonValidator
      *
      * @param  array  $manifest  Decoded theme.json contents.
      */
-    public function validate( array $manifest ): WpThemeJsonValidationResult
+    public function validate(array $manifest): WpThemeJsonValidationResult
     {
-        $present = array_intersect_key( $manifest, array_flip( self::WP_SHAPE_KEYS ) );
+        $present = array_intersect_key($manifest, array_flip(self::WP_SHAPE_KEYS));
 
-        if ( [] === $present && ! array_key_exists( 'menus', $manifest ) ) {
+        if ([] === $present && ! array_key_exists('menus', $manifest)) {
             return WpThemeJsonValidationResult::success();
         }
 
-        if ( [] !== $present ) {
-            $wpResult = $this->validateAgainstWpSchema( $present );
+        if ([] !== $present) {
+            $wpResult = $this->validateAgainstWpSchema($present);
 
-            if ( ! $wpResult->valid ) {
+            if (! $wpResult->valid) {
                 return $wpResult;
             }
         }
 
-        if ( array_key_exists( 'menus', $manifest ) ) {
-            $menusResult = $this->validateMenusExtension( $manifest['menus'] );
+        if (array_key_exists('menus', $manifest)) {
+            $menusResult = $this->validateMenusExtension($manifest['menus']);
 
-            if ( ! $menusResult->valid ) {
+            if (! $menusResult->valid) {
                 return $menusResult;
             }
         }
@@ -92,17 +92,17 @@ class WpThemeJsonValidator
      *
      * @param  array  $wpShapeSubset  Manifest keys that overlap with the WP schema.
      */
-    protected function validateAgainstWpSchema( array $wpShapeSubset ): WpThemeJsonValidationResult
+    protected function validateAgainstWpSchema(array $wpShapeSubset): WpThemeJsonValidationResult
     {
-        $version = (string) config( 'cms.themes.wpThemeJsonSchemaVersion', '3' );
-        $schema  = $this->loadSchema( $version );
+        $version = (string) config('cms.themes.wpThemeJsonSchemaVersion', '3');
+        $schema  = $this->loadSchema($version);
 
-        $subject = json_decode( json_encode( [ 'version' => (int) $version ] + $wpShapeSubset ) );
+        $subject = json_decode(json_encode(['version' => (int) $version] + $wpShapeSubset));
 
-        $validator = new Validator();
-        $validator->validate( $subject, $schema, Constraint::CHECK_MODE_TYPE_CAST );
+        $validator = new Validator;
+        $validator->validate($subject, $schema, Constraint::CHECK_MODE_TYPE_CAST);
 
-        if ( $validator->isValid() ) {
+        if ($validator->isValid()) {
             return WpThemeJsonValidationResult::success();
         }
 
@@ -113,7 +113,7 @@ class WpThemeJsonValidator
         ];
         $key = '' !== $first['property'] ? $first['property'] : '(root)';
 
-        return WpThemeJsonValidationResult::failure( $key, $first['message'] );
+        return WpThemeJsonValidationResult::failure($key, $first['message']);
     }
 
     /**
@@ -127,43 +127,43 @@ class WpThemeJsonValidator
      *
      * @param  mixed  $menus  Value of the manifest's `menus` key.
      */
-    protected function validateMenusExtension( mixed $menus ): WpThemeJsonValidationResult
+    protected function validateMenusExtension(mixed $menus): WpThemeJsonValidationResult
     {
-        if ( ! is_array( $menus ) || ( [] !== $menus && array_is_list( $menus ) ) ) {
-            return WpThemeJsonValidationResult::failure( 'menus', 'menus must be an object.' );
+        if (! is_array($menus) || ([] !== $menus && array_is_list($menus))) {
+            return WpThemeJsonValidationResult::failure('menus', 'menus must be an object.');
         }
 
-        $unknownKeys = array_diff( array_keys( $menus ), [ 'locations' ] );
+        $unknownKeys = array_diff(array_keys($menus), ['locations']);
 
-        if ( [] !== $unknownKeys ) {
+        if ([] !== $unknownKeys) {
             return WpThemeJsonValidationResult::failure(
                 'menus',
-                'menus may only contain the "locations" key; unknown keys: ' . implode( ', ', $unknownKeys ) . '.',
+                'menus may only contain the "locations" key; unknown keys: '.implode(', ', $unknownKeys).'.',
             );
         }
 
-        if ( ! array_key_exists( 'locations', $menus ) ) {
+        if (! array_key_exists('locations', $menus)) {
             return WpThemeJsonValidationResult::success();
         }
 
         $locations = $menus['locations'];
 
-        if ( ! is_array( $locations ) || array_is_list( $locations ) ) {
+        if (! is_array($locations) || array_is_list($locations)) {
             return WpThemeJsonValidationResult::failure(
                 'menus.locations',
                 'menus.locations must be an object mapping location keys to display labels.',
             );
         }
 
-        foreach ( $locations as $key => $label ) {
-            if ( ! is_string( $key ) || '' === $key ) {
+        foreach ($locations as $key => $label) {
+            if (! is_string($key) || '' === $key) {
                 return WpThemeJsonValidationResult::failure(
                     'menus.locations',
                     'menus.locations keys must be non-empty strings.',
                 );
             }
 
-            if ( ! is_string( $label ) ) {
+            if (! is_string($label)) {
                 return WpThemeJsonValidationResult::failure(
                     "menus.locations.{$key}",
                     "menus.locations.{$key} must be a string label.",
@@ -183,19 +183,19 @@ class WpThemeJsonValidator
      *
      * @throws RuntimeException If the bundled schema file is missing or malformed.
      */
-    protected function loadSchema( string $version ): object
+    protected function loadSchema(string $version): object
     {
-        $path = __DIR__ . "/schemas/wp-theme-json-v{$version}.json";
+        $path = __DIR__."/schemas/wp-theme-json-v{$version}.json";
 
-        if ( ! is_file( $path ) ) {
+        if (! is_file($path)) {
             throw new RuntimeException(
                 "Bundled WP theme.json schema for version {$version} not found at {$path}.",
             );
         }
 
-        $schema = json_decode( file_get_contents( $path ) );
+        $schema = json_decode(file_get_contents($path));
 
-        if ( ! is_object( $schema ) ) {
+        if (! is_object($schema)) {
             throw new RuntimeException(
                 "Bundled WP theme.json schema for version {$version} is not valid JSON.",
             );

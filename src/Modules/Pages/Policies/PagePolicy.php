@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Page Policy for the CMS Framework Pages Module.
@@ -35,7 +35,7 @@ class PagePolicy
      *
      * @return bool True if the user can view pages, false otherwise.
      */
-    public function viewAny( Authenticatable $user ): bool
+    public function viewAny(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any pages.
@@ -48,7 +48,7 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.viewAny', 'pages.view' ) );
+        return $user->can(applyFilters('pages.viewAny', 'pages.view'));
     }
 
     /**
@@ -61,7 +61,7 @@ class PagePolicy
      *
      * @return bool True if the user can view the page, false otherwise.
      */
-    public function view( Authenticatable $user, Page $page ): bool
+    public function view(Authenticatable $user, Page $page): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a page.
@@ -75,7 +75,7 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.view', 'pages.view', $page ) );
+        return $user->can(applyFilters('pages.view', 'pages.view', $page));
     }
 
     /**
@@ -87,7 +87,7 @@ class PagePolicy
      *
      * @return bool True if the user can create pages, false otherwise.
      */
-    public function create( Authenticatable $user ): bool
+    public function create(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can create pages.
@@ -100,7 +100,7 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.create', 'pages.create' ) );
+        return $user->can(applyFilters('pages.create', 'pages.create'));
     }
 
     /**
@@ -113,19 +113,19 @@ class PagePolicy
      *
      * @return bool True if the user can update the page, false otherwise.
      */
-    public function update( Authenticatable $user, Page $page ): bool
+    public function update(Authenticatable $user, Page $page): bool
     {
         // Check if user can edit any page
-        $canEditAny = $user->can( applyFilters( 'pages.update', 'pages.edit', $page ) );
+        $canEditAny = $user->can(applyFilters('pages.update', 'pages.edit', $page));
 
-        if ( $canEditAny ) {
+        if ($canEditAny) {
             return true;
         }
 
         // Check if user can edit their own pages
-        $canEditOwn = $user->can( applyFilters( 'pages.updateOwn', 'pages.editOwn', $page ) );
+        $canEditOwn = $user->can(applyFilters('pages.updateOwn', 'pages.editOwn', $page));
 
-        if ( $canEditOwn && $page->author_id === $user->id ) {
+        if ($canEditOwn && $page->author_id === $user->id) {
             return true;
         }
 
@@ -142,19 +142,19 @@ class PagePolicy
      *
      * @return bool True if the user can delete the page, false otherwise.
      */
-    public function delete( Authenticatable $user, Page $page ): bool
+    public function delete(Authenticatable $user, Page $page): bool
     {
         // Check if user can delete any page
-        $canDeleteAny = $user->can( applyFilters( 'pages.delete', 'pages.delete', $page ) );
+        $canDeleteAny = $user->can(applyFilters('pages.delete', 'pages.delete', $page));
 
-        if ( $canDeleteAny ) {
+        if ($canDeleteAny) {
             return true;
         }
 
         // Check if user can delete their own pages
-        $canDeleteOwn = $user->can( applyFilters( 'pages.deleteOwn', 'pages.deleteOwn', $page ) );
+        $canDeleteOwn = $user->can(applyFilters('pages.deleteOwn', 'pages.deleteOwn', $page));
 
-        if ( $canDeleteOwn && $page->author_id === $user->id ) {
+        if ($canDeleteOwn && $page->author_id === $user->id) {
             return true;
         }
 
@@ -171,7 +171,7 @@ class PagePolicy
      *
      * @return bool True if the user can publish the page, false otherwise.
      */
-    public function publish( Authenticatable $user, Page $page ): bool
+    public function publish(Authenticatable $user, Page $page): bool
     {
         /**
          * Filters the capability used to determine whether a user can publish pages.
@@ -185,6 +185,6 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.publish', 'pages.publish', $page ) );
+        return $user->can(applyFilters('pages.publish', 'pages.publish', $page));
     }
 }

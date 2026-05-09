@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * HasContentFilters Trait
@@ -38,19 +38,19 @@ trait HasContentFilters
      * @param  array  $filters  Array of filters (expects 'status' key).
      * @param  bool  $defaultToPublished  Whether to default to published scope when no status filter is provided.
      */
-    protected function applyStatusFilter( Builder $query, array $filters, bool $defaultToPublished = true ): void
+    protected function applyStatusFilter(Builder $query, array $filters, bool $defaultToPublished = true): void
     {
-        if ( isset( $filters['status'] ) ) {
+        if (isset($filters['status'])) {
             $status = $filters['status'] instanceof ContentStatus
                 ? $filters['status']
-                : ContentStatus::tryFrom( sanitizeText( $filters['status'] ) );
+                : ContentStatus::tryFrom(sanitizeText($filters['status']));
 
-            if ( null === $status || ContentStatus::Published === $status ) {
+            if (null === $status || ContentStatus::Published === $status) {
                 $query->published();
             } else {
-                $query->where( 'status', $status );
+                $query->where('status', $status);
             }
-        } elseif ( $defaultToPublished ) {
+        } elseif ($defaultToPublished) {
             $query->published();
         }
     }
@@ -65,16 +65,16 @@ trait HasContentFilters
      * @param  Builder  $query  The query builder instance.
      * @param  array  $filters  Array of filters (expects 'search' key).
      */
-    protected function applySearchFilter( Builder $query, array $filters ): void
+    protected function applySearchFilter(Builder $query, array $filters): void
     {
-        if ( isset( $filters['search'] ) ) {
-            $escaped = str_replace( ['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $filters['search'] );
+        if (isset($filters['search'])) {
+            $escaped = str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $filters['search']);
             $pattern = "%{$escaped}%";
-            $query->where( function ( $q ) use ( $pattern ): void {
-                $q->whereRaw( 'title LIKE ? ESCAPE ?', [$pattern, '\\'] )
-                    ->orWhereRaw( 'content LIKE ? ESCAPE ?', [$pattern, '\\'] )
-                    ->orWhereRaw( 'excerpt LIKE ? ESCAPE ?', [$pattern, '\\'] );
-            } );
+            $query->where(function ($q) use ($pattern): void {
+                $q->whereRaw('title LIKE ? ESCAPE ?', [$pattern, '\\'])
+                    ->orWhereRaw('content LIKE ? ESCAPE ?', [$pattern, '\\'])
+                    ->orWhereRaw('excerpt LIKE ? ESCAPE ?', [$pattern, '\\']);
+            });
         }
     }
 
@@ -86,10 +86,10 @@ trait HasContentFilters
      * @param  Builder  $query  The query builder instance.
      * @param  array  $filters  Array of filters (expects 'author' key).
      */
-    protected function applyAuthorFilter( Builder $query, array $filters ): void
+    protected function applyAuthorFilter(Builder $query, array $filters): void
     {
-        if ( isset( $filters['author'] ) ) {
-            $query->byAuthor( $filters['author'] );
+        if (isset($filters['author'])) {
+            $query->byAuthor($filters['author']);
         }
     }
 }

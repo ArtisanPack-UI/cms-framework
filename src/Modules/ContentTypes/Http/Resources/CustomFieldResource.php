@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * CustomField Resource for the CMS Framework ContentTypes Module.
@@ -38,7 +38,7 @@ class CustomFieldResource extends JsonResource
      *
      * @return array<string, mixed> The transformed custom field data array.
      */
-    public function toArray( Request $request ): array
+    public function toArray(Request $request): array
     {
         return [
             'id'                 => $this->id,
@@ -48,7 +48,7 @@ class CustomFieldResource extends JsonResource
             'column_type'        => $this->column_type,
             'description'        => $this->description,
             'content_types'      => $this->content_types,
-            'content_types_list' => $this->getContentTypes()->pluck( 'name', 'slug' )->toArray(),
+            'content_types_list' => $this->getContentTypes()->pluck('name', 'slug')->toArray(),
             'options'            => $this->options,
             'order'              => $this->order,
             'required'           => $this->required,

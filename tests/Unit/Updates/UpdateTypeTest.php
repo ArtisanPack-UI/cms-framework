@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -24,10 +24,10 @@ class UpdateTypeTest extends TestCase
     {
         $cases = UpdateType::cases();
 
-        $this->assertCount( 3, $cases );
-        $this->assertContains( UpdateType::Application, $cases );
-        $this->assertContains( UpdateType::Plugin, $cases );
-        $this->assertContains( UpdateType::Theme, $cases );
+        $this->assertCount(3, $cases);
+        $this->assertContains(UpdateType::Application, $cases);
+        $this->assertContains(UpdateType::Plugin, $cases);
+        $this->assertContains(UpdateType::Theme, $cases);
     }
 
     /**
@@ -37,9 +37,9 @@ class UpdateTypeTest extends TestCase
      */
     public function test_has_correct_string_values(): void
     {
-        $this->assertEquals( 'application', UpdateType::Application->value );
-        $this->assertEquals( 'plugin', UpdateType::Plugin->value );
-        $this->assertEquals( 'theme', UpdateType::Theme->value );
+        $this->assertEquals('application', UpdateType::Application->value);
+        $this->assertEquals('plugin', UpdateType::Plugin->value);
+        $this->assertEquals('theme', UpdateType::Theme->value);
     }
 
     /**
@@ -49,9 +49,9 @@ class UpdateTypeTest extends TestCase
      */
     public function test_can_be_created_from_valid_string(): void
     {
-        $this->assertSame( UpdateType::Application, UpdateType::from( 'application' ) );
-        $this->assertSame( UpdateType::Plugin, UpdateType::from( 'plugin' ) );
-        $this->assertSame( UpdateType::Theme, UpdateType::from( 'theme' ) );
+        $this->assertSame(UpdateType::Application, UpdateType::from('application'));
+        $this->assertSame(UpdateType::Plugin, UpdateType::from('plugin'));
+        $this->assertSame(UpdateType::Theme, UpdateType::from('theme'));
     }
 
     /**
@@ -61,9 +61,9 @@ class UpdateTypeTest extends TestCase
      */
     public function test_throws_exception_for_invalid_string(): void
     {
-        $this->expectException( ValueError::class );
+        $this->expectException(ValueError::class);
 
-        UpdateType::from( 'invalid' );
+        UpdateType::from('invalid');
     }
 
     /**
@@ -73,6 +73,6 @@ class UpdateTypeTest extends TestCase
      */
     public function test_try_from_returns_null_for_invalid_string(): void
     {
-        $this->assertNull( UpdateType::tryFrom( 'invalid' ) );
+        $this->assertNull(UpdateType::tryFrom('invalid'));
     }
 }

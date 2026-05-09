@@ -15,7 +15,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -77,10 +77,10 @@ class Menu extends Model
      */
     public function items(): HasMany
     {
-        return $this->hasMany( MenuItem::class )
-            ->orderByRaw( 'COALESCE(parent_id, 0)' )
-            ->orderBy( 'position' )
-            ->orderBy( 'id' );
+        return $this->hasMany(MenuItem::class)
+            ->orderByRaw('COALESCE(parent_id, 0)')
+            ->orderBy('position')
+            ->orderBy('id');
     }
 
     /**
@@ -91,7 +91,7 @@ class Menu extends Model
      */
     public function locationAssignments(): HasMany
     {
-        return $this->hasMany( MenuLocationAssignment::class );
+        return $this->hasMany(MenuLocationAssignment::class);
     }
 
     /**
@@ -101,7 +101,7 @@ class Menu extends Model
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
+        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
     }
 
     /**
@@ -127,9 +127,9 @@ class Menu extends Model
      */
     protected static function booted(): void
     {
-        static::deleting( static function ( Menu $menu ): void {
-            $menu->items()->each( static fn ( MenuItem $item ): ?bool => $item->delete() );
+        static::deleting(static function (Menu $menu): void {
+            $menu->items()->each(static fn (MenuItem $item): ?bool => $item->delete());
             $menu->locationAssignments()->delete();
-        } );
+        });
     }
 }

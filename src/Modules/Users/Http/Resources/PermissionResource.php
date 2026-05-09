@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Permission Resource for the CMS Framework Users Module.
@@ -39,7 +39,7 @@ class PermissionResource extends JsonResource
      *
      * @return array<string, mixed> The transformed permission data array.
      */
-    public function toArray( Request $request ): array
+    public function toArray(Request $request): array
     {
         return [
             'id'         => $this->id,
@@ -47,15 +47,15 @@ class PermissionResource extends JsonResource
             'slug'       => $this->slug,
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
-            'roles'      => $this->whenLoaded( 'roles', function () {
-                return $this->roles->map( function ( $role ) {
+            'roles'      => $this->whenLoaded('roles', function () {
+                return $this->roles->map(function ($role) {
                     return [
                         'id'   => $role->id,
                         'name' => $role->name,
                         'slug' => $role->slug,
                     ];
-                } );
-            } ),
+                });
+            }),
         ];
     }
 }

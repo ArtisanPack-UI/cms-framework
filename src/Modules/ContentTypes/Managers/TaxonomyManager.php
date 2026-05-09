@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Taxonomy Manager
@@ -30,7 +30,7 @@ class TaxonomyManager
      *
      * @param  array  $args  Taxonomy configuration.
      */
-    public function registerTaxonomy( array $args ): void
+    public function registerTaxonomy(array $args): void
     {
         /**
          * Filters the array of registered taxonomies.
@@ -43,14 +43,14 @@ class TaxonomyManager
          *
          * @return array Filtered taxonomies array.
          */
-        addFilter( 'ap.taxonomies.registeredTaxonomies', function ( $taxonomies ) use ( $args ) {
+        addFilter('ap.taxonomies.registeredTaxonomies', function ($taxonomies) use ($args) {
             $slug = $args['slug'] ?? '';
-            if ( $slug ) {
-                $taxonomies[ $slug ] = $args;
+            if ($slug) {
+                $taxonomies[$slug] = $args;
             }
 
             return $taxonomies;
-        } );
+        });
     }
 
     /**
@@ -61,7 +61,7 @@ class TaxonomyManager
     public function getRegisteredTaxonomies(): array
     {
         // Get from database
-        $dbTaxonomies = Taxonomy::all()->keyBy( 'slug' )->toArray();
+        $dbTaxonomies = Taxonomy::all()->keyBy('slug')->toArray();
 
         /**
          * Filters the array of registered taxonomies.
@@ -74,10 +74,10 @@ class TaxonomyManager
          *
          * @return array Filtered taxonomies array.
          */
-        $filteredTaxonomies = applyFilters( 'ap.taxonomies.registeredTaxonomies', [] );
+        $filteredTaxonomies = applyFilters('ap.taxonomies.registeredTaxonomies', []);
 
         // Merge database and filtered taxonomies
-        return array_merge( $dbTaxonomies, $filteredTaxonomies );
+        return array_merge($dbTaxonomies, $filteredTaxonomies);
     }
 
     /**
@@ -87,9 +87,9 @@ class TaxonomyManager
      *
      * @param  string  $contentTypeSlug  Content type slug.
      */
-    public function getTaxonomiesForContentType( string $contentTypeSlug ): Collection
+    public function getTaxonomiesForContentType(string $contentTypeSlug): Collection
     {
-        return Taxonomy::where( 'content_type_slug', sanitizeText( $contentTypeSlug ) )->get();
+        return Taxonomy::where('content_type_slug', sanitizeText($contentTypeSlug))->get();
     }
 
     /**
@@ -99,9 +99,9 @@ class TaxonomyManager
      *
      * @param  string  $slug  Taxonomy slug.
      */
-    public function taxonomyExists( string $slug ): bool
+    public function taxonomyExists(string $slug): bool
     {
-        return Taxonomy::where( 'slug', sanitizeText( $slug ) )->exists();
+        return Taxonomy::where('slug', sanitizeText($slug))->exists();
     }
 
     /**
@@ -111,9 +111,9 @@ class TaxonomyManager
      *
      * @param  string  $slug  Taxonomy slug.
      */
-    public function getTaxonomy( string $slug ): ?Taxonomy
+    public function getTaxonomy(string $slug): ?Taxonomy
     {
-        return Taxonomy::where( 'slug', sanitizeText( $slug ) )->first();
+        return Taxonomy::where('slug', sanitizeText($slug))->first();
     }
 
     /**
@@ -123,9 +123,9 @@ class TaxonomyManager
      *
      * @param  array  $data  Taxonomy data.
      */
-    public function createTaxonomy( array $data ): Taxonomy
+    public function createTaxonomy(array $data): Taxonomy
     {
-        $taxonomy = Taxonomy::create( $data );
+        $taxonomy = Taxonomy::create($data);
 
         /**
          * Fires after a taxonomy has been created.
@@ -136,7 +136,7 @@ class TaxonomyManager
          *
          * @param  Taxonomy  $taxonomy  The created taxonomy instance.
          */
-        doAction( 'ap.taxonomies.created', $taxonomy );
+        doAction('ap.taxonomies.created', $taxonomy);
 
         return $taxonomy;
     }
@@ -149,15 +149,15 @@ class TaxonomyManager
      * @param  string  $slug  Taxonomy slug.
      * @param  array  $data  Taxonomy data.
      */
-    public function updateTaxonomy( string $slug, array $data ): Taxonomy
+    public function updateTaxonomy(string $slug, array $data): Taxonomy
     {
-        $taxonomy = $this->getTaxonomy( $slug );
+        $taxonomy = $this->getTaxonomy($slug);
 
-        if ( ! $taxonomy ) {
-            throw new Exception( "Taxonomy {$slug} not found." );
+        if (! $taxonomy) {
+            throw new Exception("Taxonomy {$slug} not found.");
         }
 
-        $taxonomy->update( $data );
+        $taxonomy->update($data);
 
         /**
          * Fires after a taxonomy has been updated.
@@ -168,7 +168,7 @@ class TaxonomyManager
          *
          * @param  Taxonomy  $taxonomy  The updated taxonomy instance.
          */
-        doAction( 'ap.taxonomies.updated', $taxonomy );
+        doAction('ap.taxonomies.updated', $taxonomy);
 
         return $taxonomy;
     }
@@ -180,11 +180,11 @@ class TaxonomyManager
      *
      * @param  string  $slug  Taxonomy slug.
      */
-    public function deleteTaxonomy( string $slug ): bool
+    public function deleteTaxonomy(string $slug): bool
     {
-        $taxonomy = $this->getTaxonomy( $slug );
+        $taxonomy = $this->getTaxonomy($slug);
 
-        if ( ! $taxonomy ) {
+        if (! $taxonomy) {
             return false;
         }
 
@@ -197,11 +197,11 @@ class TaxonomyManager
          *
          * @param  Taxonomy  $taxonomy  The taxonomy being deleted.
          */
-        doAction( 'ap.taxonomies.deleting', $taxonomy );
+        doAction('ap.taxonomies.deleting', $taxonomy);
 
         $deleted = $taxonomy->delete();
 
-        if ( $deleted ) {
+        if ($deleted) {
             /**
              * Fires after a taxonomy has been deleted.
              *
@@ -211,7 +211,7 @@ class TaxonomyManager
              *
              * @param  string  $slug  The slug of the deleted taxonomy.
              */
-            doAction( 'ap.taxonomies.deleted', $slug );
+            doAction('ap.taxonomies.deleted', $slug);
         }
 
         return $deleted;

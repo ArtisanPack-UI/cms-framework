@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PostCategory Request for the CMS Framework Blog Module.
@@ -47,12 +47,12 @@ class PostCategoryRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route( 'id' );
+        $id = $this->route('id');
 
         $parentIdRules = ['nullable', 'integer', 'exists:post_categories,id'];
 
-        if ( $id ) {
-            $parentIdRules[] = Rule::notIn( [$id] );
+        if ($id) {
+            $parentIdRules[] = Rule::notIn([$id]);
         }
 
         $slugRules = [
@@ -62,9 +62,9 @@ class PostCategoryRequest extends FormRequest
             'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
         ];
 
-        $uniqueRule = Rule::unique( 'post_categories', 'slug' );
-        if ( $id ) {
-            $uniqueRule->ignore( $id );
+        $uniqueRule = Rule::unique('post_categories', 'slug');
+        if ($id) {
+            $uniqueRule->ignore($id);
         }
         $slugRules[] = $uniqueRule;
 
@@ -101,10 +101,10 @@ class PostCategoryRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => __( 'The category name is required.' ),
-            'slug.required' => __( 'The category slug is required.' ),
-            'slug.regex'    => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
-            'slug.unique'   => __( 'A category with this slug already exists.' ),
+            'name.required' => __('The category name is required.'),
+            'slug.required' => __('The category slug is required.'),
+            'slug.regex'    => __('The slug must be lowercase letters, numbers, and hyphens only.'),
+            'slug.unique'   => __('A category with this slug already exists.'),
         ];
     }
 }

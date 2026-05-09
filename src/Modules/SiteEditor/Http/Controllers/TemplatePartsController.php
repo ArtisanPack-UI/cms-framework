@@ -9,7 +9,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
@@ -27,7 +27,7 @@ use Illuminate\Routing\Controller;
 /**
  * @since 1.2.0
  */
-#[Group( 'Site Editor / Template Parts', weight: 31 )]
+#[Group('Site Editor / Template Parts', weight: 31)]
 class TemplatePartsController extends Controller
 {
     /**
@@ -36,8 +36,7 @@ class TemplatePartsController extends Controller
     public function __construct(
         private TemplatePartResolver $resolver,
         private ThemeManager $themeManager,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /api/v1/template-parts — list resolved template parts for the active theme.
@@ -46,7 +45,7 @@ class TemplatePartsController extends Controller
      */
     public function index(): JsonResponse
     {
-        return response()->json( TemplateResource::collection( $this->resolver->all() ) );
+        return response()->json(TemplateResource::collection($this->resolver->all()));
     }
 
     /**
@@ -54,15 +53,15 @@ class TemplatePartsController extends Controller
      *
      * @since 1.2.0
      */
-    public function show( string $slug ): JsonResponse
+    public function show(string $slug): JsonResponse
     {
-        $entity = $this->resolver->resolve( $slug );
+        $entity = $this->resolver->resolve($slug);
 
-        if ( null === $entity ) {
-            return response()->json( [ 'message' => 'Template part not found.' ], 404 );
+        if (null === $entity) {
+            return response()->json(['message' => 'Template part not found.'], 404);
         }
 
-        return response()->json( TemplateResource::toArray( $entity ) );
+        return response()->json(TemplateResource::toArray($entity));
     }
 
     /**
@@ -70,30 +69,30 @@ class TemplatePartsController extends Controller
      *
      * @since 1.2.0
      */
-    public function store( TemplatePartRequest $request ): JsonResponse
+    public function store(TemplatePartRequest $request): JsonResponse
     {
         $theme = $this->activeThemeSlug();
 
-        if ( null === $theme ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $theme) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
         try {
-            $part = TemplatePart::create( $this->normalizeAttributes( $theme, $request->validated() ) );
-        } catch ( QueryException $e ) {
-            if ( $this->isUniqueViolation( $e ) ) {
-                return response()->json( [
+            $part = TemplatePart::create($this->normalizeAttributes($theme, $request->validated()));
+        } catch (QueryException $e) {
+            if ($this->isUniqueViolation($e)) {
+                return response()->json([
                     'message' => 'A template part with this slug already exists for the active theme.',
-                    'errors'  => [ 'slug' => [ 'Slug must be unique within the theme.' ] ],
-                ], 409 );
+                    'errors'  => ['slug' => ['Slug must be unique within the theme.']],
+                ], 409);
             }
 
             throw $e;
         }
 
-        $entity = $this->resolver->resolve( $part->slug );
+        $entity = $this->resolver->resolve($part->slug);
 
-        return response()->json( TemplateResource::toArray( $entity ), 201 );
+        return response()->json(TemplateResource::toArray($entity), 201);
     }
 
     /**
@@ -101,40 +100,40 @@ class TemplatePartsController extends Controller
      *
      * @since 1.2.0
      */
-    public function update( TemplatePartRequest $request, string $slug ): JsonResponse
+    public function update(TemplatePartRequest $request, string $slug): JsonResponse
     {
         $theme = $this->activeThemeSlug();
 
-        if ( null === $theme ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $theme) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
         // The Form Request only validates `slug` when present in the payload.
         // For PUT, the route slug is canonical and may be the only slug in
         // play, so guard it directly against the same canonical pattern.
-        if ( ! SlugValidator::isValid( $slug ) ) {
-            return response()->json( [
+        if (! SlugValidator::isValid($slug)) {
+            return response()->json([
                 'message' => 'URL slug is not in canonical kebab-case form.',
-                'errors'  => [ 'slug' => [ 'Slug must be lowercase letters, numbers, and hyphens only.' ] ],
-            ], 422 );
+                'errors'  => ['slug' => ['Slug must be lowercase letters, numbers, and hyphens only.']],
+            ], 422);
         }
 
         $validated = $request->validated();
 
-        if ( array_key_exists( 'slug', $validated ) && $validated['slug'] !== $slug ) {
-            return response()->json( [
+        if (array_key_exists('slug', $validated) && $validated['slug'] !== $slug) {
+            return response()->json([
                 'message' => 'Body slug does not match URL slug.',
-                'errors'  => [ 'slug' => [ 'Slug in the request body must match the URL slug.' ] ],
-            ], 422 );
+                'errors'  => ['slug' => ['Slug in the request body must match the URL slug.']],
+            ], 422);
         }
 
-        unset( $validated['slug'] );
+        unset($validated['slug']);
 
-        $part = $this->upsertForTheme( $theme, $slug, $validated );
+        $part = $this->upsertForTheme($theme, $slug, $validated);
 
-        $entity = $this->resolver->resolve( $part->slug );
+        $entity = $this->resolver->resolve($part->slug);
 
-        return response()->json( TemplateResource::toArray( $entity ) );
+        return response()->json(TemplateResource::toArray($entity));
     }
 
     /**
@@ -142,15 +141,15 @@ class TemplatePartsController extends Controller
      *
      * @since 1.2.0
      */
-    public function destroy( string $slug ): JsonResponse
+    public function destroy(string $slug): JsonResponse
     {
-        $deleted = $this->resolver->revert( $slug );
+        $deleted = $this->resolver->revert($slug);
 
-        if ( ! $deleted ) {
-            return response()->json( [ 'message' => 'No template part override to revert.' ], 404 );
+        if (! $deleted) {
+            return response()->json(['message' => 'No template part override to revert.'], 404);
         }
 
-        return response()->json( null, 204 );
+        return response()->json(null, 204);
     }
 
     /**
@@ -164,35 +163,35 @@ class TemplatePartsController extends Controller
      *
      * @param  array<string, mixed>  $validated
      */
-    protected function upsertForTheme( string $theme, string $slug, array $validated ): TemplatePart
+    protected function upsertForTheme(string $theme, string $slug, array $validated): TemplatePart
     {
         $existing = TemplatePart::query()
-            ->where( 'theme', $theme )
-            ->where( 'slug', $slug )
+            ->where('theme', $theme)
+            ->where('slug', $slug)
             ->first();
 
-        if ( null !== $existing ) {
-            $existing->update( $validated );
+        if (null !== $existing) {
+            $existing->update($validated);
 
             return $existing->refresh();
         }
 
-        $attributes         = $this->normalizeAttributes( $theme, $validated );
+        $attributes         = $this->normalizeAttributes($theme, $validated);
         $attributes['slug'] = $slug;
 
         try {
-            return TemplatePart::create( $attributes );
-        } catch ( QueryException $e ) {
-            if ( ! $this->isUniqueViolation( $e ) ) {
+            return TemplatePart::create($attributes);
+        } catch (QueryException $e) {
+            if (! $this->isUniqueViolation($e)) {
                 throw $e;
             }
 
             $existing = TemplatePart::query()
-                ->where( 'theme', $theme )
-                ->where( 'slug', $slug )
+                ->where('theme', $theme)
+                ->where('slug', $slug)
                 ->firstOrFail();
 
-            $existing->update( $validated );
+            $existing->update($validated);
 
             return $existing->refresh();
         }
@@ -205,7 +204,7 @@ class TemplatePartsController extends Controller
     {
         $theme = $this->themeManager->getActiveTheme();
 
-        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty($theme['slug']) ? (string) $theme['slug'] : null;
     }
 
     /**
@@ -217,15 +216,15 @@ class TemplatePartsController extends Controller
      *
      * @since 1.2.0
      */
-    protected function isUniqueViolation( QueryException $e ): bool
+    protected function isUniqueViolation(QueryException $e): bool
     {
         $sqlState = $e->getCode();
 
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ('23000' === $sqlState || '23505' === $sqlState) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique' );
+        return str_contains(strtolower($e->getMessage()), 'unique');
     }
 
     /**
@@ -235,12 +234,12 @@ class TemplatePartsController extends Controller
      *
      * @return array<string, mixed>
      */
-    protected function normalizeAttributes( string $theme, array $validated ): array
+    protected function normalizeAttributes(string $theme, array $validated): array
     {
         $validated['theme']     = $theme;
         $validated['author_id'] = $validated['author_id'] ?? auth()->id();
 
-        if ( ! array_key_exists( 'is_custom', $validated ) ) {
+        if (! array_key_exists('is_custom', $validated)) {
             $validated['is_custom'] = false;
         }
 

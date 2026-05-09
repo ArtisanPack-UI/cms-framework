@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Bulk Post Request for the CMS Framework Blog Module.
@@ -59,7 +59,7 @@ class BulkPostRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', 'string', Rule::in( self::allowedActions() )],
+            'action' => ['required', 'string', Rule::in(self::allowedActions())],
             'ids'    => ['required', 'array', 'min:1'],
             'ids.*'  => ['required', 'integer', 'exists:posts,id'],
         ];
@@ -75,11 +75,11 @@ class BulkPostRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'action.required' => __( 'The bulk action is required.' ),
-            'action.in'       => __( 'The selected action is invalid. Allowed actions: :values.', ['values' => implode( ', ', self::allowedActions() )] ),
-            'ids.required'    => __( 'At least one post ID is required.' ),
-            'ids.min'         => __( 'At least one post ID is required.' ),
-            'ids.*.exists'    => __( 'One or more post IDs do not exist.' ),
+            'action.required' => __('The bulk action is required.'),
+            'action.in'       => __('The selected action is invalid. Allowed actions: :values.', ['values' => implode(', ', self::allowedActions())]),
+            'ids.required'    => __('At least one post ID is required.'),
+            'ids.min'         => __('At least one post ID is required.'),
+            'ids.*.exists'    => __('One or more post IDs do not exist.'),
         ];
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Site Setting Controller.
@@ -28,7 +28,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.2.0
  */
-#[Group( 'Settings', weight: 13 )]
+#[Group('Settings', weight: 13)]
 class SiteSettingController extends Controller
 {
     use AuthorizesRequests;
@@ -51,9 +51,7 @@ class SiteSettingController extends Controller
         'site_icon'   => 'site.icon_id',
     ];
 
-    public function __construct( protected SettingsManager $settings )
-    {
-    }
+    public function __construct(protected SettingsManager $settings) {}
 
     /**
      * Returns the current site-meta values.
@@ -65,9 +63,9 @@ class SiteSettingController extends Controller
      */
     public function show(): JsonResponse
     {
-        $this->authorize( 'viewAny', Setting::class );
+        $this->authorize('viewAny', Setting::class);
 
-        return response()->json( $this->buildPayload() );
+        return response()->json($this->buildPayload());
     }
 
     /**
@@ -79,15 +77,15 @@ class SiteSettingController extends Controller
      *
      * @since 1.2.0
      */
-    public function update( SiteSettingRequest $request ): JsonResponse
+    public function update(SiteSettingRequest $request): JsonResponse
     {
-        $this->authorize( 'update', Setting::class );
+        $this->authorize('update', Setting::class);
 
         $validated = $request->validated();
 
-        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
-            if ( array_key_exists( $envelopeKey, $validated ) ) {
-                $this->settings->updateSetting( $settingKey, $validated[ $envelopeKey ] );
+        foreach (self::FIELD_MAP as $envelopeKey => $settingKey) {
+            if (array_key_exists($envelopeKey, $validated)) {
+                $this->settings->updateSetting($settingKey, $validated[$envelopeKey]);
             }
         }
 
@@ -95,7 +93,7 @@ class SiteSettingController extends Controller
         // show(): the user has already cleared the `update` policy, and
         // hosts that bind separate capabilities for view-vs-update would
         // otherwise see a successful write turn into a 403 here.
-        return response()->json( $this->buildPayload() );
+        return response()->json($this->buildPayload());
     }
 
     /**
@@ -112,8 +110,8 @@ class SiteSettingController extends Controller
     {
         $payload = [];
 
-        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
-            $payload[ $envelopeKey ] = $this->settings->getSetting( $settingKey );
+        foreach (self::FIELD_MAP as $envelopeKey => $settingKey) {
+            $payload[$envelopeKey] = $this->settings->getSetting($settingKey);
         }
 
         return $payload;

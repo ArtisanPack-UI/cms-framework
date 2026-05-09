@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedEntity;
@@ -9,198 +9,198 @@ use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 
-uses( RefreshDatabase::class );
+uses(RefreshDatabase::class);
 
-beforeEach( function (): void {
-    $this->themesPath  = base_path( 'themes' );
+beforeEach(function (): void {
+    $this->themesPath  = base_path('themes');
     $this->themeSlug   = 'test-theme';
-    $this->themeFiles  = $this->themesPath . '/' . $this->themeSlug . '/templates';
+    $this->themeFiles  = $this->themesPath.'/'.$this->themeSlug.'/templates';
 
-    File::ensureDirectoryExists( $this->themeFiles );
+    File::ensureDirectoryExists($this->themeFiles);
     File::put(
-        $this->themesPath . '/' . $this->themeSlug . '/theme.json',
-        json_encode( [ 'name' => 'Test', 'slug' => $this->themeSlug, 'version' => '1.0.0' ] ),
+        $this->themesPath.'/'.$this->themeSlug.'/theme.json',
+        json_encode(['name' => 'Test', 'slug' => $this->themeSlug, 'version' => '1.0.0']),
     );
 
-    config()->set( 'cms.themes.cacheEnabled', false );
+    config()->set('cms.themes.cacheEnabled', false);
 
     // Stub ThemeManager::getActiveTheme() to return our test theme.
-    $themeManager = $this->mock( ThemeManager::class, function ( $mock ): void {
-        $mock->shouldReceive( 'getActiveTheme' )->andReturn( [
+    $themeManager = $this->mock(ThemeManager::class, function ($mock): void {
+        $mock->shouldReceive('getActiveTheme')->andReturn([
             'name' => 'Test',
             'slug' => $this->themeSlug,
-        ] );
-    } );
+        ]);
+    });
 
-    $this->resolver = new TemplateResolver( $themeManager );
-} );
+    $this->resolver = new TemplateResolver($themeManager);
+});
 
-afterEach( function (): void {
-    File::deleteDirectory( $this->themesPath . '/' . $this->themeSlug );
-} );
+afterEach(function (): void {
+    File::deleteDirectory($this->themesPath.'/'.$this->themeSlug);
+});
 
-describe( 'TemplateResolver::resolve()', function (): void {
-    it( 'returns the theme file with raw content populated and blocks empty', function (): void {
-        File::put( $this->themeFiles . '/page.html', '<!-- wp:paragraph --><p>Page</p><!-- /wp:paragraph -->' );
+describe('TemplateResolver::resolve()', function (): void {
+    it('returns the theme file with raw content populated and blocks empty', function (): void {
+        File::put($this->themeFiles.'/page.html', '<!-- wp:paragraph --><p>Page</p><!-- /wp:paragraph -->');
 
-        $result = $this->resolver->resolve( 'page' );
+        $result = $this->resolver->resolve('page');
 
-        expect( $result )
-            ->toBeInstanceOf( ResolvedEntity::class )
-            ->and( $result->source )->toBe( 'theme' )
-            ->and( $result->slug )->toBe( 'page' )
-            ->and( $result->theme )->toBe( $this->themeSlug )
-            ->and( $result->raw )->toContain( 'wp:paragraph' )
-            ->and( $result->blocks )->toBe( [] )
-            ->and( $result->hasThemeFile )->toBeTrue()
-            ->and( $result->isCustom )->toBeFalse()
-            ->and( $result->wpId() )->toBe( 0 );
-    } );
+        expect($result)
+            ->toBeInstanceOf(ResolvedEntity::class)
+            ->and($result->source)->toBe('theme')
+            ->and($result->slug)->toBe('page')
+            ->and($result->theme)->toBe($this->themeSlug)
+            ->and($result->raw)->toContain('wp:paragraph')
+            ->and($result->blocks)->toBe([])
+            ->and($result->hasThemeFile)->toBeTrue()
+            ->and($result->isCustom)->toBeFalse()
+            ->and($result->wpId())->toBe(0);
+    });
 
-    it( 'returns the DB row with blocks populated and raw empty (custom template)', function (): void {
-        $row = Template::create( [
+    it('returns the DB row with blocks populated and raw empty (custom template)', function (): void {
+        $row = Template::create([
             'theme'         => $this->themeSlug,
             'slug'          => 'custom-page',
             'title'         => 'Custom Page',
             'is_custom'     => true,
-            'block_content' => [ [ 'blockName' => 'core/paragraph' ] ],
-        ] );
+            'block_content' => [['blockName' => 'core/paragraph']],
+        ]);
 
-        $result = $this->resolver->resolve( 'custom-page' );
+        $result = $this->resolver->resolve('custom-page');
 
-        expect( $result->source )->toBe( 'db' )
-            ->and( $result->isCustom )->toBeTrue()
-            ->and( $result->hasThemeFile )->toBeFalse()
-            ->and( $result->raw )->toBe( '' )
-            ->and( $result->blocks )->toBe( [ [ 'blockName' => 'core/paragraph' ] ] )
-            ->and( $result->wpId() )->toBe( $row->id );
-    } );
+        expect($result->source)->toBe('db')
+            ->and($result->isCustom)->toBeTrue()
+            ->and($result->hasThemeFile)->toBeFalse()
+            ->and($result->raw)->toBe('')
+            ->and($result->blocks)->toBe([['blockName' => 'core/paragraph']])
+            ->and($result->wpId())->toBe($row->id);
+    });
 
-    it( 'returns the DB row over the theme file when both exist (DB wins)', function (): void {
-        File::put( $this->themeFiles . '/index.html', '<!-- file content -->' );
+    it('returns the DB row over the theme file when both exist (DB wins)', function (): void {
+        File::put($this->themeFiles.'/index.html', '<!-- file content -->');
 
-        $row = Template::create( [
+        $row = Template::create([
             'theme'         => $this->themeSlug,
             'slug'          => 'index',
             'title'         => 'DB Index',
             'is_custom'     => false,
-            'block_content' => [ [ 'blockName' => 'core/heading' ] ],
-        ] );
+            'block_content' => [['blockName' => 'core/heading']],
+        ]);
 
-        $result = $this->resolver->resolve( 'index' );
+        $result = $this->resolver->resolve('index');
 
-        expect( $result->source )->toBe( 'db' )
-            ->and( $result->isCustom )->toBeFalse() // DB row exists but theme file also backs it
-            ->and( $result->hasThemeFile )->toBeTrue()
-            ->and( $result->wpId() )->toBe( $row->id );
-    } );
+        expect($result->source)->toBe('db')
+            ->and($result->isCustom)->toBeFalse() // DB row exists but theme file also backs it
+            ->and($result->hasThemeFile)->toBeTrue()
+            ->and($result->wpId())->toBe($row->id);
+    });
 
-    it( 'returns null when neither DB nor file has the slug', function (): void {
-        expect( $this->resolver->resolve( 'missing' ) )->toBeNull();
-    } );
-} );
+    it('returns null when neither DB nor file has the slug', function (): void {
+        expect($this->resolver->resolve('missing'))->toBeNull();
+    });
+});
 
-describe( 'TemplateResolver::all()', function (): void {
-    it( 'merges file slugs and DB slugs, deduplicating with DB winning', function (): void {
-        File::put( $this->themeFiles . '/page.html', '<!-- page from file -->' );
-        File::put( $this->themeFiles . '/single.html', '<!-- single from file -->' );
+describe('TemplateResolver::all()', function (): void {
+    it('merges file slugs and DB slugs, deduplicating with DB winning', function (): void {
+        File::put($this->themeFiles.'/page.html', '<!-- page from file -->');
+        File::put($this->themeFiles.'/single.html', '<!-- single from file -->');
 
-        Template::create( [
+        Template::create([
             'theme'     => $this->themeSlug,
             'slug'      => 'page',
             'title'     => 'Page From DB',
             'is_custom' => false,
-        ] );
-        Template::create( [
+        ]);
+        Template::create([
             'theme'     => $this->themeSlug,
             'slug'      => 'archive',
             'title'     => 'Custom Archive',
             'is_custom' => true,
-        ] );
+        ]);
 
         $all = $this->resolver->all();
 
-        $bySlug = collect( $all )->keyBy( 'slug' );
+        $bySlug = collect($all)->keyBy('slug');
 
-        expect( $bySlug->keys()->all() )->toEqual( [ 'archive', 'page', 'single' ] )
-            ->and( $bySlug->get( 'page' )->source )->toBe( 'db' )
-            ->and( $bySlug->get( 'single' )->source )->toBe( 'theme' )
-            ->and( $bySlug->get( 'archive' )->source )->toBe( 'db' );
-    } );
-} );
+        expect($bySlug->keys()->all())->toEqual(['archive', 'page', 'single'])
+            ->and($bySlug->get('page')->source)->toBe('db')
+            ->and($bySlug->get('single')->source)->toBe('theme')
+            ->and($bySlug->get('archive')->source)->toBe('db');
+    });
+});
 
-describe( 'TemplateResolver::revert()', function (): void {
-    it( 'deletes the DB row and returns true', function (): void {
-        Template::create( [
+describe('TemplateResolver::revert()', function (): void {
+    it('deletes the DB row and returns true', function (): void {
+        Template::create([
             'theme' => $this->themeSlug,
             'slug'  => 'page',
             'title' => 'Page',
-        ] );
+        ]);
 
-        $result = $this->resolver->revert( 'page' );
+        $result = $this->resolver->revert('page');
 
-        expect( $result )->toBeTrue()
-            ->and( Template::where( 'theme', $this->themeSlug )->where( 'slug', 'page' )->exists() )->toBeFalse();
-    } );
+        expect($result)->toBeTrue()
+            ->and(Template::where('theme', $this->themeSlug)->where('slug', 'page')->exists())->toBeFalse();
+    });
 
-    it( 'returns false when no DB row exists for the slug', function (): void {
-        expect( $this->resolver->revert( 'never-existed' ) )->toBeFalse();
-    } );
-} );
+    it('returns false when no DB row exists for the slug', function (): void {
+        expect($this->resolver->revert('never-existed'))->toBeFalse();
+    });
+});
 
-describe( 'theme isolation', function (): void {
-    it( 'does not return a row from a different theme', function (): void {
-        Template::create( [
+describe('theme isolation', function (): void {
+    it('does not return a row from a different theme', function (): void {
+        Template::create([
             'theme' => 'other-theme',
             'slug'  => 'page',
             'title' => 'Other Theme Page',
-        ] );
+        ]);
 
-        $result = $this->resolver->resolve( 'page' );
+        $result = $this->resolver->resolve('page');
 
-        expect( $result )->toBeNull();
-    } );
-} );
+        expect($result)->toBeNull();
+    });
+});
 
-describe( 'slug sanitization', function (): void {
-    it( 'rejects path-traversal slugs', function (): void {
+describe('slug sanitization', function (): void {
+    it('rejects path-traversal slugs', function (): void {
         // Drop a real file at the would-be traversal target so a missing-file
         // null doesn't mask a successful traversal.
-        File::ensureDirectoryExists( $this->themesPath . '/' . $this->themeSlug );
-        File::put( $this->themesPath . '/' . $this->themeSlug . '/secret.html', '<!-- secret -->' );
+        File::ensureDirectoryExists($this->themesPath.'/'.$this->themeSlug);
+        File::put($this->themesPath.'/'.$this->themeSlug.'/secret.html', '<!-- secret -->');
 
-        $result = $this->resolver->resolve( '../secret' );
+        $result = $this->resolver->resolve('../secret');
 
-        expect( $result )->toBeNull();
-    } );
+        expect($result)->toBeNull();
+    });
 
-    it( 'rejects slugs containing slashes', function (): void {
-        expect( $this->resolver->resolve( 'a/b' ) )->toBeNull();
-        expect( $this->resolver->resolve( 'a\\b' ) )->toBeNull();
-    } );
+    it('rejects slugs containing slashes', function (): void {
+        expect($this->resolver->resolve('a/b'))->toBeNull();
+        expect($this->resolver->resolve('a\\b'))->toBeNull();
+    });
 
-    it( 'rejects slugs containing null bytes', function (): void {
-        expect( $this->resolver->resolve( "page\0evil" ) )->toBeNull();
-    } );
+    it('rejects slugs containing null bytes', function (): void {
+        expect($this->resolver->resolve("page\0evil"))->toBeNull();
+    });
 
-    it( 'rejects uppercase slugs', function (): void {
-        File::put( $this->themeFiles . '/lowercase.html', '<!-- ok -->' );
+    it('rejects uppercase slugs', function (): void {
+        File::put($this->themeFiles.'/lowercase.html', '<!-- ok -->');
 
-        expect( $this->resolver->resolve( 'Lowercase' ) )->toBeNull();
-    } );
+        expect($this->resolver->resolve('Lowercase'))->toBeNull();
+    });
 
-    it( 'rejects empty slugs', function (): void {
-        expect( $this->resolver->resolve( '' ) )->toBeNull();
-    } );
+    it('rejects empty slugs', function (): void {
+        expect($this->resolver->resolve(''))->toBeNull();
+    });
 
-    it( 'returns false from revert() for invalid slugs without touching the database', function (): void {
-        Template::create( [
+    it('returns false from revert() for invalid slugs without touching the database', function (): void {
+        Template::create([
             'theme' => $this->themeSlug,
             'slug'  => 'page',
             'title' => 'Page',
-        ] );
+        ]);
 
-        expect( $this->resolver->revert( '../page' ) )->toBeFalse()
-            ->and( Template::where( 'slug', 'page' )->exists() )->toBeTrue();
-    } );
-} );
+        expect($this->resolver->revert('../page'))->toBeFalse()
+            ->and(Template::where('slug', 'page')->exists())->toBeTrue();
+    });
+});

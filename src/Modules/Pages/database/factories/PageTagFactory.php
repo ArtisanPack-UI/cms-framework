@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PageTag Factory for the CMS Framework Pages Module.
@@ -47,15 +47,15 @@ class PageTagFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->words( rand( 1, 2 ), true );
+        $name = fake()->words(rand(1, 2), true);
 
         return [
-            'name'        => ucwords( $name ),
-            'slug'        => Str::slug( $name ),
+            'name'        => ucwords($name),
+            'slug'        => Str::slug($name),
             'description' => fake()->sentence(),
             'order'       => 0,
             'metadata'    => [
-                'seo_title'       => ucwords( $name ),
+                'seo_title'       => ucwords($name),
                 'seo_description' => fake()->sentence(),
             ],
         ];
@@ -70,10 +70,10 @@ class PageTagFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withOrder( int $order ): static
+    public function withOrder(int $order): static
     {
-        return $this->state( fn ( array $attributes ) => [
+        return $this->state(fn (array $attributes) => [
             'order' => $order,
-        ] );
+        ]);
     }
 }

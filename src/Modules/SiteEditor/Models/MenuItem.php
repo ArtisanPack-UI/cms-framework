@@ -16,7 +16,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -101,7 +101,7 @@ class MenuItem extends Model
      */
     public function menu(): BelongsTo
     {
-        return $this->belongsTo( Menu::class );
+        return $this->belongsTo(Menu::class);
     }
 
     /**
@@ -109,7 +109,7 @@ class MenuItem extends Model
      */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo( self::class, 'parent_id' );
+        return $this->belongsTo(self::class, 'parent_id');
     }
 
     /**
@@ -120,7 +120,7 @@ class MenuItem extends Model
      */
     public function children(): HasMany
     {
-        return $this->hasMany( self::class, 'parent_id' )->orderBy( 'position' )->orderBy( 'id' );
+        return $this->hasMany(self::class, 'parent_id')->orderBy('position')->orderBy('id');
     }
 
     /**
@@ -145,8 +145,8 @@ class MenuItem extends Model
      */
     protected static function booted(): void
     {
-        static::deleting( static function ( MenuItem $item ): void {
-            $item->children()->each( static fn ( MenuItem $child ): ?bool => $child->delete() );
-        } );
+        static::deleting(static function (MenuItem $item): void {
+            $item->children()->each(static fn (MenuItem $child): ?bool => $child->delete());
+        });
     }
 }

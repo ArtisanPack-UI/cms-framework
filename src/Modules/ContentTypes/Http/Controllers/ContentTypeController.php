@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * ContentType Controller for the CMS Framework ContentTypes Module.
@@ -32,7 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group( 'Content Types', weight: 7 )]
+#[Group('Content Types', weight: 7)]
 class ContentTypeController extends Controller
 {
     use AuthorizesRequests;
@@ -49,7 +49,7 @@ class ContentTypeController extends Controller
      *
      * @since 1.0.0
      */
-    public function __construct( ContentTypeManager $contentTypeManager )
+    public function __construct(ContentTypeManager $contentTypeManager)
     {
         $this->contentTypeManager = $contentTypeManager;
     }
@@ -65,17 +65,17 @@ class ContentTypeController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', ContentType::class );
+        $this->authorize('viewAny', ContentType::class);
 
-        $contentTypes = ContentType::select( 'content_types.*' )
+        $contentTypes = ContentType::select('content_types.*')
             ->selectSub(
-                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw( 'count(*)' )
-                    ->whereRaw( "JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))" ),
+                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw('count(*)')
+                    ->whereRaw("JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))"),
                 'custom_fields_count',
             )
-            ->paginate( 15 );
+            ->paginate(15);
 
-        return ContentTypeResource::collection( $contentTypes );
+        return ContentTypeResource::collection($contentTypes);
     }
 
     /**
@@ -90,14 +90,14 @@ class ContentTypeController extends Controller
      *
      * @return JsonResponse The JSON response containing the created content type resource.
      */
-    public function store( ContentTypeRequest $request ): JsonResponse
+    public function store(ContentTypeRequest $request): JsonResponse
     {
-        $this->authorize( 'create', ContentType::class );
+        $this->authorize('create', ContentType::class);
 
         $validated   = $request->validated();
-        $contentType = $this->contentTypeManager->createContentType( $validated );
+        $contentType = $this->contentTypeManager->createContentType($validated);
 
-        return response()->json( new ContentTypeResource( $contentType ), 201 );
+        return response()->json(new ContentTypeResource($contentType), 201);
     }
 
     /**
@@ -111,19 +111,19 @@ class ContentTypeController extends Controller
      *
      * @return ContentTypeResource The content type resource.
      */
-    public function show( string $slug ): ContentTypeResource
+    public function show(string $slug): ContentTypeResource
     {
-        $contentType = ContentType::select( 'content_types.*' )
+        $contentType = ContentType::select('content_types.*')
             ->selectSub(
-                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw( 'count(*)' )
-                    ->whereRaw( "JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))" ),
+                \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField::selectRaw('count(*)')
+                    ->whereRaw("JSON_CONTAINS(custom_fields.content_types, CONCAT('\"', content_types.slug, '\"'))"),
                 'custom_fields_count',
             )
-            ->where( 'slug', sanitizeText( $slug ) )
+            ->where('slug', sanitizeText($slug))
             ->firstOrFail();
-        $this->authorize( 'view', $contentType );
+        $this->authorize('view', $contentType);
 
-        return new ContentTypeResource( $contentType );
+        return new ContentTypeResource($contentType);
     }
 
     /**
@@ -139,16 +139,16 @@ class ContentTypeController extends Controller
      *
      * @return ContentTypeResource The updated content type resource.
      */
-    public function update( ContentTypeRequest $request, string $slug ): ContentTypeResource
+    public function update(ContentTypeRequest $request, string $slug): ContentTypeResource
     {
-        $sanitizedSlug = sanitizeText( $slug );
-        $contentType   = ContentType::where( 'slug', $sanitizedSlug )->firstOrFail();
-        $this->authorize( 'update', $contentType );
+        $sanitizedSlug = sanitizeText($slug);
+        $contentType   = ContentType::where('slug', $sanitizedSlug)->firstOrFail();
+        $this->authorize('update', $contentType);
 
         $validated   = $request->validated();
-        $contentType = $this->contentTypeManager->updateContentType( $sanitizedSlug, $validated );
+        $contentType = $this->contentTypeManager->updateContentType($sanitizedSlug, $validated);
 
-        return new ContentTypeResource( $contentType );
+        return new ContentTypeResource($contentType);
     }
 
     /**
@@ -163,13 +163,13 @@ class ContentTypeController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy( string $slug ): Response
+    public function destroy(string $slug): Response
     {
-        $sanitizedSlug = sanitizeText( $slug );
-        $contentType   = ContentType::where( 'slug', $sanitizedSlug )->firstOrFail();
-        $this->authorize( 'delete', $contentType );
+        $sanitizedSlug = sanitizeText($slug);
+        $contentType   = ContentType::where('slug', $sanitizedSlug)->firstOrFail();
+        $this->authorize('delete', $contentType);
 
-        $this->contentTypeManager->deleteContentType( $sanitizedSlug );
+        $this->contentTypeManager->deleteContentType($sanitizedSlug);
 
         return response()->noContent();
     }
@@ -183,13 +183,13 @@ class ContentTypeController extends Controller
      *
      * @return JsonResponse The JSON response containing the custom fields.
      */
-    public function customFields( string $slug ): JsonResponse
+    public function customFields(string $slug): JsonResponse
     {
-        $contentType = ContentType::where( 'slug', sanitizeText( $slug ) )->firstOrFail();
-        $this->authorize( 'view', $contentType );
+        $contentType = ContentType::where('slug', sanitizeText($slug))->firstOrFail();
+        $this->authorize('view', $contentType);
 
         $customFields = $contentType->getCustomFields();
 
-        return response()->json( $customFields );
+        return response()->json($customFields);
     }
 }

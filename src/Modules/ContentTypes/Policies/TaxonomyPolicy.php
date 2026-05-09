@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Taxonomy Policy for the CMS Framework ContentTypes Module.
@@ -35,7 +35,7 @@ class TaxonomyPolicy
      *
      * @return bool True if the user can view taxonomies, false otherwise.
      */
-    public function viewAny( Authenticatable $user ): bool
+    public function viewAny(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any taxonomies.
@@ -48,7 +48,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.viewAny', 'taxonomies.manage' ) );
+        return $user->can(applyFilters('taxonomies.viewAny', 'taxonomies.manage'));
     }
 
     /**
@@ -61,7 +61,7 @@ class TaxonomyPolicy
      *
      * @return bool True if the user can view the taxonomy, false otherwise.
      */
-    public function view( Authenticatable $user, Taxonomy $taxonomy ): bool
+    public function view(Authenticatable $user, Taxonomy $taxonomy): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a taxonomy.
@@ -75,7 +75,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.view', 'taxonomies.manage', $taxonomy ) );
+        return $user->can(applyFilters('taxonomies.view', 'taxonomies.manage', $taxonomy));
     }
 
     /**
@@ -87,7 +87,7 @@ class TaxonomyPolicy
      *
      * @return bool True if the user can create taxonomies, false otherwise.
      */
-    public function create( Authenticatable $user ): bool
+    public function create(Authenticatable $user): bool
     {
         /**
          * Filters the capability used to determine whether a user can create taxonomies.
@@ -100,7 +100,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.create', 'taxonomies.manage' ) );
+        return $user->can(applyFilters('taxonomies.create', 'taxonomies.manage'));
     }
 
     /**
@@ -113,7 +113,7 @@ class TaxonomyPolicy
      *
      * @return bool True if the user can update the taxonomy, false otherwise.
      */
-    public function update( Authenticatable $user, Taxonomy $taxonomy ): bool
+    public function update(Authenticatable $user, Taxonomy $taxonomy): bool
     {
         /**
          * Filters the capability used to determine whether a user can update taxonomies.
@@ -127,7 +127,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.update', 'taxonomies.manage', $taxonomy ) );
+        return $user->can(applyFilters('taxonomies.update', 'taxonomies.manage', $taxonomy));
     }
 
     /**
@@ -140,7 +140,7 @@ class TaxonomyPolicy
      *
      * @return bool True if the user can delete the taxonomy, false otherwise.
      */
-    public function delete( Authenticatable $user, Taxonomy $taxonomy ): bool
+    public function delete(Authenticatable $user, Taxonomy $taxonomy): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete taxonomies.
@@ -154,6 +154,6 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.delete', 'taxonomies.manage', $taxonomy ) );
+        return $user->can(applyFilters('taxonomies.delete', 'taxonomies.manage', $taxonomy));
     }
 }

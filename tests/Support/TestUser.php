@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace ArtisanPackUI\CMSFramework\Tests\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Concerns\HasNotifications;
@@ -11,9 +13,9 @@ use Illuminate\Notifications\Notifiable;
 class TestUser extends Authenticatable
 {
     use HasFactory;
-use HasNotifications;
-use HasRolesAndPermissions;
-use Notifiable;
+    use HasNotifications;
+    use HasRolesAndPermissions;
+    use Notifiable;
 
     protected $table = 'users';
 

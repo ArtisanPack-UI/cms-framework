@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * PageTag Resource for the CMS Framework Pages Module.
@@ -38,7 +38,7 @@ class PageTagResource extends JsonResource
      *
      * @return array<string, mixed> The transformed tag data array.
      */
-    public function toArray( Request $request ): array
+    public function toArray(Request $request): array
     {
         return [
             'id'          => $this->id,

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Notification Model
@@ -61,7 +61,7 @@ class Notification extends Model
      */
     public function getPivotAttribute()
     {
-        if ( $this->relationLoaded( 'users' ) && $this->users->isNotEmpty() ) {
+        if ($this->relationLoaded('users') && $this->users->isNotEmpty()) {
             return $this->users->first()->pivot;
         }
 
@@ -76,12 +76,12 @@ class Notification extends Model
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(
-            config( 'auth.providers.users.model' ),
+            config('auth.providers.users.model'),
             'notification_user',
             'notification_id',
             'user_id',
         )
-            ->withPivot( ['is_read', 'read_at', 'is_dismissed', 'dismissed_at'] )
+            ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
             ->withTimestamps();
     }
 
@@ -90,17 +90,15 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
-    public function scopeUnreadForUser( Builder $query, int $userId )
+    public function scopeUnreadForUser(Builder $query, int $userId)
     {
-        return $query->whereHas( 'users', function ( $q ) use ( $userId ): void {
-            $q->where( 'user_id', sanitizeInt( $userId ) )
-                ->where( 'is_read', false )
-                ->where( 'is_dismissed', false );
-        } );
+        return $query->whereHas('users', function ($q) use ($userId): void {
+            $q->where('user_id', sanitizeInt($userId))
+                ->where('is_read', false)
+                ->where('is_dismissed', false);
+        });
     }
 
     /**
@@ -108,17 +106,15 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
-    public function scopeReadForUser( Builder $query, int $userId )
+    public function scopeReadForUser(Builder $query, int $userId)
     {
-        return $query->whereHas( 'users', function ( $q ) use ( $userId ): void {
-            $q->where( 'user_id', sanitizeInt( $userId ) )
-                ->where( 'is_read', true )
-                ->where( 'is_dismissed', false );
-        } );
+        return $query->whereHas('users', function ($q) use ($userId): void {
+            $q->where('user_id', sanitizeInt($userId))
+                ->where('is_read', true)
+                ->where('is_dismissed', false);
+        });
     }
 
     /**
@@ -126,16 +122,14 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
-    public function scopeNotDismissedForUser( Builder $query, int $userId )
+    public function scopeNotDismissedForUser(Builder $query, int $userId)
     {
-        return $query->whereHas( 'users', function ( $q ) use ( $userId ): void {
-            $q->where( 'user_id', sanitizeInt( $userId ) )
-                ->where( 'is_dismissed', false );
-        } );
+        return $query->whereHas('users', function ($q) use ($userId): void {
+            $q->where('user_id', sanitizeInt($userId))
+                ->where('is_dismissed', false);
+        });
     }
 
     /**
@@ -143,14 +137,12 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
-    public function scopeOfType( Builder $query, NotificationType $type )
+    public function scopeOfType(Builder $query, NotificationType $type)
     {
         // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Type-safe enum
-        return $query->where( 'type', $type );
+        return $query->where('type', $type);
     }
 
     /**

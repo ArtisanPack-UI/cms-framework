@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * HasContentStatus Trait
@@ -32,13 +32,13 @@ trait HasContentStatus
      *
      * @return Builder
      */
-    public function scopePublished( Builder $query )
+    public function scopePublished(Builder $query)
     {
-        return $query->where( 'status', ContentStatus::Published )
-            ->where( function ( $q ): void {
-                $q->whereNull( 'published_at' )
-                    ->orWhere( 'published_at', '<=', now() );
-            } );
+        return $query->where('status', ContentStatus::Published)
+            ->where(function ($q): void {
+                $q->whereNull('published_at')
+                    ->orWhere('published_at', '<=', now());
+            });
     }
 
     /**
@@ -48,9 +48,9 @@ trait HasContentStatus
      *
      * @return Builder
      */
-    public function scopeDraft( Builder $query )
+    public function scopeDraft(Builder $query)
     {
-        return $query->where( 'status', ContentStatus::Draft );
+        return $query->where('status', ContentStatus::Draft);
     }
 
     /**
@@ -61,6 +61,6 @@ trait HasContentStatus
     public function isPublished(): bool
     {
         return ContentStatus::Published === $this->status &&
-            ( null === $this->published_at || $this->published_at->isPast() );
+            (null === $this->published_at || $this->published_at->isPast());
     }
 }

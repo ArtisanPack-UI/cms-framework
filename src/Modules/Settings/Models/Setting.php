@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Models;
 
@@ -73,17 +73,17 @@ class Setting extends Model
     protected function value(): Attribute
     {
         return Attribute::make(
-            get: function ( $value ) {
-                $type = SettingType::tryFrom( $this->attributes['type'] ?? 'string' ) ?? SettingType::String;
+            get: function ($value) {
+                $type = SettingType::tryFrom($this->attributes['type'] ?? 'string') ?? SettingType::String;
 
-                return $type->cast( $value );
+                return $type->cast($value);
             },
-            set: function ( $value ) {
-                $type = SettingType::fromValue( $value );
+            set: function ($value) {
+                $type = SettingType::fromValue($value);
 
                 return [
                     'type'  => $type->value,
-                    'value' => $type->serialize( $value ),
+                    'value' => $type->serialize($value),
                 ];
             },
         );

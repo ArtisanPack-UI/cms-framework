@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * ContentType Model
@@ -74,7 +74,7 @@ class ContentType extends Model
      */
     public function getModelInstance(): ?Model
     {
-        if ( ! class_exists( $this->model_class ) ) {
+        if (! class_exists($this->model_class)) {
             return null;
         }
 
@@ -86,13 +86,13 @@ class ContentType extends Model
      *
      * @since 1.0.0
      */
-    public function supportsFeature( string $feature ): bool
+    public function supportsFeature(string $feature): bool
     {
-        if ( null === $this->supports ) {
+        if (null === $this->supports) {
             return false;
         }
 
-        return in_array( $feature, $this->supports, true );
+        return in_array($feature, $this->supports, true);
     }
 
     /**
@@ -102,7 +102,7 @@ class ContentType extends Model
      */
     public function getCustomFields(): Collection
     {
-        return CustomField::whereJsonContains( 'content_types', $this->slug )->get();
+        return CustomField::whereJsonContains('content_types', $this->slug)->get();
     }
 
     /**
@@ -114,11 +114,11 @@ class ContentType extends Model
      *
      * @return \Illuminate\Database\Eloquent\Builder
      */
-    public function scopeWithCustomFieldsCount( Builder $query )
+    public function scopeWithCustomFieldsCount(Builder $query)
     {
         return $query->selectSub(
-            CustomField::selectRaw( 'count(*)' )
-                ->whereRaw( "JSON_CONTAINS(content_types, CONCAT('\"', content_types.slug, '\"'))" ),
+            CustomField::selectRaw('count(*)')
+                ->whereRaw("JSON_CONTAINS(content_types, CONCAT('\"', content_types.slug, '\"'))"),
             'custom_fields_count',
         );
     }

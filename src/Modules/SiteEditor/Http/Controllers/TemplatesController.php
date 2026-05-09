@@ -9,7 +9,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
@@ -27,7 +27,7 @@ use Illuminate\Routing\Controller;
 /**
  * @since 1.2.0
  */
-#[Group( 'Site Editor / Templates', weight: 30 )]
+#[Group('Site Editor / Templates', weight: 30)]
 class TemplatesController extends Controller
 {
     /**
@@ -36,8 +36,7 @@ class TemplatesController extends Controller
     public function __construct(
         private TemplateResolver $resolver,
         private ThemeManager $themeManager,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /api/v1/templates — list resolved templates for the active theme.
@@ -46,7 +45,7 @@ class TemplatesController extends Controller
      */
     public function index(): JsonResponse
     {
-        return response()->json( TemplateResource::collection( $this->resolver->all() ) );
+        return response()->json(TemplateResource::collection($this->resolver->all()));
     }
 
     /**
@@ -54,15 +53,15 @@ class TemplatesController extends Controller
      *
      * @since 1.2.0
      */
-    public function show( string $slug ): JsonResponse
+    public function show(string $slug): JsonResponse
     {
-        $entity = $this->resolver->resolve( $slug );
+        $entity = $this->resolver->resolve($slug);
 
-        if ( null === $entity ) {
-            return response()->json( [ 'message' => 'Template not found.' ], 404 );
+        if (null === $entity) {
+            return response()->json(['message' => 'Template not found.'], 404);
         }
 
-        return response()->json( TemplateResource::toArray( $entity ) );
+        return response()->json(TemplateResource::toArray($entity));
     }
 
     /**
@@ -70,30 +69,30 @@ class TemplatesController extends Controller
      *
      * @since 1.2.0
      */
-    public function store( TemplateRequest $request ): JsonResponse
+    public function store(TemplateRequest $request): JsonResponse
     {
         $theme = $this->activeThemeSlug();
 
-        if ( null === $theme ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $theme) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
         try {
-            $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
-        } catch ( QueryException $e ) {
-            if ( $this->isUniqueViolation( $e ) ) {
-                return response()->json( [
+            $template = Template::create($this->normalizeAttributes($theme, $request->validated()));
+        } catch (QueryException $e) {
+            if ($this->isUniqueViolation($e)) {
+                return response()->json([
                     'message' => 'A template with this slug already exists for the active theme.',
-                    'errors'  => [ 'slug' => [ 'Slug must be unique within the theme.' ] ],
-                ], 409 );
+                    'errors'  => ['slug' => ['Slug must be unique within the theme.']],
+                ], 409);
             }
 
             throw $e;
         }
 
-        $entity = $this->resolver->resolve( $template->slug );
+        $entity = $this->resolver->resolve($template->slug);
 
-        return response()->json( TemplateResource::toArray( $entity ), 201 );
+        return response()->json(TemplateResource::toArray($entity), 201);
     }
 
     /**
@@ -101,12 +100,12 @@ class TemplatesController extends Controller
      *
      * @since 1.2.0
      */
-    public function update( TemplateRequest $request, string $slug ): JsonResponse
+    public function update(TemplateRequest $request, string $slug): JsonResponse
     {
         $theme = $this->activeThemeSlug();
 
-        if ( null === $theme ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $theme) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
         // The Form Request only validates `slug` when present in the payload.
@@ -114,11 +113,11 @@ class TemplatesController extends Controller
         // play, so guard it directly against the same canonical pattern.
         // Without this, a PUT to /api/v1/templates/Invalid_Slug! with no body
         // slug would create a DB row the resolver subsequently can't read.
-        if ( ! SlugValidator::isValid( $slug ) ) {
-            return response()->json( [
+        if (! SlugValidator::isValid($slug)) {
+            return response()->json([
                 'message' => 'URL slug is not in canonical kebab-case form.',
-                'errors'  => [ 'slug' => [ 'Slug must be lowercase letters, numbers, and hyphens only.' ] ],
-            ], 422 );
+                'errors'  => ['slug' => ['Slug must be lowercase letters, numbers, and hyphens only.']],
+            ], 422);
         }
 
         $validated = $request->validated();
@@ -126,22 +125,22 @@ class TemplatesController extends Controller
         // PUT identifies the resource via the route slug. If the body also
         // carries a slug it must match, so a client that mistakenly tries to
         // rename the resource gets a 422 instead of silently being ignored.
-        if ( array_key_exists( 'slug', $validated ) && $validated['slug'] !== $slug ) {
-            return response()->json( [
+        if (array_key_exists('slug', $validated) && $validated['slug'] !== $slug) {
+            return response()->json([
                 'message' => 'Body slug does not match URL slug.',
-                'errors'  => [ 'slug' => [ 'Slug in the request body must match the URL slug.' ] ],
-            ], 422 );
+                'errors'  => ['slug' => ['Slug in the request body must match the URL slug.']],
+            ], 422);
         }
 
         // Strip slug from the validated attributes — the route slug is
         // canonical for both branches below.
-        unset( $validated['slug'] );
+        unset($validated['slug']);
 
-        $template = $this->upsertForTheme( $theme, $slug, $validated );
+        $template = $this->upsertForTheme($theme, $slug, $validated);
 
-        $entity = $this->resolver->resolve( $template->slug );
+        $entity = $this->resolver->resolve($template->slug);
 
-        return response()->json( TemplateResource::toArray( $entity ) );
+        return response()->json(TemplateResource::toArray($entity));
     }
 
     /**
@@ -151,15 +150,15 @@ class TemplatesController extends Controller
      *
      * @since 1.2.0
      */
-    public function destroy( string $slug ): JsonResponse
+    public function destroy(string $slug): JsonResponse
     {
-        $deleted = $this->resolver->revert( $slug );
+        $deleted = $this->resolver->revert($slug);
 
-        if ( ! $deleted ) {
-            return response()->json( [ 'message' => 'No template override to revert.' ], 404 );
+        if (! $deleted) {
+            return response()->json(['message' => 'No template override to revert.'], 404);
         }
 
-        return response()->json( null, 204 );
+        return response()->json(null, 204);
     }
 
     /**
@@ -179,35 +178,35 @@ class TemplatesController extends Controller
      *
      * @param  array<string, mixed>  $validated
      */
-    protected function upsertForTheme( string $theme, string $slug, array $validated ): Template
+    protected function upsertForTheme(string $theme, string $slug, array $validated): Template
     {
         $existing = Template::query()
-            ->where( 'theme', $theme )
-            ->where( 'slug', $slug )
+            ->where('theme', $theme)
+            ->where('slug', $slug)
             ->first();
 
-        if ( null !== $existing ) {
-            $existing->update( $validated );
+        if (null !== $existing) {
+            $existing->update($validated);
 
             return $existing->refresh();
         }
 
-        $attributes         = $this->normalizeAttributes( $theme, $validated );
+        $attributes         = $this->normalizeAttributes($theme, $validated);
         $attributes['slug'] = $slug;
 
         try {
-            return Template::create( $attributes );
-        } catch ( QueryException $e ) {
-            if ( ! $this->isUniqueViolation( $e ) ) {
+            return Template::create($attributes);
+        } catch (QueryException $e) {
+            if (! $this->isUniqueViolation($e)) {
                 throw $e;
             }
 
             $existing = Template::query()
-                ->where( 'theme', $theme )
-                ->where( 'slug', $slug )
+                ->where('theme', $theme)
+                ->where('slug', $slug)
                 ->firstOrFail();
 
-            $existing->update( $validated );
+            $existing->update($validated);
 
             return $existing->refresh();
         }
@@ -220,7 +219,7 @@ class TemplatesController extends Controller
     {
         $theme = $this->themeManager->getActiveTheme();
 
-        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty($theme['slug']) ? (string) $theme['slug'] : null;
     }
 
     /**
@@ -232,15 +231,15 @@ class TemplatesController extends Controller
      *
      * @since 1.2.0
      */
-    protected function isUniqueViolation( QueryException $e ): bool
+    protected function isUniqueViolation(QueryException $e): bool
     {
         $sqlState = $e->getCode();
 
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ('23000' === $sqlState || '23505' === $sqlState) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique' );
+        return str_contains(strtolower($e->getMessage()), 'unique');
     }
 
     /**
@@ -253,12 +252,12 @@ class TemplatesController extends Controller
      *
      * @return array<string, mixed>
      */
-    protected function normalizeAttributes( string $theme, array $validated ): array
+    protected function normalizeAttributes(string $theme, array $validated): array
     {
         $validated['theme']     = $theme;
         $validated['author_id'] = $validated['author_id'] ?? auth()->id();
 
-        if ( ! array_key_exists( 'is_custom', $validated ) ) {
+        if (! array_key_exists('is_custom', $validated)) {
             $validated['is_custom'] = false;
         }
 

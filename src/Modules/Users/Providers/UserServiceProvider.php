@@ -1,59 +1,83 @@
 <?php
 
-declare( strict_types = 1 );
-
-/**
- * User Service Provider for the CMS Framework Users Module.
- *
- * This service provider handles the registration and bootstrapping of user-related
- * services including role management, permission management, migrations, and API routes.
- *
- * @since   1.0.0
- */
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\Users\Http\Middleware\CheckRole;
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\RoleManager;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
+use ArtisanPackUI\CMSFramework\Modules\Users\Policies\PermissionPolicy;
+use ArtisanPackUI\CMSFramework\Modules\Users\Policies\RolePolicy;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 /**
- * Service provider for user-related functionality within the CMS Framework.
+ * Service provider for the cms-framework Users module.
  *
- * Registers role and permission managers as singletons and bootstraps
- * database migrations and API routes for the users module.
- *
- * @since 1.0.0
+ * - Registers the RoleManager + PermissionManager singletons.
+ * - Binds the cms-framework Role / Permission subclasses as the
+ *   `artisanpack.rbac.models.*` so rbac internals (Gate, observers,
+ *   commands, middleware) resolve through this package's models.
+ * - Aliases the `role:` route middleware. The `permission:` middleware
+ *   is shipped by `artisanpack-ui/rbac` directly.
+ * - Loads the API routes.
  */
 class UserServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     *
-     * Registers the RoleManager and PermissionManager as singleton instances
-     * within the application container for dependency injection.
-     *
-     * @since 1.0.0
-     */
     public function register(): void
     {
-        $this->app->singleton( RoleManager::class, fn () => new RoleManager );
-        $this->app->singleton( PermissionManager::class, fn () => new PermissionManager );
+        $this->app->singleton(RoleManager::class, fn () => new RoleManager);
+        $this->app->singleton(PermissionManager::class, fn () => new PermissionManager);
+    }
+
+    public function boot(): void
+    {
+        $this->bindRbacModels();
+        $this->registerMiddleware();
+        $this->registerPolicies();
+
+        Route::prefix('api/v1')
+            ->middleware('api')
+            ->group(__DIR__.'/../routes/api.php');
     }
 
     /**
-     * Bootstrap any application services.
-     *
-     * Loads database migrations for the users module and registers API routes
-     * with the 'api/v1' prefix and 'api' middleware group.
-     *
-     * @since 1.0.0
+     * Register the Role + Permission policies. The
+     * `authorizeResource()` calls in the controllers depend on these
+     * bindings being in place.
      */
-    public function boot(): void
+    protected function registerPolicies(): void
     {
-        Route::prefix( 'api/v1' )
-            ->middleware( 'api' )
-            ->group( __DIR__ . '/../routes/api.php' );
+        Gate::policy(Role::class, RolePolicy::class);
+        Gate::policy(Permission::class, PermissionPolicy::class);
+    }
+
+    /**
+     * Point rbac at the cms-framework Role + Permission subclasses so
+     * `Role::create()`, observers, the `permission:` middleware, the
+     * Gate cache, and the rbac Artisan commands all resolve through
+     * this package's models.
+     */
+    protected function bindRbacModels(): void
+    {
+        config([
+            'artisanpack.rbac.models.role'       => Role::class,
+            'artisanpack.rbac.models.permission' => Permission::class,
+        ]);
+    }
+
+    /**
+     * Register the `role:` route middleware. rbac already aliases
+     * `permission:`; this pairs them so consumers can write
+     * `Route::middleware('role:admin')` alongside
+     * `Route::middleware('permission:pages.publish')`.
+     */
+    protected function registerMiddleware(): void
+    {
+        $this->app['router']->aliasMiddleware('role', CheckRole::class);
     }
 }

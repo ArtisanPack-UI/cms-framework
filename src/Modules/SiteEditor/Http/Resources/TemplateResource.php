@@ -9,7 +9,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources;
 
@@ -28,12 +28,12 @@ final class TemplateResource
      *
      * @return array<string, mixed>
      */
-    public static function toArray( ResolvedEntity $entity ): array
+    public static function toArray(ResolvedEntity $entity): array
     {
         $payload = [
             // `id` is always `theme//slug` form, matching WP REST behavior. The integer
             // DB row id (when one exists) is exposed separately as `wp_id`.
-            'id'             => $entity->theme . '//' . $entity->slug,
+            'id'             => $entity->theme.'//'.$entity->slug,
             'slug'           => $entity->slug,
             'theme'          => $entity->theme,
             'type'           => 'wp_template',
@@ -59,13 +59,13 @@ final class TemplateResource
             'wp_id'          => $entity->wpId(),
             'has_theme_file' => $entity->hasThemeFile,
             'is_custom'      => $entity->isCustom,
-            'author'         => null !== $entity->model ? (int) ( $entity->model->author_id ?? 0 ) : 0,
+            'author'         => null !== $entity->model ? (int) ($entity->model->author_id ?? 0) : 0,
             'modified'       => null !== $entity->model
-                ? optional( $entity->model->updated_at )->toIso8601String()
+                ? optional($entity->model->updated_at)->toIso8601String()
                 : null,
         ];
 
-        if ( null !== $entity->area ) {
+        if (null !== $entity->area) {
             $payload['type'] = 'wp_template_part';
             $payload['area'] = $entity->area;
         }
@@ -80,8 +80,8 @@ final class TemplateResource
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function collection( array $entities ): array
+    public static function collection(array $entities): array
     {
-        return array_map( static fn ( ResolvedEntity $e ) => self::toArray( $e ), $entities );
+        return array_map(static fn (ResolvedEntity $e) => self::toArray($e), $entities);
     }
 }

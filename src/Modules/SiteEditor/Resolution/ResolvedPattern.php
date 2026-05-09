@@ -16,7 +16,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
@@ -30,17 +30,16 @@ final class ResolvedPattern
     /**
      * @since 1.2.0
      *
-     * @param  string  $slug          Storage-form slug. Theme patterns use the raw slug
-     *                                (`my-pattern`); user patterns carry the `user/`
-     *                                prefix per plan 14 §5.6.
+     * @param  string  $slug  Storage-form slug. Theme patterns use the raw slug
+     *                        (`my-pattern`); user patterns carry the `user/`
+     *                        prefix per plan 14 §5.6.
      * @param  string  $userFacingSlug  Slug as shown to clients (no `user/` prefix).
-     * @param  string|null  $theme     Active theme slug; null for user patterns.
-     * @param  string  $title         Display title.
-     * @param  string|null  $description
+     * @param  string|null  $theme  Active theme slug; null for user patterns.
+     * @param  string  $title  Display title.
      * @param  'theme'|'user'  $source
-     * @param  bool  $synced          True for synced (live-edited) user patterns;
-     *                                always false for theme patterns.
-     * @param  string  $rawContent    Serialized block markup string.
+     * @param  bool  $synced  True for synced (live-edited) user patterns;
+     *                        always false for theme patterns.
+     * @param  string  $rawContent  Serialized block markup string.
      * @param  array<int, array<string, mixed>>  $blocks  Parsed block tree (DB rows).
      * @param  array<int, string>  $categories  Pattern category slugs.
      * @param  array<int, string>  $blockTypes  WP `blockTypes` hint for the inserter.
@@ -59,8 +58,7 @@ final class ResolvedPattern
         public readonly array $categories,
         public readonly array $blockTypes,
         public readonly ?BlockPattern $model,
-    ) {
-    }
+    ) {}
 
     /**
      * The integer ID of the backing DB row, or 0 for theme patterns.

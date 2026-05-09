@@ -16,7 +16,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -108,7 +108,7 @@ class BlockPattern extends Model
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
+        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
     }
 
     /**
@@ -122,7 +122,7 @@ class BlockPattern extends Model
      */
     public function userFacingSlug(): string
     {
-        return self::stripUserPrefix( $this->slug );
+        return self::stripUserPrefix($this->slug);
     }
 
     /**
@@ -131,11 +131,11 @@ class BlockPattern extends Model
      *
      * @since 1.2.0
      */
-    public static function withUserPrefix( string $slug ): string
+    public static function withUserPrefix(string $slug): string
     {
-        return str_starts_with( $slug, self::USER_SLUG_PREFIX )
+        return str_starts_with($slug, self::USER_SLUG_PREFIX)
             ? $slug
-            : self::USER_SLUG_PREFIX . $slug;
+            : self::USER_SLUG_PREFIX.$slug;
     }
 
     /**
@@ -144,10 +144,10 @@ class BlockPattern extends Model
      *
      * @since 1.2.0
      */
-    public static function stripUserPrefix( string $slug ): string
+    public static function stripUserPrefix(string $slug): string
     {
-        return str_starts_with( $slug, self::USER_SLUG_PREFIX )
-            ? substr( $slug, strlen( self::USER_SLUG_PREFIX ) )
+        return str_starts_with($slug, self::USER_SLUG_PREFIX)
+            ? substr($slug, strlen(self::USER_SLUG_PREFIX))
             : $slug;
     }
 
@@ -161,12 +161,12 @@ class BlockPattern extends Model
      *
      * @since 1.2.0
      */
-    public function setSlugAttribute( string $value ): void
+    public function setSlugAttribute(string $value): void
     {
         $source = $this->attributes['source'] ?? self::SOURCE_USER;
 
         $this->attributes['slug'] = self::SOURCE_USER === $source
-            ? self::withUserPrefix( $value )
+            ? self::withUserPrefix($value)
             : $value;
     }
 

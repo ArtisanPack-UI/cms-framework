@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Service provider for the Admin module.
@@ -30,8 +30,8 @@ class AdminServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton( AdminMenuManager::class, fn () => new AdminMenuManager );
-        $this->app->singleton( AdminPageManager::class, fn () => new AdminPageManager );
+        $this->app->singleton(AdminMenuManager::class, fn () => new AdminMenuManager);
+        $this->app->singleton(AdminPageManager::class, fn () => new AdminPageManager);
     }
 
     /**
@@ -39,11 +39,11 @@ class AdminServiceProvider extends ServiceProvider
      *
      * @since 1.0.0
      */
-    public function boot( Router $router ): void
+    public function boot(Router $router): void
     {
-        $router->aliasMiddleware( 'admin.can', CheckAdminCapability::class );
-        $this->app->booted( function (): void {
-            app( AdminPageManager::class )->registerRoutes();
-        } );
+        $router->aliasMiddleware('admin.can', CheckAdminCapability::class);
+        $this->app->booted(function (): void {
+            app(AdminPageManager::class)->registerRoutes();
+        });
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Notification API Resource
@@ -29,16 +29,16 @@ class NotificationResource extends JsonResource
      *
      * @return array<string, mixed>
      */
-    public function toArray( Request $request ): array
+    public function toArray(Request $request): array
     {
-        $pivotData = $this->whenPivotLoaded( 'notification_user', function () {
+        $pivotData = $this->whenPivotLoaded('notification_user', function () {
             return [
                 'is_read'      => (bool) $this->pivot->is_read,
                 'read_at'      => $this->pivot->read_at,
                 'is_dismissed' => (bool) $this->pivot->is_dismissed,
                 'dismissed_at' => $this->pivot->dismissed_at,
             ];
-        } );
+        });
 
         return [
             'id'   => $this->id,
@@ -55,7 +55,7 @@ class NotificationResource extends JsonResource
             'created_at'       => $this->created_at->toISOString(),
             'created_at_human' => $this->created_at->diffForHumans(),
             'updated_at'       => $this->updated_at->toISOString(),
-            ...( is_array( $pivotData ) ? ['user_data' => $pivotData] : [] ),
+            ...(is_array($pivotData) ? ['user_data' => $pivotData] : []),
         ];
     }
 }

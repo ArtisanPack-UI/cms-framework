@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 /**
  * Role Controller for the CMS Framework Users Module.
@@ -31,7 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group( 'Roles', weight: 11 )]
+#[Group('Roles', weight: 11)]
 class RoleController extends Controller
 {
     use AuthorizesRequests;
@@ -65,13 +65,13 @@ class RoleController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of role resources.
      */
-    public function index( Request $request ): AnonymousResourceCollection
+    public function index(Request $request): AnonymousResourceCollection
     {
-        $this->authorize( 'viewAny', Role::class );
+        $this->authorize('viewAny', Role::class);
 
-        $roles = Role::with( $this->getRequestedIncludes( $request ) )->paginate( 15 );
+        $roles = Role::with($this->getRequestedIncludes($request))->paginate(15);
 
-        return RoleResource::collection( $roles );
+        return RoleResource::collection($roles);
     }
 
     /**
@@ -86,19 +86,19 @@ class RoleController extends Controller
      *
      * @return RoleResource The created role resource with loaded permissions.
      */
-    public function store( Request $request ): JsonResponse
+    public function store(Request $request): JsonResponse
     {
-        $this->authorize( 'create', Role::class );
+        $this->authorize('create', Role::class);
 
-        $validated = $request->validate( [
+        $validated = $request->validate([
             'name' => 'required|string|max:255',
             'slug' => 'required|string|max:255|unique:roles',
-        ] );
+        ]);
 
-        $role = Role::create( $validated );
-        $role->load( $this->getRequestedIncludes( $request ) );
+        $role = Role::create($validated);
+        $role->load($this->getRequestedIncludes($request));
 
-        return (new RoleResource( $role ))->response()->setStatusCode( 201 );
+        return (new RoleResource($role))->response()->setStatusCode(201);
     }
 
     /**
@@ -113,14 +113,14 @@ class RoleController extends Controller
      *
      * @return RoleResource The role resource with loaded permissions.
      */
-    public function show( Request $request, string|int $id ): RoleResource
+    public function show(Request $request, string|int $id): RoleResource
     {
-        $role = Role::findOrFail( $id );
-        $this->authorize( 'view', $role );
+        $role = Role::findOrFail($id);
+        $this->authorize('view', $role);
 
-        $role->load( $this->getRequestedIncludes( $request ) );
+        $role->load($this->getRequestedIncludes($request));
 
-        return new RoleResource( $role );
+        return new RoleResource($role);
     }
 
     /**
@@ -136,20 +136,20 @@ class RoleController extends Controller
      *
      * @return RoleResource The updated role resource with loaded permissions.
      */
-    public function update( Request $request, string|int $id ): RoleResource
+    public function update(Request $request, string|int $id): RoleResource
     {
-        $role = Role::findOrFail( $id );
-        $this->authorize( 'update', $role );
+        $role = Role::findOrFail($id);
+        $this->authorize('update', $role);
 
-        $validated = $request->validate( [
+        $validated = $request->validate([
             'name' => 'sometimes|required|string|max:255',
-            'slug' => 'sometimes|required|string|max:255|unique:roles,slug,' . $role->id,
-        ] );
+            'slug' => 'sometimes|required|string|max:255|unique:roles,slug,'.$role->id,
+        ]);
 
-        $role->update( $validated );
-        $role->load( $this->getRequestedIncludes( $request ) );
+        $role->update($validated);
+        $role->load($this->getRequestedIncludes($request));
 
-        return new RoleResource( $role );
+        return new RoleResource($role);
     }
 
     /**
@@ -164,13 +164,13 @@ class RoleController extends Controller
      *
      * @return JsonResponse A JSON response with 204 status code.
      */
-    public function destroy( string|int $id ): JsonResponse
+    public function destroy(string|int $id): JsonResponse
     {
-        $role = Role::findOrFail( $id );
-        $this->authorize( 'delete', $role );
+        $role = Role::findOrFail($id);
+        $this->authorize('delete', $role);
 
         $role->delete();
 
-        return response()->json( [], 204 );
+        return response()->json([], 204);
     }
 }

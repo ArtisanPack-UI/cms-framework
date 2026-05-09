@@ -1,25 +1,27 @@
 <?php
 
-test( 'example unit test', function (): void {
-    expect( true )->toBe( true );
-} );
+declare(strict_types=1);
 
-test( 'basic math operations', function (): void {
-    expect( 1 + 1 )->toBe( 2 );
-    expect( 5 * 3 )->toBe( 15 );
-    expect( 10 / 2 )->toBe( 5 );
-} );
+test('example unit test', function (): void {
+    expect(true)->toBe(true);
+});
 
-test( 'string operations', function (): void {
-    expect( 'hello world' )->toContain( 'world' );
-    expect( 'Laravel' )->toStartWith( 'L' );
-    expect( 'Framework' )->toEndWith( 'work' );
-} );
+test('basic math operations', function (): void {
+    expect(1 + 1)->toBe(2);
+    expect(5 * 3)->toBe(15);
+    expect(10 / 2)->toBe(5);
+});
 
-test( 'array operations', function (): void {
+test('string operations', function (): void {
+    expect('hello world')->toContain('world');
+    expect('Laravel')->toStartWith('L');
+    expect('Framework')->toEndWith('work');
+});
+
+test('array operations', function (): void {
     $array = [1, 2, 3, 4, 5];
 
-    expect( $array )->toHaveCount( 5 );
-    expect( $array )->toContain( 3 );
-    expect( $array )->not()->toContain( 6 );
-} );
+    expect($array)->toHaveCount(5);
+    expect($array)->toContain(3);
+    expect($array)->not()->toContain(6);
+});

@@ -9,7 +9,7 @@
  * @since 1.1.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums;
 

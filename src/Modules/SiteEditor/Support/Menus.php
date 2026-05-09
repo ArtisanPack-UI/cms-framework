@@ -12,7 +12,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 
@@ -39,34 +39,34 @@ class Menus
      */
     public static function locations(): array
     {
-        $appLocations = self::normalizeStringMap( config( 'cms.menus.locations', [] ) );
+        $appLocations = self::normalizeStringMap(config('cms.menus.locations', []));
 
         $theme = self::activeThemeManifest();
 
-        if ( null === $theme ) {
+        if (null === $theme) {
             return $appLocations;
         }
 
-        $themeLocations = self::normalizeStringMap( $theme['menus']['locations'] ?? [] );
+        $themeLocations = self::normalizeStringMap($theme['menus']['locations'] ?? []);
 
-        if ( empty( $themeLocations ) ) {
+        if (empty($themeLocations)) {
             return $appLocations;
         }
 
-        foreach ( array_keys( $themeLocations ) as $key ) {
-            if ( array_key_exists( $key, $appLocations ) && $appLocations[ $key ] !== $themeLocations[ $key ] ) {
+        foreach (array_keys($themeLocations) as $key) {
+            if (array_key_exists($key, $appLocations) && $appLocations[$key] !== $themeLocations[$key]) {
                 logger()->warning(
                     'Theme `theme.json` menus.locations key overrides app config(\'cms.menus.locations\').',
                     [
                         'location'   => $key,
-                        'app_label'  => $appLocations[ $key ],
+                        'app_label'  => $appLocations[$key],
                         'theme_slug' => $theme['slug'] ?? null,
                     ],
                 );
             }
         }
 
-        return array_merge( $appLocations, $themeLocations );
+        return array_merge($appLocations, $themeLocations);
     }
 
     /**
@@ -78,17 +78,17 @@ class Menus
      *
      * @return MenuLocationAssignment|null Null when there is no active theme.
      */
-    public static function assign( string $location, int $menuId ): ?MenuLocationAssignment
+    public static function assign(string $location, int $menuId): ?MenuLocationAssignment
     {
         $theme = self::activeThemeSlug();
 
-        if ( null === $theme ) {
+        if (null === $theme) {
             return null;
         }
 
         return MenuLocationAssignment::query()->updateOrCreate(
-            [ 'theme' => $theme, 'location' => $location ],
-            [ 'menu_id' => $menuId ],
+            ['theme' => $theme, 'location' => $location],
+            ['menu_id' => $menuId],
         );
     }
 
@@ -98,17 +98,17 @@ class Menus
      *
      * @since 1.2.0
      */
-    public static function unassign( string $location ): bool
+    public static function unassign(string $location): bool
     {
         $theme = self::activeThemeSlug();
 
-        if ( null === $theme ) {
+        if (null === $theme) {
             return false;
         }
 
         return MenuLocationAssignment::query()
-            ->where( 'theme', $theme )
-            ->where( 'location', $location )
+            ->where('theme', $theme)
+            ->where('location', $location)
             ->delete() > 0;
     }
 
@@ -118,17 +118,17 @@ class Menus
      *
      * @since 1.2.0
      */
-    public static function assigned( string $location ): ?Menu
+    public static function assigned(string $location): ?Menu
     {
         $theme = self::activeThemeSlug();
 
-        if ( null === $theme ) {
+        if (null === $theme) {
             return null;
         }
 
         $assignment = MenuLocationAssignment::query()
-            ->where( 'theme', $theme )
-            ->where( 'location', $location )
+            ->where('theme', $theme)
+            ->where('location', $location)
             ->first();
 
         return null !== $assignment ? $assignment->menu : null;
@@ -141,7 +141,7 @@ class Menus
     {
         $theme = self::activeThemeManifest();
 
-        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty($theme['slug']) ? (string) $theme['slug'] : null;
     }
 
     /**
@@ -151,7 +151,7 @@ class Menus
      */
     protected static function activeThemeManifest(): ?array
     {
-        return app( ThemeManager::class )->getActiveTheme();
+        return app(ThemeManager::class)->getActiveTheme();
     }
 
     /**
@@ -164,23 +164,23 @@ class Menus
      *
      * @return array<string, string>
      */
-    protected static function normalizeStringMap( mixed $input ): array
+    protected static function normalizeStringMap(mixed $input): array
     {
-        if ( ! is_array( $input ) ) {
+        if (! is_array($input)) {
             return [];
         }
 
         $normalized = [];
 
-        foreach ( $input as $key => $value ) {
-            if ( ! is_string( $key ) || '' === $key ) {
+        foreach ($input as $key => $value) {
+            if (! is_string($key) || '' === $key) {
                 continue;
             }
 
-            if ( is_string( $value ) ) {
-                $normalized[ $key ] = $value;
-            } elseif ( is_scalar( $value ) ) {
-                $normalized[ $key ] = (string) $value;
+            if (is_string($value)) {
+                $normalized[$key] = $value;
+            } elseif (is_scalar($value)) {
+                $normalized[$key] = (string) $value;
             }
         }
 

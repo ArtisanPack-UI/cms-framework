@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Taxonomy Model
@@ -62,7 +62,7 @@ class Taxonomy extends Model
      */
     public function contentType(): BelongsTo
     {
-        return $this->belongsTo( ContentType::class, 'content_type_slug', 'slug' );
+        return $this->belongsTo(ContentType::class, 'content_type_slug', 'slug');
     }
 
     /**
@@ -88,26 +88,26 @@ class Taxonomy extends Model
     public function getTermModel(): ?string
     {
         // Check if metadata has a custom model class
-        if ( isset( $this->metadata['model_class'] ) ) {
+        if (isset($this->metadata['model_class'])) {
             return $this->metadata['model_class'];
         }
 
         // Try to derive from content type and taxonomy slug
         $contentType = $this->contentType;
-        if ( ! $contentType ) {
+        if (! $contentType) {
             return null;
         }
 
         // Get the model namespace from content type model class
         $modelClass = $contentType->model_class;
-        $namespace  = substr( $modelClass, 0, strrpos( $modelClass, '\\' ) );
+        $namespace  = substr($modelClass, 0, strrpos($modelClass, '\\'));
 
         // Convert taxonomy slug to model class name
         // Example: "post_categories" -> "PostCategory"
-        $modelName = str_replace( '_', '', ucwords( $this->slug, '_' ) );
-        $modelName = rtrim( $modelName, 's' ); // Remove trailing 's' if present
+        $modelName = str_replace('_', '', ucwords($this->slug, '_'));
+        $modelName = rtrim($modelName, 's'); // Remove trailing 's' if present
 
-        return $namespace . '\\' . $modelName;
+        return $namespace.'\\'.$modelName;
     }
 
     /**

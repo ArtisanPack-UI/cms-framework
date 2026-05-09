@@ -16,7 +16,7 @@
  * @since      1.2.0
  */
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
@@ -34,7 +34,7 @@ use Illuminate\Routing\Controller;
 /**
  * @since 1.2.0
  */
-#[Group( 'Site Editor / Menu Items', weight: 61 )]
+#[Group('Site Editor / Menu Items', weight: 61)]
 class MenuItemsController extends Controller
 {
     /**
@@ -42,8 +42,7 @@ class MenuItemsController extends Controller
      */
     public function __construct(
         private ThemeManager $themeManager,
-    ) {
-    }
+    ) {}
 
     /**
      * GET /api/v1/menu-items?menus={id} — list items for a menu, ordered
@@ -55,32 +54,32 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    public function index( Request $request ): JsonResponse
+    public function index(Request $request): JsonResponse
     {
         $query = $this->themeScopedQuery();
 
-        if ( null === $query ) {
-            return response()->json( [] );
+        if (null === $query) {
+            return response()->json([]);
         }
 
-        $query->orderByRaw( 'COALESCE(parent_id, 0)' )
-            ->orderBy( 'position' )
-            ->orderBy( 'id' );
+        $query->orderByRaw('COALESCE(parent_id, 0)')
+            ->orderBy('position')
+            ->orderBy('id');
 
-        $menusFilter = $request->query( 'menus' );
+        $menusFilter = $request->query('menus');
 
-        if ( null !== $menusFilter ) {
-            if ( ! self::isPositiveIntegerString( $menusFilter ) ) {
-                return response()->json( [
+        if (null !== $menusFilter) {
+            if (! self::isPositiveIntegerString($menusFilter)) {
+                return response()->json([
                     'message' => 'Invalid menus filter.',
-                    'errors'  => [ 'menus' => [ 'menus must be a positive integer menu id.' ] ],
-                ], 422 );
+                    'errors'  => ['menus' => ['menus must be a positive integer menu id.']],
+                ], 422);
             }
 
-            $query->where( 'menu_id', (int) $menusFilter );
+            $query->where('menu_id', (int) $menusFilter);
         }
 
-        return response()->json( MenuItemResource::collection( $query->get() ) );
+        return response()->json(MenuItemResource::collection($query->get()));
     }
 
     /**
@@ -88,15 +87,15 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    public function show( int $id ): JsonResponse
+    public function show(int $id): JsonResponse
     {
-        $item = $this->findItemForActiveTheme( $id );
+        $item = $this->findItemForActiveTheme($id);
 
-        if ( null === $item ) {
-            return response()->json( [ 'message' => 'Menu item not found.' ], 404 );
+        if (null === $item) {
+            return response()->json(['message' => 'Menu item not found.'], 404);
         }
 
-        return response()->json( MenuItemResource::toArray( $item ) );
+        return response()->json(MenuItemResource::toArray($item));
     }
 
     /**
@@ -106,26 +105,26 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    public function store( MenuItemRequest $request ): JsonResponse
+    public function store(MenuItemRequest $request): JsonResponse
     {
         $theme = $this->activeThemeSlug();
 
-        if ( null === $theme ) {
-            return response()->json( [ 'message' => 'No active theme.' ], 409 );
+        if (null === $theme) {
+            return response()->json(['message' => 'No active theme.'], 409);
         }
 
         $validated = $request->validated();
         $menu      = Menu::query()
-            ->where( 'theme', $theme )
-            ->find( (int) $validated['menus'] );
+            ->where('theme', $theme)
+            ->find((int) $validated['menus']);
 
-        if ( null === $menu ) {
-            return response()->json( [ 'message' => 'Menu not found.' ], 404 );
+        if (null === $menu) {
+            return response()->json(['message' => 'Menu not found.'], 404);
         }
 
-        $item = MenuItem::create( $this->mapPayload( $validated, $menu->id ) );
+        $item = MenuItem::create($this->mapPayload($validated, $menu->id));
 
-        return response()->json( MenuItemResource::toArray( $item ), 201 );
+        return response()->json(MenuItemResource::toArray($item), 201);
     }
 
     /**
@@ -133,19 +132,19 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    public function update( MenuItemRequest $request, int $id ): JsonResponse
+    public function update(MenuItemRequest $request, int $id): JsonResponse
     {
-        $item = $this->findItemForActiveTheme( $id );
+        $item = $this->findItemForActiveTheme($id);
 
-        if ( null === $item ) {
-            return response()->json( [ 'message' => 'Menu item not found.' ], 404 );
+        if (null === $item) {
+            return response()->json(['message' => 'Menu item not found.'], 404);
         }
 
         $validated = $request->validated();
 
-        $item->update( $this->mapPayload( $validated, (int) $item->menu_id, $item ) );
+        $item->update($this->mapPayload($validated, (int) $item->menu_id, $item));
 
-        return response()->json( MenuItemResource::toArray( $item->refresh() ) );
+        return response()->json(MenuItemResource::toArray($item->refresh()));
     }
 
     /**
@@ -154,17 +153,17 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    public function destroy( int $id ): JsonResponse
+    public function destroy(int $id): JsonResponse
     {
-        $item = $this->findItemForActiveTheme( $id );
+        $item = $this->findItemForActiveTheme($id);
 
-        if ( null === $item ) {
-            return response()->json( [ 'message' => 'Menu item not found.' ], 404 );
+        if (null === $item) {
+            return response()->json(['message' => 'Menu item not found.'], 404);
         }
 
         $item->delete();
 
-        return response()->json( null, 204 );
+        return response()->json(null, 204);
     }
 
     /**
@@ -178,13 +177,13 @@ class MenuItemsController extends Controller
     {
         $theme = $this->activeThemeSlug();
 
-        if ( null === $theme ) {
+        if (null === $theme) {
             return null;
         }
 
-        return MenuItem::query()->whereHas( 'menu', static function ( Builder $menu ) use ( $theme ): void {
-            $menu->where( 'theme', $theme );
-        } );
+        return MenuItem::query()->whereHas('menu', static function (Builder $menu) use ($theme): void {
+            $menu->where('theme', $theme);
+        });
     }
 
     /**
@@ -193,15 +192,15 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    protected function findItemForActiveTheme( int $id ): ?MenuItem
+    protected function findItemForActiveTheme(int $id): ?MenuItem
     {
         $query = $this->themeScopedQuery();
 
-        if ( null === $query ) {
+        if (null === $query) {
             return null;
         }
 
-        return $query->find( $id );
+        return $query->find($id);
     }
 
     /**
@@ -211,7 +210,7 @@ class MenuItemsController extends Controller
     {
         $theme = $this->themeManager->getActiveTheme();
 
-        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty($theme['slug']) ? (string) $theme['slug'] : null;
     }
 
     /**
@@ -226,11 +225,11 @@ class MenuItemsController extends Controller
      *
      * @since 1.2.0
      */
-    protected static function isPositiveIntegerString( mixed $value ): bool
+    protected static function isPositiveIntegerString(mixed $value): bool
     {
-        return is_string( $value )
+        return is_string($value)
             && '' !== $value
-            && ctype_digit( $value )
+            && ctype_digit($value)
             && '0' !== $value[0];
     }
 
@@ -247,9 +246,9 @@ class MenuItemsController extends Controller
      *
      * @return array<string, mixed>
      */
-    protected function mapPayload( array $validated, int $menuId, ?MenuItem $existing = null ): array
+    protected function mapPayload(array $validated, int $menuId, ?MenuItem $existing = null): array
     {
-        $attributes = [ 'menu_id' => $menuId ];
+        $attributes = ['menu_id' => $menuId];
 
         $map = [
             'title'       => 'label',
@@ -266,21 +265,21 @@ class MenuItemsController extends Controller
             'xfn'         => 'rel',
         ];
 
-        foreach ( $map as $payloadKey => $modelKey ) {
-            if ( array_key_exists( $payloadKey, $validated ) ) {
-                $attributes[ $modelKey ] = $validated[ $payloadKey ];
+        foreach ($map as $payloadKey => $modelKey) {
+            if (array_key_exists($payloadKey, $validated)) {
+                $attributes[$modelKey] = $validated[$payloadKey];
             }
         }
 
-        if ( null === $existing && ! array_key_exists( 'position', $attributes ) ) {
+        if (null === $existing && ! array_key_exists('position', $attributes)) {
             $attributes['position'] = 0;
         }
 
-        if ( null === $existing && ! array_key_exists( 'target', $attributes ) ) {
+        if (null === $existing && ! array_key_exists('target', $attributes)) {
             $attributes['target'] = '_self';
         }
 
-        if ( null === $existing && ! array_key_exists( 'type', $attributes ) ) {
+        if (null === $existing && ! array_key_exists('type', $attributes)) {
             $attributes['type'] = MenuItem::TYPE_LINK;
         }
 

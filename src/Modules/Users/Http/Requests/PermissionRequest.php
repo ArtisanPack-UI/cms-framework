@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Permission Request for the CMS Framework Users Module.
@@ -48,21 +48,21 @@ class PermissionRequest extends FormRequest
      */
     public function rules(): array
     {
-        $permissionId = $this->route( 'permission' ) ?? $this->route( 'id' );
+        $permissionId = $this->route('permission') ?? $this->route('id');
 
         return [
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                Rule::unique( 'permissions', 'name' )->ignore( $permissionId ),
+                Rule::unique('permissions', 'name')->ignore($permissionId),
             ],
             'slug' => [
                 'required',
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:\.[a-z0-9]+)*(?:-[a-z0-9]+)*$/',
-                Rule::unique( 'permissions', 'slug' )->ignore( $permissionId ),
+                Rule::unique('permissions', 'slug')->ignore($permissionId),
             ],
         ];
     }

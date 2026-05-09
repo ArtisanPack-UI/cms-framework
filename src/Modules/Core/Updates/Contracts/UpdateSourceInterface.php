@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts;
 
@@ -25,7 +25,7 @@ interface UpdateSourceInterface
      *
      * @return bool True if this source supports the URL
      */
-    public function supports( string $url ): bool;
+    public function supports(string $url): bool;
 
     /**
      * Check for available updates.
@@ -49,7 +49,7 @@ interface UpdateSourceInterface
      *
      * @return string Path to downloaded ZIP file
      */
-    public function downloadUpdate( string $version ): string;
+    public function downloadUpdate(string $version): string;
 
     /**
      * Set authentication credentials.
@@ -58,7 +58,7 @@ interface UpdateSourceInterface
      *
      * @param  array|string  $credentials  Token string or array of credentials
      */
-    public function setAuthentication( string|array $credentials ): void;
+    public function setAuthentication(string|array $credentials): void;
 
     /**
      * Get the source name (for logging/debugging).

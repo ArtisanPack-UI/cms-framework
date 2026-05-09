@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare(strict_types=1);
 
 /**
  * Seeder for default permissions.
@@ -24,124 +24,130 @@ use Illuminate\Database\Seeder;
  */
 class PermissionsTableSeeder extends Seeder
 {
-	/**
-	 * Run the database seeds.
-	 *
-	 * Creates default permissions for content management, user management,
-	 * settings, and system administration.
-	 *
-	 * @return void
-	 *
-	 * @since 1.0.0
-	 */
-	public function run(): void
-	{
-		$permissions = [
-			// Content permissions
-			[
-				'name'        => 'Manage Content',
-				'slug'        => 'manage-content',
-				'description' => 'Create, edit, and delete content',
-			],
-			[
-				'name'        => 'Publish Content',
-				'slug'        => 'publish-content',
-				'description' => 'Publish and unpublish content',
-			],
-			[
-				'name'        => 'Delete Content',
-				'slug'        => 'delete-content',
-				'description' => 'Delete content permanently',
-			],
+    /**
+     * Run the database seeds.
+     *
+     * Creates default permissions for content management, user management,
+     * settings, and system administration.
+     *
+     *
+     * @since 1.0.0
+     */
+    public function run(): void
+    {
+        $permissions = [
+            // Content permissions
+            [
+                'name'        => 'Manage Content',
+                'slug'        => 'manage-content',
+                'description' => 'Create, edit, and delete content',
+            ],
+            [
+                'name'        => 'Publish Content',
+                'slug'        => 'publish-content',
+                'description' => 'Publish and unpublish content',
+            ],
+            [
+                'name'        => 'Delete Content',
+                'slug'        => 'delete-content',
+                'description' => 'Delete content permanently',
+            ],
 
-			// User permissions
-			[
-				'name'        => 'Manage Users',
-				'slug'        => 'manage-users',
-				'description' => 'Create, edit, and delete users',
-			],
-			[
-				'name'        => 'Manage Roles',
-				'slug'        => 'manage-roles',
-				'description' => 'Create, edit, and delete roles',
-			],
-			[
-				'name'        => 'Manage Permissions',
-				'slug'        => 'manage-permissions',
-				'description' => 'Assign permissions to roles',
-			],
+            // User permissions
+            [
+                'name'        => 'Manage Users',
+                'slug'        => 'manage-users',
+                'description' => 'Create, edit, and delete users',
+            ],
+            [
+                'name'        => 'Manage Roles',
+                'slug'        => 'manage-roles',
+                'description' => 'Create, edit, and delete roles',
+            ],
+            [
+                'name'        => 'Manage Permissions',
+                'slug'        => 'manage-permissions',
+                'description' => 'Assign permissions to roles',
+            ],
 
-			// Settings permissions
-			[
-				'name'        => 'Manage Settings',
-				'slug'        => 'manage-settings',
-				'description' => 'Modify system settings',
-			],
+            // Settings permissions
+            [
+                'name'        => 'Manage Settings',
+                'slug'        => 'manage-settings',
+                'description' => 'Modify system settings',
+            ],
 
-			// Plugin & Theme permissions
-			[
-				'name'        => 'Manage Plugins',
-				'slug'        => 'manage-plugins',
-				'description' => 'Install, activate, and configure plugins',
-			],
-			[
-				'name'        => 'Manage Themes',
-				'slug'        => 'manage-themes',
-				'description' => 'Install and activate themes',
-			],
+            // Plugin & Theme permissions
+            [
+                'name'        => 'Manage Plugins',
+                'slug'        => 'manage-plugins',
+                'description' => 'Install, activate, and configure plugins',
+            ],
+            [
+                'name'        => 'Manage Themes',
+                'slug'        => 'manage-themes',
+                'description' => 'Install and activate themes',
+            ],
 
-			// System permissions
-			[
-				'name'        => 'Access Admin',
-				'slug'        => 'access-admin',
-				'description' => 'Access the admin dashboard',
-			],
-		];
+            // System permissions
+            [
+                'name'        => 'Access Admin',
+                'slug'        => 'access-admin',
+                'description' => 'Access the admin dashboard',
+            ],
+        ];
 
-		foreach ( $permissions as $permission ) {
-			Permission::firstOrCreate(
-				['slug' => $permission['slug']],
-				$permission,
-			);
-		}
+        foreach ($permissions as $permission) {
+            Permission::firstOrCreate(
+                ['slug' => $permission['slug']],
+                $permission,
+            );
+        }
 
-		// Assign permissions to roles
-		$this->assignPermissionsToRoles();
-	}
+        // Assign permissions to roles
+        $this->assignPermissionsToRoles();
+    }
 
-	/**
-	 * Assign permissions to default roles.
-	 *
-	 * @return void
-	 *
-	 * @since 1.0.0
-	 */
-	protected function assignPermissionsToRoles(): void
-	{
-		// Admin gets all permissions
-		$admin = Role::where( 'slug', 'admin' )->first();
-		if ( $admin ) {
-			$admin->permissions()->sync( Permission::all() );
-		}
+    /**
+     * Assign permissions to default roles.
+     *
+     *
+     * @since 1.0.0
+     */
+    protected function assignPermissionsToRoles(): void
+    {
+        // Use syncWithoutDetaching everywhere so re-running this opt-in
+        // seeder against an environment that's already added consumer
+        // permissions doesn't strip them off the framework's default
+        // roles. The seeder is now non-destructive: it adds the default
+        // assignments without removing anything an operator added.
 
-		// Editor gets content and access permissions
-		$editor = Role::where( 'slug', 'editor' )->first();
-		if ( $editor ) {
-			$editor->permissions()->sync(
-				Permission::whereIn( 'slug', [
-					'manage-content',
-					'publish-content',
-					'access-admin',
-				] )->get(),
-			);
-		}
+        // Admin gets all permissions.
+        $admin = Role::where('slug', 'admin')->first();
+        if ($admin) {
+            $admin->permissions()->syncWithoutDetaching(
+                Permission::pluck('id')->all(),
+            );
+        }
 
-		// User gets only access permission
-		$user = Role::where( 'slug', 'user' )->first();
-		if ( $user ) {
-			$user->permissions()->sync(
-				Permission::where( 'slug', 'access-admin' )->get(),
-			);
-		}
-	}
+        // Editor gets content and access permissions.
+        $editor = Role::where('slug', 'editor')->first();
+        if ($editor) {
+            $editor->permissions()->syncWithoutDetaching(
+                Permission::whereIn('slug', [
+                    'manage-content',
+                    'publish-content',
+                    'access-admin',
+                ])->pluck('id')->all(),
+            );
+        }
+
+        // User gets only access permission.
+        $user = Role::where('slug', 'user')->first();
+        if ($user) {
+            $user->permissions()->syncWithoutDetaching(
+                Permission::where('slug', 'access-admin')->pluck('id')->all(),
+            );
+        }
+    }
 }
