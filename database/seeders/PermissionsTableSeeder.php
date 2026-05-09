@@ -116,29 +116,37 @@ class PermissionsTableSeeder extends Seeder
      */
     protected function assignPermissionsToRoles(): void
     {
-        // Admin gets all permissions
+        // Use syncWithoutDetaching everywhere so re-running this opt-in
+        // seeder against an environment that's already added consumer
+        // permissions doesn't strip them off the framework's default
+        // roles. The seeder is now non-destructive: it adds the default
+        // assignments without removing anything an operator added.
+
+        // Admin gets all permissions.
         $admin = Role::where('slug', 'admin')->first();
         if ($admin) {
-            $admin->permissions()->sync(Permission::all());
+            $admin->permissions()->syncWithoutDetaching(
+                Permission::pluck('id')->all(),
+            );
         }
 
-        // Editor gets content and access permissions
+        // Editor gets content and access permissions.
         $editor = Role::where('slug', 'editor')->first();
         if ($editor) {
-            $editor->permissions()->sync(
+            $editor->permissions()->syncWithoutDetaching(
                 Permission::whereIn('slug', [
                     'manage-content',
                     'publish-content',
                     'access-admin',
-                ])->get(),
+                ])->pluck('id')->all(),
             );
         }
 
-        // User gets only access permission
+        // User gets only access permission.
         $user = Role::where('slug', 'user')->first();
         if ($user) {
-            $user->permissions()->sync(
-                Permission::where('slug', 'access-admin')->get(),
+            $user->permissions()->syncWithoutDetaching(
+                Permission::where('slug', 'access-admin')->pluck('id')->all(),
             );
         }
     }
