@@ -43,6 +43,21 @@ class GlobalStylesEmitter
     private const CACHE_TTL = 86400;
 
     /**
+     * Emitter-output schema version. Bumped whenever the structure of
+     * the CSS this emitter produces changes (new rule families, removed
+     * rules, reformatted selectors). The version is part of the cache
+     * key so a deploy with a bumped emitter automatically invalidates
+     * every cached entry — no manual `php artisan cache:clear` needed
+     * to pick up the new output. Bump on any meaningful emission diff.
+     *
+     * v2: emit `.has-{slug}-color` / `-background-color` / `-border-color`
+     * / `-font-size` / `-gradient-background` preset class bindings
+     * (Keystone #53). Without these the picker swatch lights up but
+     * neither the canvas nor the front-end visually applies the color.
+     */
+    private const SCHEMA_VERSION = 'v2';
+
+    /**
      * @since 1.2.0
      */
     public function __construct(
@@ -106,7 +121,7 @@ class GlobalStylesEmitter
      */
     protected function cacheKey(ResolvedGlobalStyles $resolved): string
     {
-        return 'cms.global-styles.css.'.$resolved->theme.'.'.$resolved->contentHash();
+        return 'cms.global-styles.css.'.self::SCHEMA_VERSION.'.'.$resolved->theme.'.'.$resolved->contentHash();
     }
 
     /**
@@ -138,7 +153,100 @@ class GlobalStylesEmitter
             $blocks[] = $rule;
         }
 
+        // Preset class bindings — Gutenberg adds `has-{slug}-color`,
+        // `has-{slug}-background-color`, `has-{slug}-font-size` etc.
+        // when the author picks a preset from the palette / font-size
+        // picker. Without a CSS rule binding those classes to the
+        // matching `--wp--preset--*` custom property the choice never
+        // visually applies — the picker swatch lights up but neither
+        // the canvas nor the front-end shows the color change
+        // (Keystone #53).
+        foreach ($this->presetClassBindings($resolved->settings) as $rule) {
+            $blocks[] = $rule;
+        }
+
         return implode("\n\n", $blocks);
+    }
+
+    /**
+     * Emit `.has-{slug}-color`, `-background-color`, `-border-color`,
+     * `-font-size`, and `-gradient-background` rules that bind each
+     * preset slug to its matching `--wp--preset--*` custom property.
+     *
+     * `!important` mirrors WordPress core's emission so a preset
+     * selection always overrides cascading default styles, the way
+     * the upstream block editor and front-end already behave.
+     *
+     * @since 1.2.0
+     *
+     * @param  array<string, mixed>  $settings
+     *
+     * @return array<int, string>
+     */
+    protected function presetClassBindings(array $settings): array
+    {
+        $rules = [];
+
+        $palette = is_array($settings['color']['palette'] ?? null)
+            ? $settings['color']['palette']
+            : [];
+
+        foreach ($this->presetSlugs($palette) as $slug) {
+            $var = '--wp--preset--color--'.$slug;
+
+            $rules[] = '.has-'.$slug.'-color { color: var('.$var.') !important; }';
+            $rules[] = '.has-'.$slug.'-background-color { background-color: var('.$var.') !important; }';
+            $rules[] = '.has-'.$slug.'-border-color { border-color: var('.$var.') !important; }';
+        }
+
+        $fontSizes = is_array($settings['typography']['fontSizes'] ?? null)
+            ? $settings['typography']['fontSizes']
+            : [];
+
+        foreach ($this->presetSlugs($fontSizes) as $slug) {
+            $rules[] = '.has-'.$slug.'-font-size { font-size: var(--wp--preset--font-size--'.$slug.') !important; }';
+        }
+
+        $gradients = is_array($settings['color']['gradients'] ?? null)
+            ? $settings['color']['gradients']
+            : [];
+
+        foreach ($this->presetSlugs($gradients) as $slug) {
+            $rules[] = '.has-'.$slug.'-gradient-background { background: var(--wp--preset--gradient--'.$slug.') !important; }';
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Extract the kebab-cased slug list from a presets array, skipping
+     * malformed entries the same way {@see presetCustomProperties()} does.
+     *
+     * @since 1.2.0
+     *
+     * @param  array<int, mixed>  $items
+     *
+     * @return array<int, string>
+     */
+    protected function presetSlugs(array $items): array
+    {
+        $slugs = [];
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $slug = $item['slug'] ?? null;
+
+            if (! is_string($slug) || '' === $slug) {
+                continue;
+            }
+
+            $slugs[] = $this->kebab($slug);
+        }
+
+        return $slugs;
     }
 
     /**
