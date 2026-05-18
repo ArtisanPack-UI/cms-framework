@@ -191,7 +191,7 @@ class GlobalStylesEmitter
             ? $settings['color']['palette']
             : [];
 
-        foreach ($this->presetSlugs($palette) as $slug) {
+        foreach ($this->presetSlugs($palette, 'color') as $slug) {
             $var = '--wp--preset--color--'.$slug;
 
             $rules[] = '.has-'.$slug.'-color { color: var('.$var.') !important; }';
@@ -203,7 +203,7 @@ class GlobalStylesEmitter
             ? $settings['typography']['fontSizes']
             : [];
 
-        foreach ($this->presetSlugs($fontSizes) as $slug) {
+        foreach ($this->presetSlugs($fontSizes, 'size') as $slug) {
             $rules[] = '.has-'.$slug.'-font-size { font-size: var(--wp--preset--font-size--'.$slug.') !important; }';
         }
 
@@ -211,7 +211,7 @@ class GlobalStylesEmitter
             ? $settings['color']['gradients']
             : [];
 
-        foreach ($this->presetSlugs($gradients) as $slug) {
+        foreach ($this->presetSlugs($gradients, 'gradient') as $slug) {
             $rules[] = '.has-'.$slug.'-gradient-background { background: var(--wp--preset--gradient--'.$slug.') !important; }';
         }
 
@@ -220,15 +220,20 @@ class GlobalStylesEmitter
 
     /**
      * Extract the kebab-cased slug list from a presets array, skipping
-     * malformed entries the same way {@see presetCustomProperties()} does.
+     * malformed entries the same way {@see presetCustomProperties()} does
+     * — a slug alone isn't enough; the matching `$valueKey`
+     * (`color` / `size` / `gradient` / `fontFamily`) has to be a usable
+     * scalar too. Without the value guard a malformed entry would still
+     * emit a `.has-{slug}-*` rule pointing at an undeclared CSS var.
      *
      * @since 1.2.0
      *
      * @param  array<int, mixed>  $items
+     * @param  string             $valueKey  The required-non-empty value key per preset family.
      *
      * @return array<int, string>
      */
-    protected function presetSlugs(array $items): array
+    protected function presetSlugs(array $items, string $valueKey): array
     {
         $slugs = [];
 
@@ -237,9 +242,10 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            $slug = $item['slug'] ?? null;
+            $slug  = $item['slug'] ?? null;
+            $value = $item[$valueKey] ?? null;
 
-            if (! is_string($slug) || '' === $slug) {
+            if (! is_string($slug) || '' === $slug || ! is_scalar($value)) {
                 continue;
             }
 

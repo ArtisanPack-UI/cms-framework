@@ -222,6 +222,54 @@ describe('GlobalStylesEmitter::emit()', function (): void {
             ->toContain('.has-sunset-gradient-background { background: var(--wp--preset--gradient--sunset) !important; }');
     });
 
+    it('skips preset class bindings for malformed entries missing the value key (CodeRabbit follow-up on #53)', function (): void {
+        // A slug alone isn't enough — without a usable `color` / `size`
+        // / `gradient` we'd emit a `.has-{slug}-*` rule pointing at an
+        // undeclared CSS var. Match `presetCustomProperties()`'s
+        // existing malformed-entry filter so both code paths stay in
+        // lockstep.
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'good', 'color' => '#abcdef'],
+                        ['slug' => 'no-color'],
+                        ['slug' => 'null-color', 'color' => null],
+                        ['slug' => 'array-color', 'color' => ['#fff']],
+                    ],
+                    'gradients' => [
+                        ['slug' => 'good-gradient', 'gradient' => 'linear-gradient(...)'],
+                        ['slug' => 'no-gradient'],
+                    ],
+                ],
+                'typography' => [
+                    'fontSizes' => [
+                        ['slug' => 'good-size', 'size' => '14px'],
+                        ['slug' => 'no-size'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive('resolve')->andReturn($resolved);
+
+        $css = $this->emitter->emit();
+
+        // Valid entries still emit.
+        expect($css)
+            ->toContain('.has-good-color { color: var(--wp--preset--color--good) !important; }')
+            ->and($css)->toContain('.has-good-gradient-gradient-background')
+            ->and($css)->toContain('.has-good-size-font-size');
+
+        // Malformed entries skipped — no rules referencing undefined vars.
+        expect($css)
+            ->not->toContain('.has-no-color')
+            ->and($css)->not->toContain('.has-null-color')
+            ->and($css)->not->toContain('.has-array-color')
+            ->and($css)->not->toContain('.has-no-gradient')
+            ->and($css)->not->toContain('.has-no-size');
+    });
+
     it('skips preset class bindings when the palette / font-size / gradient list is empty (Keystone #53)', function (): void {
         $resolved = makeResolved();
 
