@@ -204,7 +204,9 @@ class TemplatePartResolver implements EntityResolver
     /**
      * Guess a template-part area from the slug for theme-file parts that
      * carry no metadata: e.g. `header`, `header-large` → `'header'`,
-     * `footer` → `'footer'`, anything else → `'general'`.
+     * `footer` → `'footer'`, anything else → `'uncategorized'`
+     * (WP core's catch-all label, used for the Create-overlay action
+     * on `core/navigation` — Keystone #55).
      *
      * @since 1.2.0
      */
@@ -216,6 +218,6 @@ class TemplatePartResolver implements EntityResolver
             }
         }
 
-        return 'general';
+        return 'uncategorized';
     }
 }
