@@ -35,7 +35,7 @@ final class ResolvedEntity
      * @param  string  $status  WP status (`'publish'` by default).
      * @param  bool  $hasThemeFile  True when a theme file backs this slug (regardless of whether a DB override exists).
      * @param  bool  $isCustom  True when the entity was authored in the admin with no theme-file backing.
-     * @param  string|null  $area  Template-part area (`'header' | 'footer' | 'sidebar' | 'uncategorized'`); null for templates.
+     * @param  string|null  $area  Template-part area (`'header' | 'footer' | 'sidebar' | 'uncategorized' | 'navigation-overlay'`); null for templates.
      * @param  Template|TemplatePart|null  $model  The DB row when `$source === 'db'`; null otherwise.
      */
     public function __construct(
