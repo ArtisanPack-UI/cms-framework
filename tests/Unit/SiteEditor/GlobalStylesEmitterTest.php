@@ -153,6 +153,135 @@ describe('GlobalStylesEmitter::emit()', function (): void {
         expect($css)->toContain('--wp--custom--spacing--gutter: 24px;')
             ->and($css)->toContain('--wp--custom--font-size--tiny: 10px;');
     });
+
+    it('emits `.has-{slug}-color` / `-background-color` / `-border-color` rules for each palette preset (Keystone #53)', function (): void {
+        // Without these class bindings the editor picker sets
+        // `textColor: "accent"` (which renders as `has-accent-color`)
+        // but neither the canvas nor the front-end applies the
+        // color — the var is declared on `:root` but nothing binds
+        // the class to it.
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'primary', 'color' => '#0f172a'],
+                        ['slug' => 'accent-soft', 'color' => '#dbeafe'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive('resolve')->andReturn($resolved);
+
+        $css = $this->emitter->emit();
+
+        expect($css)
+            ->toContain('.has-primary-color { color: var(--wp--preset--color--primary) !important; }')
+            ->and($css)->toContain('.has-primary-background-color { background-color: var(--wp--preset--color--primary) !important; }')
+            ->and($css)->toContain('.has-primary-border-color { border-color: var(--wp--preset--color--primary) !important; }')
+            ->and($css)->toContain('.has-accent-soft-color { color: var(--wp--preset--color--accent-soft) !important; }');
+    });
+
+    it('emits `.has-{slug}-font-size` rules for each font-size preset (Keystone #53)', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontSizes' => [
+                        ['slug' => 'small',  'size' => '12px'],
+                        ['slug' => 'medium', 'size' => '16px'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive('resolve')->andReturn($resolved);
+
+        $css = $this->emitter->emit();
+
+        expect($css)
+            ->toContain('.has-small-font-size { font-size: var(--wp--preset--font-size--small) !important; }')
+            ->and($css)->toContain('.has-medium-font-size { font-size: var(--wp--preset--font-size--medium) !important; }');
+    });
+
+    it('emits `.has-{slug}-gradient-background` rules for each gradient preset (Keystone #53)', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'gradients' => [
+                        ['slug' => 'sunset', 'gradient' => 'linear-gradient(...)'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive('resolve')->andReturn($resolved);
+
+        $css = $this->emitter->emit();
+
+        expect($css)
+            ->toContain('.has-sunset-gradient-background { background: var(--wp--preset--gradient--sunset) !important; }');
+    });
+
+    it('skips preset class bindings for malformed entries missing the value key (CodeRabbit follow-up on #53)', function (): void {
+        // A slug alone isn't enough — without a usable `color` / `size`
+        // / `gradient` we'd emit a `.has-{slug}-*` rule pointing at an
+        // undeclared CSS var. Match `presetCustomProperties()`'s
+        // existing malformed-entry filter so both code paths stay in
+        // lockstep.
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'good', 'color' => '#abcdef'],
+                        ['slug' => 'no-color'],
+                        ['slug' => 'null-color', 'color' => null],
+                        ['slug' => 'array-color', 'color' => ['#fff']],
+                    ],
+                    'gradients' => [
+                        ['slug' => 'good-gradient', 'gradient' => 'linear-gradient(...)'],
+                        ['slug' => 'no-gradient'],
+                    ],
+                ],
+                'typography' => [
+                    'fontSizes' => [
+                        ['slug' => 'good-size', 'size' => '14px'],
+                        ['slug' => 'no-size'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive('resolve')->andReturn($resolved);
+
+        $css = $this->emitter->emit();
+
+        // Valid entries still emit.
+        expect($css)
+            ->toContain('.has-good-color { color: var(--wp--preset--color--good) !important; }')
+            ->and($css)->toContain('.has-good-gradient-gradient-background')
+            ->and($css)->toContain('.has-good-size-font-size');
+
+        // Malformed entries skipped — no rules referencing undefined vars.
+        expect($css)
+            ->not->toContain('.has-no-color')
+            ->and($css)->not->toContain('.has-null-color')
+            ->and($css)->not->toContain('.has-array-color')
+            ->and($css)->not->toContain('.has-no-gradient')
+            ->and($css)->not->toContain('.has-no-size');
+    });
+
+    it('skips preset class bindings when the palette / font-size / gradient list is empty (Keystone #53)', function (): void {
+        $resolved = makeResolved();
+
+        $this->resolver->shouldReceive('resolve')->andReturn($resolved);
+
+        $css = $this->emitter->emit();
+
+        // No empty-slug rules slipped through.
+        expect($css)->not->toMatch('/\.has--color\b/');
+        expect($css)->not->toMatch('/\.has--font-size\b/');
+        expect($css)->not->toMatch('/\.has--gradient-background\b/');
+    });
 });
 
 describe('GlobalStylesEmitter cache', function (): void {
@@ -177,7 +306,10 @@ describe('GlobalStylesEmitter cache', function (): void {
 
         $this->emitter->emit();
 
-        $cacheKey = 'cms.global-styles.css.test-theme.'.$resolved->contentHash();
+        // Cache key carries the schema version so a deploy with a
+        // bumped emitter automatically busts every cached entry
+        // (Keystone #53). Mirror that here.
+        $cacheKey = 'cms.global-styles.css.v2.test-theme.'.$resolved->contentHash();
         expect(Cache::has($cacheKey))->toBeTrue();
 
         $this->emitter->invalidate();
