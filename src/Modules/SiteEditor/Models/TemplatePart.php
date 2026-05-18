@@ -51,13 +51,18 @@ class TemplatePart extends Model
         'header',
         'footer',
         'sidebar',
-        // WP core's catch-all for non-themed template parts (e.g.,
-        // Gutenberg's "Create overlay" action on `core/navigation`
-        // creates a part with `area: "uncategorized"`). Previously
-        // named `general` — the rename keeps the enum aligned with
-        // upstream so block-library actions land cleanly without a
+        // WP core's catch-all for non-themed template parts.
+        // Previously named `general` — the rename keeps the enum
+        // aligned with upstream so any future block-library action
+        // that POSTs `uncategorized` lands cleanly without a
         // client-side translation shim (Keystone #55).
         'uncategorized',
+        // Gutenberg's block-library extends WP core's default areas
+        // with `navigation-overlay` via the `block_template_part_areas`
+        // filter — that's the area the Create Overlay action on
+        // `core/navigation` POSTs with. Without it our enum rejected
+        // the request and the overlay never got created (Keystone #55).
+        'navigation-overlay',
     ];
 
     /**
