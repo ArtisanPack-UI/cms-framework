@@ -44,7 +44,7 @@
     "laravel/framework": "^12.0",
     "laravel/tinker": "^2.10.1",
     "artisanpack-ui/accessibility": "^2.1.0",
-    "artisanpack-ui/security": "^1.0.3",
+    "artisanpack-ui/security": "^1.0.3|^2.0",
     "artisanpack-ui/core": "^1.0",
     "artisanpack-ui/hooks": "^1.1",
     "artisanpack-ui/rbac": "^0.1@dev",
