@@ -39,6 +39,47 @@ public function update(SettingsManager $settings)
 }
 ```
 
+## REST API
+
+### Saving registered settings (recommended)
+
+To update registered settings over HTTP, use the by-key bulk endpoint. Every value is routed through `SettingsManager::updateSetting()`, so the registered sanitizer callback **and** `SettingType` are applied — exactly as if you had called `apUpdateSetting()` in PHP.
+
+```http
+PUT /api/v1/settings
+Content-Type: application/json
+
+{
+  "settings": {
+    "site.title": "  My Site  ",
+    "site.logo_id": "42"
+  }
+}
+```
+
+The response echoes the freshly-stored, sanitized and cast values:
+
+```json
+{
+  "settings": {
+    "site.title": "My Site",
+    "site.logo_id": 42
+  }
+}
+```
+
+Notes:
+
+- Authorization goes through `SettingPolicy` (`settings.manage` by default, via the `settings.update` capability filter).
+- Every key in the payload must be **registered** (`apRegisterSetting`/`SettingsManager::registerSetting`). Unregistered keys are rejected with a `422` validation error, since there would be no sanitizer or type to apply.
+- This is the natural fit for an admin settings page that saves a group of keys at once.
+
+### Generic CRUD caveat
+
+The resourceful endpoints — `POST /api/v1/settings`, `PUT /api/v1/settings/{key}`, etc. — write **directly to the `Setting` model** and therefore **bypass the registered sanitizer callback and `SettingType`**. They are intended for ad-hoc, unregistered key/value storage.
+
+> **Do not use the generic CRUD to save registered settings.** Use `PUT /api/v1/settings` (above) or `apUpdateSetting()` so sanitizers and types are always applied.
+
 ## Default Resolution Order
 
 When you request a setting value using `getSetting($key, $default)` or `apGetSetting($key, $default)`, the value is resolved in this order:

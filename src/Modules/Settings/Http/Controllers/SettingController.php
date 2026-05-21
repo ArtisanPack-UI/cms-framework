@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Setting Controller for the CMS Framework Settings Module.
@@ -13,8 +13,10 @@ declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests\RegisteredSettingsRequest;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests\SettingRequest;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Http\Resources\SettingResource;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -22,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 
 /**
  * API controller for managing setting.
@@ -31,10 +34,14 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Settings', weight: 13)]
+#[Group( 'Settings', weight: 13 )]
 class SettingController extends Controller
 {
     use AuthorizesRequests;
+
+    public function __construct( protected SettingsManager $settings )
+    {
+    }
 
     /**
      * Display a listing of settings.
@@ -48,11 +55,52 @@ class SettingController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', Setting::class);
+        $this->authorize( 'viewAny', Setting::class );
 
-        $settings = Setting::paginate(15);
+        $settings = Setting::paginate( 15 );
 
-        return SettingResource::collection($settings);
+        return SettingResource::collection( $settings );
+    }
+
+    /**
+     * Bulk-update one or more registered settings by key.
+     *
+     * Each supplied value is routed through `SettingsManager::updateSetting()`
+     * so the per-key sanitizer callback and registered `SettingType` always
+     * apply — unlike {@see store()}/{@see update()}, which write to the model
+     * directly and bypass both. Use this path for saving registered settings
+     * (e.g. an admin settings page); the generic ID/key CRUD remains for
+     * ad-hoc, unregistered keys.
+     *
+     * Unknown keys are rejected by {@see RegisteredSettingsRequest}, so every
+     * key reaching this method is guaranteed to be registered. The response
+     * echoes the freshly-read values so callers observe exactly what was
+     * persisted (sanitized and cast).
+     *
+     * @since 1.2.0
+     *
+     * @param  RegisteredSettingsRequest  $request  The request carrying the `settings` key/value map.
+     *
+     * @return JsonResponse The sanitized, persisted values keyed by setting key.
+     */
+    public function bulkUpdate( RegisteredSettingsRequest $request ): JsonResponse
+    {
+        $this->authorize( 'update', Setting::class );
+
+        /** @var array<string, mixed> $values */
+        $values  = $request->validated()['settings'];
+        $applied = [];
+
+        // Persist the whole group atomically: if any key fails, no partial
+        // write survives and the caller can safely retry the same payload.
+        DB::transaction( function () use ( $values, &$applied ): void {
+            foreach ( $values as $key => $value ) {
+                $this->settings->updateSetting( $key, $value );
+                $applied[ $key ] = $this->settings->getSetting( $key );
+            }
+        } );
+
+        return response()->json( ['settings' => $applied] );
     }
 
     /**
@@ -68,15 +116,15 @@ class SettingController extends Controller
      *
      * @return JsonResponse The JSON response containing the created setting resource.
      */
-    public function store(SettingRequest $request): JsonResponse // Correct return type hint
+    public function store( SettingRequest $request ): JsonResponse // Correct return type hint
     {
-        $this->authorize('create', Setting::class);
+        $this->authorize( 'create', Setting::class );
 
         $validated = $request->validated();
-        $setting   = Setting::create($validated);
+        $setting   = Setting::create( $validated );
 
         // Return JsonResponse explicitly with 201 status
-        return response()->json(new SettingResource($setting), 201);
+        return response()->json( new SettingResource( $setting ), 201 );
     }
 
     /**
@@ -91,12 +139,12 @@ class SettingController extends Controller
      *
      * @return SettingResource The setting resource with loaded permissions.
      */
-    public function show(string|int $id): SettingResource
+    public function show( string|int $id ): SettingResource
     {
-        $setting = Setting::findOrFail($id);
-        $this->authorize('view', $setting);
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'view', $setting );
 
-        return new SettingResource($setting);
+        return new SettingResource( $setting );
     }
 
     /**
@@ -112,14 +160,14 @@ class SettingController extends Controller
      *
      * @return SettingResource The updated setting resource with loaded permissions.
      */
-    public function update(SettingRequest $request, string|int $id): SettingResource
+    public function update( SettingRequest $request, string|int $id ): SettingResource
     {
-        $setting = Setting::findOrFail($id);
-        $this->authorize('update', $setting);
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'update', $setting );
         $validated = $request->validated();
-        $setting->update($validated);
+        $setting->update( $validated );
 
-        return new SettingResource($setting);
+        return new SettingResource( $setting );
     }
 
     /**
@@ -135,10 +183,10 @@ class SettingController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy(string|int $id): Response // Correct return type hint
+    public function destroy( string|int $id ): Response // Correct return type hint
     {
-        $setting = Setting::findOrFail($id);
-        $this->authorize('delete', $setting);
+        $setting = Setting::findOrFail( $id );
+        $this->authorize( 'delete', $setting );
         $setting->delete();
 
         return response()->noContent();
