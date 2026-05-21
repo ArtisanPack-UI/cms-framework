@@ -24,6 +24,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 
 /**
  * API controller for managing setting.
@@ -90,10 +91,14 @@ class SettingController extends Controller
         $values  = $request->validated()['settings'];
         $applied = [];
 
-        foreach ( $values as $key => $value ) {
-            $this->settings->updateSetting( $key, $value );
-            $applied[ $key ] = $this->settings->getSetting( $key );
-        }
+        // Persist the whole group atomically: if any key fails, no partial
+        // write survives and the caller can safely retry the same payload.
+        DB::transaction( function () use ( $values, &$applied ): void {
+            foreach ( $values as $key => $value ) {
+                $this->settings->updateSetting( $key, $value );
+                $applied[ $key ] = $this->settings->getSetting( $key );
+            }
+        } );
 
         return response()->json( ['settings' => $applied] );
     }
@@ -181,7 +186,7 @@ class SettingController extends Controller
     public function destroy( string|int $id ): Response // Correct return type hint
     {
         $setting = Setting::findOrFail( $id );
-        $this->authorize( 'delete', $setting);
+        $this->authorize( 'delete', $setting );
         $setting->delete();
 
         return response()->noContent();
