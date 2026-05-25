@@ -63,6 +63,9 @@ trait HasFeaturedImage
     public function setFeaturedImage(int $mediaId): void
     {
         $this->featuredImage()->sync([sanitizeInt($mediaId)]);
+        // Drop any eager-loaded copy so getFeaturedImageUrl() — which
+        // reuses the loaded relation — does not return stale data.
+        $this->unsetRelation('featuredImage');
     }
 
     /**
@@ -75,6 +78,7 @@ trait HasFeaturedImage
     public function removeFeaturedImage(): void
     {
         $this->featuredImage()->detach();
+        $this->unsetRelation('featuredImage');
     }
 
     /**

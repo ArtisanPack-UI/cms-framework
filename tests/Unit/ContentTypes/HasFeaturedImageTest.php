@@ -114,6 +114,33 @@ test('getFeaturedImageUrl returns the URL of the attached media row', function (
     expect($model->getFeaturedImageUrl())->toBe('https://example.test/a.jpg');
 });
 
+test('setFeaturedImage invalidates the eager-loaded relation so getFeaturedImageUrl is not stale', function (): void {
+    $model = TestFeaturedImageModel::create(['name' => 'Subject']);
+    $first = TestMedia::create(['url' => 'https://example.test/first.jpg']);
+    $second = TestMedia::create(['url' => 'https://example.test/second.jpg']);
+    $model->setFeaturedImage($first->id);
+
+    $reloaded = TestFeaturedImageModel::with('featuredImage')->find($model->id);
+    expect($reloaded->getFeaturedImageUrl())->toBe('https://example.test/first.jpg');
+
+    $reloaded->setFeaturedImage($second->id);
+
+    expect($reloaded->getFeaturedImageUrl())->toBe('https://example.test/second.jpg');
+});
+
+test('removeFeaturedImage invalidates the eager-loaded relation so getFeaturedImageUrl returns null', function (): void {
+    $model = TestFeaturedImageModel::create(['name' => 'Subject']);
+    $media = TestMedia::create(['url' => 'https://example.test/a.jpg']);
+    $model->setFeaturedImage($media->id);
+
+    $reloaded = TestFeaturedImageModel::with('featuredImage')->find($model->id);
+    expect($reloaded->getFeaturedImageUrl())->toBe('https://example.test/a.jpg');
+
+    $reloaded->removeFeaturedImage();
+
+    expect($reloaded->getFeaturedImageUrl())->toBeNull();
+});
+
 test('getFeaturedImageUrl reuses the eager-loaded relation without re-querying', function (): void {
     $model = TestFeaturedImageModel::create(['name' => 'Subject']);
     $media = TestMedia::create(['url' => 'https://example.test/a.jpg']);
