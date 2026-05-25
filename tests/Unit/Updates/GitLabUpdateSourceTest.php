@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitLabUpdateSource;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
 
@@ -292,6 +293,174 @@ class GitLabUpdateSourceTest extends TestCase
 
         $this->assertEquals('gitlab', $updateInfo->metadata['source']);
         $this->assertArrayHasKey('release_url', $updateInfo->metadata);
+    }
+
+    /**
+     * Test GitLab source populates sha256 from a `.sha256` sidecar link.
+     *
+     * @since 2.0.0
+     */
+    public function test_populates_sha256_from_sidecar_link(): void
+    {
+        $expectedHash = str_repeat('a', 64);
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release notes',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'source.zip',
+                                'url'  => 'https://gitlab.com/user/repo/-/releases/v2.0.0/source.zip',
+                            ],
+                            [
+                                'name' => 'source.zip.sha256',
+                                'url'  => 'https://example.com/releases/v2.0.0/source.zip.sha256',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'example.com/releases/v2.0.0/source.zip.sha256' => Http::response(
+                $expectedHash."  source.zip\n",
+                200,
+            ),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame($expectedHash, $updateInfo->sha256);
+    }
+
+    /**
+     * Test GitLab source populates sha256 from the release description.
+     *
+     * @since 2.0.0
+     */
+    public function test_populates_sha256_from_description_marker(): void
+    {
+        $expectedHash = str_repeat('b', 64);
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => "Release notes\n\nSHA-256: {$expectedHash}\n",
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame($expectedHash, $updateInfo->sha256);
+    }
+
+    /**
+     * Test GitLab source logs a warning when no checksum is published.
+     *
+     * @since 2.0.0
+     */
+    public function test_logs_warning_and_leaves_sha256_null_when_absent(): void
+    {
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'No checksum here.',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200),
+        ]);
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(function (string $message, array $context): bool {
+                return str_contains($message, 'SHA-256')
+                    && 'v2.0.0' === ($context['tag_name'] ?? null);
+            });
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertNull($updateInfo->sha256);
+    }
+
+    /**
+     * Test GitLab source falls back when sidecar fetch fails and uses description.
+     *
+     * @since 2.0.0
+     */
+    public function test_falls_back_to_description_when_sidecar_fetch_fails(): void
+    {
+        $expectedHash = str_repeat('c', 64);
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => "Notes\nSHA256: {$expectedHash}",
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'source.zip.sha256',
+                                'url'  => 'https://example.com/missing.sha256',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'example.com/missing.sha256' => Http::response('not found', 404),
+        ]);
+
+        // The sidecar fetch failure should be logged, but the source should still
+        // surface a checksum extracted from the description.
+        Log::shouldReceive('warning')->atLeast()->once();
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame($expectedHash, $updateInfo->sha256);
+    }
+
+    /**
+     * Test GitLab source returns null when sidecar body is not a hex digest.
+     *
+     * @since 2.0.0
+     */
+    public function test_returns_null_when_sidecar_body_is_not_hex(): void
+    {
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'No description checksum.',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'source.zip.sha256',
+                                'url'  => 'https://example.com/bad.sha256',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+            'example.com/bad.sha256' => Http::response('garbage payload without a hash', 200),
+        ]);
+
+        Log::shouldReceive('warning')->atLeast()->once();
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertNull($updateInfo->sha256);
     }
 
     /**

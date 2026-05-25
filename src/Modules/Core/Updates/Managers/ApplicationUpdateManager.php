@@ -90,10 +90,8 @@ class ApplicationUpdateManager
             // Step 3: Download update
             $zipPath = $this->getUpdateChecker()->downloadUpdate($targetVersion);
 
-            // Step 4: Verify checksum (if available)
-            if (config('cms.updates.verify_checksum', true) && $updateInfo->sha256) {
-                $this->verifyChecksum($zipPath, $updateInfo->sha256);
-            }
+            // Step 4: Verify checksum (or surface the silent skip)
+            $this->maybeVerifyChecksum($zipPath, $updateInfo, $targetVersion);
 
             // Step 5: Extract update
             $this->extractUpdate($zipPath);
@@ -369,6 +367,36 @@ class ApplicationUpdateManager
         if ($actualHash !== $expectedHash) {
             throw UpdateException::checksumMismatch($expectedHash, $actualHash);
         }
+    }
+
+    /**
+     * Verify the downloaded ZIP against its declared checksum, or surface that
+     * verification was skipped because the source did not advertise one.
+     *
+     * @since 2.0.0
+     *
+     * @param  string  $zipPath  Path to the downloaded ZIP.
+     * @param  UpdateInfo  $updateInfo  Update metadata from the source.
+     * @param  string  $targetVersion  Version being installed.
+     *
+     * @throws UpdateException When the checksum is present but does not match.
+     */
+    protected function maybeVerifyChecksum(string $zipPath, UpdateInfo $updateInfo, string $targetVersion): void
+    {
+        if (! config('cms.updates.verify_checksum', true)) {
+            return;
+        }
+
+        if ($updateInfo->sha256) {
+            $this->verifyChecksum($zipPath, $updateInfo->sha256);
+
+            return;
+        }
+
+        \Illuminate\Support\Facades\Log::warning('Skipping update integrity verification: update source did not advertise a SHA-256 checksum.', [
+            'target_version' => $targetVersion,
+            'source'         => $updateInfo->metadata['source'] ?? null,
+        ]);
     }
 
     /**

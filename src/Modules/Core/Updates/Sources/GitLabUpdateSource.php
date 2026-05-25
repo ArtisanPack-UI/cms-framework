@@ -9,7 +9,9 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * GitLab Update Source
@@ -94,12 +96,22 @@ class GitLabUpdateSource implements UpdateSourceInterface
         // Get download link for source code
         $downloadUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$latest['tag_name']}";
 
+        $sha256 = $this->extractChecksum($latest);
+
+        if (null === $sha256) {
+            Log::warning('GitLab release does not advertise a SHA-256 checksum; update integrity verification will be skipped.', [
+                'project_id' => $this->projectId,
+                'tag_name'   => $latest['tag_name'] ?? null,
+            ]);
+        }
+
         return new UpdateInfo(
             currentVersion: $this->currentVersion,
             latestVersion: ltrim($latest['tag_name'], 'v'),
             downloadUrl: $downloadUrl,
             changelog: $latest['description'] ?? null,
             releaseDate: $latest['created_at'] ?? null,
+            sha256: $sha256,
             metadata: [
                 'source'      => 'gitlab',
                 'release_url' => "https://gitlab.com/{$this->projectId}/-/releases/{$latest['tag_name']}",
@@ -294,5 +306,145 @@ class GitLabUpdateSource implements UpdateSourceInterface
         }
 
         return "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$release['tag_name']}";
+    }
+
+    /**
+     * Extract a SHA-256 checksum from a GitLab release.
+     *
+     * Discovery order:
+     *   1. An asset link whose name or URL ends with `.sha256` (fetched and parsed).
+     *   2. A `SHA-256: <64-hex>` line embedded in the release description.
+     *
+     * @since 2.0.0
+     *
+     * @param  array<string, mixed>  $release  Release payload from the GitLab API.
+     *
+     * @return string|null Lowercase 64-character hex digest, or null when no checksum is published.
+     */
+    protected function extractChecksum(array $release): ?string
+    {
+        $sidecarHash = $this->extractChecksumFromSidecar($release);
+
+        if (null !== $sidecarHash) {
+            return $sidecarHash;
+        }
+
+        return $this->extractChecksumFromDescription($release['description'] ?? null);
+    }
+
+    /**
+     * Locate and fetch a `*.sha256` sidecar link from a release's asset links.
+     *
+     * @since 2.0.0
+     *
+     * @param  array<string, mixed>  $release  Release payload from the GitLab API.
+     *
+     * @return string|null Lowercase hex digest, or null if no usable sidecar is found.
+     */
+    protected function extractChecksumFromSidecar(array $release): ?string
+    {
+        $links = $release['assets']['links'] ?? [];
+
+        if (! is_array($links)) {
+            return null;
+        }
+
+        foreach ($links as $link) {
+            if (! is_array($link)) {
+                continue;
+            }
+
+            $name = isset($link['name']) && is_string($link['name']) ? $link['name'] : '';
+            $url  = isset($link['url']) && is_string($link['url']) ? $link['url'] : '';
+
+            if ('' === $url) {
+                continue;
+            }
+
+            if (! str_ends_with(strtolower($name), '.sha256') && ! str_ends_with(strtolower($url), '.sha256')) {
+                continue;
+            }
+
+            $hash = $this->fetchSidecarHash($url);
+
+            if (null !== $hash) {
+                return $hash;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Download a sidecar file and extract the first SHA-256 hex digest it contains.
+     *
+     * Accepts the common sidecar formats: a bare digest or a `<digest>  <filename>` line.
+     *
+     * @since 2.0.0
+     *
+     * @param  string  $url  URL of the `.sha256` sidecar.
+     *
+     * @return string|null Lowercase hex digest, or null on failure / unparseable contents.
+     */
+    protected function fetchSidecarHash(string $url): ?string
+    {
+        $headers = [];
+        if ($this->accessToken) {
+            $headers['PRIVATE-TOKEN'] = $this->accessToken;
+        }
+
+        try {
+            $response = Http::withHeaders($headers)
+                ->timeout(config('cms.updates.http_timeout', 15))
+                ->get($url);
+        } catch (Throwable $e) {
+            Log::warning('Failed to fetch GitLab SHA-256 sidecar.', [
+                'url'   => $url,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if (! $response->successful()) {
+            Log::warning('GitLab SHA-256 sidecar request returned a non-success status.', [
+                'url'    => $url,
+                'status' => $response->status(),
+            ]);
+
+            return null;
+        }
+
+        if (preg_match('/\b([a-f0-9]{64})\b/i', $response->body(), $matches)) {
+            return strtolower($matches[1]);
+        }
+
+        Log::warning('GitLab SHA-256 sidecar did not contain a 64-character hex digest.', [
+            'url' => $url,
+        ]);
+
+        return null;
+    }
+
+    /**
+     * Extract a `SHA-256: <hex>` line from a release description.
+     *
+     * @since 2.0.0
+     *
+     * @param  string|null  $description  Release description (Markdown allowed).
+     *
+     * @return string|null Lowercase hex digest, or null when no marker is present.
+     */
+    protected function extractChecksumFromDescription(?string $description): ?string
+    {
+        if (! is_string($description) || '' === $description) {
+            return null;
+        }
+
+        if (preg_match('/SHA-?256\s*[:=]\s*`?([a-f0-9]{64})`?/i', $description, $matches)) {
+            return strtolower($matches[1]);
+        }
+
+        return null;
     }
 }
