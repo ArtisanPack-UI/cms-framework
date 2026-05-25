@@ -9,9 +9,11 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns\HasRolesAndPermissi
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class TestUser extends Authenticatable
 {
+    use HasApiTokens;
     use HasFactory;
     use HasNotifications;
     use HasRolesAndPermissions;

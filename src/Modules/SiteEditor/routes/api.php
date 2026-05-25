@@ -13,7 +13,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\TemplatesCont
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('api/v1')
-    ->middleware('auth')
+    ->middleware('auth:sanctum')
     ->group(function (): void {
         Route::prefix('templates')->group(function (): void {
             Route::get('/', [TemplatesController::class, 'index'])->name('api.templates.index');
