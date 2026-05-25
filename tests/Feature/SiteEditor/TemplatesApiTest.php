@@ -39,6 +39,26 @@ describe('GET /api/v1/templates', function (): void {
         $this->getJson('/api/v1/templates')->assertUnauthorized();
     });
 
+    it('accepts a Sanctum personal access token via Authorization header', function (): void {
+        File::put($this->themeFiles.'/page.html', '<!-- file -->');
+
+        $token = $this->user->createToken('test-token')->plainTextToken;
+
+        $this->getJson('/api/v1/templates', [
+            'Authorization' => 'Bearer '.$token,
+        ])->assertOk();
+    });
+
+    it('accepts a session-cookie authenticated user (browser editor flow)', function (): void {
+        File::put($this->themeFiles.'/page.html', '<!-- file -->');
+
+        // actingAs() on the default web guard simulates the browser session
+        // cookie path that the site editor UI uses today.
+        $this->actingAs($this->user);
+
+        $this->getJson('/api/v1/templates')->assertOk();
+    });
+
     it('returns merged file + DB templates in WP shape', function (): void {
         File::put($this->themeFiles.'/page.html', '<!-- file -->');
 

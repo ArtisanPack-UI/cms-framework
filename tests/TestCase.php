@@ -17,6 +17,7 @@ use ArtisanPackUI\Rbac\RbacServiceProvider;
 use ArtisanPackUI\Security\SecurityServiceProvider;
 use Dedoc\Scramble\ScrambleServiceProvider;
 use Illuminate\Foundation\Application;
+use Laravel\Sanctum\SanctumServiceProvider;
 
 /**
  * Provides the base application for all package tests.
@@ -31,6 +32,15 @@ class TestCase extends \Orchestra\Testbench\TestCase
 
         // Load the package's migrations (includes users, roles, permissions, settings, etc.)
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+
+        // Sanctum ships its own personal-access-tokens table; load it so
+        // `auth:sanctum` HTTP tests can mint bearer tokens. Resolve the path
+        // defensively so a missing vendor install doesn't crash bootstrap.
+        $sanctumMigrations = realpath(__DIR__.'/../vendor/laravel/sanctum/database/migrations');
+
+        if (false !== $sanctumMigrations) {
+            $this->loadMigrationsFrom($sanctumMigrations);
+        }
     }
 
     /**
@@ -46,6 +56,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
             SecurityServiceProvider::class,
             ScrambleServiceProvider::class,
             RbacServiceProvider::class,
+            SanctumServiceProvider::class,
             CMSFrameworkServiceProvider::class,
             HooksServiceProvider::class,
         ];
