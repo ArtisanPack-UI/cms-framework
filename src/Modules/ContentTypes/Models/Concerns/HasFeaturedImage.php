@@ -86,13 +86,14 @@ trait HasFeaturedImage
      */
     public function getFeaturedImageUrl(string $size = 'full'): ?string
     {
-        $media = $this->featuredImage()->first();
+        // Reuse the eager-loaded relation when available so callers that
+        // already loaded `featuredImage` (e.g. via API resources) don't
+        // get an N+1 query per row.
+        $media = $this->relationLoaded('featuredImage')
+            ? $this->featuredImage->first()
+            : $this->featuredImage()->first();
 
-        if (! $media) {
-            return null;
-        }
-
-        return $media->url ?? null;
+        return $media?->url;
     }
 
     /**

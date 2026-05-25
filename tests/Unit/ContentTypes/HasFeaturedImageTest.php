@@ -114,6 +114,22 @@ test('getFeaturedImageUrl returns the URL of the attached media row', function (
     expect($model->getFeaturedImageUrl())->toBe('https://example.test/a.jpg');
 });
 
+test('getFeaturedImageUrl reuses the eager-loaded relation without re-querying', function (): void {
+    $model = TestFeaturedImageModel::create(['name' => 'Subject']);
+    $media = TestMedia::create(['url' => 'https://example.test/a.jpg']);
+    $model->setFeaturedImage($media->id);
+
+    $reloaded = TestFeaturedImageModel::with('featuredImage')->find($model->id);
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    expect($reloaded->getFeaturedImageUrl())->toBe('https://example.test/a.jpg');
+    expect(DB::getQueryLog())->toBeEmpty();
+
+    DB::disableQueryLog();
+});
+
 test('setFeaturedImage isolates featured images per host model row', function (): void {
     $modelA = TestFeaturedImageModel::create(['name' => 'A']);
     $modelB = TestFeaturedImageModel::create(['name' => 'B']);
