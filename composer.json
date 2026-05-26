@@ -28,15 +28,6 @@
       "email": "me@jacobmartella.com"
     }
   ],
-  "repositories": [
-    {
-      "type": "path",
-      "url": "../rbac",
-      "options": {
-        "symlink": true
-      }
-    }
-  ],
   "prefer-stable": true,
   "require": {
     "php": "^8.2",
@@ -47,7 +38,7 @@
     "artisanpack-ui/security": "^1.0.3|^2.0",
     "artisanpack-ui/core": "^1.0",
     "artisanpack-ui/hooks": "^1.1",
-    "artisanpack-ui/rbac": "^0.1@dev",
+    "artisanpack-ui/rbac": "^1.0",
     "dedoc/scramble": "^0.12 || ^0.13",
     "justinrainbow/json-schema": "^6.0",
     "laravel/sanctum": "^4.0.8"

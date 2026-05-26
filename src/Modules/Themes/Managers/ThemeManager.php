@@ -8,20 +8,23 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use Exception;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
+use ZipArchive;
 
 /**
  * Theme Manager class.
@@ -50,7 +53,8 @@ class ThemeManager
     public function __construct(
         private SettingsManager $settingsManager,
         private WpThemeJsonValidator $wpThemeJsonValidator,
-    ) {}
+    ) {
+    }
 
     /**
      * Discovers all themes in the themes directory.
@@ -64,43 +68,43 @@ class ThemeManager
      */
     public function discoverThemes(): array
     {
-        $cacheEnabled = config('cms.themes.cacheEnabled', true);
-        $cacheKey     = config('cms.themes.cacheKey', 'cms.themes.discovered');
-        $cacheTtl     = config('cms.themes.cacheTtl', 3600);
+        $cacheEnabled = config( 'cms.themes.cacheEnabled', true );
+        $cacheKey     = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
+        $cacheTtl     = config( 'cms.themes.cacheTtl', 3600 );
 
-        if ($cacheEnabled) {
-            $themes = Cache::get($cacheKey);
+        if ( $cacheEnabled ) {
+            $themes = Cache::get( $cacheKey );
 
-            if (null !== $themes) {
-                return $this->markActiveTheme($themes);
+            if ( null !== $themes ) {
+                return $this->markActiveTheme( $themes );
             }
         }
 
         $themesPath = $this->getThemesPath();
         $themes     = [];
 
-        if (! File::isDirectory($themesPath)) {
+        if ( ! File::isDirectory( $themesPath ) ) {
             return $themes;
         }
 
-        $directories = File::directories($themesPath);
+        $directories = File::directories( $themesPath );
 
-        foreach ($directories as $directory) {
-            if ($this->validateTheme($directory)) {
-                $manifestPath = $directory.'/theme.json';
-                $manifest     = $this->parseManifest($manifestPath);
+        foreach ( $directories as $directory ) {
+            if ( $this->validateTheme( $directory ) ) {
+                $manifestPath = $directory . '/theme.json';
+                $manifest     = $this->parseManifest( $manifestPath );
 
-                if (null !== $manifest) {
+                if ( null !== $manifest ) {
                     $themes[] = $manifest;
                 }
             }
         }
 
-        if ($cacheEnabled) {
-            Cache::put($cacheKey, $themes, $cacheTtl);
+        if ( $cacheEnabled ) {
+            Cache::put( $cacheKey, $themes, $cacheTtl );
         }
 
-        return $this->markActiveTheme($themes);
+        return $this->markActiveTheme( $themes );
     }
 
     /**
@@ -117,14 +121,14 @@ class ThemeManager
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config('cms.themes.default', 'digital-shopfront'),
+            config( 'cms.themes.default', 'digital-shopfront' ),
         );
 
-        if (empty($activeSlug)) {
+        if ( empty( $activeSlug ) ) {
             return null;
         }
 
-        return $this->getTheme($activeSlug);
+        return $this->getTheme( $activeSlug );
     }
 
     /**
@@ -141,33 +145,86 @@ class ThemeManager
      *
      * @return bool True on successful activation.
      */
-    public function activateTheme(string $slug): bool
+    public function activateTheme( string $slug ): bool
     {
-        $theme = $this->getTheme($slug);
+        $theme = $this->getTheme( $slug );
 
-        if (null === $theme) {
-            throw ThemeNotFoundException::forSlug($slug);
+        if ( null === $theme ) {
+            throw ThemeNotFoundException::forSlug( $slug );
         }
 
-        $this->settingsManager->updateSetting('themes.activeTheme', $slug);
+        $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
 
         // Clear theme cache
-        $cacheKey = config('cms.themes.cacheKey', 'cms.themes.discovered');
-        Cache::forget($cacheKey);
+        $cacheKey = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
+        Cache::forget( $cacheKey );
 
         // Clear view cache
         try {
-            Artisan::call('view:clear');
-        } catch (Exception $e) {
+            Artisan::call( 'view:clear' );
+        } catch ( Exception $e ) {
             // Log the error but don't fail activation
-            if (function_exists('logger')) {
-                logger()->warning('Failed to clear view cache during theme activation', [
+            if ( function_exists( 'logger' ) ) {
+                logger()->warning( 'Failed to clear view cache during theme activation', [
                     'error' => $e->getMessage(),
-                ]);
+                ] );
             }
         }
 
         return true;
+    }
+
+    /**
+     * Installs a theme from an uploaded ZIP archive.
+     *
+     * Process:
+     * 1. Validate the ZIP (file exists, MIME type, size, integrity, contains theme.json).
+     * 2. Extract the ZIP into the themes directory, guarding against ZIP-slip /
+     *    path-traversal attempts by resolving each entry's destination against the
+     *    themes base directory.
+     * 3. Validate the extracted theme's manifest against the WP theme.json schema.
+     *    If validation fails, the extracted directory is removed before throwing.
+     * 4. Invalidate the discovery cache so the new theme is picked up immediately.
+     *
+     * The first top-level directory in the ZIP becomes the theme slug, matching
+     * the Plugins module convention.
+     *
+     * @since 1.2.0
+     *
+     * @param  string  $zipPath  Absolute path to the uploaded ZIP file.
+     *
+     * @throws ThemeValidationException If the ZIP or extracted manifest fails validation.
+     * @throws ThemeInstallationException If extraction fails or the slug is already installed.
+     *
+     * @return array The parsed manifest of the installed theme.
+     */
+    public function installFromZip( string $zipPath ): array
+    {
+        $this->validateZip( $zipPath );
+
+        $slug = $this->extractZip( $zipPath );
+
+        $themePath = $this->getThemesPath() . '/' . $slug;
+
+        if ( ! $this->validateTheme( $themePath ) ) {
+            // Rollback: remove the freshly extracted directory so we don't leave
+            // a half-installed theme on disk.
+            File::deleteDirectory( $themePath );
+
+            throw ThemeValidationException::invalidManifest( "Theme '{$slug}' failed schema validation after extraction." );
+        }
+
+        $manifest = $this->parseManifest( $themePath . '/theme.json' );
+
+        if ( null === $manifest ) {
+            File::deleteDirectory( $themePath );
+
+            throw ThemeValidationException::invalidManifest( "Theme '{$slug}' manifest could not be parsed after extraction." );
+        }
+
+        Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
+
+        return $manifest;
     }
 
     /**
@@ -183,29 +240,29 @@ class ThemeManager
      *
      * @return array|null Theme manifest array, or null if not found, invalid, or contains invalid characters.
      */
-    public function getTheme(string $slug): ?array
+    public function getTheme( string $slug ): ?array
     {
         // Validate slug to prevent path traversal attacks
-        if (! $this->validateSlug($slug)) {
+        if ( ! $this->validateSlug( $slug ) ) {
             return null;
         }
 
         // Resolve and validate path within themes directory
         $themesBasePath = $this->getThemesPath();
-        $realThemePath  = $this->resolveSecurePath($themesBasePath.'/'.$slug, $themesBasePath);
+        $realThemePath  = $this->resolveSecurePath( $themesBasePath . '/' . $slug, $themesBasePath );
 
-        if (null === $realThemePath) {
+        if ( null === $realThemePath ) {
             return null;
         }
 
         // Now safe to proceed with validation and manifest parsing
-        $manifestPath = $realThemePath.'/theme.json';
+        $manifestPath = $realThemePath . '/theme.json';
 
-        if (! $this->validateTheme($realThemePath)) {
+        if ( ! $this->validateTheme( $realThemePath ) ) {
             return null;
         }
 
-        return $this->parseManifest($manifestPath);
+        return $this->parseManifest( $manifestPath );
     }
 
     /**
@@ -220,20 +277,20 @@ class ThemeManager
     {
         $activeTheme = $this->getActiveTheme();
 
-        if (null === $activeTheme) {
+        if ( null === $activeTheme ) {
             return;
         }
 
         // Defensive check: ensure slug key exists in the manifest
-        if (! is_array($activeTheme) || empty($activeTheme['slug'])) {
+        if ( ! is_array( $activeTheme ) || empty( $activeTheme['slug'] ) ) {
             return;
         }
 
-        $themePath = $this->getThemesPath().'/'.$activeTheme['slug'];
+        $themePath = $this->getThemesPath() . '/' . $activeTheme['slug'];
 
-        if (File::isDirectory($themePath)) {
+        if ( File::isDirectory( $themePath ) ) {
             // Prepend the theme path to give it priority
-            View::getFinder()->prependLocation($themePath);
+            View::getFinder()->prependLocation( $themePath );
         }
     }
 
@@ -257,20 +314,20 @@ class ThemeManager
      *
      * @return string Template name without .blade.php extension.
      */
-    public function resolveTemplate(string $contentType, ?string $slug = null): string
+    public function resolveTemplate( string $contentType, ?string $slug = null ): string
     {
         // Sanitize inputs to prevent path traversal
-        if (! $this->validateSlug($contentType)) {
+        if ( ! $this->validateSlug( $contentType ) ) {
             return 'index';
         }
 
-        if (null !== $slug && ! $this->validateSlug($slug)) {
+        if ( null !== $slug && ! $this->validateSlug( $slug ) ) {
             $slug = null;
         }
 
         $templates = [];
 
-        if (null !== $slug) {
+        if ( null !== $slug ) {
             $templates[] = "single-{$contentType}-{$slug}";
         }
 
@@ -278,8 +335,8 @@ class ThemeManager
         $templates[] = 'single';
         $templates[] = 'index';
 
-        foreach ($templates as $template) {
-            if ($this->templateExists($template)) {
+        foreach ( $templates as $template ) {
+            if ( $this->templateExists( $template ) ) {
                 return $template;
             }
         }
@@ -298,23 +355,192 @@ class ThemeManager
      *
      * @return bool True if template exists, false otherwise.
      */
-    public function templateExists(string $template): bool
+    public function templateExists( string $template ): bool
     {
         // Validate template name to prevent path traversal
-        if (! $this->validateSlug($template)) {
+        if ( ! $this->validateSlug( $template ) ) {
             return false;
         }
 
         $activeTheme = $this->getActiveTheme();
 
-        if (null === $activeTheme) {
+        if ( null === $activeTheme ) {
             return false;
         }
 
-        $themePath    = $this->getThemesPath().'/'.$activeTheme['slug'];
-        $templatePath = $themePath.'/'.$template.'.blade.php';
+        $themePath    = $this->getThemesPath() . '/' . $activeTheme['slug'];
+        $templatePath = $themePath . '/' . $template . '.blade.php';
 
-        return File::exists($templatePath);
+        return File::exists( $templatePath );
+    }
+
+    /**
+     * Validate a theme ZIP file before extraction.
+     *
+     * Mirrors the Plugins module's pre-extraction validation: confirms the file
+     * exists, has an allowed MIME type, is within the configured size limit,
+     * opens as a valid ZIP archive, and contains a theme.json manifest.
+     *
+     * @since 1.2.0
+     *
+     * @param  string  $zipPath  Absolute path to the ZIP file.
+     *
+     * @throws ThemeValidationException If the ZIP is invalid or fails any check.
+     */
+    protected function validateZip( string $zipPath ): void
+    {
+        if ( ! File::exists( $zipPath ) ) {
+            throw ThemeValidationException::invalidZip( 'ZIP file not found.' );
+        }
+
+        $finfo = finfo_open( FILEINFO_MIME_TYPE );
+        if ( false === $finfo ) {
+            throw ThemeValidationException::invalidZip( 'Unable to determine file type.' );
+        }
+
+        $mimeType = finfo_file( $finfo, $zipPath );
+        finfo_close( $finfo );
+
+        if ( false === $mimeType ) {
+            throw ThemeValidationException::invalidZip( 'Unable to read file type information.' );
+        }
+
+        $allowedTypes = config( 'cms.themes.allowedMimeTypes', [
+            'application/zip',
+            'application/x-zip-compressed',
+        ] );
+
+        if ( ! in_array( $mimeType, $allowedTypes, true ) ) {
+            throw ThemeValidationException::invalidZip( 'Invalid file type. Must be a ZIP file.' );
+        }
+
+        $maxSize = config( 'cms.themes.maxUploadSize', 10 * 1024 * 1024 );
+        if ( filesize( $zipPath ) > $maxSize ) {
+            throw ThemeValidationException::invalidZip( 'File size exceeds maximum allowed size.' );
+        }
+
+        $zip = new ZipArchive;
+        if ( true !== $zip->open( $zipPath ) ) {
+            throw ThemeValidationException::invalidZip( 'Invalid or corrupted ZIP file.' );
+        }
+
+        $manifestFound = false;
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $filename = $zip->getNameIndex( $i );
+            if ( str_ends_with( $filename, 'theme.json' ) ) {
+                $manifestFound = true;
+                break;
+            }
+        }
+
+        $zip->close();
+
+        if ( ! $manifestFound ) {
+            throw ThemeValidationException::invalidZip( 'Theme manifest (theme.json) not found in ZIP.' );
+        }
+    }
+
+    /**
+     * Extract a validated theme ZIP into the themes directory.
+     *
+     * The first ZIP entry's top-level directory becomes the theme slug. Each
+     * entry is checked for ZIP-slip / path-traversal: any entry whose resolved
+     * destination falls outside the themes base directory causes extraction to
+     * abort and the partial directory to be removed.
+     *
+     * @since 1.2.0
+     *
+     * @param  string  $zipPath  Absolute path to the ZIP file.
+     *
+     * @throws ThemeInstallationException If extraction fails, the slug already exists, or a ZIP-slip attempt is detected.
+     *
+     * @return string The extracted theme slug.
+     */
+    protected function extractZip( string $zipPath ): string
+    {
+        $zip = new ZipArchive;
+        if ( true !== $zip->open( $zipPath ) ) {
+            throw ThemeInstallationException::extractionFailed( 'unknown' );
+        }
+
+        $firstEntry = $zip->getNameIndex( 0 );
+        if ( false === $firstEntry ) {
+            $zip->close();
+            throw ThemeInstallationException::extractionFailed( 'unknown' );
+        }
+
+        // The first entry must live under a top-level directory (e.g. "my-theme/")
+        // so we can derive the slug. Reject ZIPs whose first entry is a bare file.
+        if ( ! str_contains( $firstEntry, '/' ) ) {
+            $zip->close();
+            throw ThemeInstallationException::extractionFailed( 'unknown' );
+        }
+
+        $slug = explode( '/', $firstEntry )[0];
+
+        $themesBasePath = $this->getThemesPath();
+        $realBasePath   = realpath( $themesBasePath );
+
+        if ( false === $realBasePath ) {
+            $zip->close();
+            throw ThemeInstallationException::extractionFailed( $slug );
+        }
+
+        // Reject if the slug directory already exists.
+        if ( File::exists( $themesBasePath . '/' . $slug ) ) {
+            $zip->close();
+            throw ThemeInstallationException::alreadyInstalled( $slug );
+        }
+
+        // ZIP-slip guard: anchor every entry's intended destination to the
+        // themes base directory. We resolve the *parent* of each destination
+        // because the entry itself does not yet exist on disk.
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $entry = $zip->getNameIndex( $i );
+            if ( false === $entry ) {
+                continue;
+            }
+
+            $normalized = str_replace( '\\', '/', $entry );
+
+            // Reject absolute paths and any entry containing traversal segments.
+            if ( str_starts_with( $normalized, '/' )
+                || preg_match( '#(^|/)\.\.(/|$)#', $normalized ) ) {
+                $zip->close();
+                throw ThemeInstallationException::pathTraversal( $entry );
+            }
+
+            $destination = $realBasePath . '/' . ltrim( $normalized, '/' );
+
+            // Walk up the destination path until we find an existing ancestor,
+            // then verify that ancestor sits inside the themes base directory.
+            $ancestor = dirname( $destination );
+            while ( '' !== $ancestor && '/' !== $ancestor && ! File::exists( $ancestor ) ) {
+                $ancestor = dirname( $ancestor );
+            }
+
+            $realAncestor = realpath( $ancestor );
+            if ( false === $realAncestor || ! str_starts_with( $realAncestor . '/', $realBasePath . '/' ) ) {
+                $zip->close();
+                throw ThemeInstallationException::pathTraversal( $entry );
+            }
+        }
+
+        if ( ! $zip->extractTo( $themesBasePath ) ) {
+            $zip->close();
+
+            // Clean up any partial files extractTo() may have written before failing.
+            $partialPath = $themesBasePath . '/' . $slug;
+            if ( File::exists( $partialPath ) ) {
+                File::deleteDirectory( $partialPath );
+            }
+
+            throw ThemeInstallationException::extractionFailed( $slug );
+        }
+
+        $zip->close();
+
+        return $slug;
     }
 
     /**
@@ -336,38 +562,38 @@ class ThemeManager
      *
      * @return bool True if theme is valid, false otherwise.
      */
-    protected function validateTheme(string $themePath): bool
+    protected function validateTheme( string $themePath ): bool
     {
-        if (! File::isDirectory($themePath)) {
+        if ( ! File::isDirectory( $themePath ) ) {
             return false;
         }
 
-        $requiredFiles = config('cms.themes.requiredFiles', ['theme.json']);
+        $requiredFiles = config( 'cms.themes.requiredFiles', ['theme.json'] );
 
-        foreach ($requiredFiles as $file) {
-            if (! File::exists($themePath.'/'.$file)) {
+        foreach ( $requiredFiles as $file ) {
+            if ( ! File::exists( $themePath . '/' . $file ) ) {
                 return false;
             }
         }
 
-        $manifest = $this->parseManifest($themePath.'/theme.json');
+        $manifest = $this->parseManifest( $themePath . '/theme.json' );
 
-        if (null === $manifest) {
-            Log::warning('Theme has invalid theme.json (parse failed).', [
+        if ( null === $manifest ) {
+            Log::warning( 'Theme has invalid theme.json (parse failed).', [
                 'path' => $themePath,
-            ]);
+            ] );
 
             return false;
         }
 
-        $result = $this->wpThemeJsonValidator->validate($manifest);
+        $result = $this->wpThemeJsonValidator->validate( $manifest );
 
-        if (! $result->valid) {
-            Log::warning('Theme rejected: theme.json failed schema validation.', [
+        if ( ! $result->valid ) {
+            Log::warning( 'Theme rejected: theme.json failed schema validation.', [
                 'path'         => $themePath,
                 'offendingKey' => $result->offendingKey,
                 'message'      => $result->message,
-            ]);
+            ] );
 
             return false;
         }
@@ -387,9 +613,9 @@ class ThemeManager
      */
     protected function getThemesPath(): string
     {
-        $directory = config('cms.themes.directory', 'themes');
+        $directory = config( 'cms.themes.directory', 'themes');
 
-        return base_path($directory);
+        return base_path( $directory);
     }
 
     /**
@@ -405,16 +631,16 @@ class ThemeManager
      *
      * @return array Themes array with is_active flag added to each theme.
      */
-    protected function markActiveTheme(array $themes): array
+    protected function markActiveTheme( array $themes): array
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config('cms.themes.default', 'digital-shopfront'),
+            config( 'cms.themes.default', 'digital-shopfront'),
         );
 
-        return array_map(function ($theme) use ($activeSlug) {
+        return array_map( function ( $theme) use ( $activeSlug) {
             // Defensive check: ensure slug key exists before comparing
-            $theme['is_active'] = isset($theme['slug']) && $theme['slug'] === $activeSlug;
+            $theme['is_active'] = isset( $theme['slug']) && $theme['slug'] === $activeSlug;
 
             return $theme;
         }, $themes);
