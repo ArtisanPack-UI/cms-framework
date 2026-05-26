@@ -318,6 +318,21 @@ describe( 'ThemeManager::validateManifest() via installFromZip()', function (): 
         expect( $result['keystone']['seed']['pages'] )->toBe( ['home', 'about'] );
     } );
 
+    it( 'rejects optional fields that are present but null', function ( string $field ): void {
+        $slug    = "null-{$field}-theme";
+        $zipPath = buildValidateZip( $this->tmpPath, $slug, [
+            'slug'    => $slug,
+            'name'    => "Null {$field}",
+            'version' => '1.0.0',
+            $field    => null,
+        ], $this->testSlugs );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( ThemeValidationException::class );
+
+        expect( File::exists( $this->themesPath . '/' . $slug ) )->toBeFalse();
+    } )->with( ['screenshot', 'requires', 'templates', 'supports'] );
+
     it( 'rolls back the extracted theme directory when validation fails', function (): void {
         $zipPath = buildValidateZip( $this->tmpPath, 'rollback-theme', [
             'slug'    => 'rollback-theme',

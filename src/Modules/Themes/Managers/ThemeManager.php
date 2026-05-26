@@ -678,7 +678,7 @@ class ThemeManager
             );
         }
 
-        if ( isset( $manifest['screenshot'] ) ) {
+        if ( array_key_exists( 'screenshot', $manifest ) ) {
             $screenshot = $manifest['screenshot'];
 
             if ( ! is_string( $screenshot ) || '' === $screenshot ) {
@@ -703,7 +703,7 @@ class ThemeManager
             }
         }
 
-        if ( isset( $manifest['requires'] ) ) {
+        if ( array_key_exists( 'requires', $manifest ) ) {
             $requires = $manifest['requires'];
 
             if ( ! is_string( $requires ) || ! preg_match( '/^\d+\.\d+\.\d+$/', $requires ) ) {
@@ -713,7 +713,7 @@ class ThemeManager
             }
         }
 
-        if ( isset( $manifest['templates'] ) ) {
+        if ( array_key_exists( 'templates', $manifest ) ) {
             if ( ! is_array( $manifest['templates'] ) ) {
                 throw ThemeValidationException::invalidManifest(
                     "Field 'templates' must be an object.",
@@ -721,7 +721,7 @@ class ThemeManager
             }
 
             foreach ( ['layouts', 'pages', 'partials'] as $bucket ) {
-                if ( ! isset( $manifest['templates'][ $bucket ] ) ) {
+                if ( ! array_key_exists( $bucket, $manifest['templates'] ) ) {
                     continue;
                 }
 
@@ -743,7 +743,7 @@ class ThemeManager
             }
         }
 
-        if ( isset( $manifest['supports'] ) ) {
+        if ( array_key_exists( 'supports', $manifest ) ) {
             if ( ! is_array( $manifest['supports'] ) ) {
                 throw ThemeValidationException::invalidManifest(
                     "Field 'supports' must be an object.",
