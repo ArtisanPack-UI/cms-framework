@@ -172,7 +172,7 @@ The Themes module fires `doAction()` callbacks around `installFromZip()` and `ac
 | `theme.installing` | After the ZIP is extracted and the manifest is validated, before the install is finalized. | `string $slug, array $manifest` | Throwing aborts the install; the extracted directory is rolled back. |
 | `theme.installed` | After the install completes and the discovery cache is cleared. | `string $slug, array $manifest` | Throwing propagates to the caller (install is already complete). |
 | `theme.activating` | After the target theme is resolved, before `themes.activeTheme` is updated. | `string $slug, array $manifest` | Throwing aborts activation; the active theme setting is not changed. |
-| `theme.activated` | After `themes.activeTheme` is updated and view caches are cleared. | `string $slug, array $manifest` | Throwing propagates to the caller (activation is already complete). |
+| `theme.activated` | After `themes.activeTheme` is updated and cache invalidation is attempted (including `view:clear`, which is logged-and-continued on failure). | `string $slug, array $manifest` | Throwing propagates to the caller (activation is already complete). |
 
 ```php
 addAction('theme.activated', function (string $slug, array $manifest): void {

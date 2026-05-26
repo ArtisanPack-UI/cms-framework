@@ -110,6 +110,26 @@ describe( 'theme install lifecycle hooks', function (): void {
         expect( $events[1][2] )->toMatchArray( $manifest );
     } );
 
+    it( 'rolls back the extracted directory when a theme.installing listener throws a non-Exception Throwable', function (): void {
+        $manifest = [
+            'slug'    => 'hooks-error',
+            'name'    => 'Hooks Error',
+            'version' => '1.0.0',
+        ];
+
+        addAction( 'theme.installing', function (): void {
+            // Error (parent of TypeError, etc.) is a Throwable but not an Exception.
+            throw new Error( 'fatal in listener' );
+        } );
+
+        $zipPath = buildHookThemeZip( $this->tmpPath, 'hooks-error', $manifest, $this->testSlugs );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( Error::class, 'fatal in listener' );
+
+        expect( File::exists( $this->themesPath . '/hooks-error' ) )->toBeFalse();
+    } );
+
     it( 'aborts the install and rolls back the extracted directory when a theme.installing listener throws', function (): void {
         $manifest = [
             'slug'    => 'hooks-abort',
