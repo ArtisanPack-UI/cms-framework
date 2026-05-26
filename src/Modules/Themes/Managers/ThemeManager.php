@@ -222,6 +222,14 @@ class ThemeManager
             throw ThemeValidationException::invalidManifest( "Theme '{$slug}' manifest could not be parsed after extraction." );
         }
 
+        try {
+            $this->validateManifest( $manifest );
+        } catch ( ThemeValidationException $e ) {
+            File::deleteDirectory( $themePath );
+
+            throw $e;
+        }
+
         Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
 
         return $manifest;
@@ -611,6 +619,148 @@ class ThemeManager
     }
 
     /**
+     * Validate a parsed theme.json manifest against the strict schema.
+     *
+     * Mirrors the Plugins module's required-field enforcement and adds
+     * screenshot-path safety and optional-field type checks. Intended for
+     * the upload/install path: `discoverThemes()` keeps using the looser
+     * WP-shape validator so existing on-disk themes are not broken by
+     * stricter rules.
+     *
+     * Required fields:
+     *  - `slug` — alphanumeric, hyphens, underscores (matches Plugins).
+     *  - `name` — non-empty string.
+     *  - `version` — anchored semver `MAJOR.MINOR.PATCH` (matches Plugins).
+     *
+     * Optional fields, validated when present:
+     *  - `screenshot` — basename only (no path separators) with an
+     *    allowlisted image extension (png, jpg, jpeg, webp).
+     *  - `requires` — anchored semver.
+     *  - `templates.layouts|pages|partials` — arrays of strings.
+     *  - `supports.*` — booleans.
+     *
+     * The `keystone` namespace is reserved for consumer-specific install
+     * hints (e.g. `keystone.installer`, `keystone.seed.pages[]`) and is
+     * intentionally opaque to the framework.
+     *
+     * @since 1.2.0
+     *
+     * @param  array  $manifest  Parsed theme.json contents.
+     *
+     * @throws ThemeValidationException If any required or optional field fails its check.
+     */
+    protected function validateManifest( array $manifest ): void
+    {
+        $required = ['slug', 'name', 'version'];
+
+        foreach ( $required as $field ) {
+            $value = $manifest[ $field ] ?? null;
+
+            if ( null === $value || ( is_string( $value ) && '' === trim( $value ) ) ) {
+                throw ThemeValidationException::invalidManifest( "Missing required field: {$field}" );
+            }
+
+            if ( ! is_string( $value ) ) {
+                throw ThemeValidationException::invalidManifest( "Field '{$field}' must be a string." );
+            }
+        }
+
+        if ( ! $this->validateSlug( $manifest['slug'] ) ) {
+            throw ThemeValidationException::invalidManifest(
+                'Invalid slug format. Use alphanumeric, hyphens, and underscores only.',
+            );
+        }
+
+        // Anchored at end to prevent injection attempts like "1.0.0'; DROP TABLE".
+        if ( ! preg_match( '/^\d+\.\d+\.\d+$/', $manifest['version'] ) ) {
+            throw ThemeValidationException::invalidManifest(
+                'Invalid version format. Use semantic versioning (e.g., 1.0.0).',
+            );
+        }
+
+        if ( isset( $manifest['screenshot'] ) ) {
+            $screenshot = $manifest['screenshot'];
+
+            if ( ! is_string( $screenshot ) || '' === $screenshot ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'screenshot' must be a non-empty string.",
+                );
+            }
+
+            if ( str_contains( $screenshot, '/' ) || str_contains( $screenshot, '\\' ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'screenshot' must be a filename, not a path.",
+                );
+            }
+
+            $extension         = strtolower( pathinfo( $screenshot, PATHINFO_EXTENSION ) );
+            $allowedExtensions = ['png', 'jpg', 'jpeg', 'webp'];
+
+            if ( ! in_array( $extension, $allowedExtensions, true ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'screenshot' must have an allowed extension (png, jpg, jpeg, webp).",
+                );
+            }
+        }
+
+        if ( isset( $manifest['requires'] ) ) {
+            $requires = $manifest['requires'];
+
+            if ( ! is_string( $requires ) || ! preg_match( '/^\d+\.\d+\.\d+$/', $requires ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'requires' must be a semver string (e.g., 1.0.0).",
+                );
+            }
+        }
+
+        if ( isset( $manifest['templates'] ) ) {
+            if ( ! is_array( $manifest['templates'] ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'templates' must be an object.",
+                );
+            }
+
+            foreach ( ['layouts', 'pages', 'partials'] as $bucket ) {
+                if ( ! isset( $manifest['templates'][ $bucket ] ) ) {
+                    continue;
+                }
+
+                $entries = $manifest['templates'][ $bucket ];
+
+                if ( ! is_array( $entries ) ) {
+                    throw ThemeValidationException::invalidManifest(
+                        "Field 'templates.{$bucket}' must be an array of strings.",
+                    );
+                }
+
+                foreach ( $entries as $entry ) {
+                    if ( ! is_string( $entry ) ) {
+                        throw ThemeValidationException::invalidManifest(
+                            "Field 'templates.{$bucket}' must contain strings only.",
+                        );
+                    }
+                }
+            }
+        }
+
+        if ( isset( $manifest['supports'] ) ) {
+            if ( ! is_array( $manifest['supports'] ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'supports' must be an object.",
+                );
+            }
+
+            foreach ( $manifest['supports'] as $feature => $value ) {
+                if ( ! is_bool( $value ) ) {
+                    throw ThemeValidationException::invalidManifest(
+                        "Field 'supports.{$feature}' must be a boolean.",
+                    );
+                }
+            }
+        }
+    }
+
+    /**
      * Gets the themes base directory path.
      *
      * Returns the absolute path to the themes directory based on the
@@ -622,9 +772,9 @@ class ThemeManager
      */
     protected function getThemesPath(): string
     {
-        $directory = config( 'cms.themes.directory', 'themes');
+        $directory = config( 'cms.themes.directory', 'themes' );
 
-        return base_path( $directory);
+        return base_path( $directory );
     }
 
     /**
@@ -640,16 +790,16 @@ class ThemeManager
      *
      * @return array Themes array with is_active flag added to each theme.
      */
-    protected function markActiveTheme( array $themes): array
+    protected function markActiveTheme( array $themes ): array
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront'),
+            config( 'cms.themes.default', 'digital-shopfront' ),
         );
 
-        return array_map( function ( $theme) use ( $activeSlug) {
+        return array_map( function ( $theme ) use ( $activeSlug ) {
             // Defensive check: ensure slug key exists before comparing
-            $theme['is_active'] = isset( $theme['slug']) && $theme['slug'] === $activeSlug;
+            $theme['is_active'] = isset( $theme['slug'] ) && $theme['slug'] === $activeSlug;
 
             return $theme;
         }, $themes);
