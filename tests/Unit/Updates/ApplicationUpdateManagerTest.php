@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Illuminate\Support\Facades\Log;
 use Orchestra\Testbench\TestCase;
 use ReflectionClass;
 
@@ -170,6 +171,118 @@ class ApplicationUpdateManagerTest extends TestCase
         $result = $manager->checkForUpdate();
 
         $this->assertEquals('2.0.0', $result->latestVersion);
+    }
+
+    /**
+     * Test verifyChecksum throws on mismatch.
+     *
+     * @since 2.0.0
+     */
+    public function test_verify_checksum_throws_on_mismatch(): void
+    {
+        $manager = new ApplicationUpdateManager;
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'cmsfw-update-');
+        file_put_contents($zipPath, 'fake zip contents');
+
+        try {
+            $reflection = new ReflectionClass($manager);
+            $method     = $reflection->getMethod('verifyChecksum');
+            $method->setAccessible(true);
+
+            $this->expectException(UpdateException::class);
+            $this->expectExceptionMessage('Checksum mismatch');
+
+            $method->invoke($manager, $zipPath, str_repeat('0', 64));
+        } finally {
+            @unlink($zipPath);
+        }
+    }
+
+    /**
+     * Test verifyChecksum passes when the digest matches.
+     *
+     * @since 2.0.0
+     */
+    public function test_verify_checksum_passes_when_digest_matches(): void
+    {
+        $manager = new ApplicationUpdateManager;
+
+        $zipPath = tempnam(sys_get_temp_dir(), 'cmsfw-update-');
+        file_put_contents($zipPath, 'matching zip contents');
+
+        try {
+            $reflection = new ReflectionClass($manager);
+            $method     = $reflection->getMethod('verifyChecksum');
+            $method->setAccessible(true);
+
+            $method->invoke($manager, $zipPath, hash_file('sha256', $zipPath));
+
+            $this->assertTrue(true); // No exception means success.
+        } finally {
+            @unlink($zipPath);
+        }
+    }
+
+    /**
+     * Test maybeVerifyChecksum logs a warning when the source omits a checksum.
+     *
+     * @since 2.0.0
+     */
+    public function test_maybe_verify_checksum_logs_warning_when_sha256_missing(): void
+    {
+        config(['cms.updates.verify_checksum' => true]);
+
+        $manager = new ApplicationUpdateManager;
+
+        $updateInfo = new UpdateInfo(
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+            downloadUrl: 'https://example.com/update.zip',
+            sha256: null,
+            metadata: ['source' => 'gitlab'],
+        );
+
+        Log::shouldReceive('warning')
+            ->once()
+            ->withArgs(function (string $message, array $context): bool {
+                return str_contains($message, 'Skipping update integrity verification')
+                    && '2.0.0' === ($context['target_version'] ?? null)
+                    && 'gitlab' === ($context['source'] ?? null);
+            });
+
+        $reflection = new ReflectionClass($manager);
+        $method     = $reflection->getMethod('maybeVerifyChecksum');
+        $method->setAccessible(true);
+
+        $method->invoke($manager, '/does/not/matter.zip', $updateInfo, '2.0.0');
+    }
+
+    /**
+     * Test maybeVerifyChecksum does not warn when verification is disabled.
+     *
+     * @since 2.0.0
+     */
+    public function test_maybe_verify_checksum_is_silent_when_disabled(): void
+    {
+        config(['cms.updates.verify_checksum' => false]);
+
+        $manager = new ApplicationUpdateManager;
+
+        $updateInfo = new UpdateInfo(
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+            downloadUrl: 'https://example.com/update.zip',
+            sha256: null,
+        );
+
+        Log::shouldReceive('warning')->never();
+
+        $reflection = new ReflectionClass($manager);
+        $method     = $reflection->getMethod('maybeVerifyChecksum');
+        $method->setAccessible(true);
+
+        $method->invoke($manager, '/does/not/matter.zip', $updateInfo, '2.0.0');
     }
 
     /**
