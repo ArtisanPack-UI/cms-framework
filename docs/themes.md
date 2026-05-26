@@ -166,6 +166,29 @@ When `ThemeManager::discoverThemes()` runs, each theme is validated in three sta
 
 Themes that fail any stage are skipped from discovery. Schema failures log a warning naming the offending key (e.g. `settings.color.palette`) so theme authors can correct their manifest.
 
+### Strict install validation
+
+`ThemeManager::installFromZip()` runs an additional `validateManifest()` check after extraction. This stricter pass is the contract every uploadable theme must satisfy. It is not applied to themes already on disk so existing installations are not broken by tightened rules.
+
+**Required fields:**
+
+- `slug` — alphanumeric, hyphens, and underscores only (`/^[a-zA-Z0-9_-]+$/`).
+- `name` — non-empty string.
+- `version` — anchored semver `MAJOR.MINOR.PATCH` (`/^\d+\.\d+\.\d+$/`). Anchoring is deliberate; it prevents injection suffixes such as `1.0.0'; DROP TABLE`.
+
+**Optional fields, validated when present:**
+
+- `screenshot` — basename only, no path separators (`/` or `\`), with an allowlisted image extension (`png`, `jpg`, `jpeg`, `webp`).
+- `requires` — anchored semver, same shape as `version`.
+- `templates.layouts`, `templates.pages`, `templates.partials` — arrays of strings.
+- `supports.*` — booleans (e.g. `supports.menus`, `supports.widgets`).
+
+If validation fails, the freshly extracted theme directory is removed and a `ThemeValidationException` is thrown.
+
+### Reserved `keystone` namespace
+
+The `keystone` top-level key is reserved for consumer-specific install hints (e.g. `keystone.installer`, `keystone.seed.pages[]`). cms-framework treats this namespace as opaque — it is preserved through parsing but not interpreted. Downstream CMSes can layer their own installer/seed contracts under `keystone` without forking the manifest spec.
+
 ## Template Hierarchy
 
 The theme system implements a WordPress‑style template hierarchy for resolving templates:
