@@ -153,6 +153,10 @@ class ThemeManager
             throw ThemeNotFoundException::forSlug( $slug );
         }
 
+        // Pre-activation hook: listeners may throw to short-circuit activation
+        // before any persistent state changes.
+        doAction( 'theme.activating', $slug, $theme );
+
         $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
 
         // Clear theme cache
@@ -170,6 +174,8 @@ class ThemeManager
                 ] );
             }
         }
+
+        doAction( 'theme.activated', $slug, $theme );
 
         return true;
     }
@@ -230,7 +236,20 @@ class ThemeManager
             throw $e;
         }
 
+        // Pre-install hook: listeners may throw to abort the install. The
+        // extracted directory is rolled back so we never leave a half-installed
+        // theme on disk after a vetoed install.
+        try {
+            doAction( 'theme.installing', $slug, $manifest );
+        } catch ( Exception $e ) {
+            File::deleteDirectory( $themePath );
+
+            throw $e;
+        }
+
         Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
+
+        doAction( 'theme.installed', $slug, $manifest );
 
         return $manifest;
     }
