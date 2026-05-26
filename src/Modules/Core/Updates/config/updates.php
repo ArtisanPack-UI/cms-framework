@@ -159,6 +159,11 @@ return [
     | case-insensitively against the asset link's `name` field, falling back
     | to the basename of its `url` when the name is missing.
     |
+    | The default is `*.zip` because the update extractor uses `ZipArchive`.
+    | Other archive formats (e.g. `*.tar.gz`) can be selected via this glob,
+    | but the matched asset must still be a ZIP — supporting tarballs would
+    | require extending the extractor in `ApplicationUpdateManager`.
+    |
     */
-    'gitlab_release_asset_pattern' => env( 'GITLAB_RELEASE_ASSET_PATTERN', '*.tar.gz' ),
+    'gitlab_release_asset_pattern' => env( 'GITLAB_RELEASE_ASSET_PATTERN', '*.zip' ),
 ];

@@ -326,10 +326,10 @@ class GitLabUpdateSource implements UpdateSourceInterface
      */
     protected function resolveDownloadUrl(array $release): string
     {
-        $strategy = config('cms.updates.gitlab_update_strategy', 'auto_archive');
+        $strategy = (string) config('cms.updates.gitlab_update_strategy', 'auto_archive');
 
         if ('release_asset' === $strategy) {
-            $pattern = (string) config('cms.updates.gitlab_release_asset_pattern', '*.tar.gz');
+            $pattern = (string) config('cms.updates.gitlab_release_asset_pattern', '*.zip');
             $assetUrl = $this->findReleaseAssetUrl($release, $pattern);
 
             if (null === $assetUrl) {
@@ -343,7 +343,14 @@ class GitLabUpdateSource implements UpdateSourceInterface
             return $assetUrl;
         }
 
-        return $this->buildAutoArchiveUrl($release['tag_name']);
+        if ('auto_archive' === $strategy) {
+            return $this->buildAutoArchiveUrl($release['tag_name']);
+        }
+
+        throw UpdateException::downloadFailed(
+            "Unsupported `cms.updates.gitlab_update_strategy` value '{$strategy}'. "
+            ."Expected 'auto_archive' or 'release_asset'.",
+        );
     }
 
     /**
