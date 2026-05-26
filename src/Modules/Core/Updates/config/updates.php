@@ -142,9 +142,12 @@ return [
     |
     | - 'release_asset': resolve the download URL from `release.assets.links[]`
     |   by matching against `gitlab_release_asset_pattern`. This lets CI-built
-    |   tarballs (with curated contents and a sidecar checksum) be consumed
-    |   by the updater. If no link matches the pattern, the update fails
-    |   loudly rather than silently falling back to the auto-archive.
+    |   ZIP archives (with curated contents and a sidecar checksum) be consumed
+    |   by the updater. The matched asset must be a ZIP — the extractor in
+    |   `ApplicationUpdateManager::extractUpdate()` uses `ZipArchive`, so other
+    |   archive formats (e.g. tarballs) are not supported until that extractor
+    |   is extended. If no link matches the pattern, the update fails loudly
+    |   rather than silently falling back to the auto-archive.
     |
     */
     'gitlab_update_strategy' => env( 'GITLAB_UPDATE_STRATEGY', 'auto_archive' ),
@@ -160,9 +163,9 @@ return [
     | to the basename of its `url` when the name is missing.
     |
     | The default is `*.zip` because the update extractor uses `ZipArchive`.
-    | Other archive formats (e.g. `*.tar.gz`) can be selected via this glob,
-    | but the matched asset must still be a ZIP — supporting tarballs would
-    | require extending the extractor in `ApplicationUpdateManager`.
+    | Customizing this glob only changes which asset link is selected; the
+    | matched asset must still be a ZIP. Supporting other archive formats
+    | (tarballs, etc.) would require extending `ApplicationUpdateManager::extractUpdate()`.
     |
     */
     'gitlab_release_asset_pattern' => env( 'GITLAB_RELEASE_ASSET_PATTERN', '*.zip' ),
