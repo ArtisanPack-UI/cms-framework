@@ -93,8 +93,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
             throw UpdateException::versionCheckFailed('No stable releases found');
         }
 
-        // Get download link for source code
-        $downloadUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$latest['tag_name']}";
+        $downloadUrl = $this->resolveDownloadUrl($latest);
 
         $sha256 = $this->extractChecksum($latest);
 
@@ -296,16 +295,123 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @param  array  $release  Release data from GitLab API
      *
+     * @throws UpdateException
+     *
      * @return string Download URL
      */
     protected function extractDownloadUrl(array $release): string
     {
-        // Get download link for source code
         if (! isset($release['tag_name'])) {
             throw UpdateException::downloadFailed('No tag_name found in release');
         }
 
-        return "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$release['tag_name']}";
+        return $this->resolveDownloadUrl($release);
+    }
+
+    /**
+     * Resolve the download URL for a release based on the configured strategy.
+     *
+     * Two strategies are supported:
+     *   - 'auto_archive' (default): returns the auto-generated GitLab source archive URL.
+     *   - 'release_asset': returns the URL of the first asset link matching
+     *     `cms.updates.gitlab_release_asset_pattern`; throws when no link matches.
+     *
+     * @since 2.0.0
+     *
+     * @param  array<string, mixed>  $release  Release payload from the GitLab API.
+     *
+     * @throws UpdateException When `release_asset` is selected but no asset link matches the pattern.
+     *
+     * @return string Resolved download URL.
+     */
+    protected function resolveDownloadUrl(array $release): string
+    {
+        $strategy = config('cms.updates.gitlab_update_strategy', 'auto_archive');
+
+        if ('release_asset' === $strategy) {
+            $pattern = (string) config('cms.updates.gitlab_release_asset_pattern', '*.tar.gz');
+            $assetUrl = $this->findReleaseAssetUrl($release, $pattern);
+
+            if (null === $assetUrl) {
+                throw UpdateException::downloadFailed(
+                    "No release asset link matched pattern '{$pattern}' for tag '{$release['tag_name']}'. "
+                    .'Either upload a matching asset, adjust `cms.updates.gitlab_release_asset_pattern`, '
+                    ."or set `cms.updates.gitlab_update_strategy` to 'auto_archive'.",
+                );
+            }
+
+            return $assetUrl;
+        }
+
+        return $this->buildAutoArchiveUrl($release['tag_name']);
+    }
+
+    /**
+     * Build the auto-generated GitLab source-archive URL for a tag.
+     *
+     * @since 2.0.0
+     *
+     * @param  string  $tagName  Release tag name (e.g. `v2.0.0`).
+     *
+     * @return string Auto-archive download URL.
+     */
+    protected function buildAutoArchiveUrl(string $tagName): string
+    {
+        return "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$tagName}";
+    }
+
+    /**
+     * Locate a release-asset link whose name (or URL basename) matches a glob pattern.
+     *
+     * Matches case-insensitively using `fnmatch`. SHA-256 sidecar files
+     * (`*.sha256`) are always excluded so the checksum sidecar is not chosen
+     * as the download target when the pattern is broad.
+     *
+     * @since 2.0.0
+     *
+     * @param  array<string, mixed>  $release  Release payload from the GitLab API.
+     * @param  string  $pattern  Glob pattern compatible with `fnmatch`.
+     *
+     * @return string|null Matching asset URL, or null when no link matches.
+     */
+    protected function findReleaseAssetUrl(array $release, string $pattern): ?string
+    {
+        $links = $release['assets']['links'] ?? [];
+
+        if (! is_array($links)) {
+            return null;
+        }
+
+        $patternLower = strtolower($pattern);
+
+        foreach ($links as $link) {
+            if (! is_array($link)) {
+                continue;
+            }
+
+            $url = isset($link['url']) && is_string($link['url']) ? $link['url'] : '';
+
+            if ('' === $url) {
+                continue;
+            }
+
+            $name = isset($link['name']) && is_string($link['name']) && '' !== $link['name']
+                ? $link['name']
+                : basename(parse_url($url, PHP_URL_PATH) ?: $url);
+
+            $nameLower = strtolower($name);
+
+            // Never select a sidecar checksum as the download target.
+            if (str_ends_with($nameLower, '.sha256')) {
+                continue;
+            }
+
+            if (fnmatch($patternLower, $nameLower)) {
+                return $url;
+            }
+        }
+
+        return null;
     }
 
     /**
