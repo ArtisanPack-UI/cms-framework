@@ -175,6 +175,33 @@ describe( 'ThemeManager::installFromZip()', function (): void {
         expect( File::exists( $this->themesPath . '/' . $slug ) )->toBeFalse();
     } );
 
+    it( 'rejects a ZIP whose entries are not all rooted under the derived slug', function (): void {
+        $slug                  = 'multi-root-theme';
+        $this->testSlugs[]     = $slug;
+        $this->testSlugs[]     = 'other-theme';
+
+        $zipPath = $this->tmpPath . '/' . $slug . '.zip';
+        $zip     = new ZipArchive;
+        if ( true !== $zip->open( $zipPath, ZipArchive::CREATE ) ) {
+            throw new \RuntimeException( "Failed to create test ZIP at {$zipPath}" );
+        }
+        $zip->addEmptyDir( $slug );
+        $zip->addFromString( $slug . '/theme.json', json_encode( [
+            'slug'    => $slug,
+            'name'    => 'Multi Root Theme',
+            'version' => '1.0.0',
+        ] ) );
+        // Second top-level directory: would survive a rollback that only deletes $slug.
+        $zip->addFromString( 'other-theme/payload.txt', 'extra' );
+        $zip->close();
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( ThemeInstallationException::class, 'escapes the themes directory' );
+
+        expect( File::exists( $this->themesPath . '/' . $slug ) )->toBeFalse();
+        expect( File::exists( $this->themesPath . '/other-theme' ) )->toBeFalse();
+    } );
+
     it( 'rolls back the extracted directory when the manifest fails schema validation', function (): void {
         // Missing required "version" field triggers the legacy/cms-framework validator.
         $manifest = [

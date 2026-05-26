@@ -510,6 +510,15 @@ class ThemeManager
                 throw ThemeInstallationException::pathTraversal( $entry );
             }
 
+            // Every entry must live under the derived slug directory. Without
+            // this, a malicious ZIP could ship a second top-level folder that
+            // would escape rollback (which only removes the slug directory).
+            $topSegment = explode( '/', $normalized, 2 )[0];
+            if ( $topSegment !== $slug ) {
+                $zip->close();
+                throw ThemeInstallationException::pathTraversal( $entry );
+            }
+
             $destination = $realBasePath . '/' . ltrim( $normalized, '/' );
 
             // Walk up the destination path until we find an existing ancestor,
