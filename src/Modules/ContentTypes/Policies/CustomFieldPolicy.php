@@ -154,6 +154,6 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.delete', 'customFields.manage', $customField));
+        return $user->can( applyFilters( 'customFields.delete', 'customFields.manage', $customField ) );
     }
 }

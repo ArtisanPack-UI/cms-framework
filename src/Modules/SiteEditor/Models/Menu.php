@@ -130,6 +130,6 @@ class Menu extends Model
         static::deleting( static function ( Menu $menu ): void {
             $menu->items()->each( static fn ( MenuItem $item ): ?bool => $item->delete() );
             $menu->locationAssignments()->delete();
-        });
+        } );
     }
 }

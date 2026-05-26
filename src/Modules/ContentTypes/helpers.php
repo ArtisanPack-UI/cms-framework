@@ -41,6 +41,6 @@ if ( ! function_exists( 'contentTypeExists' ) ) {
      */
     function contentTypeExists( string $slug ): bool
     {
-        return app( ContentTypeManager::class )->contentTypeExists( $slug);
+        return app( ContentTypeManager::class )->contentTypeExists( $slug );
     }
 }

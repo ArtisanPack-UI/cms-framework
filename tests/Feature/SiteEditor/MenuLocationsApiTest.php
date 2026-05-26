@@ -117,8 +117,8 @@ describe( 'DELETE /api/v1/menu-locations/{location}', function (): void {
     } );
 
     it( 'returns 404 when nothing was assigned', function (): void {
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $this->deleteJson( '/api/v1/menu-locations/primary')->assertNotFound();
-    });
+        $this->deleteJson( '/api/v1/menu-locations/primary' )->assertNotFound();
+    } );
 });

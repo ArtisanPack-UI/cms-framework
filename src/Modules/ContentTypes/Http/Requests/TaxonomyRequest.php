@@ -135,7 +135,7 @@ class TaxonomyRequest extends FormRequest
             'hierarchical'      => __( 'hierarchical' ),
             'show_in_admin'     => __( 'show in admin' ),
             'rest_base'         => __( 'REST base' ),
-            'metadata'          => __( 'metadata'),
+            'metadata'          => __( 'metadata' ),
         ];
     }
 }

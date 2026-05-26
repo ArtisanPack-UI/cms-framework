@@ -84,6 +84,6 @@ class NotificationPolicy
     public function delete( $user, Notification $notification ): bool
     {
         // Only users with notification management capability can delete
-        return $user->hasCapability( 'notifications.manage');
+        return $user->hasCapability( 'notifications.manage' );
     }
 }

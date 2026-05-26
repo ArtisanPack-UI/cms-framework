@@ -124,6 +124,6 @@ class MenuLocationsController extends Controller
     {
         $theme = $this->themeManager->getActiveTheme();
 
-        return null !== $theme && ! empty( $theme['slug']) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
     }
 }

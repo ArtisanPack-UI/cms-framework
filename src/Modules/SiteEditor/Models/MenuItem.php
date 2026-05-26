@@ -147,6 +147,6 @@ class MenuItem extends Model
     {
         static::deleting( static function ( MenuItem $item ): void {
             $item->children()->each( static fn ( MenuItem $child ): ?bool => $child->delete() );
-        });
+        } );
     }
 }

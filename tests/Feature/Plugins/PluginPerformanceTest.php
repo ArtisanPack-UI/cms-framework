@@ -321,16 +321,16 @@ describe( 'Scalability Tests', function (): void {
                 'name'    => $manifest['name'],
                 'version' => $manifest['version'],
                 'meta'    => $manifest,
-            ]);
-            $times[ $size ] = microtime( true) - $start;
+            ] );
+            $times[ $size ] = microtime( true ) - $start;
         }
 
         // Performance should scale linearly, not exponentially
         // Later insertions shouldn't be significantly slower
-        $firstTime = reset( $times);
-        $lastTime  = end( $times);
+        $firstTime = reset( $times );
+        $lastTime  = end( $times );
 
         // Last insertion should not be more than 5x slower than first
-        expect( $lastTime)->toBeLessThan( $firstTime * 5);
-    });
+        expect( $lastTime )->toBeLessThan( $firstTime * 5 );
+    } );
 });

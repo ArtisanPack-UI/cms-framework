@@ -257,9 +257,9 @@ class PageManager
     protected function applyFilters( Builder $query, array $filters ): void
     {
         // Apply shared content filters
-        $this->applyStatusFilter( $query, $filters, false);
-        $this->applyAuthorFilter( $query, $filters);
-        $this->applySearchFilter( $query, $filters);
+        $this->applyStatusFilter( $query, $filters, false );
+        $this->applyAuthorFilter( $query, $filters );
+        $this->applySearchFilter( $query, $filters );
 
         // Apply template filter (page-specific)
         if ( isset( $filters['template'])) {

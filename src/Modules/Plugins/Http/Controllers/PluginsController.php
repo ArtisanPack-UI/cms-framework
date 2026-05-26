@@ -163,7 +163,7 @@ class PluginsController extends Controller
         } catch ( Exception $e ) {
             return response()->json( [
                 'message' => 'Update failed: ' . $e->getMessage(),
-            ], 422);
+            ], 422 );
         }
     }
 }

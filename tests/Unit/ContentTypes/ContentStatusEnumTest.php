@@ -38,5 +38,5 @@ test( 'content status enum label returns translatable string', function (): void
 test( 'content status enum validationRule returns enum rule', function (): void {
     $rule = ContentStatus::validationRule();
 
-    expect( $rule)->toBeInstanceOf( Enum::class);
-});
+    expect( $rule )->toBeInstanceOf( Enum::class );
+} );

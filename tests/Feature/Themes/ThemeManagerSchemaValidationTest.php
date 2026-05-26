@@ -161,10 +161,10 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
 
         expect( $slugs )->not->toContain( 'malformed-theme' );
 
-        Log::shouldHaveReceived( 'warning')
-            ->withArgs( function ( string $message): bool {
-                return str_contains( $message, 'parse failed');
-            })
+        Log::shouldHaveReceived( 'warning' )
+            ->withArgs( function ( string $message ): bool {
+                return str_contains( $message, 'parse failed' );
+            } )
             ->once();
-    });
+    } );
 });

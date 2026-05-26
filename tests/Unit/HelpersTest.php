@@ -135,13 +135,13 @@ test( 'helper functions use app container correctly', function (): void {
             public function addPermissionToRole( $roleSlug, $permissionSlug ): void
             {
                 $role       = Role::where( 'slug', sanitizeText( $roleSlug ) )->firstOrFail();
-                $permission = Permission::where( 'slug', $permissionSlug)->firstOrFail();
-                $role->permissions()->syncWithoutDetaching( $permission->id);
+                $permission = Permission::where( 'slug', $permissionSlug )->firstOrFail();
+                $role->permissions()->syncWithoutDetaching( $permission->id );
             }
         };
-    });
+    } );
 
-    $role = ap_register_role( 'test-role', 'Test Role');
-    expect( $role)->toBeInstanceOf( Role::class);
-    expect( $role->slug)->toBe( 'test-role');
+    $role = ap_register_role( 'test-role', 'Test Role' );
+    expect( $role )->toBeInstanceOf( Role::class );
+    expect( $role->slug )->toBe( 'test-role');
 });

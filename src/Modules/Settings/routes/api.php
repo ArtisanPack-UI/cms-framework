@@ -28,5 +28,5 @@ Route::middleware( 'auth' )->group( function (): void {
     // of writing to the model directly.
     Route::put( 'settings', [SettingController::class, 'bulkUpdate'] )->name( 'settings.bulk-update' );
 
-    Route::apiResource( 'settings', SettingController::class);
-});
+    Route::apiResource( 'settings', SettingController::class );
+} );

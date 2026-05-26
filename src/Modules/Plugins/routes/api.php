@@ -31,6 +31,6 @@ Route::prefix( 'api/v1' )
             Route::post( '{slug}/update', [PluginsController::class, 'update'] )->name( 'api.plugins.update' );
 
             // Delete plugin
-            Route::delete( '{slug}', [PluginsController::class, 'destroy'])->name( 'api.plugins.destroy');
-        });
+            Route::delete( '{slug}', [PluginsController::class, 'destroy'] )->name( 'api.plugins.destroy' );
+        } );
     });

@@ -162,8 +162,8 @@ class ContentTypeRequest extends FormRequest
             'metadata'      => __( 'metadata' ),
             'public'        => __( 'public' ),
             'show_in_admin' => __( 'show in admin' ),
-            'icon'          => __( 'icon'),
-            'menu_position' => __( 'menu position'),
+            'icon'          => __( 'icon' ),
+            'menu_position' => __( 'menu position' ),
         ];
     }
 }

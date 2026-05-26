@@ -195,7 +195,7 @@ class WpThemeJsonValidator
 
         $schema = json_decode( file_get_contents( $path ) );
 
-        if ( ! is_object( $schema)) {
+        if ( ! is_object( $schema ) ) {
             throw new RuntimeException(
                 "Bundled WP theme.json schema for version {$version} is not valid JSON.",
             );

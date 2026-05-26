@@ -170,9 +170,9 @@ test( 'auto-register: a content type that declares editor support but lacks the 
     expect( $resources )->not->toHaveKey( 'broken' );
 
     Log::shouldHaveReceived( 'warning' )
-        ->withArgs( fn ( string $message) => str_contains( $message, '[broken]')
-            && str_contains( $message, TestPlainContentTypeModel::class)
-            && str_contains( $message, 'HasBlockContent'),
+        ->withArgs( fn ( string $message ) => str_contains( $message, '[broken]' )
+            && str_contains( $message, TestPlainContentTypeModel::class )
+            && str_contains( $message, 'HasBlockContent' ),
         )
         ->once();
 });

@@ -154,6 +154,6 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'contentTypes.delete', 'contentTypes.manage', $contentType));
+        return $user->can( applyFilters( 'contentTypes.delete', 'contentTypes.manage', $contentType ) );
     }
 }

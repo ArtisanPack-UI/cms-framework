@@ -42,5 +42,5 @@ test( 'type definition files are publishable to resource path', function (): voi
     }
 
     expect( $hasSourcePath )->toBeTrue()
-        ->and( $hasDestinationPath)->toBeTrue();
-});
+        ->and( $hasDestinationPath )->toBeTrue();
+} );

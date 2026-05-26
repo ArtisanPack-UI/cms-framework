@@ -108,6 +108,6 @@ class PostCategoryFactory extends Factory
     {
         return $this->state( fn ( array $attributes ) => [
             'order' => $order,
-        ]);
+        ] );
     }
 }

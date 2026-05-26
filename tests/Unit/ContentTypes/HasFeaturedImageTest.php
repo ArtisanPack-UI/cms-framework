@@ -167,13 +167,13 @@ test( 'setFeaturedImage isolates featured images per host model row', function (
     $modelB->setFeaturedImage( $mediaB->id );
 
     expect( $modelA->featuredImage()->first()->id )->toBe( $mediaA->id );
-    expect( $modelB->featuredImage()->first()->id )->toBe( $mediaB->id);
-});
+    expect( $modelB->featuredImage()->first()->id )->toBe( $mediaB->id );
+} );
 
 test( 'post model still uses HasFeaturedImage trait', function (): void {
-    expect( in_array( HasFeaturedImage::class, class_uses_recursive( Post::class), true))->toBeTrue();
-});
+    expect( in_array( HasFeaturedImage::class, class_uses_recursive( Post::class ), true ) )->toBeTrue();
+} );
 
 test( 'page model still uses HasFeaturedImage trait', function (): void {
-    expect( in_array( HasFeaturedImage::class, class_uses_recursive( Page::class), true))->toBeTrue();
+    expect( in_array( HasFeaturedImage::class, class_uses_recursive( Page::class ), true ) )->toBeTrue();
 });

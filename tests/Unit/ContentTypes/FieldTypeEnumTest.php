@@ -65,14 +65,14 @@ test( 'field type enum label returns translatable string', function (): void {
     expect( FieldType::Time->label() )->toBe( __( 'Time' ) );
     expect( FieldType::Email->label() )->toBe( __( 'Email' ) );
     expect( FieldType::Url->label() )->toBe( __( 'URL' ) );
-    expect( FieldType::Tel->label() )->toBe( __( 'Telephone'));
-    expect( FieldType::Color->label())->toBe( __( 'Color'));
-    expect( FieldType::File->label())->toBe( __( 'File'));
-    expect( FieldType::Image->label())->toBe( __( 'Image'));
-});
+    expect( FieldType::Tel->label() )->toBe( __( 'Telephone' ) );
+    expect( FieldType::Color->label() )->toBe( __( 'Color' ) );
+    expect( FieldType::File->label() )->toBe( __( 'File' ) );
+    expect( FieldType::Image->label() )->toBe( __( 'Image' ) );
+} );
 
 test( 'field type enum validationRule returns enum rule', function (): void {
     $rule = FieldType::validationRule();
 
-    expect( $rule)->toBeInstanceOf( Enum::class);
+    expect( $rule )->toBeInstanceOf( Enum::class);
 });

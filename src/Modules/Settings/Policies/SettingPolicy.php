@@ -200,6 +200,6 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.forceDelete', 'settings.delete'));
+        return $user->can( applyFilters( 'settings.forceDelete', 'settings.delete' ));
     }
 }

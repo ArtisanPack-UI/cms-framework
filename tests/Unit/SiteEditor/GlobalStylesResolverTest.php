@@ -248,17 +248,17 @@ describe( 'ResolvedGlobalStyles::contentHash()', function (): void {
     it( 'changes when settings change', function (): void {
         $first = $this->resolver->resolve();
 
-        $this->resolver->update( ['styles' => ['color' => ['background' => '#deadbe']]]);
+        $this->resolver->update( ['styles' => ['color' => ['background' => '#deadbe']]] );
 
         $second = $this->resolver->resolve();
 
-        expect( $first->contentHash())->not->toBe( $second->contentHash());
-    });
+        expect( $first->contentHash() )->not->toBe( $second->contentHash() );
+    } );
 
     it( 'is stable across calls when input is unchanged', function (): void {
         $a = $this->resolver->resolve()->contentHash();
         $b = $this->resolver->resolve()->contentHash();
 
-        expect( $a)->toBe( $b);
+        expect( $a )->toBe( $b );
     });
 });

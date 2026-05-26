@@ -162,12 +162,12 @@ test( 'export command supports pretty print', function (): void {
     $this->artisan( 'cms:openapi:export', [
         'path'     => $prettyPath,
         '--pretty' => true,
-    ])->assertSuccessful();
+    ] )->assertSuccessful();
 
-    $compactContent = file_get_contents( $compactPath);
-    $prettyContent  = file_get_contents( $prettyPath);
+    $compactContent = file_get_contents( $compactPath );
+    $prettyContent  = file_get_contents( $prettyPath );
 
     // Pretty-printed JSON is longer and contains indentation
-    expect( strlen( $prettyContent))->toBeGreaterThan( strlen( $compactContent));
-    expect( $prettyContent)->toContain( "\n    ");
+    expect( strlen( $prettyContent ) )->toBeGreaterThan( strlen( $compactContent ) );
+    expect( $prettyContent )->toContain( "\n    ");
 });

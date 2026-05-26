@@ -121,7 +121,7 @@ class SettingRequest extends FormRequest
         return [
             'key'   => __( 'setting key' ),
             'value' => __( 'setting value' ),
-            'type'  => __( 'setting type'),
+            'type'  => __( 'setting type' ),
         ];
     }
 }

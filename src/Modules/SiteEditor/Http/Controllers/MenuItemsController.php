@@ -276,11 +276,11 @@ class MenuItemsController extends Controller
             $attributes['position'] = 0;
         }
 
-        if ( null === $existing && ! array_key_exists( 'target', $attributes )) {
+        if ( null === $existing && ! array_key_exists( 'target', $attributes ) ) {
             $attributes['target'] = '_self';
         }
 
-        if ( null === $existing && ! array_key_exists( 'type', $attributes)) {
+        if ( null === $existing && ! array_key_exists( 'type', $attributes ) ) {
             $attributes['type'] = MenuItem::TYPE_LINK;
         }
 

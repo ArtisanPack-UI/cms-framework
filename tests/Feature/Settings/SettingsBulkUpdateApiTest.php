@@ -182,5 +182,5 @@ test( 'it rejects a request missing the settings key entirely', function (): voi
     actingAs( $this->user )
         ->putJson( '/api/v1/settings', [] )
         ->assertStatus( 422 )
-        ->assertJsonValidationErrors( ['settings']);
+        ->assertJsonValidationErrors( ['settings'] );
 });

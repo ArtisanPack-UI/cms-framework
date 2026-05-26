@@ -532,10 +532,10 @@ class GlobalStylesEmitter
      */
     protected function kebab( string $value ): string
     {
-        $value = preg_replace( '/([a-z\d])([A-Z])/', '$1-$2', $value) ?? $value;
-        $value = strtolower( $value);
+        $value = preg_replace( '/([a-z\d])([A-Z])/', '$1-$2', $value ) ?? $value;
+        $value = strtolower( $value );
 
-        return str_replace( '_', '-', $value);
+        return str_replace( '_', '-', $value );
     }
 
     /**
@@ -543,12 +543,12 @@ class GlobalStylesEmitter
      *
      * @param  array<int|string, mixed>  $value
      */
-    protected function isAssoc( array $value): bool
+    protected function isAssoc( array $value ): bool
     {
-        if ( [] === $value) {
+        if ( [] === $value ) {
             return false;
         }
 
-        return array_keys( $value) !== range( 0, count( $value) - 1);
+        return array_keys( $value ) !== range( 0, count( $value) - 1);
     }
 }

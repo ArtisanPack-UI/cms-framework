@@ -166,8 +166,8 @@ test( 'hasPermissionTo works with role that has multiple permissions', function 
     $adminRole->permissions()->attach( $permissions );
     $user->roles()->attach( $adminRole );
 
-    expect( $user->hasPermissionTo( 'create-posts'))->toBeTrue();
-    expect( $user->hasPermissionTo( 'edit-posts'))->toBeTrue();
-    expect( $user->hasPermissionTo( 'delete-posts'))->toBeTrue();
-    expect( $user->hasPermissionTo( 'non-existent-permission'))->toBeFalse();
+    expect( $user->hasPermissionTo( 'create-posts' ) )->toBeTrue();
+    expect( $user->hasPermissionTo( 'edit-posts' ) )->toBeTrue();
+    expect( $user->hasPermissionTo( 'delete-posts' ) )->toBeTrue();
+    expect( $user->hasPermissionTo( 'non-existent-permission' ) )->toBeFalse();
 });

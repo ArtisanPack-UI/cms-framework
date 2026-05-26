@@ -92,5 +92,5 @@ it( 'passes null through ap.visual-editor.global-styles when the table is missin
 it( 'short-circuits ap.visual-editor.navigation when the menus table is missing', function (): void {
     $result = applyFilters( 'ap.visual-editor.navigation', ['primary' => ['location' => 'primary']] );
 
-    expect( $result)->toBe( ['primary' => ['location' => 'primary']]);
-});
+    expect( $result )->toBe( ['primary' => ['location' => 'primary']] );
+} );

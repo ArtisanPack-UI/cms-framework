@@ -73,6 +73,6 @@ class UpdateTypeTest extends TestCase
      */
     public function test_try_from_returns_null_for_invalid_string(): void
     {
-        $this->assertNull( UpdateType::tryFrom( 'invalid'));
+        $this->assertNull( UpdateType::tryFrom( 'invalid' ) );
     }
 }

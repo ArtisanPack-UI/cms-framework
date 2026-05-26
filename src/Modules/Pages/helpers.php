@@ -39,6 +39,6 @@ if ( ! function_exists( 'getPageTree' ) ) {
     {
         $pageManager = app( ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager::class );
 
-        return $pageManager->getPageTree( $filters);
+        return $pageManager->getPageTree( $filters );
     }
 }

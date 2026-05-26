@@ -217,4 +217,4 @@ describe( 'ThemeManager::installFromZip()', function (): void {
         // Rollback: the extracted directory should not remain on disk.
         expect( File::exists( $this->themesPath . '/broken-theme' ) )->toBeFalse();
     } )->skip(); // depends on schema strictness — covered by ThemeManagerSchemaValidationTest
-});
+} );

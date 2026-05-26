@@ -78,6 +78,6 @@ class UserServiceProvider extends ServiceProvider
      */
     protected function registerMiddleware(): void
     {
-        $this->app['router']->aliasMiddleware( 'role', CheckRole::class);
+        $this->app['router']->aliasMiddleware( 'role', CheckRole::class );
     }
 }

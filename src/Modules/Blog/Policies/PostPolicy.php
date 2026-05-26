@@ -185,6 +185,6 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.publish', 'posts.publish', $post));
+        return $user->can( applyFilters( 'posts.publish', 'posts.publish', $post ));
     }
 }

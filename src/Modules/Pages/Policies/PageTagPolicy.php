@@ -154,6 +154,6 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.delete', 'pageTags.manage', $tag));
+        return $user->can( applyFilters( 'pageTags.delete', 'pageTags.manage', $tag ) );
     }
 }

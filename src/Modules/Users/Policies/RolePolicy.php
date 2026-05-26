@@ -198,6 +198,6 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.forceDelete', 'roles.delete'));
+        return $user->can( applyFilters( 'role.forceDelete', 'roles.delete' ));
     }
 }

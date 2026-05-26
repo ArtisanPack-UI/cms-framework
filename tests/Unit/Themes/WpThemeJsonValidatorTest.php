@@ -259,15 +259,15 @@ describe( 'configurable schema version', function (): void {
 
     it( 'reads the configured version when validating WP-shape keys', function (): void {
         // Default is '3'. Re-asserting it is loadable is sufficient.
-        config()->set( 'cms.themes.wpThemeJsonSchemaVersion', '3');
+        config()->set( 'cms.themes.wpThemeJsonSchemaVersion', '3' );
 
         $manifest = [
             'slug'     => 'configurable',
             'settings' => ['appearanceTools' => true],
         ];
 
-        $result = $this->validator->validate( $manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect( $result->valid)->toBeTrue();
-    });
+        expect( $result->valid )->toBeTrue();
+    } );
 });

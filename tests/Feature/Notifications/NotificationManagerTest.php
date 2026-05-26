@@ -360,11 +360,11 @@ test( 'getUnreadCount returns correct unread count', function (): void {
     $notification2 = Notification::factory()->create();
     $notification3 = Notification::factory()->create();
 
-    $notification1->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false]);
-    $notification2->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false]);
-    $notification3->users()->attach( $user->id, ['is_read' => true, 'is_dismissed' => false]);
+    $notification1->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false] );
+    $notification2->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false] );
+    $notification3->users()->attach( $user->id, ['is_read' => true, 'is_dismissed' => false] );
 
-    $count = $manager->getUnreadCount( $user->id);
+    $count = $manager->getUnreadCount( $user->id );
 
-    expect( $count)->toBe( 2);
+    expect( $count )->toBe( 2 );
 });

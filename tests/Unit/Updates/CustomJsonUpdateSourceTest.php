@@ -280,10 +280,10 @@ class CustomJsonUpdateSourceTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app): void
+    protected function defineEnvironment( $app ): void
     {
-        $app['config']->set( 'cms.updates.http_timeout', 15);
-        $app['config']->set( 'cms.updates.http_retries', 3);
-        $app['config']->set( 'cms.updates.download_timeout', 300);
+        $app['config']->set( 'cms.updates.http_timeout', 15 );
+        $app['config']->set( 'cms.updates.http_retries', 3 );
+        $app['config']->set( 'cms.updates.download_timeout', 300 );
     }
 }

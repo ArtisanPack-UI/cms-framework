@@ -94,10 +94,10 @@ test( 'it updates setting and updates existing', function (): void {
         SettingType::String,
     );
 
-    $this->manager->updateSetting( 'existing-key', '100');
+    $this->manager->updateSetting( 'existing-key', '100' );
 
     $this->assertDatabaseHas( 'settings', [
         'key'   => 'existing-key',
         'value' => '200', // Value should be "sanitized"
-    ]);
+    ] );
 });

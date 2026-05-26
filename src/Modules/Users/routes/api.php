@@ -18,4 +18,4 @@ Route::middleware( 'auth' )->group( function (): void {
     Route::apiResource( 'permissions', PermissionController::class );
 
     Route::post( 'users/bulk', [UserController::class, 'bulk'] );
-});
+} );

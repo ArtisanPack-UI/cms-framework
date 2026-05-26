@@ -209,11 +209,11 @@ describe( 'MenuResolver::revert()', function (): void {
         $reverted = $this->resolver->revert( 'primary' );
 
         expect( $reverted )->toBeTrue()
-            ->and( Menu::query()->find( $menu->id ))->not->toBeNull()
-            ->and( MenuLocationAssignment::query()->where( 'location', 'primary')->exists())->toBeFalse();
-    });
+            ->and( Menu::query()->find( $menu->id ) )->not->toBeNull()
+            ->and( MenuLocationAssignment::query()->where( 'location', 'primary' )->exists() )->toBeFalse();
+    } );
 
     it( 'returns false when no assignment exists', function (): void {
-        expect( $this->resolver->revert( 'primary'))->toBeFalse();
+        expect( $this->resolver->revert( 'primary' ) )->toBeFalse();
     });
 });

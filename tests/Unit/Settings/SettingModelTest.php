@@ -128,9 +128,9 @@ test( 'it handles null value', function (): void {
 
     // Test case 3: Simulating a raw null value from DB for a non-string type
     $setting = Setting::create( ['key' => 'test-raw-null-int', 'value' => 123, 'type' => 'integer'] );                        // Create with initial value
-    Illuminate\Support\Facades\DB::table( 'settings' )->where( 'key', 'test-raw-null-int' )->update( ['value' => null]);    // Force DB null
+    Illuminate\Support\Facades\DB::table( 'settings' )->where( 'key', 'test-raw-null-int' )->update( ['value' => null] );    // Force DB null
     $setting->refresh();                                                                                                        // Reload
 
-    expect( $setting->type)->toBe( 'integer');
-    expect( $setting->value)->toBeNull(); // Getter returns null for null non-string type
+    expect( $setting->type )->toBe( 'integer' );
+    expect( $setting->value )->toBeNull(); // Getter returns null for null non-string type
 });

@@ -272,10 +272,10 @@ if ( ! function_exists( 'postTagExists' ) ) {
      *
      * @return bool True if the tag exists, false otherwise.
      */
-    function postTagExists( int|string $identifier): bool
+    function postTagExists( int|string $identifier ): bool
     {
-        if ( is_int( $identifier)) {
-            return PostTag::where( 'id', sanitizeInt( $identifier))->exists();
+        if ( is_int( $identifier ) ) {
+            return PostTag::where( 'id', sanitizeInt( $identifier ) )->exists();
         }
 
         return PostTag::where( 'slug', sanitizeText( $identifier))->exists();

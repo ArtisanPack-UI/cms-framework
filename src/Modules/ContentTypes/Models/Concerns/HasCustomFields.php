@@ -89,6 +89,6 @@ trait HasCustomFields
     {
         $contentType = $this->getTable();
 
-        return app( CustomFieldManager::class )->getFieldsForContentType( $contentType);
+        return app( CustomFieldManager::class )->getFieldsForContentType( $contentType );
     }
 }

@@ -154,6 +154,6 @@ class PostCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postCategories.delete', 'postCategories.manage', $category));
+        return $user->can( applyFilters( 'postCategories.delete', 'postCategories.manage', $category ) );
     }
 }

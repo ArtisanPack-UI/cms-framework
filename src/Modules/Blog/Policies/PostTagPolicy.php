@@ -154,6 +154,6 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postTags.delete', 'postTags.manage', $tag));
+        return $user->can( applyFilters( 'postTags.delete', 'postTags.manage', $tag ) );
     }
 }

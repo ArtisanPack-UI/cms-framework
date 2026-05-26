@@ -86,8 +86,8 @@ describe( 'ap.visual-editor.global-styles filter wiring', function (): void {
         removeAllFilters( 'ap.visual-editor.global-styles' );
         (new SiteEditorServiceProvider( app() ))->registerVisualEditorSiteEditorFilters();
 
-        $entry = applyFilters( 'ap.visual-editor.global-styles', null);
+        $entry = applyFilters( 'ap.visual-editor.global-styles', null );
 
-        expect( $entry)->toBeNull();
-    });
+        expect( $entry )->toBeNull();
+    } );
 });

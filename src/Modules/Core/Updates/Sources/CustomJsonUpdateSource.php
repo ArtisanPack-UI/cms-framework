@@ -190,8 +190,8 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
 
         $data = $response->json();
 
-        if ( ! is_array( $data)) {
-            throw UpdateException::invalidJsonResponse( $url);
+        if ( ! is_array( $data ) ) {
+            throw UpdateException::invalidJsonResponse( $url );
         }
 
         return $data;

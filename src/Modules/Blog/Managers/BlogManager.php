@@ -176,11 +176,11 @@ class BlogManager
      *
      * @param  int  $limit  Number of posts to retrieve.
      */
-    public function getPopularPosts( int $limit = 10): Collection
+    public function getPopularPosts( int $limit = 10 ): Collection
     {
         return $this->getArchiveQuery()
-            ->orderByRaw( 'CAST(JSON_EXTRACT(metadata, "$.view_count") AS UNSIGNED) DESC')
-            ->limit( $limit)
+            ->orderByRaw( 'CAST(JSON_EXTRACT(metadata, "$.view_count") AS UNSIGNED) DESC' )
+            ->limit( $limit )
             ->get();
     }
 }

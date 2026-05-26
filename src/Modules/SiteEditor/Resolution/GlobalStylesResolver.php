@@ -283,13 +283,13 @@ class GlobalStylesResolver
             return false;
         }
 
-        return array_keys( $value ) !== range( 0, count( $value) - 1);
+        return array_keys( $value ) !== range( 0, count( $value ) - 1 );
     }
 
     /**
      * @since 2.0.0
      */
-    protected function humanizeSlug( string $slug): string
+    protected function humanizeSlug( string $slug ): string
     {
         return ucwords( str_replace( ['-', '_'], ' ', $slug));
     }

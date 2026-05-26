@@ -126,8 +126,8 @@ it( 'checks if has service provider', function (): void {
         'slug'    => 'plugin-without-sp',
         'name'    => 'Plugin Without SP',
         'version' => '1.0.0',
-    ]);
+    ] );
 
-    expect( $pluginWithSP->hasServiceProvider())->toBeTrue()
-        ->and( $pluginWithoutSP->hasServiceProvider())->toBeFalse();
+    expect( $pluginWithSP->hasServiceProvider() )->toBeTrue()
+        ->and( $pluginWithoutSP->hasServiceProvider() )->toBeFalse();
 });

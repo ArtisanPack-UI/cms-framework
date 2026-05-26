@@ -115,4 +115,4 @@ describe( 'POST /v1/themes (upload)', function (): void {
 
         $response->assertStatus( 401 );
     } );
-});
+} );

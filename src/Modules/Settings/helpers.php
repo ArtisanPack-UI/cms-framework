@@ -61,6 +61,6 @@ if ( ! function_exists( 'apUpdateSetting' ) ) {
      */
     function apUpdateSetting( string $key, mixed $value ): void
     {
-        app( SettingsManager::class )->updateSetting( $key, $value);
+        app( SettingsManager::class )->updateSetting( $key, $value );
     }
 }

@@ -78,6 +78,6 @@ class PermissionController extends Controller
     {
         $permission->delete();
 
-        return response()->json( [], 204);
+        return response()->json( [], 204 );
     }
 }

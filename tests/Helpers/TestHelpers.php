@@ -18,6 +18,6 @@ if ( ! function_exists( 'invokeMethod' ) ) {
         $method     = $reflection->getMethod( $methodName );
         $method->setAccessible( true );
 
-        return $method->invokeArgs( $object, $parameters);
+        return $method->invokeArgs( $object, $parameters );
     }
 }

@@ -380,10 +380,10 @@ class NotificationManager
      */
     protected function filterUsersForEmail( array $userIds, string $notificationKey ): array
     {
-        $userModel = config( 'auth.providers.users.model');
+        $userModel = config( 'auth.providers.users.model' );
 
-        return $userModel::whereIn( 'id', $userIds)
-            ->whereDoesntHave( 'notificationPreferences', function ( $query) use ( $notificationKey): void {
+        return $userModel::whereIn( 'id', $userIds )
+            ->whereDoesntHave( 'notificationPreferences', function ( $query ) use ( $notificationKey ): void {
                 $query->where( 'notification_type', sanitizeText( $notificationKey))
                     ->where( 'email_enabled', false);
             })

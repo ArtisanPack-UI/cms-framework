@@ -214,7 +214,7 @@ class TemplatePartResolver implements EntityResolver
     protected function guessAreaFromSlug( string $slug ): string
     {
         foreach ( ['header', 'footer', 'sidebar'] as $area ) {
-            if ( $slug === $area || str_starts_with( $slug, $area . '-')) {
+            if ( $slug === $area || str_starts_with( $slug, $area . '-' ) ) {
                 return $area;
             }
         }

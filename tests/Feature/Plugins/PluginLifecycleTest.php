@@ -254,17 +254,17 @@ describe( 'Active Plugins Loading', function (): void {
             'name'      => 'Active Plugin 2',
             'version'   => '1.0.0',
             'is_active' => true,
-        ]);
+        ] );
 
         Plugin::create( [
             'slug'      => 'inactive-plugin',
             'name'      => 'Inactive Plugin',
             'version'   => '1.0.0',
             'is_active' => false,
-        ]);
+        ] );
 
         // This method is called during boot, we're just testing it doesn't error
-        expect( fn () => $this->manager->loadActivePlugins())
-            ->not->toThrow( Exception::class);
-    });
+        expect( fn () => $this->manager->loadActivePlugins() )
+            ->not->toThrow( Exception::class );
+    } );
 });

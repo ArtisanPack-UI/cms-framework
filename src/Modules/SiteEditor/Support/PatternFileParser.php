@@ -143,7 +143,7 @@ final class PatternFileParser
             return null;
         }
 
-        $trimmed = trim( $value);
+        $trimmed = trim( $value );
 
         return '' === $trimmed ? null : $trimmed;
     }

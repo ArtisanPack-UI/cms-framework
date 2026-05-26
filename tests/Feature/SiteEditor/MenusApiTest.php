@@ -215,13 +215,13 @@ describe( 'DELETE /api/v1/menus/{id_or_slug}', function (): void {
         $this->deleteJson( '/api/v1/menus/' . $menu->id )->assertNoContent();
 
         expect( Menu::query()->find( $menu->id ) )->toBeNull()
-            ->and( MenuItem::query()->find( $item->id))->toBeNull()
-            ->and( MenuLocationAssignment::query()->where( 'menu_id', $menu->id)->exists())->toBeFalse();
-    });
+            ->and( MenuItem::query()->find( $item->id ) )->toBeNull()
+            ->and( MenuLocationAssignment::query()->where( 'menu_id', $menu->id )->exists() )->toBeFalse();
+    } );
 
     it( 'returns 404 for unknown menus', function (): void {
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $this->deleteJson( '/api/v1/menus/9999')->assertNotFound();
+        $this->deleteJson( '/api/v1/menus/9999' )->assertNotFound();
     });
 });

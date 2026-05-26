@@ -48,6 +48,6 @@ class PermissionPolicy
 
     public function forceDelete( Authenticatable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete'));
+        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete' ));
     }
 }

@@ -154,6 +154,6 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageCategories.delete', 'pageCategories.manage', $category));
+        return $user->can( applyFilters( 'pageCategories.delete', 'pageCategories.manage', $category ) );
     }
 }

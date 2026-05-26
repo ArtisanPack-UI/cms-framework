@@ -201,10 +201,10 @@ class SiteEditorServiceProvider extends ServiceProvider
     protected function registerGlobalStylesObserver(): void
     {
         $invalidate = function (): void {
-            $this->app->make( GlobalStylesEmitter::class)->invalidate();
+            $this->app->make( GlobalStylesEmitter::class )->invalidate();
         };
 
-        GlobalStyles::saved( $invalidate);
+        GlobalStyles::saved( $invalidate );
         GlobalStyles::deleted( $invalidate);
     }
 }

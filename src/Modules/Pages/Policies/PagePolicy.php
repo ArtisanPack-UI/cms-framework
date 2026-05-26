@@ -185,6 +185,6 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.publish', 'pages.publish', $page));
+        return $user->can( applyFilters( 'pages.publish', 'pages.publish', $page ));
     }
 }

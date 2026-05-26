@@ -57,13 +57,13 @@ test( 'column type enum label returns translatable string', function (): void {
     expect( ColumnType::Boolean->label() )->toBe( __( 'Boolean' ) );
     expect( ColumnType::Date->label() )->toBe( __( 'Date' ) );
     expect( ColumnType::DateTime->label() )->toBe( __( 'DateTime' ) );
-    expect( ColumnType::Time->label() )->toBe( __( 'Time'));
-    expect( ColumnType::Json->label())->toBe( __( 'JSON'));
-    expect( ColumnType::Binary->label())->toBe( __( 'Binary'));
-});
+    expect( ColumnType::Time->label() )->toBe( __( 'Time' ) );
+    expect( ColumnType::Json->label() )->toBe( __( 'JSON' ) );
+    expect( ColumnType::Binary->label() )->toBe( __( 'Binary' ) );
+} );
 
 test( 'column type enum validationRule returns enum rule', function (): void {
     $rule = ColumnType::validationRule();
 
-    expect( $rule)->toBeInstanceOf( Enum::class);
+    expect( $rule )->toBeInstanceOf( Enum::class);
 });

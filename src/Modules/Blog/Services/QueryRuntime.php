@@ -447,15 +447,15 @@ class QueryRuntime
      *
      * @since 2.0.0
      */
-    protected function normalizeIdList( mixed $value): array
+    protected function normalizeIdList( mixed $value ): array
     {
-        if ( ! is_array( $value)) {
+        if ( ! is_array( $value ) ) {
             return [];
         }
 
         $ids = array_filter(
-            array_map( static fn ( mixed $id): int => (int) $id, $value),
-            static fn ( int $id): bool => $id > 0,
+            array_map( static fn ( mixed $id ): int => (int) $id, $value ),
+            static fn ( int $id ): bool => $id > 0,
         );
 
         return array_values( array_unique( $ids));

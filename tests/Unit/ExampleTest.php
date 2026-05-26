@@ -23,5 +23,5 @@ test( 'array operations', function (): void {
 
     expect( $array )->toHaveCount( 5 );
     expect( $array )->toContain( 3 );
-    expect( $array)->not()->toContain( 6);
-});
+    expect( $array )->not()->toContain( 6 );
+} );

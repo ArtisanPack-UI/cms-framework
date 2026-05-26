@@ -229,8 +229,8 @@ class UpdateManager
             throw new Exception( 'Failed to download update' );
         }
 
-        $tempPath = storage_path( 'app/temp-plugin-' . time() . '.zip');
-        File::put( $tempPath, $response->body());
+        $tempPath = storage_path( 'app/temp-plugin-' . time() . '.zip' );
+        File::put( $tempPath, $response->body() );
 
         return $tempPath;
     }
@@ -243,7 +243,7 @@ class UpdateManager
      *
      * @return bool True if update available
      */
-    protected function isUpdateAvailable( string $current, string $available): bool
+    protected function isUpdateAvailable( string $current, string $available ): bool
     {
         return version_compare( $available, $current, '>');
     }

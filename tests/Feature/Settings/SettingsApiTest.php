@@ -148,9 +148,9 @@ test( 'user can delete setting', function (): void {
 
     $setting = Setting::create( ['key' => 'delete-key', 'value' => 'old'] );
 
-    actingAs( $this->user)
-        ->deleteJson( '/api/v1/settings/' . $setting->key) // Use key in URL
+    actingAs( $this->user )
+        ->deleteJson( '/api/v1/settings/' . $setting->key ) // Use key in URL
         ->assertNoContent(); // 204 No Content
 
-    $this->assertDatabaseMissing( 'settings', ['key' => 'delete-key']);
+    $this->assertDatabaseMissing( 'settings', ['key' => 'delete-key'] );
 });

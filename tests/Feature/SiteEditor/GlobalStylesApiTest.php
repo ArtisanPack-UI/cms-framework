@@ -208,14 +208,14 @@ describe( 'theme isolation', function (): void {
         GlobalStyles::create( [
             'theme'  => 'other-theme',
             'styles' => ['color' => ['background' => '#dead00']],
-        ]);
+        ] );
 
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $response = $this->getJson( '/api/v1/global-styles');
+        $response = $this->getJson( '/api/v1/global-styles' );
 
         $response->assertOk();
-        expect( $response->json( 'has_user_customization'))->toBeFalse()
-            ->and( $response->json( 'styles.color.background'))->toBe( '#ffffff');
+        expect( $response->json( 'has_user_customization' ) )->toBeFalse()
+            ->and( $response->json( 'styles.color.background' ) )->toBe( '#ffffff' );
     });
 });

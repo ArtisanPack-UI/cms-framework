@@ -270,19 +270,19 @@ describe( 'ap.visual-editor.patterns filter wiring', function (): void {
         // Shape contract that visual-editor's ResolvedPattern::fromArray expects.
         expect( $merged['hero'] )->toHaveKeys( ['slug', 'title', 'raw_content', 'blocks', 'source', 'synced', 'categories', 'block_types', 'wp_id'] )
             ->and( $merged['hero']['source'] )->toBe( 'theme' )
-            ->and( $merged['user/callout']['source'])->toBe( 'user')
-            ->and( $merged['user/callout']['synced'])->toBeTrue();
-    });
+            ->and( $merged['user/callout']['source'] )->toBe( 'user' )
+            ->and( $merged['user/callout']['synced'] )->toBeTrue();
+    } );
 
     it( 'lets static config / earlier contributors win on key collision', function (): void {
-        File::put( $this->themePatterns . '/hero.php', "<?php\n/**\n * Title: Theme Hero\n */\n");
+        File::put( $this->themePatterns . '/hero.php', "<?php\n/**\n * Title: Theme Hero\n */\n" );
 
         $existing = [
             'hero' => ['slug' => 'hero', 'title' => 'Static Hero', 'source' => 'theme'],
         ];
 
-        $merged = applyFilters( 'ap.visual-editor.patterns', $existing);
+        $merged = applyFilters( 'ap.visual-editor.patterns', $existing );
 
-        expect( $merged['hero']['title'])->toBe( 'Static Hero');
+        expect( $merged['hero']['title'] )->toBe( 'Static Hero' );
     });
 });

@@ -297,10 +297,10 @@ class ApplicationUpdateManagerTest extends TestCase
         $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
         $app['config']->set( 'cms.updates.backup_enabled', true );
         $app['config']->set( 'cms.updates.backup_path', 'backups/application' );
-        $app['config']->set( 'cms.updates.backup_retention_days', 30);
-        $app['config']->set( 'cms.updates.verify_checksum', false); // Disable for tests
-        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev');
-        $app['config']->set( 'cms.updates.composer_timeout', 600);
-        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
+        $app['config']->set( 'cms.updates.backup_retention_days', 30 );
+        $app['config']->set( 'cms.updates.verify_checksum', false ); // Disable for tests
+        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev' );
+        $app['config']->set( 'cms.updates.composer_timeout', 600 );
+        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor'] );
     }
 }

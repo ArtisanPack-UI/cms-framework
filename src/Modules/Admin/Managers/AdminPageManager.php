@@ -72,6 +72,6 @@ class AdminPageManager
                         $route->middleware( 'can:' . $details['capability'] );
                     }
                 }
-            });
+            } );
     }
 }

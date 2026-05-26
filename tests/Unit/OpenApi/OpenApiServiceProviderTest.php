@@ -47,6 +47,6 @@ test( 'openapi config values can be overridden', function (): void {
         'artisanpack.cms-framework.openapi.info.version' => '3.0.0',
     ] );
 
-    expect( config( 'artisanpack.cms-framework.openapi.info.title' ) )->toBe( 'Custom API Title');
-    expect( config( 'artisanpack.cms-framework.openapi.info.version'))->toBe( '3.0.0');
+    expect( config( 'artisanpack.cms-framework.openapi.info.title' ) )->toBe( 'Custom API Title' );
+    expect( config( 'artisanpack.cms-framework.openapi.info.version' ) )->toBe( '3.0.0' );
 });

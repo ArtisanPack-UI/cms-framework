@@ -30,5 +30,5 @@ Route::middleware( ['auth:sanctum'] )->prefix( 'notifications' )->group( functio
     Route::post( '/{id}/mark-as-read', [NotificationController::class, 'markAsRead'] )->name( 'api.notifications.markAsRead' );
     Route::post( '/{id}/dismiss', [NotificationController::class, 'dismiss'] )->name( 'api.notifications.dismiss' );
     Route::post( '/mark-all-as-read', [NotificationController::class, 'markAllAsRead'] )->name( 'api.notifications.markAllAsRead' );
-    Route::post( '/dismiss-all', [NotificationController::class, 'dismissAll'])->name( 'api.notifications.dismissAll');
-});
+    Route::post( '/dismiss-all', [NotificationController::class, 'dismissAll'] )->name( 'api.notifications.dismissAll' );
+} );

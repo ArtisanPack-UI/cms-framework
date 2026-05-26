@@ -159,7 +159,7 @@ class SettingsManager
                 $attributes['type'] = $registeredType->value;
             }
 
-            Setting::create( $attributes);
+            Setting::create( $attributes );
         }
     }
 }

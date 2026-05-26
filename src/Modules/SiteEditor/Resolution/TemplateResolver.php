@@ -211,8 +211,8 @@ class TemplateResolver implements EntityResolver
      *
      * @since 2.0.0
      */
-    protected function humanizeSlug( string $slug): string
+    protected function humanizeSlug( string $slug ): string
     {
-        return ucwords( str_replace( ['-', '_'], ' ', $slug));
+        return ucwords( str_replace( ['-', '_'], ' ', $slug ));
     }
 }

@@ -258,7 +258,7 @@ class TemplatesController extends Controller
         $validated['theme']     = $theme;
         $validated['author_id'] = $validated['author_id'] ?? auth()->id();
 
-        if ( ! array_key_exists( 'is_custom', $validated)) {
+        if ( ! array_key_exists( 'is_custom', $validated ) ) {
             $validated['is_custom'] = false;
         }
 

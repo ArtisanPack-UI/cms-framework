@@ -82,6 +82,6 @@ final class TemplateResource
      */
     public static function collection( array $entities ): array
     {
-        return array_map( static fn ( ResolvedEntity $e ) => self::toArray( $e ), $entities);
+        return array_map( static fn ( ResolvedEntity $e ) => self::toArray( $e ), $entities );
     }
 }

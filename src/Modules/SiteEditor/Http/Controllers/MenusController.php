@@ -231,10 +231,10 @@ class MenusController extends Controller
     {
         $sqlState = $e->getCode();
 
-        if ( '23000' === $sqlState || '23505' === $sqlState) {
+        if ( '23000' === $sqlState || '23505' === $sqlState ) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage()), 'unique');
+        return str_contains( strtolower( $e->getMessage() ), 'unique');
     }
 }

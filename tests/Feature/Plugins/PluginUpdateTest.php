@@ -282,25 +282,25 @@ describe( 'Update Hooks', function (): void {
             'meta'    => [
                 'update_url' => 'https://example.com/updates/test-plugin',
             ],
-        ]);
+        ] );
 
         Http::fake( [
             'https://example.com/updates/test-plugin' => Http::response( [
                 'version'      => '2.0.0',
                 'download_url' => 'https://example.com/downloads/test-plugin.zip',
-            ]),
-        ]);
+            ] ),
+        ] );
 
         // Note: This will fail at download, but should still fire the hook
         try {
-            $this->updateManager->updatePlugin( 'test-plugin');
-        } catch ( Exception $e) {
+            $this->updateManager->updatePlugin( 'test-plugin' );
+        } catch ( Exception $e ) {
             // Expected to fail at download
         }
 
-        expect( $hookFired)->toBeTrue();
-    });
-});
+        expect( $hookFired )->toBeTrue();
+    } );
+} );
 
 // Helper function
 function createMockUpdateZip(): void

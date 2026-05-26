@@ -74,6 +74,6 @@ class PageTagFactory extends Factory
     {
         return $this->state( fn ( array $attributes ) => [
             'order' => $order,
-        ]);
+        ] );
     }
 }

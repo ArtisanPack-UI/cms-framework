@@ -72,6 +72,6 @@ if ( ! function_exists( 'apGetAdminMenu' ) ) {
      */
     function apGetAdminMenu(): array
     {
-        return app( AdminMenuManager::class)->getAdminMenu();
+        return app( AdminMenuManager::class )->getAdminMenu();
     }
 }

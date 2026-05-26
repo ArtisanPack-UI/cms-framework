@@ -170,10 +170,10 @@ test( 'PUT does not re-run viewAny authorization when capabilities are split', f
     addFilter( 'settings.update', fn () => 'settings.write' );
 
     Gate::define( 'settings.write', fn ( User $user ) => true );
-    Gate::define( 'settings.read', fn ( User $user) => false);
+    Gate::define( 'settings.read', fn ( User $user ) => false );
 
-    actingAs( $this->user)
-        ->putJson( '/api/v1/settings/site', ['title' => 'Write-only Title'])
+    actingAs( $this->user )
+        ->putJson( '/api/v1/settings/site', ['title' => 'Write-only Title'] )
         ->assertOk()
-        ->assertJsonFragment( ['title' => 'Write-only Title']);
+        ->assertJsonFragment( ['title' => 'Write-only Title'] );
 });

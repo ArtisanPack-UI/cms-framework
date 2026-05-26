@@ -284,19 +284,19 @@ test( 'user controller destroy deletes user', function (): void {
     $user = $userModel::create( [
         'name'     => 'To Delete',
         'email'    => 'delete@example.com',
-        'password' => Hash::make( 'password'),
-    ]);
+        'password' => Hash::make( 'password' ),
+    ] );
 
-    $response = $this->deleteJson( "/api/v1/users/{$user->id}");
+    $response = $this->deleteJson( "/api/v1/users/{$user->id}" );
 
-    $response->assertStatus( 204);
+    $response->assertStatus( 204 );
 
     // Verify user was deleted
-    expect( $userModel::find( $user->id))->toBeNull();
-});
+    expect( $userModel::find( $user->id ) )->toBeNull();
+} );
 
 test( 'user controller destroy returns 404 for non-existent user', function (): void {
-    $response = $this->deleteJson( '/api/v1/users/999');
+    $response = $this->deleteJson( '/api/v1/users/999' );
 
     $response->assertStatus( 404);
 });

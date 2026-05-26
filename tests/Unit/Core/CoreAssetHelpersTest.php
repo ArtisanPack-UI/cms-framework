@@ -57,5 +57,5 @@ test( 'auth helpers: enqueue and retrieve assets via helpers', function (): void
         ->toMatchArray( [
             'path'     => '/auth/app.js',
             'inFooter' => true,
-        ]);
-});
+        ] );
+} );

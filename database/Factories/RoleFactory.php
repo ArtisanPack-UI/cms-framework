@@ -66,6 +66,6 @@ class RoleFactory extends Factory
         return $this->state( fn ( array $attributes ) => [
             'name' => 'User',
             'slug' => 'user',
-        ]);
+        ] );
     }
 }

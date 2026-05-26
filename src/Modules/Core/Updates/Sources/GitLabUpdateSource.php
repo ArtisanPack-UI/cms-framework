@@ -528,13 +528,13 @@ class GitLabUpdateSource implements UpdateSourceInterface
             return null;
         }
 
-        if ( preg_match( '/\b([a-f0-9]{64})\b/i', $response->body(), $matches )) {
-            return strtolower( $matches[1]);
+        if ( preg_match( '/\b([a-f0-9]{64})\b/i', $response->body(), $matches ) ) {
+            return strtolower( $matches[1] );
         }
 
         Log::warning( 'GitLab SHA-256 sidecar did not contain a 64-character hex digest.', [
             'url' => $url,
-        ]);
+        ] );
 
         return null;
     }
@@ -548,13 +548,13 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string|null Lowercase hex digest, or null when no marker is present.
      */
-    protected function extractChecksumFromDescription( ?string $description): ?string
+    protected function extractChecksumFromDescription( ?string $description ): ?string
     {
-        if ( ! is_string( $description) || '' === $description) {
+        if ( ! is_string( $description ) || '' === $description ) {
             return null;
         }
 
-        if ( preg_match( '/SHA-?256\s*[:=]\s*`?([a-f0-9]{64})`?/i', $description, $matches)) {
+        if ( preg_match( '/SHA-?256\s*[:=]\s*`?([a-f0-9]{64})`?/i', $description, $matches ) ) {
             return strtolower( $matches[1]);
         }
 

@@ -83,7 +83,7 @@ namespace ArtisanPackUI\VisualEditor\Concerns {
              */
             public function setBlockContent( array $blocks ): void
             {
-                $this->setAttribute( $this->getBlockContentColumn(), $blocks);
+                $this->setAttribute( $this->getBlockContentColumn(), $blocks );
             }
         }
     }

@@ -283,19 +283,19 @@ describe( 'BlockPattern slug prefix', function (): void {
             'slug'   => 'plain',
             'title'  => 'Plain',
             'source' => BlockPattern::SOURCE_USER,
-        ]);
+        ] );
 
-        expect( $row->slug)->toBe( 'user/plain')
-            ->and( $row->userFacingSlug())->toBe( 'plain');
-    });
+        expect( $row->slug )->toBe( 'user/plain' )
+            ->and( $row->userFacingSlug() )->toBe( 'plain' );
+    } );
 
     it( 'is idempotent — accepts an already-prefixed slug without double-prefixing', function (): void {
         $row = BlockPattern::create( [
             'slug'   => 'user/already',
             'title'  => 'Already',
             'source' => BlockPattern::SOURCE_USER,
-        ]);
+        ] );
 
-        expect( $row->slug)->toBe( 'user/already');
+        expect( $row->slug )->toBe( 'user/already' );
     });
 });

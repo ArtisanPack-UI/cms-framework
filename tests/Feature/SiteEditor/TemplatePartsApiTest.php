@@ -170,11 +170,11 @@ describe( 'theme isolation', function (): void {
             'area'  => 'header',
         ] );
 
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $response = $this->getJson( '/api/v1/template-parts');
-        $slugs    = collect( $response->json())->pluck( 'slug')->all();
+        $response = $this->getJson( '/api/v1/template-parts' );
+        $slugs    = collect( $response->json() )->pluck( 'slug' )->all();
 
-        expect( $slugs)->not->toContain( 'header');
+        expect( $slugs )->not->toContain( 'header' );
     });
 });

@@ -154,6 +154,6 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.delete', 'taxonomies.manage', $taxonomy));
+        return $user->can( applyFilters( 'taxonomies.delete', 'taxonomies.manage', $taxonomy ) );
     }
 }

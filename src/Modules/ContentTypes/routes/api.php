@@ -54,5 +54,5 @@ Route::prefix( 'taxonomies' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/{slug}', [TaxonomyController::class, 'show'] );
     Route::put( '/{slug}', [TaxonomyController::class, 'update'] );
     Route::delete( '/{slug}', [TaxonomyController::class, 'destroy'] );
-    Route::get( '/content-type/{contentTypeSlug}', [TaxonomyController::class, 'byContentType']);
-});
+    Route::get( '/content-type/{contentTypeSlug}', [TaxonomyController::class, 'byContentType'] );
+} );

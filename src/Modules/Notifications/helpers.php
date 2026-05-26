@@ -189,7 +189,7 @@ if ( ! function_exists( 'apGetUnreadNotificationCount' ) ) {
     }
 }
 
-if ( ! function_exists( 'apGetRegisteredNotifications')) {
+if ( ! function_exists( 'apGetRegisteredNotifications' ) ) {
     /**
      * Get all registered notifications.
      *

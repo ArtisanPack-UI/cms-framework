@@ -102,8 +102,8 @@ class RollbackUpdateCommand extends Command
             return self::SUCCESS;
         } catch ( Exception $e ) {
             $this->newLine();
-            $this->error( '✗ Rollback failed:');
-            $this->error( $e->getMessage());
+            $this->error( '✗ Rollback failed:' );
+            $this->error( $e->getMessage() );
 
             return self::FAILURE;
         }

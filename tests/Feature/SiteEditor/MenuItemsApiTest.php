@@ -395,7 +395,7 @@ describe( 'DELETE /api/v1/menu-items/{id}', function (): void {
             'position' => 0,
             'type'     => MenuItem::TYPE_SUBMENU,
             'label'    => 'Parent',
-        ]);
+        ] );
 
         $child = MenuItem::create( [
             'menu_id'   => $this->menu->id,
@@ -403,13 +403,13 @@ describe( 'DELETE /api/v1/menu-items/{id}', function (): void {
             'position'  => 0,
             'type'      => MenuItem::TYPE_LINK,
             'label'     => 'Child',
-        ]);
+        ] );
 
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $this->deleteJson( '/api/v1/menu-items/' . $parent->id)->assertNoContent();
+        $this->deleteJson( '/api/v1/menu-items/' . $parent->id )->assertNoContent();
 
-        expect( MenuItem::query()->find( $parent->id))->toBeNull()
-            ->and( MenuItem::query()->find( $child->id))->toBeNull();
+        expect( MenuItem::query()->find( $parent->id ) )->toBeNull()
+            ->and( MenuItem::query()->find( $child->id ) )->toBeNull();
     });
 });

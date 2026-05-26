@@ -262,11 +262,11 @@ describe( 'Version Comparison', function (): void {
     } );
 
     it( 'returns false for identical versions', function (): void {
-        $updateManager = new UpdateManager( $this->pluginManager);
-        $reflection    = new ReflectionClass( $updateManager);
-        $method        = $reflection->getMethod( 'isUpdateAvailable');
-        $method->setAccessible( true);
+        $updateManager = new UpdateManager( $this->pluginManager );
+        $reflection    = new ReflectionClass( $updateManager );
+        $method        = $reflection->getMethod( 'isUpdateAvailable' );
+        $method->setAccessible( true );
 
-        expect( $method->invoke( $updateManager, '1.0.0', '1.0.0'))->toBeFalse();
-    });
+        expect( $method->invoke( $updateManager, '1.0.0', '1.0.0' ) )->toBeFalse();
+    } );
 });

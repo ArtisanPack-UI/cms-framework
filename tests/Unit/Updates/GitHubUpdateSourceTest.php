@@ -285,7 +285,7 @@ class GitHubUpdateSourceTest extends TestCase
         $source     = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertEquals( '2.5.1', $updateInfo->latestVersion);
+        $this->assertEquals( '2.5.1', $updateInfo->latestVersion );
     }
 
     /**
@@ -295,9 +295,9 @@ class GitHubUpdateSourceTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app): void
+    protected function defineEnvironment( $app ): void
     {
-        $app['config']->set( 'cms.updates.http_timeout', 15);
-        $app['config']->set( 'cms.updates.download_timeout', 300);
+        $app['config']->set( 'cms.updates.http_timeout', 15 );
+        $app['config']->set( 'cms.updates.download_timeout', 300 );
     }
 }

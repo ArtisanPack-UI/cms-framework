@@ -72,8 +72,8 @@ Route::prefix( 'api/v1' )
         } );
 
         Route::prefix( 'menu-locations' )->group( function (): void {
-            Route::get( '/', [MenuLocationsController::class, 'index'])->name( 'api.menu-locations.index');
-            Route::put( '{location}', [MenuLocationsController::class, 'update'])->name( 'api.menu-locations.update');
-            Route::delete( '{location}', [MenuLocationsController::class, 'destroy'])->name( 'api.menu-locations.destroy');
-        });
+            Route::get( '/', [MenuLocationsController::class, 'index'] )->name( 'api.menu-locations.index' );
+            Route::put( '{location}', [MenuLocationsController::class, 'update'] )->name( 'api.menu-locations.update' );
+            Route::delete( '{location}', [MenuLocationsController::class, 'destroy'] )->name( 'api.menu-locations.destroy' );
+        } );
     });

@@ -106,7 +106,7 @@ test( 'post block_content is nullable and defaults to null', function (): void {
         'slug'      => 'no-blocks',
         'author_id' => $user->id,
         'status'    => 'draft',
-    ]);
+    ] );
 
-    expect( $post->block_content)->toBeNull();
-});
+    expect( $post->block_content )->toBeNull();
+} );

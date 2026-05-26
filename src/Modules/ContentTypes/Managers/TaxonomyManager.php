@@ -201,7 +201,7 @@ class TaxonomyManager
 
         $deleted = $taxonomy->delete();
 
-        if ( $deleted) {
+        if ( $deleted ) {
             /**
              * Fires after a taxonomy has been deleted.
              *
@@ -211,7 +211,7 @@ class TaxonomyManager
              *
              * @param  string  $slug  The slug of the deleted taxonomy.
              */
-            doAction( 'ap.taxonomies.deleted', $slug);
+            doAction( 'ap.taxonomies.deleted', $slug );
         }
 
         return $deleted;

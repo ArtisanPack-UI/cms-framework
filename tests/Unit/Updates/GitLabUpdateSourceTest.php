@@ -785,16 +785,16 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-            'example.com/app-2.0.0.zip' => Http::response( 'zip-bytes', 200),
-        ]);
+            ], 200 ),
+            'example.com/app-2.0.0.zip' => Http::response( 'zip-bytes', 200 ),
+        ] );
 
-        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0');
-        $source->downloadUpdate( 'v2.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+        $source->downloadUpdate( 'v2.0.0' );
 
-        Http::assertSent( function ( $request) {
+        Http::assertSent( function ( $request ) {
             return 'https://example.com/app-2.0.0.zip' === $request->url();
-        });
+        } );
     }
 
     /**
@@ -804,9 +804,9 @@ class GitLabUpdateSourceTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app): void
+    protected function defineEnvironment( $app ): void
     {
-        $app['config']->set( 'cms.updates.http_timeout', 15);
+        $app['config']->set( 'cms.updates.http_timeout', 15 );
         $app['config']->set( 'cms.updates.download_timeout', 300);
     }
 }

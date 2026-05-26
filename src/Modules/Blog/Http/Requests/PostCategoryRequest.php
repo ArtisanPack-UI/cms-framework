@@ -104,7 +104,7 @@ class PostCategoryRequest extends FormRequest
             'name.required' => __( 'The category name is required.' ),
             'slug.required' => __( 'The category slug is required.' ),
             'slug.regex'    => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
-            'slug.unique'   => __( 'A category with this slug already exists.'),
+            'slug.unique'   => __( 'A category with this slug already exists.' ),
         ];
     }
 }

@@ -307,9 +307,9 @@ class CMSFrameworkServiceProvider extends ServiceProvider
             return;
         }
 
-        $userModel = config( 'artisanpack.cms-framework.user_model');
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
 
-        if ( null === $userModel) {
+        if ( null === $userModel ) {
             throw new InvalidArgumentException(
                 'The CMS Framework user_model configuration is not set. ' .
                 'Please publish the configuration file using: ' .

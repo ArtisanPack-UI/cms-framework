@@ -135,7 +135,7 @@ if ( ! function_exists( 'apAuthDequeueAsset' ) ) {
     }
 }
 
-if ( ! function_exists( 'apAuthAssets')) {
+if ( ! function_exists( 'apAuthAssets' ) ) {
     /**
      * Retrieve all enqueued authenticated-area assets.
      *
@@ -145,6 +145,6 @@ if ( ! function_exists( 'apAuthAssets')) {
      */
     function apAuthAssets(): array
     {
-        return app( AssetManager::class)->authAssets();
+        return app( AssetManager::class )->authAssets();
     }
 }

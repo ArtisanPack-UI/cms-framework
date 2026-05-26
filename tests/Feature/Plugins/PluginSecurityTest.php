@@ -286,8 +286,8 @@ describe( 'Permission Checks', function (): void {
         foreach ( $invalidSlugs as $slug ) {
             expect( $this->manager->getPlugin( $slug ) )->toBeNull();
         }
-    });
-});
+    } );
+} );
 
 describe( 'File System Security', function (): void {
     it( 'prevents writing outside plugins directory', function (): void {
@@ -295,12 +295,12 @@ describe( 'File System Security', function (): void {
         $slug = '../../../tmp/malicious';
 
         // Slug validation should prevent this
-        expect( $this->manager->getPlugin( $slug))->toBeNull();
-    });
+        expect( $this->manager->getPlugin( $slug ) )->toBeNull();
+    } );
 
     it( 'sanitizes file paths in ZIP extraction', function (): void {
         // When extracting, paths should be validated
         // This is tested implicitly through the ZIP extraction process
-        expect( true)->toBeTrue();
+        expect( true )->toBeTrue();
     });
 });

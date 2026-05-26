@@ -100,7 +100,7 @@ describe( 'ap.visual-editor.navigation filter wiring', function (): void {
         // The cms-framework callback merges its map *under* `$static`, so
         // the static entry wins on collision while still picking up the
         // resolver's `footer` entry.
-        expect( $entries['primary']['wp_id'])->toBe( 999)
-            ->and( $entries)->toHaveKey( 'footer');
-    });
+        expect( $entries['primary']['wp_id'] )->toBe( 999 )
+            ->and( $entries )->toHaveKey( 'footer' );
+    } );
 });

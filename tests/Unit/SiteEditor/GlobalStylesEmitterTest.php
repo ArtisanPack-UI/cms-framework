@@ -300,9 +300,9 @@ describe( 'GlobalStylesEmitter cache', function (): void {
     } );
 
     it( 'invalidates the cache when invalidate() is called', function (): void {
-        $resolved = makeResolved( styles: ['color' => ['background' => '#aaaaaa']]);
+        $resolved = makeResolved( styles: ['color' => ['background' => '#aaaaaa']] );
 
-        $this->resolver->shouldReceive( 'resolve')->andReturn( $resolved);
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
 
         $this->emitter->emit();
 
@@ -310,10 +310,10 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
         $cacheKey = 'cms.global-styles.css.v2.test-theme.' . $resolved->contentHash();
-        expect( Cache::has( $cacheKey))->toBeTrue();
+        expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
 
-        expect( Cache::has( $cacheKey))->toBeFalse();
+        expect( Cache::has( $cacheKey ) )->toBeFalse();
     });
 });

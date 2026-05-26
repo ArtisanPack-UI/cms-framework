@@ -120,6 +120,6 @@ it( 'falls back to an empty result when no posts match', function (): void {
         'perPage'  => 5,
     ] );
 
-    expect( $result->total())->toBe( 0)
-        ->and( $result->items())->toBe( []);
+    expect( $result->total() )->toBe( 0 )
+        ->and( $result->items() )->toBe( [] );
 });

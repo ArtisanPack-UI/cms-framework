@@ -229,18 +229,18 @@ test( 'exceptions return JsonResponse for JSON requests', function (): void {
 test( 'module exceptions that extend CMSFrameworkException inherit JSON rendering', function (): void {
     // Create a test route for a generic subclass
     Route::middleware( ['api'] )->get( '/test/module-error', function (): void {
-        throw new class( 'Module error occurred.') extends CMSFrameworkException {};
-    });
+        throw new class( 'Module error occurred.' ) extends CMSFrameworkException {};
+    } );
 
-    $response = $this->getJson( '/test/module-error');
+    $response = $this->getJson( '/test/module-error' );
 
-    $response->assertStatus( 500);
+    $response->assertStatus( 500 );
     $response->assertJsonStructure( [
         'error' => [
             'code',
             'message',
         ],
-    ]);
-    $response->assertJsonPath( 'error.code', 'SERVER_ERROR');
-    $response->assertJsonPath( 'error.message', 'Module error occurred.');
+    ] );
+    $response->assertJsonPath( 'error.code', 'SERVER_ERROR' );
+    $response->assertJsonPath( 'error.message', 'Module error occurred.' );
 });

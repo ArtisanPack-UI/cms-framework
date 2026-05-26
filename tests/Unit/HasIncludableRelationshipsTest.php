@@ -97,8 +97,8 @@ test( 'returns empty arrays when properties are not defined', function (): void 
     };
 
     $includable = invokeMethod( $controller, 'getIncludableRelationships', [] );
-    $defaults   = invokeMethod( $controller, 'getDefaultIncludes', []);
+    $defaults   = invokeMethod( $controller, 'getDefaultIncludes', [] );
 
-    expect( $includable)->toBe( []);
-    expect( $defaults)->toBe( []);
+    expect( $includable )->toBe( [] );
+    expect( $defaults )->toBe( [] );
 });

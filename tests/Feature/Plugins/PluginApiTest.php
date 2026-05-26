@@ -225,9 +225,9 @@ describe( 'Plugin API - Permission Checks', function (): void {
             ['GET', '/api/v1/plugins/updates'],
         ];
 
-        foreach ( $endpoints as [$method, $uri]) {
-            $response = $this->json( $method, $uri);
-            $response->assertStatus( 401);
+        foreach ( $endpoints as [$method, $uri] ) {
+            $response = $this->json( $method, $uri );
+            $response->assertStatus( 401 );
         }
-    });
+    } );
 });

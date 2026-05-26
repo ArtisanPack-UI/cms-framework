@@ -201,6 +201,6 @@ class ContentTypeManager
      */
     public function contentTypeExists( string $slug ): bool
     {
-        return ContentType::where( 'slug', sanitizeText( $slug))->exists();
+        return ContentType::where( 'slug', sanitizeText( $slug ) )->exists();
     }
 }

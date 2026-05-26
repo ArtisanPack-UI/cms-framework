@@ -50,5 +50,5 @@ test( 'job only sends to existing users', function (): void {
     $job = new SendNotificationEmail( $notification, [$user->id, 9999] );
     $job->handle();
 
-    Mail::assertSent( NotificationMail::class, 1);
+    Mail::assertSent( NotificationMail::class, 1 );
 });

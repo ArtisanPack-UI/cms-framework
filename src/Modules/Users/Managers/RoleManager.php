@@ -78,6 +78,6 @@ class RoleManager
     {
         $role       = Role::where( 'slug', sanitizeText( $roleSlug ) )->firstOrFail();
         $permission = Permission::where( 'slug', sanitizeText( $permissionSlug ) )->firstOrFail();
-        $role->permissions()->syncWithoutDetaching( $permission->id);
+        $role->permissions()->syncWithoutDetaching( $permission->id );
     }
 }

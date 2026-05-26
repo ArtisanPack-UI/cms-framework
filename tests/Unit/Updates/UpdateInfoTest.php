@@ -116,7 +116,7 @@ class UpdateInfoTest extends TestCase
         $this->assertEquals( '1.0.0', $array['current'] );
         $this->assertEquals( '2.0.0', $array['latest'] );
         $this->assertTrue( $array['hasUpdate'] );
-        $this->assertEquals( 'https://example.com/update.zip', $array['download_url']);
-        $this->assertEquals( 'New features', $array['changelog']);
+        $this->assertEquals( 'https://example.com/update.zip', $array['download_url'] );
+        $this->assertEquals( 'New features', $array['changelog'] );
     }
 }

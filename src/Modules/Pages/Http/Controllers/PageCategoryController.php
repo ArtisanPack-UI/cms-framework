@@ -159,7 +159,7 @@ class PageCategoryController extends Controller
     public function destroy( int $id ): Response
     {
         $category = PageCategory::findOrFail( $id );
-        $this->authorize( 'delete', $category);
+        $this->authorize( 'delete', $category );
 
         $category->delete();
 

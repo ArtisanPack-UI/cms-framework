@@ -179,7 +179,7 @@ class Menus
 
             if ( is_string( $value ) ) {
                 $normalized[ $key ] = $value;
-            } elseif ( is_scalar( $value)) {
+            } elseif ( is_scalar( $value ) ) {
                 $normalized[ $key ] = (string) $value;
             }
         }

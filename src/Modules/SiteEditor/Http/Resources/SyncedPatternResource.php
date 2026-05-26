@@ -65,6 +65,6 @@ final class SyncedPatternResource
         return array_values( array_map(
             static fn ( ResolvedPattern $p ) => self::toArray( $p ),
             $patterns,
-        ));
+        ) );
     }
 }

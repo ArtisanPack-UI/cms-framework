@@ -281,18 +281,18 @@ describe( 'DELETE /api/v1/templates/{slug}', function (): void {
             'theme' => $this->themeSlug,
             'slug'  => 'page',
             'title' => 'Page',
-        ]);
+        ] );
 
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $this->deleteJson( '/api/v1/templates/page')->assertNoContent();
+        $this->deleteJson( '/api/v1/templates/page' )->assertNoContent();
 
-        expect( Template::where( 'theme', $this->themeSlug)->where( 'slug', 'page')->exists())->toBeFalse();
-    });
+        expect( Template::where( 'theme', $this->themeSlug )->where( 'slug', 'page' )->exists() )->toBeFalse();
+    } );
 
     it( '404s when no DB row exists for the slug', function (): void {
-        $this->actingAs( $this->user);
+        $this->actingAs( $this->user );
 
-        $this->deleteJson( '/api/v1/templates/never-existed')->assertNotFound();
+        $this->deleteJson( '/api/v1/templates/never-existed' )->assertNotFound();
     });
 });

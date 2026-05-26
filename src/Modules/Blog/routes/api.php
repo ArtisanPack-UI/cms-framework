@@ -65,6 +65,6 @@ Route::prefix( 'post-tags' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/', [PostTagController::class, 'index'] );
     Route::post( '/', [PostTagController::class, 'store'] );
     Route::get( '/{id}', [PostTagController::class, 'show'] );
-    Route::put( '/{id}', [PostTagController::class, 'update']);
-    Route::delete( '/{id}', [PostTagController::class, 'destroy']);
-});
+    Route::put( '/{id}', [PostTagController::class, 'update'] );
+    Route::delete( '/{id}', [PostTagController::class, 'destroy'] );
+} );

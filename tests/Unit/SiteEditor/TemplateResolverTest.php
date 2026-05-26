@@ -190,17 +190,17 @@ describe( 'slug sanitization', function (): void {
     } );
 
     it( 'rejects empty slugs', function (): void {
-        expect( $this->resolver->resolve( '' ))->toBeNull();
-    });
+        expect( $this->resolver->resolve( '' ) )->toBeNull();
+    } );
 
     it( 'returns false from revert() for invalid slugs without touching the database', function (): void {
         Template::create( [
             'theme' => $this->themeSlug,
             'slug'  => 'page',
             'title' => 'Page',
-        ]);
+        ] );
 
-        expect( $this->resolver->revert( '../page'))->toBeFalse()
-            ->and( Template::where( 'slug', 'page')->exists())->toBeTrue();
+        expect( $this->resolver->revert( '../page' ) )->toBeFalse()
+            ->and( Template::where( 'slug', 'page' )->exists() )->toBeTrue();
     });
 });

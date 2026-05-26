@@ -266,11 +266,11 @@ class MenuItemRequest extends FormRequest
 
         $itemId = $this->route( 'id' );
 
-        if ( null === $itemId) {
+        if ( null === $itemId ) {
             return null;
         }
 
-        $item = MenuItem::query()->find( $itemId);
+        $item = MenuItem::query()->find( $itemId );
 
         return null !== $item ? (int) $item->menu_id : null;
     }

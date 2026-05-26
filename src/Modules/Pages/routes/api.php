@@ -55,6 +55,6 @@ Route::prefix( 'page-tags' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/', [PageTagController::class, 'index'] );
     Route::post( '/', [PageTagController::class, 'store'] );
     Route::get( '/{id}', [PageTagController::class, 'show'] );
-    Route::put( '/{id}', [PageTagController::class, 'update']);
-    Route::delete( '/{id}', [PageTagController::class, 'destroy']);
-});
+    Route::put( '/{id}', [PageTagController::class, 'update'] );
+    Route::delete( '/{id}', [PageTagController::class, 'destroy'] );
+} );

@@ -121,7 +121,7 @@ class BlogServiceProvider extends ServiceProvider
     {
         $helpersPath = __DIR__ . '/../helpers.php';
 
-        if ( file_exists( $helpersPath)) {
+        if ( file_exists( $helpersPath ) ) {
             require_once $helpersPath;
         }
     }

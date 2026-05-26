@@ -189,17 +189,17 @@ describe( 'Manifest Parsing', function (): void {
     it( 'returns null for non-existent manifest', function (): void {
         $manifest = invokeMethod( $this->manager, 'parseManifest', ['/non/existent/path/plugin.json'] );
 
-        expect( $manifest)->toBeNull();
-    });
+        expect( $manifest )->toBeNull();
+    } );
 
     it( 'returns null for invalid JSON', function (): void {
-        $tempFile = storage_path( 'app/invalid-manifest.json');
-        File::put( $tempFile, '{invalid json}');
+        $tempFile = storage_path( 'app/invalid-manifest.json' );
+        File::put( $tempFile, '{invalid json}' );
 
-        $manifest = invokeMethod( $this->manager, 'parseManifest', [$tempFile]);
+        $manifest = invokeMethod( $this->manager, 'parseManifest', [$tempFile] );
 
-        expect( $manifest)->toBeNull();
+        expect( $manifest )->toBeNull();
 
-        File::delete( $tempFile);
+        File::delete( $tempFile );
     });
 });

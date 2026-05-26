@@ -104,7 +104,7 @@ if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
          * @return array<string,array{label:string,order:int}> Modified sections array.
          */
         addFilter( 'ap.users.settings.sections', function ( array $sections ) use ( $key, $label, $order ) {
-            $sections[ $key ] = compact( 'label', 'order');
+            $sections[ $key ] = compact( 'label', 'order' );
 
             return $sections;
         });

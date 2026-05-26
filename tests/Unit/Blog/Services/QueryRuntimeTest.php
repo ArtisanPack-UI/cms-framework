@@ -262,20 +262,20 @@ it( 'filters posts by post_tag through taxQuery IN', function (): void {
 
 it( 'ignores taxQuery operators outside the V1 IN subset', function (): void {
     $cat = PostCategory::create( ['name' => 'Laravel', 'slug' => 'laravel'] );
-    $a   = publishedPost( $this->user->id, 'A');
-    $a->categories()->attach( $cat->id);
-    publishedPost( $this->user->id, 'B');
+    $a   = publishedPost( $this->user->id, 'A' );
+    $a->categories()->attach( $cat->id );
+    publishedPost( $this->user->id, 'B' );
 
     $result = $this->runtime->resolve( [
         'postType' => 'post',
         'taxQuery' => ['taxonomy' => 'category', 'terms' => [$cat->id], 'operator' => 'NOT IN'],
-    ]);
+    ] );
 
     // `NOT IN` is not implemented in V1 — the runtime drops the
     // constraint entirely, so both posts come back.
-    expect( $result->total())->toBe( 2);
-});
+    expect( $result->total() )->toBe( 2 );
+} );
 
 it( 'throws when an unknown postType is requested', function (): void {
-    $this->runtime->resolve( ['postType' => 'something-unregistered']);
-})->throws( InvalidArgumentException::class, 'unknown post type');
+    $this->runtime->resolve( ['postType' => 'something-unregistered'] );
+} )->throws( InvalidArgumentException::class, 'unknown post type');

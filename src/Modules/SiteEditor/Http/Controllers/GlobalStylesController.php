@@ -132,6 +132,6 @@ class GlobalStylesController extends Controller
     {
         return response( $this->emitter->emit(), 200, [
             'Content-Type' => 'text/css; charset=UTF-8',
-        ]);
+        ] );
     }
 }

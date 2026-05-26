@@ -190,7 +190,7 @@ class AdminMenuManager
             }
         }
 
-        return array_merge( $topLevelItems, $menu);
+        return array_merge( $topLevelItems, $menu );
     }
 
     /**
@@ -202,7 +202,7 @@ class AdminMenuManager
      *
      * @return array|null The page's data array, or null if not found.
      */
-    public function getPageBySlug( string $slug): ?array
+    public function getPageBySlug( string $slug ): ?array
     {
         return $this->items[ $slug ] ?? null;
     }

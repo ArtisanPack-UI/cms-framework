@@ -131,9 +131,9 @@ describe( 'ap.visual-editor.template-parts filter wiring', function (): void {
         $templates = applyFilters( 'ap.visual-editor.templates', [] );
         $parts     = applyFilters( 'ap.visual-editor.template-parts', [] );
 
-        expect( $templates)->toHaveKey( 'page')
-            ->and( $templates)->not->toHaveKey( 'header')
-            ->and( $parts)->toHaveKey( 'header')
-            ->and( $parts)->not->toHaveKey( 'page');
+        expect( $templates )->toHaveKey( 'page' )
+            ->and( $templates )->not->toHaveKey( 'header' )
+            ->and( $parts )->toHaveKey( 'header' )
+            ->and( $parts )->not->toHaveKey( 'page' );
     });
 });

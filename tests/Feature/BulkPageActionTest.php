@@ -268,8 +268,8 @@ test( 'bulk page action returns mixed results when some items fail authorization
     $response->assertSuccessful();
     expect( $response->json( 'processed' ) )->toBe( 1 );
     expect( $response->json( 'failed' ) )->toBe( 1 );
-    expect( $response->json( 'errors' ) )->toHaveKey( (string) $otherPage->id);
-});
+    expect( $response->json( 'errors' ) )->toHaveKey( (string) $otherPage->id );
+} );
 
 // --- Response structure ---
 
@@ -277,13 +277,13 @@ test( 'bulk page action returns correct response structure', function (): void {
     grantAllPagePermissions();
     $user = TestUser::factory()->create();
 
-    $page = createTestPage( ['author_id' => $user->id]);
+    $page = createTestPage( ['author_id' => $user->id] );
 
-    $response = $this->actingAs( $user)->postJson( '/api/v1/pages/bulk', [
+    $response = $this->actingAs( $user )->postJson( '/api/v1/pages/bulk', [
         'action' => 'delete',
         'ids'    => [$page->id],
-    ]);
+    ] );
 
     $response->assertSuccessful();
-    $response->assertJsonStructure( ['processed', 'failed', 'errors']);
+    $response->assertJsonStructure( ['processed', 'failed', 'errors'] );
 });

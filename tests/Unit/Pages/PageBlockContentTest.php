@@ -110,7 +110,7 @@ test( 'page block_content is nullable and defaults to null', function (): void {
         'author_id' => $user->id,
         'status'    => 'draft',
         'order'     => 0,
-    ]);
+    ] );
 
-    expect( $page->block_content)->toBeNull();
-});
+    expect( $page->block_content )->toBeNull();
+} );

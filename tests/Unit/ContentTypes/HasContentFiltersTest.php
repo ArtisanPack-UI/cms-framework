@@ -321,13 +321,13 @@ test( 'blog manager search filter escapes LIKE wildcards', function (): void {
         'author_id'    => $user->id,
         'status'       => 'published',
         'published_at' => now()->subDay(),
-    ]);
+    ] );
 
     $manager = new BlogManager;
 
     // Searching for literal "50%" should only match the post with "50%" in the title
-    $results = $manager->getArchiveQuery( ['search' => '50%'])->get();
+    $results = $manager->getArchiveQuery( ['search' => '50%'] )->get();
 
-    expect( $results)->toHaveCount( 1);
-    expect( $results->first()->title)->toBe( 'Sale: 50% off everything');
+    expect( $results )->toHaveCount( 1 );
+    expect( $results->first()->title )->toBe( 'Sale: 50% off everything' );
 });

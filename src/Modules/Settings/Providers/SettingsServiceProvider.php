@@ -67,6 +67,6 @@ class SettingsServiceProvider extends ServiceProvider
         $settings->registerSetting( 'site.tagline', '', 'sanitizeText', SettingType::String );
         $settings->registerSetting( 'site.url', config( 'app.url', '' ), 'sanitizeUrl', SettingType::String );
         $settings->registerSetting( 'site.logo_id', null, 'sanitizeInt', SettingType::Integer );
-        $settings->registerSetting( 'site.icon_id', null, 'sanitizeInt', SettingType::Integer);
+        $settings->registerSetting( 'site.icon_id', null, 'sanitizeInt', SettingType::Integer );
     }
 }

@@ -90,7 +90,7 @@ class PerformUpdateCommand extends Command
             $this->error( $e->getMessage() );
             $this->newLine();
             $this->warn( 'If a backup was created, you can restore it using:' );
-            $this->comment( 'php artisan update:rollback');
+            $this->comment( 'php artisan update:rollback' );
 
             return self::FAILURE;
         }

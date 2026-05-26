@@ -159,11 +159,11 @@ describe( 'resolveSecurePath', function (): void {
     } );
 
     it( 'returns null when base path does not exist', function (): void {
-        $basePath = storage_path( 'app/non-existent-base');
+        $basePath = storage_path( 'app/non-existent-base' );
         $itemPath = $basePath . '/some-item';
 
-        $result = $this->parser->resolveSecurePath( $itemPath, $basePath);
+        $result = $this->parser->resolveSecurePath( $itemPath, $basePath );
 
-        expect( $result)->toBeNull();
-    });
+        expect( $result )->toBeNull();
+    } );
 });
