@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * ContentType Request for the CMS Framework ContentTypes Module.
@@ -48,7 +48,7 @@ class ContentTypeRequest extends FormRequest
      */
     public function rules(): array
     {
-        $slug = $this->route('slug');
+        $slug = $this->route( 'slug' );
 
         return [
             'name' => [
@@ -61,7 +61,7 @@ class ContentTypeRequest extends FormRequest
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('content_types', 'slug')->ignore($slug, 'slug'),
+                Rule::unique( 'content_types', 'slug' )->ignore( $slug, 'slug' ),
             ],
             'table_name' => [
                 'required',
@@ -130,13 +130,13 @@ class ContentTypeRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required'        => __('The content type name is required.'),
-            'slug.required'        => __('The content type slug is required.'),
-            'slug.regex'           => __('The slug must be lowercase letters, numbers, and hyphens only.'),
-            'slug.unique'          => __('A content type with this slug already exists.'),
-            'table_name.required'  => __('The table name is required.'),
-            'table_name.regex'     => __('The table name must be lowercase letters, numbers, and underscores only.'),
-            'model_class.required' => __('The model class is required.'),
+            'name.required'        => __( 'The content type name is required.' ),
+            'slug.required'        => __( 'The content type slug is required.' ),
+            'slug.regex'           => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
+            'slug.unique'          => __( 'A content type with this slug already exists.' ),
+            'table_name.required'  => __( 'The table name is required.' ),
+            'table_name.regex'     => __( 'The table name must be lowercase letters, numbers, and underscores only.' ),
+            'model_class.required' => __( 'The model class is required.' ),
         ];
     }
 
@@ -150,20 +150,20 @@ class ContentTypeRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'name'          => __('name'),
-            'slug'          => __('slug'),
-            'table_name'    => __('table name'),
-            'model_class'   => __('model class'),
-            'description'   => __('description'),
-            'hierarchical'  => __('hierarchical'),
-            'has_archive'   => __('has archive'),
-            'archive_slug'  => __('archive slug'),
-            'supports'      => __('supports'),
-            'metadata'      => __('metadata'),
-            'public'        => __('public'),
-            'show_in_admin' => __('show in admin'),
-            'icon'          => __('icon'),
-            'menu_position' => __('menu position'),
+            'name'          => __( 'name' ),
+            'slug'          => __( 'slug' ),
+            'table_name'    => __( 'table name' ),
+            'model_class'   => __( 'model class' ),
+            'description'   => __( 'description' ),
+            'hierarchical'  => __( 'hierarchical' ),
+            'has_archive'   => __( 'has archive' ),
+            'archive_slug'  => __( 'archive slug' ),
+            'supports'      => __( 'supports' ),
+            'metadata'      => __( 'metadata' ),
+            'public'        => __( 'public' ),
+            'show_in_admin' => __( 'show in admin' ),
+            'icon'          => __( 'icon'),
+            'menu_position' => __( 'menu position'),
         ];
     }
 }

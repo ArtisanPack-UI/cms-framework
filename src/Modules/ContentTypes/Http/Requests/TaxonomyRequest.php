@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Taxonomy Request for the CMS Framework ContentTypes Module.
@@ -48,7 +48,7 @@ class TaxonomyRequest extends FormRequest
      */
     public function rules(): array
     {
-        $slug = $this->route('slug');
+        $slug = $this->route( 'slug' );
 
         $slugRules = [
             'required',
@@ -57,9 +57,9 @@ class TaxonomyRequest extends FormRequest
             'regex:/^[a-z0-9_]+$/',
         ];
 
-        $uniqueRule = Rule::unique('taxonomies', 'slug');
-        if ($slug) {
-            $uniqueRule->ignore($slug, 'slug');
+        $uniqueRule = Rule::unique( 'taxonomies', 'slug' );
+        if ( $slug ) {
+            $uniqueRule->ignore( $slug, 'slug' );
         }
         $slugRules[] = $uniqueRule;
 
@@ -109,12 +109,12 @@ class TaxonomyRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required'              => __('The taxonomy name is required.'),
-            'slug.required'              => __('The taxonomy slug is required.'),
-            'slug.regex'                 => __('The slug must be lowercase letters, numbers, and underscores only.'),
-            'slug.unique'                => __('A taxonomy with this slug already exists.'),
-            'content_type_slug.required' => __('The content type is required.'),
-            'content_type_slug.exists'   => __('The selected content type does not exist.'),
+            'name.required'              => __( 'The taxonomy name is required.' ),
+            'slug.required'              => __( 'The taxonomy slug is required.' ),
+            'slug.regex'                 => __( 'The slug must be lowercase letters, numbers, and underscores only.' ),
+            'slug.unique'                => __( 'A taxonomy with this slug already exists.' ),
+            'content_type_slug.required' => __( 'The content type is required.' ),
+            'content_type_slug.exists'   => __( 'The selected content type does not exist.' ),
         ];
     }
 
@@ -128,14 +128,14 @@ class TaxonomyRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'name'              => __('name'),
-            'slug'              => __('slug'),
-            'content_type_slug' => __('content type'),
-            'description'       => __('description'),
-            'hierarchical'      => __('hierarchical'),
-            'show_in_admin'     => __('show in admin'),
-            'rest_base'         => __('REST base'),
-            'metadata'          => __('metadata'),
+            'name'              => __( 'name' ),
+            'slug'              => __( 'slug' ),
+            'content_type_slug' => __( 'content type' ),
+            'description'       => __( 'description' ),
+            'hierarchical'      => __( 'hierarchical' ),
+            'show_in_admin'     => __( 'show in admin' ),
+            'rest_base'         => __( 'REST base' ),
+            'metadata'          => __( 'metadata'),
         ];
     }
 }

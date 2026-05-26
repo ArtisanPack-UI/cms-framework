@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PostTag Controller for the CMS Framework Blog Module.
@@ -31,7 +31,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Post Tags', weight: 3)]
+#[Group( 'Post Tags', weight: 3 )]
 class PostTagController extends Controller
 {
     use AuthorizesRequests;
@@ -47,11 +47,11 @@ class PostTagController extends Controller
      */
     public function index(): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', PostTag::class);
+        $this->authorize( 'viewAny', PostTag::class );
 
-        $tags = PostTag::orderBy('order')->paginate(15);
+        $tags = PostTag::orderBy( 'order' )->paginate( 15 );
 
-        return PostTagResource::collection($tags);
+        return PostTagResource::collection( $tags );
     }
 
     /**
@@ -66,14 +66,14 @@ class PostTagController extends Controller
      *
      * @return JsonResponse The JSON response containing the created tag resource.
      */
-    public function store(PostTagRequest $request): JsonResponse
+    public function store( PostTagRequest $request ): JsonResponse
     {
-        $this->authorize('create', PostTag::class);
+        $this->authorize( 'create', PostTag::class );
 
         $validated = $request->validated();
-        $tag       = PostTag::create($validated);
+        $tag       = PostTag::create( $validated );
 
-        return response()->json(new PostTagResource($tag), 201);
+        return response()->json( new PostTagResource( $tag ), 201 );
     }
 
     /**
@@ -87,12 +87,12 @@ class PostTagController extends Controller
      *
      * @return PostTagResource The tag resource.
      */
-    public function show(int $id): PostTagResource
+    public function show( int $id ): PostTagResource
     {
-        $tag = PostTag::findOrFail($id);
-        $this->authorize('view', $tag);
+        $tag = PostTag::findOrFail( $id );
+        $this->authorize( 'view', $tag );
 
-        return new PostTagResource($tag);
+        return new PostTagResource( $tag );
     }
 
     /**
@@ -108,15 +108,15 @@ class PostTagController extends Controller
      *
      * @return PostTagResource The updated tag resource.
      */
-    public function update(PostTagRequest $request, int $id): PostTagResource
+    public function update( PostTagRequest $request, int $id ): PostTagResource
     {
-        $tag = PostTag::findOrFail($id);
-        $this->authorize('update', $tag);
+        $tag = PostTag::findOrFail( $id );
+        $this->authorize( 'update', $tag );
 
         $validated = $request->validated();
-        $tag->update($validated);
+        $tag->update( $validated );
 
-        return new PostTagResource($tag);
+        return new PostTagResource( $tag );
     }
 
     /**
@@ -131,10 +131,10 @@ class PostTagController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy(int $id): Response
+    public function destroy( int $id ): Response
     {
-        $tag = PostTag::findOrFail($id);
-        $this->authorize('delete', $tag);
+        $tag = PostTag::findOrFail( $id );
+        $this->authorize( 'delete', $tag );
 
         $tag->delete();
 

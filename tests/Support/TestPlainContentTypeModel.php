@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Test fixture: a content-type model that does NOT use HasBlockContent.
@@ -8,7 +8,7 @@ declare(strict_types=1);
  * Used to verify that the bridge silently skips types whose models lack
  * the trait (and warns when they nevertheless declare editor support).
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Tests\Support;

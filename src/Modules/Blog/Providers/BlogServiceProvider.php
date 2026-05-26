@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Blog Service Provider
@@ -42,7 +42,7 @@ class BlogServiceProvider extends ServiceProvider
     public function register(): void
     {
         // Register BlogManager as singleton
-        $this->app->singleton(BlogManager::class, fn () => new BlogManager);
+        $this->app->singleton( BlogManager::class, fn () => new BlogManager );
 
         // G4c-1 — QueryRuntime resolves `core/query` block attributes to a
         // paginated Eloquent result. Bound here so visual-editor's REST
@@ -50,10 +50,10 @@ class BlogServiceProvider extends ServiceProvider
         // layer over BlogManager / PageManager / ContentTypeManager.
         $this->app->singleton(
             QueryRuntime::class,
-            fn ($app) => new QueryRuntime(
-                $app->make(BlogManager::class),
-                $app->make(PageManager::class),
-                $app->make(ContentTypeManager::class),
+            fn ( $app ) => new QueryRuntime(
+                $app->make( BlogManager::class ),
+                $app->make( PageManager::class ),
+                $app->make( ContentTypeManager::class ),
             ),
         );
 
@@ -66,20 +66,20 @@ class BlogServiceProvider extends ServiceProvider
      *
      * @since 1.0.0
      */
-    public function boot(Router $router): void
+    public function boot( Router $router ): void
     {
         // Load migrations
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
 
         // Load API routes
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
 
         // Register policies
-        Gate::policy(Post::class, PostPolicy::class);
-        Gate::policy(PostCategory::class, PostCategoryPolicy::class);
-        Gate::policy(PostTag::class, PostTagPolicy::class);
+        Gate::policy( Post::class, PostPolicy::class );
+        Gate::policy( PostCategory::class, PostCategoryPolicy::class );
+        Gate::policy( PostTag::class, PostTagPolicy::class );
 
         // Register blog content type
         $this->registerBlogContentType();
@@ -92,9 +92,9 @@ class BlogServiceProvider extends ServiceProvider
      */
     protected function registerBlogContentType(): void
     {
-        $contentTypeManager = app(ContentTypeManager::class);
+        $contentTypeManager = app( ContentTypeManager::class );
 
-        $contentTypeManager->register([
+        $contentTypeManager->register( [
             'name'          => 'Blog Posts',
             'slug'          => 'posts',
             'table_name'    => 'posts',
@@ -109,7 +109,7 @@ class BlogServiceProvider extends ServiceProvider
             'show_in_admin' => true,
             'icon'          => 'fas-newspaper',
             'menu_position' => 20,
-        ]);
+        ] );
     }
 
     /**
@@ -119,9 +119,9 @@ class BlogServiceProvider extends ServiceProvider
      */
     protected function loadHelpers(): void
     {
-        $helpersPath = __DIR__.'/../helpers.php';
+        $helpersPath = __DIR__ . '/../helpers.php';
 
-        if (file_exists($helpersPath)) {
+        if ( file_exists( $helpersPath)) {
             require_once $helpersPath;
         }
     }

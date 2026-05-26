@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Site Setting Controller.
@@ -10,7 +10,7 @@ declare(strict_types=1);
  * `/wp/v2/settings` envelope shape so visual-editor's `core/site-*` blocks
  * can read and write them through `apGetSetting()` / a single REST call.
  *
- * @since   1.2.0
+ * @since   2.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Controllers;
@@ -26,9 +26,9 @@ use Illuminate\Routing\Controller;
 /**
  * GET/PUT controller for the WP-shape site-meta envelope.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
-#[Group('Settings', weight: 13)]
+#[Group( 'Settings', weight: 13 )]
 class SiteSettingController extends Controller
 {
     use AuthorizesRequests;
@@ -39,7 +39,7 @@ class SiteSettingController extends Controller
      * Kept as a constant so the GET and PUT paths stay in sync. Adding a
      * new field is a single-line change here.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<string, string>
      */
@@ -51,7 +51,9 @@ class SiteSettingController extends Controller
         'site_icon'   => 'site.icon_id',
     ];
 
-    public function __construct(protected SettingsManager $settings) {}
+    public function __construct( protected SettingsManager $settings )
+    {
+    }
 
     /**
      * Returns the current site-meta values.
@@ -59,13 +61,13 @@ class SiteSettingController extends Controller
      * Reads each `site.*` setting through the manager so registered
      * defaults fill in for keys the host hasn't persisted yet.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function show(): JsonResponse
     {
-        $this->authorize('viewAny', Setting::class);
+        $this->authorize( 'viewAny', Setting::class );
 
-        return response()->json($this->buildPayload());
+        return response()->json( $this->buildPayload() );
     }
 
     /**
@@ -75,17 +77,17 @@ class SiteSettingController extends Controller
      * fields are preserved. Sanitization runs through the per-key
      * sanitizer registered in `SettingsServiceProvider::registerSiteSettings()`.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public function update(SiteSettingRequest $request): JsonResponse
+    public function update( SiteSettingRequest $request ): JsonResponse
     {
-        $this->authorize('update', Setting::class);
+        $this->authorize( 'update', Setting::class );
 
         $validated = $request->validated();
 
-        foreach (self::FIELD_MAP as $envelopeKey => $settingKey) {
-            if (array_key_exists($envelopeKey, $validated)) {
-                $this->settings->updateSetting($settingKey, $validated[$envelopeKey]);
+        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
+            if ( array_key_exists( $envelopeKey, $validated ) ) {
+                $this->settings->updateSetting( $settingKey, $validated[ $envelopeKey ] );
             }
         }
 
@@ -93,7 +95,7 @@ class SiteSettingController extends Controller
         // show(): the user has already cleared the `update` policy, and
         // hosts that bind separate capabilities for view-vs-update would
         // otherwise see a successful write turn into a 403 here.
-        return response()->json($this->buildPayload());
+        return response()->json( $this->buildPayload() );
     }
 
     /**
@@ -102,7 +104,7 @@ class SiteSettingController extends Controller
      * Pure data access — does not authorize, so safe to call from any
      * action that has already cleared its own policy check.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
@@ -110,8 +112,8 @@ class SiteSettingController extends Controller
     {
         $payload = [];
 
-        foreach (self::FIELD_MAP as $envelopeKey => $settingKey) {
-            $payload[$envelopeKey] = $this->settings->getSetting($settingKey);
+        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
+            $payload[ $envelopeKey ] = $this->settings->getSetting( $settingKey );
         }
 
         return $payload;

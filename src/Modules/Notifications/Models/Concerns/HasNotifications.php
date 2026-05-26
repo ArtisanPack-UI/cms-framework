@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * HasNotifications Trait
@@ -37,9 +37,9 @@ trait HasNotifications
             'user_id',
             'notification_id',
         )
-            ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
+            ->withPivot( ['is_read', 'read_at', 'is_dismissed', 'dismissed_at'] )
             ->withTimestamps()
-            ->orderByDesc('created_at');
+            ->orderByDesc( 'created_at' );
     }
 
     /**
@@ -50,8 +50,8 @@ trait HasNotifications
     public function unreadSystemNotifications(): BelongsToMany
     {
         return $this->systemNotifications()
-            ->wherePivot('is_read', false)
-            ->wherePivot('is_dismissed', false);
+            ->wherePivot( 'is_read', false )
+            ->wherePivot( 'is_dismissed', false );
     }
 
     /**
@@ -61,7 +61,7 @@ trait HasNotifications
      */
     public function notificationPreferences(): HasMany
     {
-        return $this->hasMany(NotificationPreference::class, 'user_id');
+        return $this->hasMany( NotificationPreference::class, 'user_id' );
     }
 
     /**
@@ -71,10 +71,10 @@ trait HasNotifications
      *
      * @param  string  $notificationType  The notification type key.
      */
-    public function getNotificationPreference(string $notificationType): ?NotificationPreference
+    public function getNotificationPreference( string $notificationType ): ?NotificationPreference
     {
         return $this->notificationPreferences()
-            ->where('notification_type', sanitizeText($notificationType))
+            ->where( 'notification_type', sanitizeText( $notificationType ) )
             ->first();
     }
 
@@ -85,12 +85,12 @@ trait HasNotifications
      *
      * @param  string  $notificationType  The notification type key.
      */
-    public function shouldReceiveNotification(string $notificationType): bool
+    public function shouldReceiveNotification( string $notificationType ): bool
     {
-        $preference = $this->getNotificationPreference($notificationType);
+        $preference = $this->getNotificationPreference( $notificationType );
 
         // If no preference exists, default to enabled
-        if (! $preference) {
+        if ( ! $preference ) {
             return true;
         }
 
@@ -104,12 +104,12 @@ trait HasNotifications
      *
      * @param  string  $notificationType  The notification type key.
      */
-    public function shouldReceiveNotificationEmail(string $notificationType): bool
+    public function shouldReceiveNotificationEmail( string $notificationType ): bool
     {
-        $preference = $this->getNotificationPreference($notificationType);
+        $preference = $this->getNotificationPreference( $notificationType );
 
         // If no preference exists, default to enabled
-        if (! $preference) {
+        if ( ! $preference ) {
             return true;
         }
 
@@ -123,12 +123,12 @@ trait HasNotifications
      *
      * @param  int  $notificationId  The notification ID.
      */
-    public function markNotificationAsRead(int $notificationId): bool
+    public function markNotificationAsRead( int $notificationId ): bool
     {
-        return $this->systemNotifications()->updateExistingPivot($notificationId, [
+        return $this->systemNotifications()->updateExistingPivot( $notificationId, [
             'is_read' => true,
             'read_at' => now(),
-        ]) > 0;
+        ] ) > 0;
     }
 
     /**
@@ -138,12 +138,12 @@ trait HasNotifications
      *
      * @param  int  $notificationId  The notification ID.
      */
-    public function dismissNotification(int $notificationId): bool
+    public function dismissNotification( int $notificationId ): bool
     {
-        return $this->systemNotifications()->updateExistingPivot($notificationId, [
+        return $this->systemNotifications()->updateExistingPivot( $notificationId, [
             'is_dismissed' => true,
             'dismissed_at' => now(),
-        ]) > 0;
+        ] ) > 0;
     }
 
     /**
@@ -156,15 +156,15 @@ trait HasNotifications
     public function markAllNotificationsAsRead(): int
     {
         // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
-        return \Illuminate\Support\Facades\DB::table('notification_user')
-            ->where('user_id', $this->id)
-            ->where('is_read', false)
-            ->where('is_dismissed', false)
-            ->update([
+        return \Illuminate\Support\Facades\DB::table( 'notification_user' )
+            ->where( 'user_id', $this->id )
+            ->where( 'is_read', false )
+            ->where( 'is_dismissed', false )
+            ->update( [
                 'is_read'    => true,
                 'read_at'    => now(),
                 'updated_at' => now(),
-            ]);
+            ] );
     }
 
     /**
@@ -177,14 +177,14 @@ trait HasNotifications
     public function dismissAllNotifications(): int
     {
         // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
-        return \Illuminate\Support\Facades\DB::table('notification_user')
-            ->where('user_id', $this->id)
-            ->where('is_dismissed', false)
-            ->update([
+        return \Illuminate\Support\Facades\DB::table( 'notification_user' )
+            ->where( 'user_id', $this->id )
+            ->where( 'is_dismissed', false )
+            ->update( [
                 'is_dismissed' => true,
                 'dismissed_at' => now(),
                 'updated_at'   => now(),
-            ]);
+            ] );
     }
 
     /**

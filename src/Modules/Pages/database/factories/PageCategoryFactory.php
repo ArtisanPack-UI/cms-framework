@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PageCategory Factory for the CMS Framework Pages Module.
@@ -48,16 +48,16 @@ class PageCategoryFactory extends Factory
      */
     public function definition(): array
     {
-        $name = fake()->words(rand(1, 3), true);
+        $name = fake()->words( rand( 1, 3 ), true );
 
         return [
-            'name'        => ucwords($name),
-            'slug'        => Str::slug($name),
+            'name'        => ucwords( $name ),
+            'slug'        => Str::slug( $name ),
             'description' => fake()->sentence(),
             'parent_id'   => null,
             'order'       => 0,
             'metadata'    => [
-                'seo_title'       => ucwords($name),
+                'seo_title'       => ucwords( $name ),
                 'seo_description' => fake()->sentence(),
             ],
         ];
@@ -72,11 +72,11 @@ class PageCategoryFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withParent(int $parentId): static
+    public function withParent( int $parentId ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'parent_id' => $parentId,
-        ]);
+        ] );
     }
 
     /**
@@ -90,9 +90,9 @@ class PageCategoryFactory extends Factory
      */
     public function asChild(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'parent_id' => PageCategory::factory(),
-        ]);
+        ] );
     }
 
     /**
@@ -104,9 +104,9 @@ class PageCategoryFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withOrder(int $order): static
+    public function withOrder( int $order ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'order' => $order,
         ]);
     }

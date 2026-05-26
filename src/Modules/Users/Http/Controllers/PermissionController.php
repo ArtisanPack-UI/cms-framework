@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
@@ -22,62 +22,62 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Permissions', weight: 12)]
+#[Group( 'Permissions', weight: 12 )]
 class PermissionController extends Controller
 {
     use AuthorizesRequests;
 
     public function __construct()
     {
-        $this->authorizeResource(Permission::class, 'permission');
+        $this->authorizeResource( Permission::class, 'permission' );
     }
 
     public function index(): AnonymousResourceCollection
     {
-        $permissions = Permission::with('roles')->paginate(15);
+        $permissions = Permission::with( 'roles' )->paginate( 15 );
 
-        return PermissionResource::collection($permissions);
+        return PermissionResource::collection( $permissions );
     }
 
-    public function store(Request $request): PermissionResource
+    public function store( Request $request ): PermissionResource
     {
-        $validated = $request->validate([
+        $validated = $request->validate( [
             'name'        => 'required|string|max:255|unique:permissions,name',
             'slug'        => 'sometimes|string|max:255|unique:permissions,slug',
             'description' => 'nullable|string|max:255',
-        ]);
+        ] );
 
-        $permission = Permission::create($validated);
-        $permission->load('roles');
+        $permission = Permission::create( $validated );
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
-    public function show(Permission $permission): PermissionResource
+    public function show( Permission $permission ): PermissionResource
     {
-        $permission->load('roles');
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
-    public function update(Request $request, Permission $permission): PermissionResource
+    public function update( Request $request, Permission $permission ): PermissionResource
     {
-        $validated = $request->validate([
-            'name'        => 'sometimes|required|string|max:255|unique:permissions,name,'.$permission->id,
-            'slug'        => 'sometimes|required|string|max:255|unique:permissions,slug,'.$permission->id,
+        $validated = $request->validate( [
+            'name'        => 'sometimes|required|string|max:255|unique:permissions,name,' . $permission->id,
+            'slug'        => 'sometimes|required|string|max:255|unique:permissions,slug,' . $permission->id,
             'description' => 'sometimes|nullable|string|max:255',
-        ]);
+        ] );
 
-        $permission->update($validated);
-        $permission->load('roles');
+        $permission->update( $validated );
+        $permission->load( 'roles' );
 
-        return new PermissionResource($permission);
+        return new PermissionResource( $permission );
     }
 
-    public function destroy(Permission $permission): JsonResponse
+    public function destroy( Permission $permission ): JsonResponse
     {
         $permission->delete();
 
-        return response()->json([], 204);
+        return response()->json( [], 204);
     }
 }

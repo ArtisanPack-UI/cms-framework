@@ -8,22 +8,22 @@
  * deferred to V1.1 — the WP schema is large and editor-side adapters
  * already validate before submission.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 class GlobalStylesRequest extends FormRequest
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function authorize(): bool
     {
@@ -31,7 +31,7 @@ class GlobalStylesRequest extends FormRequest
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
@@ -46,14 +46,14 @@ class GlobalStylesRequest extends FormRequest
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, string>
      */
     public function messages(): array
     {
         return [
-            'variation.regex' => __('The variation slug must be alphanumeric, hyphens, or underscores.'),
+            'variation.regex' => __( 'The variation slug must be alphanumeric, hyphens, or underscores.' ),
         ];
     }
 }

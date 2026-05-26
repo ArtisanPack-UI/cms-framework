@@ -9,26 +9,26 @@
  * when resolution is file-only (matches WP's behavior for not-yet-customized
  * themes).
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class GlobalStylesResource
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
-    public static function toArray(ResolvedGlobalStyles $resolved): array
+    public static function toArray( ResolvedGlobalStyles $resolved ): array
     {
         return [
             'id'                     => $resolved->wpId(),
@@ -40,7 +40,7 @@ final class GlobalStylesResource
             'has_user_customization' => $resolved->hasUserCustomization,
             'content_hash'           => $resolved->contentHash(),
             'modified'               => null !== $resolved->model
-                ? optional($resolved->model->updated_at)->toIso8601String()
+                ? optional( $resolved->model->updated_at )->toIso8601String()
                 : null,
         ];
     }

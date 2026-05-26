@@ -18,6 +18,7 @@ The Settings module provides a lightweight, application‑wide key–value store
 - [Sanitization and Types](Settings-Sanitization-And-Types) — Ensure clean, typed input
 - [Hooks and Events](Settings-Hooks-And-Events) — `ap.settings.registeredSettings` filter
 - [Database and Migrations](Settings-Database-And-Migrations) — Storage schema and considerations
+- [[settings/Site Settings]] — Built-in `site.*` settings and the WP-shape `/api/v1/settings/site` endpoint *(2.0.0)*
 
 ## Overview
 

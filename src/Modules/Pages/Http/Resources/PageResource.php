@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Page Resource for the CMS Framework Pages Module.
@@ -38,7 +38,7 @@ class PageResource extends JsonResource
      *
      * @return array<string, mixed> The transformed page data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'        => $this->id,
@@ -47,22 +47,22 @@ class PageResource extends JsonResource
             'content'   => $this->content,
             'excerpt'   => $this->excerpt,
             'author_id' => $this->author_id,
-            'author'    => $this->whenLoaded('author', function () {
+            'author'    => $this->whenLoaded( 'author', function () {
                 return [
                     'id'    => $this->author->id,
                     'name'  => $this->author->name,
                     'email' => $this->author->email,
                 ];
-            }),
+            } ),
             'parent_id' => $this->parent_id,
-            'parent'    => $this->whenLoaded('parent', function () {
+            'parent'    => $this->whenLoaded( 'parent', function () {
                 return $this->parent ? [
                     'id'    => $this->parent->id,
                     'title' => $this->parent->title,
                     'slug'  => $this->parent->slug,
                 ] : null;
-            }),
-            'children'           => self::collection($this->whenLoaded('children')),
+            } ),
+            'children'           => self::collection( $this->whenLoaded( 'children' ) ),
             'order'              => $this->order,
             'template'           => $this->template,
             'status'             => $this->status,
@@ -72,8 +72,8 @@ class PageResource extends JsonResource
             'breadcrumb'         => $this->breadcrumb,
             'depth'              => $this->depth,
             'metadata'           => $this->metadata,
-            'categories'         => PageCategoryResource::collection($this->whenLoaded('categories')),
-            'tags'               => PageTagResource::collection($this->whenLoaded('tags')),
+            'categories'         => PageCategoryResource::collection( $this->whenLoaded( 'categories' ) ),
+            'tags'               => PageTagResource::collection( $this->whenLoaded( 'tags' ) ),
             'featured_image_url' => $this->getFeaturedImageUrl(),
             'created_at'         => $this->created_at,
             'updated_at'         => $this->updated_at,

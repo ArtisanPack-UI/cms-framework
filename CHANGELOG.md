@@ -9,12 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `block_content` JSON column on the `posts` and `pages` tables for visual editor block trees, alongside the existing `content` longText column
-- `Post` and `Page` models adopt `ArtisanPackUI\VisualEditor\Concerns\HasBlockContent` with a polyfill stub so visual-editor remains an optional integration rather than a hard composer dependency
-- H2 — Site editor patterns module: `BlockPattern` model + `block_patterns` table, `PatternResolver` merging theme `.php` pattern files with user-source DB rows, REST endpoints under `/api/v1/blocks` (synced) and `/api/v1/block-patterns/patterns` (unsynced) returning WP-shape payloads (matching `/wp/v2/blocks` and `/wp/v2/block-patterns/patterns` respectively), and `ap.visual-editor.patterns` filter registration behind a `class_exists` guard
-- `PatternFileParser` for theme-shipped pattern files with WP-style header doc-comments (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`)
-- H3 — Site editor global styles module: `GlobalStyles` model + `global_styles` table (singleton-per-theme), `GlobalStylesResolver` deep-merging `theme.json` defaults with theme-shipped variation files (`themes/{active}/styles/{slug}.json`) and DB user customization, `GlobalStylesEmitter` translating the resolved tree into `--wp--preset--*` custom properties + per-element CSS rules with content-hash cache invalidation on model save/delete, REST endpoints under `/api/v1/global-styles` (GET / PUT / DELETE / variations / css) returning WP `/wp/v2/global-styles` shape, `@cmsGlobalStyles` Blade directive for front-end head injection, and `ap.visual-editor.global-styles` singleton filter registration behind a `class_exists` guard
-
 ### Changed
 
 ### Deprecated
@@ -24,6 +18,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Security
+
+## [2.0.0] - 2026-05-26
+
+### Added
+
+- **SiteEditor module** — entirely new module providing the back-end for a WordPress-style site editor experience:
+  - **H0** — extended `theme.json` schema covering settings, styles, templates, parts, patterns, and `menus.locations`
+  - **H1** — Templates + template-parts: `Template` and `TemplatePart` models, `TemplateResolver` / `TemplatePartResolver` merging theme-shipped files with DB user customizations, REST endpoints returning WP `/wp/v2/templates` and `/wp/v2/template-parts` shape, with `ap.visual-editor.templates` and `ap.visual-editor.template-parts` filter registration behind `class_exists` guards
+  - **H2** — Patterns: `BlockPattern` model + `block_patterns` table, `PatternResolver` merging theme `.php` pattern files with user-source DB rows, REST endpoints under `/api/v1/blocks` (synced) and `/api/v1/block-patterns/patterns` (unsynced) returning WP-shape payloads, and `ap.visual-editor.patterns` filter registration behind a `class_exists` guard
+  - `PatternFileParser` for theme-shipped pattern files with WP-style header doc-comments (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`)
+  - **H3** — Global styles: `GlobalStyles` model + `global_styles` table (singleton-per-theme), `GlobalStylesResolver` deep-merging `theme.json` defaults with theme-shipped variation files (`themes/{active}/styles/{slug}.json`) and DB user customization, `GlobalStylesEmitter` translating the resolved tree into `--wp--preset--*` custom properties + per-element CSS rules with content-hash cache invalidation on model save/delete, REST endpoints under `/api/v1/global-styles` (GET / PUT / DELETE / variations / css) returning WP `/wp/v2/global-styles` shape, `@cmsGlobalStyles` Blade directive for front-end head injection, and `ap.visual-editor.global-styles` singleton filter registration behind a `class_exists` guard
+  - **H4** — Menus: `Menu`, `MenuItem`, and `MenuLocationAssignment` models with REST endpoints for menus, menu items, and theme-declared menu locations
+- **Visual editor integration** — opt-in bridge to the optional `artisanpack-ui/visual-editor` package:
+  - `block_content` JSON column on `posts` and `pages` tables for visual editor block trees, alongside the existing `content` longText column
+  - `Post` and `Page` models adopt `ArtisanPackUI\VisualEditor\Concerns\HasBlockContent` with a polyfill stub so visual-editor remains an optional integration rather than a hard composer dependency
+  - Auto-registration of `HasBlockContent` content types into the `ap.visual-editor.resources` filter, plus explicit registration of `Post` and `Page`
+  - Registration of `visual_editor.*` permissions when visual-editor is installed
+- **QueryRuntime service** (G4c-1) for resolving `core/query` block loops at render time
+- **Site settings** — `site.*` settings registered with a WP-shape `/api/v1/settings/site` endpoint and a by-key save path that applies sanitizers and types
+- **Themes lifecycle**:
+  - `installFromZip()` API and `POST /v1/themes` upload route for installing themes from a ZIP archive
+  - Strict manifest schema enforcement for theme installs (`WpThemeJsonValidator` + `WpThemeJsonValidationResult`)
+  - Theme lifecycle hooks fired on install and activate
+- **Updates**:
+  - `GitLabUpdateSource` now supports release-asset download URLs in addition to tarball URLs
+
+### Changed
+
+- **RBAC migration (Wave 4)** — the Users module's bundled `Role`, `Permission`, `HasRolesAndPermissions`, and RBAC migrations have been removed and replaced by composition over the shared `artisanpack-ui/rbac` package. The cms-framework classes remain at the same paths and subclass the rbac base, so existing imports keep working. See [UPGRADE-RBAC.md](UPGRADE-RBAC.md) for migration details.
+- Relaxed `artisanpack-ui/security` constraint to allow `^2.0` in addition to `^1.0.3`
+- `RolesTableSeeder` and `PermissionsTableSeeder` are now opt-in; the default `DatabaseSeeder` only runs `SettingsTableSeeder`
+- `roles` and `permissions` schemas now expose a `description` column (via the rbac base schema)
+- New `role:` route middleware alias pairs with rbac's `permission:` alias
+
+### Fixed
+
+- `HasFeaturedImage` content-type trait rewritten to use the `featureables` pivot table (replacing the legacy direct column reference)
+- Site editor REST routes now use `auth:sanctum` so REST clients can pass Bearer tokens
+- Template parts now accept `navigation-overlay` as a valid area; the legacy `general` area was renamed to `uncategorized` to match WP core (Keystone #55)
+- `UpdateInfo->sha256` is now populated from GitLab releases
+- `Users` API routes (`users`, `roles`, `permissions`, `users/bulk`) are now gated behind the `auth` middleware (bug fix #129)
+- `PermissionController` now calls `authorizeResource()` so it consults `PermissionPolicy` like every other controller in the framework (bug fix #127)
+- `PermissionPolicy` methods now take `Authenticatable $user` (Laravel's standard signature) instead of `string|int $id` (bug fix #128)
+- Bulk settings updates wrapped in a DB transaction
+- Schema-guarded `ap.visual-editor.*` filter callbacks against missing tables
+- `Post` and `Page` `$fillable` no longer include `block_content` (block trees flow through the visual-editor pipeline, not mass assignment)
+- `PatternFileParser` regexes are now anchored
+
+### Removed
+
+- Bundled `Role` model, `Permission` model, `HasRolesAndPermissions` trait implementation, and the three RBAC migrations (`create_roles_table`, `create_permissions_table`, `create_user_role_permission_pivots`) — superseded by `artisanpack-ui/rbac`. The class/trait names are preserved as subclasses for backward compatibility.
+
+### Migration / Upgrade
+
+See [UPGRADE-RBAC.md](UPGRADE-RBAC.md) for the full upgrade guide. For most apps, the upgrade is `composer require artisanpack-ui/rbac:^0.1 && php artisan migrate`.
 
 ## [1.1.0] - 2026-04-06
 

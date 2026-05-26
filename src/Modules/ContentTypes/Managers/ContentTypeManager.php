@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * ContentType Manager
@@ -29,7 +29,7 @@ class ContentTypeManager
      *
      * @param  array  $args  Content type configuration.
      */
-    public function register(array $args): void
+    public function register( array $args ): void
     {
         /**
          * Filters the array of registered content types.
@@ -42,14 +42,14 @@ class ContentTypeManager
          *
          * @return array Filtered content types array.
          */
-        addFilter('ap.contentTypes.registeredContentTypes', function ($contentTypes) use ($args) {
+        addFilter( 'ap.contentTypes.registeredContentTypes', function ( $contentTypes ) use ( $args ) {
             $slug = $args['slug'] ?? '';
-            if ($slug) {
-                $contentTypes[$slug] = $args;
+            if ( $slug ) {
+                $contentTypes[ $slug ] = $args;
             }
 
             return $contentTypes;
-        });
+        } );
     }
 
     /**
@@ -60,7 +60,7 @@ class ContentTypeManager
     public function getRegisteredContentTypes(): array
     {
         // Get from database
-        $dbContentTypes = ContentType::all()->keyBy('slug')->toArray();
+        $dbContentTypes = ContentType::all()->keyBy( 'slug' )->toArray();
 
         /**
          * Filters the array of registered content types.
@@ -73,10 +73,10 @@ class ContentTypeManager
          *
          * @return array Filtered content types array.
          */
-        $filteredContentTypes = applyFilters('ap.contentTypes.registeredContentTypes', []);
+        $filteredContentTypes = applyFilters( 'ap.contentTypes.registeredContentTypes', [] );
 
         // Merge database and filtered content types
-        return array_merge($dbContentTypes, $filteredContentTypes);
+        return array_merge( $dbContentTypes, $filteredContentTypes );
     }
 
     /**
@@ -86,9 +86,9 @@ class ContentTypeManager
      *
      * @param  string  $slug  Content type slug.
      */
-    public function getContentType(string $slug): ?ContentType
+    public function getContentType( string $slug ): ?ContentType
     {
-        return ContentType::where('slug', sanitizeText($slug))->first();
+        return ContentType::where( 'slug', sanitizeText( $slug ) )->first();
     }
 
     /**
@@ -98,9 +98,9 @@ class ContentTypeManager
      *
      * @param  array  $data  Content type data.
      */
-    public function createContentType(array $data): ContentType
+    public function createContentType( array $data ): ContentType
     {
-        $contentType = ContentType::create($data);
+        $contentType = ContentType::create( $data );
 
         /**
          * Fires after a content type has been created.
@@ -111,7 +111,7 @@ class ContentTypeManager
          *
          * @param  ContentType  $contentType  The created content type instance.
          */
-        doAction('ap.contentTypes.created', $contentType);
+        doAction( 'ap.contentTypes.created', $contentType );
 
         return $contentType;
     }
@@ -124,15 +124,15 @@ class ContentTypeManager
      * @param  string  $slug  Content type slug.
      * @param  array  $data  Content type data.
      */
-    public function updateContentType(string $slug, array $data): ContentType
+    public function updateContentType( string $slug, array $data ): ContentType
     {
-        $contentType = $this->getContentType($slug);
+        $contentType = $this->getContentType( $slug );
 
-        if (! $contentType) {
-            throw new Exception("Content type {$slug} not found.");
+        if ( ! $contentType ) {
+            throw new Exception( "Content type {$slug} not found." );
         }
 
-        $contentType->update($data);
+        $contentType->update( $data );
 
         /**
          * Fires after a content type has been updated.
@@ -143,7 +143,7 @@ class ContentTypeManager
          *
          * @param  ContentType  $contentType  The updated content type instance.
          */
-        doAction('ap.contentTypes.updated', $contentType);
+        doAction( 'ap.contentTypes.updated', $contentType );
 
         return $contentType;
     }
@@ -155,11 +155,11 @@ class ContentTypeManager
      *
      * @param  string  $slug  Content type slug.
      */
-    public function deleteContentType(string $slug): bool
+    public function deleteContentType( string $slug ): bool
     {
-        $contentType = $this->getContentType($slug);
+        $contentType = $this->getContentType( $slug );
 
-        if (! $contentType) {
+        if ( ! $contentType ) {
             return false;
         }
 
@@ -172,11 +172,11 @@ class ContentTypeManager
          *
          * @param  ContentType  $contentType  The content type being deleted.
          */
-        doAction('ap.contentTypes.deleting', $contentType);
+        doAction( 'ap.contentTypes.deleting', $contentType );
 
         $deleted = $contentType->delete();
 
-        if ($deleted) {
+        if ( $deleted ) {
             /**
              * Fires after a content type has been deleted.
              *
@@ -186,7 +186,7 @@ class ContentTypeManager
              *
              * @param  string  $slug  The slug of the deleted content type.
              */
-            doAction('ap.contentTypes.deleted', $slug);
+            doAction( 'ap.contentTypes.deleted', $slug );
         }
 
         return $deleted;
@@ -199,8 +199,8 @@ class ContentTypeManager
      *
      * @param  string  $slug  Content type slug.
      */
-    public function contentTypeExists(string $slug): bool
+    public function contentTypeExists( string $slug ): bool
     {
-        return ContentType::where('slug', sanitizeText($slug))->exists();
+        return ContentType::where( 'slug', sanitizeText( $slug))->exists();
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Middleware;
 
@@ -19,24 +19,24 @@ use Illuminate\Support\Facades\Auth;
  */
 class CheckRole
 {
-    public function handle(Request $request, Closure $next, string ...$roles)
+    public function handle( Request $request, Closure $next, string ...$roles )
     {
-        if (Auth::guest()) {
-            abort(401);
+        if ( Auth::guest() ) {
+            abort( 401 );
         }
 
         $user = Auth::user();
 
-        if (! method_exists($user, 'hasRole')) {
-            abort(403);
+        if ( ! method_exists( $user, 'hasRole' ) ) {
+            abort( 403 );
         }
 
-        foreach ($roles as $role) {
-            if ($user->hasRole($role)) {
-                return $next($request);
+        foreach ( $roles as $role ) {
+            if ( $user->hasRole( $role ) ) {
+                return $next( $request );
             }
         }
 
-        abort(403);
+        abort( 403);
     }
 }

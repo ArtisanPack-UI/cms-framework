@@ -13,13 +13,13 @@
  * an optional integration rather than a hard composer dependency.
  *
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\VisualEditor\Concerns {
-    if (! trait_exists(__NAMESPACE__.'\\HasBlockContent', true)) {
+    if ( ! trait_exists( __NAMESPACE__ . '\\HasBlockContent', true ) ) {
         /**
          * Minimal stub of HasBlockContent.
          *
@@ -35,14 +35,14 @@ namespace ArtisanPackUI\VisualEditor\Concerns {
             /**
              * Registers an `array` cast for the configured block content column.
              *
-             * @since 1.2.0
+             * @since 2.0.0
              */
             public function initializeHasBlockContent(): void
             {
                 $column = $this->getBlockContentColumn();
 
-                if (! array_key_exists($column, $this->getCasts())) {
-                    $this->mergeCasts([$column => 'array']);
+                if ( ! array_key_exists( $column, $this->getCasts() ) ) {
+                    $this->mergeCasts( [$column => 'array'] );
                 }
             }
 
@@ -51,11 +51,11 @@ namespace ArtisanPackUI\VisualEditor\Concerns {
              *
              * Override by setting `protected $blockContentColumn = 'body';` on the model.
              *
-             * @since 1.2.0
+             * @since 2.0.0
              */
             public function getBlockContentColumn(): string
             {
-                return isset($this->blockContentColumn) && is_string($this->blockContentColumn)
+                return isset( $this->blockContentColumn ) && is_string( $this->blockContentColumn )
                     ? $this->blockContentColumn
                     : 'content';
             }
@@ -63,27 +63,27 @@ namespace ArtisanPackUI\VisualEditor\Concerns {
             /**
              * Returns the current block tree for the model.
              *
-             * @since 1.2.0
+             * @since 2.0.0
              *
              * @return array<int, array<string, mixed>>
              */
             public function getBlockContent(): array
             {
-                $value = $this->getAttribute($this->getBlockContentColumn());
+                $value = $this->getAttribute( $this->getBlockContentColumn() );
 
-                return is_array($value) ? $value : [];
+                return is_array( $value ) ? $value : [];
             }
 
             /**
              * Persists a new block tree for the model.
              *
-             * @since 1.2.0
+             * @since 2.0.0
              *
              * @param  array<int, array<string, mixed>>  $blocks  The block tree to store.
              */
-            public function setBlockContent(array $blocks): void
+            public function setBlockContent( array $blocks ): void
             {
-                $this->setAttribute($this->getBlockContentColumn(), $blocks);
+                $this->setAttribute( $this->getBlockContentColumn(), $blocks);
             }
         }
     }

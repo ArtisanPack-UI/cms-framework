@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Post Resource for the CMS Framework Blog Module.
@@ -38,7 +38,7 @@ class PostResource extends JsonResource
      *
      * @return array<string, mixed> The transformed post data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'        => $this->id,
@@ -47,19 +47,19 @@ class PostResource extends JsonResource
             'content'   => $this->content,
             'excerpt'   => $this->excerpt,
             'author_id' => $this->author_id,
-            'author'    => $this->whenLoaded('author', function () {
+            'author'    => $this->whenLoaded( 'author', function () {
                 return [
                     'id'   => $this->author->id,
                     'name' => $this->author->name,
                 ];
-            }),
+            } ),
             'status'             => $this->status,
             'published_at'       => $this->published_at,
             'is_published'       => $this->isPublished(),
             'permalink'          => $this->permalink,
             'metadata'           => $this->metadata,
-            'categories'         => PostCategoryResource::collection($this->whenLoaded('categories')),
-            'tags'               => PostTagResource::collection($this->whenLoaded('tags')),
+            'categories'         => PostCategoryResource::collection( $this->whenLoaded( 'categories' ) ),
+            'tags'               => PostTagResource::collection( $this->whenLoaded( 'tags' ) ),
             'featured_image_url' => $this->getFeaturedImageUrl(),
             'created_at'         => $this->created_at,
             'updated_at'         => $this->updated_at,

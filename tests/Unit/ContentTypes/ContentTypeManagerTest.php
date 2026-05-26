@@ -1,16 +1,16 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\Hooks\Facades\Filter;
 
-beforeEach(function (): void {
-    $this->artisan('migrate', ['--database' => 'testing']);
-});
+beforeEach( function (): void {
+    $this->artisan( 'migrate', ['--database' => 'testing'] );
+} );
 
-test('register content type adds content type to filter hook', function (): void {
+test( 'register content type adds content type to filter hook', function (): void {
     $manager = new ContentTypeManager;
 
     $args = [
@@ -21,18 +21,18 @@ test('register content type adds content type to filter hook', function (): void
         'supports'    => ['title', 'content'],
     ];
 
-    $manager->register($args);
+    $manager->register( $args );
 
     $registeredTypes = $manager->getRegisteredContentTypes();
 
-    expect($registeredTypes)->toHaveKey('products');
-    expect($registeredTypes['products']['name'])->toBe('Products');
-});
+    expect( $registeredTypes )->toHaveKey( 'products' );
+    expect( $registeredTypes['products']['name'] )->toBe( 'Products' );
+} );
 
-test('get registered content types returns database content types', function (): void {
+test( 'get registered content types returns database content types', function (): void {
     $manager = new ContentTypeManager;
 
-    ContentType::create([
+    ContentType::create( [
         'name'          => 'Blog Posts',
         'slug'          => 'posts',
         'table_name'    => 'posts',
@@ -41,18 +41,18 @@ test('get registered content types returns database content types', function ():
         'has_archive'   => true,
         'public'        => true,
         'show_in_admin' => true,
-    ]);
+    ] );
 
     $registeredTypes = $manager->getRegisteredContentTypes();
 
-    expect($registeredTypes)->toHaveKey('posts');
-    expect($registeredTypes['posts']['name'])->toBe('Blog Posts');
-});
+    expect( $registeredTypes )->toHaveKey( 'posts' );
+    expect( $registeredTypes['posts']['name'] )->toBe( 'Blog Posts' );
+} );
 
-test('get content type returns correct content type by slug', function (): void {
+test( 'get content type returns correct content type by slug', function (): void {
     $manager = new ContentTypeManager;
 
-    ContentType::create([
+    ContentType::create( [
         'name'          => 'Pages',
         'slug'          => 'pages',
         'table_name'    => 'pages',
@@ -61,25 +61,25 @@ test('get content type returns correct content type by slug', function (): void 
         'has_archive'   => false,
         'public'        => true,
         'show_in_admin' => true,
-    ]);
+    ] );
 
-    $contentType = $manager->getContentType('pages');
+    $contentType = $manager->getContentType( 'pages' );
 
-    expect($contentType)->toBeInstanceOf(ContentType::class);
-    expect($contentType->slug)->toBe('pages');
-    expect($contentType->name)->toBe('Pages');
-    expect($contentType->hierarchical)->toBeTrue();
-});
+    expect( $contentType )->toBeInstanceOf( ContentType::class );
+    expect( $contentType->slug )->toBe( 'pages' );
+    expect( $contentType->name )->toBe( 'Pages' );
+    expect( $contentType->hierarchical )->toBeTrue();
+} );
 
-test('get content type returns null for non existent content type', function (): void {
+test( 'get content type returns null for non existent content type', function (): void {
     $manager = new ContentTypeManager;
 
-    $contentType = $manager->getContentType('non-existent');
+    $contentType = $manager->getContentType( 'non-existent' );
 
-    expect($contentType)->toBeNull();
-});
+    expect( $contentType )->toBeNull();
+} );
 
-test('create content type creates new content type in database', function (): void {
+test( 'create content type creates new content type in database', function (): void {
     $manager = new ContentTypeManager;
 
     $data = [
@@ -97,101 +97,101 @@ test('create content type creates new content type in database', function (): vo
         'menu_position' => 30,
     ];
 
-    $contentType = $manager->createContentType($data);
+    $contentType = $manager->createContentType( $data );
 
-    expect($contentType)->toBeInstanceOf(ContentType::class);
-    expect($contentType->slug)->toBe('events');
-    expect($contentType->name)->toBe('Events');
-    expect($contentType->has_archive)->toBeTrue();
-    expect($contentType->archive_slug)->toBe('events');
-    expect($contentType->supports)->toBe(['title', 'content', 'excerpt', 'featured_image']);
-    expect($contentType->icon)->toBe('fas-calendar');
-    expect($contentType->menu_position)->toBe(30);
-    expect($contentType->exists)->toBeTrue();
-});
+    expect( $contentType )->toBeInstanceOf( ContentType::class );
+    expect( $contentType->slug )->toBe( 'events' );
+    expect( $contentType->name )->toBe( 'Events' );
+    expect( $contentType->has_archive )->toBeTrue();
+    expect( $contentType->archive_slug )->toBe( 'events' );
+    expect( $contentType->supports )->toBe( ['title', 'content', 'excerpt', 'featured_image'] );
+    expect( $contentType->icon )->toBe( 'fas-calendar' );
+    expect( $contentType->menu_position )->toBe( 30 );
+    expect( $contentType->exists )->toBeTrue();
+} );
 
-test('update content type updates existing content type', function (): void {
+test( 'update content type updates existing content type', function (): void {
     $manager = new ContentTypeManager;
 
-    ContentType::create([
+    ContentType::create( [
         'name'          => 'Portfolios',
         'slug'          => 'portfolios',
         'table_name'    => 'portfolios',
         'model_class'   => 'App\\Models\\Portfolio',
         'public'        => true,
         'show_in_admin' => true,
-    ]);
+    ] );
 
-    $updatedContentType = $manager->updateContentType('portfolios', [
+    $updatedContentType = $manager->updateContentType( 'portfolios', [
         'name' => 'Portfolio Items',
         'icon' => 'fas-briefcase',
-    ]);
+    ] );
 
-    expect($updatedContentType->name)->toBe('Portfolio Items');
-    expect($updatedContentType->icon)->toBe('fas-briefcase');
-    expect($updatedContentType->slug)->toBe('portfolios'); // Should not change
-});
+    expect( $updatedContentType->name )->toBe( 'Portfolio Items' );
+    expect( $updatedContentType->icon )->toBe( 'fas-briefcase' );
+    expect( $updatedContentType->slug )->toBe( 'portfolios' ); // Should not change
+} );
 
-test('update content type throws exception for non existent content type', function (): void {
+test( 'update content type throws exception for non existent content type', function (): void {
     $manager = new ContentTypeManager;
 
-    expect(fn () => $manager->updateContentType('non-existent', ['name' => 'Updated']))
-        ->toThrow(Exception::class, 'Content type non-existent not found.');
-});
+    expect( fn () => $manager->updateContentType( 'non-existent', ['name' => 'Updated'] ) )
+        ->toThrow( Exception::class, 'Content type non-existent not found.' );
+} );
 
-test('delete content type deletes existing content type', function (): void {
+test( 'delete content type deletes existing content type', function (): void {
     $manager = new ContentTypeManager;
 
-    ContentType::create([
+    ContentType::create( [
         'name'          => 'Testimonials',
         'slug'          => 'testimonials',
         'table_name'    => 'testimonials',
         'model_class'   => 'App\\Models\\Testimonial',
         'public'        => true,
         'show_in_admin' => true,
-    ]);
+    ] );
 
-    $result = $manager->deleteContentType('testimonials');
+    $result = $manager->deleteContentType( 'testimonials' );
 
-    expect($result)->toBeTrue();
-    expect(ContentType::where('slug', 'testimonials')->exists())->toBeFalse();
-});
+    expect( $result )->toBeTrue();
+    expect( ContentType::where( 'slug', 'testimonials' )->exists() )->toBeFalse();
+} );
 
-test('delete content type returns false for non existent content type', function (): void {
+test( 'delete content type returns false for non existent content type', function (): void {
     $manager = new ContentTypeManager;
 
-    $result = $manager->deleteContentType('non-existent');
+    $result = $manager->deleteContentType( 'non-existent' );
 
-    expect($result)->toBeFalse();
-});
+    expect( $result )->toBeFalse();
+} );
 
-test('content type exists returns true for existing content type', function (): void {
+test( 'content type exists returns true for existing content type', function (): void {
     $manager = new ContentTypeManager;
 
-    ContentType::create([
+    ContentType::create( [
         'name'          => 'FAQs',
         'slug'          => 'faqs',
         'table_name'    => 'faqs',
         'model_class'   => 'App\\Models\\FAQ',
         'public'        => true,
         'show_in_admin' => true,
-    ]);
+    ] );
 
-    $exists = $manager->contentTypeExists('faqs');
+    $exists = $manager->contentTypeExists( 'faqs' );
 
-    expect($exists)->toBeTrue();
-});
+    expect( $exists )->toBeTrue();
+} );
 
-test('content type exists returns false for non existent content type', function (): void {
+test( 'content type exists returns false for non existent content type', function (): void {
     $manager = new ContentTypeManager;
 
-    $exists = $manager->contentTypeExists('non-existent');
+    $exists = $manager->contentTypeExists( 'non-existent' );
 
-    expect($exists)->toBeFalse();
-});
+    expect( $exists )->toBeFalse();
+} );
 
-test('content type manager works with app container', function (): void {
-    $manager = app(ContentTypeManager::class);
+test( 'content type manager works with app container', function (): void {
+    $manager = app( ContentTypeManager::class );
 
     $data = [
         'name'          => 'Services',
@@ -202,27 +202,27 @@ test('content type manager works with app container', function (): void {
         'show_in_admin' => true,
     ];
 
-    $contentType = $manager->createContentType($data);
+    $contentType = $manager->createContentType( $data );
 
-    expect($contentType)->toBeInstanceOf(ContentType::class);
-    expect($contentType->slug)->toBe('services');
-});
+    expect( $contentType )->toBeInstanceOf( ContentType::class );
+    expect( $contentType->slug )->toBe( 'services' );
+} );
 
-test('registered content types merges database and filtered content types', function (): void {
+test( 'registered content types merges database and filtered content types', function (): void {
     $manager = new ContentTypeManager;
 
     // Create in database
-    ContentType::create([
+    ContentType::create( [
         'name'          => 'Posts',
         'slug'          => 'posts',
         'table_name'    => 'posts',
         'model_class'   => 'App\\Models\\Post',
         'public'        => true,
         'show_in_admin' => true,
-    ]);
+    ] );
 
     // Register via filter
-    $manager->register([
+    $manager->register( [
         'name'        => 'Custom Type',
         'slug'        => 'custom',
         'table_name'  => 'custom',
@@ -231,6 +231,6 @@ test('registered content types merges database and filtered content types', func
 
     $registeredTypes = $manager->getRegisteredContentTypes();
 
-    expect($registeredTypes)->toHaveKey('posts');
-    expect($registeredTypes)->toHaveKey('custom');
+    expect( $registeredTypes)->toHaveKey( 'posts');
+    expect( $registeredTypes)->toHaveKey( 'custom');
 });

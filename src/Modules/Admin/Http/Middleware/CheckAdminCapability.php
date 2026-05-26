@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Middleware to check if a user has a specific admin capability.
@@ -31,11 +31,11 @@ class CheckAdminCapability
      *                              to check
      *                              for.
      */
-    public function handle(Request $request, Closure $next, string $capability): Response
+    public function handle( Request $request, Closure $next, string $capability ): Response
     {
         // Gate::authorize will automatically throw a 403 exception if the user is not allowed.
-        Gate::authorize($capability);
+        Gate::authorize( $capability );
 
-        return $next($request);
+        return $next( $request );
     }
 }

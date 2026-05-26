@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\Database\Factories;
 
@@ -30,8 +30,8 @@ class RoleFactory extends Factory
         $name = fake()->unique()->word();
 
         return [
-            'name'        => ucfirst($name),
-            'slug'        => Str::slug($name),
+            'name'        => ucfirst( $name ),
+            'slug'        => Str::slug( $name ),
             'description' => fake()->optional()->sentence(),
         ];
     }
@@ -41,10 +41,10 @@ class RoleFactory extends Factory
      */
     public function admin(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'name' => 'Admin',
             'slug' => 'admin',
-        ]);
+        ] );
     }
 
     /**
@@ -52,10 +52,10 @@ class RoleFactory extends Factory
      */
     public function editor(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'name' => 'Editor',
             'slug' => 'editor',
-        ]);
+        ] );
     }
 
     /**
@@ -63,7 +63,7 @@ class RoleFactory extends Factory
      */
     public function user(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'name' => 'User',
             'slug' => 'user',
         ]);

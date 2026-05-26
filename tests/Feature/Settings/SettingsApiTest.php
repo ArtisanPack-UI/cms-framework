@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Feature Tests for the Settings API Endpoints.
@@ -17,22 +17,21 @@ use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
-
 use function Pest\Laravel\actingAs;
 // --- FIX 1: Import the eval'd User class ---
 use function Pest\Laravel\getJson;
 
-uses(RefreshDatabase::class); // Use RefreshDatabase trait
+uses( RefreshDatabase::class ); // Use RefreshDatabase trait
 
-beforeEach(function (): void {
-    $this->artisan('migrate', ['--database' => 'testing']);
+beforeEach( function (): void {
+    $this->artisan( 'migrate', ['--database' => 'testing'] );
 
     // Set up configuration
-    config(['artisanpack.cms-framework.user_model' => 'App\Models\User']);
+    config( ['artisanpack.cms-framework.user_model' => 'App\Models\User'] );
 
     // Create a test user model class if it doesn't exist
-    if (! class_exists('App\\Models\\User')) {
-        eval('
+    if ( ! class_exists( 'App\\Models\\User' ) ) {
+        eval( '
             namespace App\\Models {
                 // --- FIX 2: Extend the correct Authenticatable class for `actingAs` ---
                 use Illuminate\\Foundation\\Auth\\User as Authenticatable;
@@ -46,54 +45,54 @@ beforeEach(function (): void {
                     protected $hidden = ["password"];
                 }
             }
-        ');
+        ' );
     }
 
     // Now this works because of the `use App\Models\User;` at the top
-    $this->user = User::create([
+    $this->user = User::create( [
         'name'     => 'Test User',
         'email'    => 'test@example.com',
-        'password' => bcrypt('password'),
-    ]);
+        'password' => bcrypt( 'password' ),
+    ] );
 
     // Assign role (this part is fine)
-    $role = Role::create(['name' => 'Admin', 'slug' => 'admin']);
-    $this->user->roles()->attach($role);
-});
+    $role = Role::create( ['name' => 'Admin', 'slug' => 'admin'] );
+    $this->user->roles()->attach( $role );
+} );
 
 // Helper function within the test file scope
-function grantPermission(string $permission): void
+function grantPermission( string $permission ): void
 {
-    addFilter($permission, fn ($perm) => $perm, 10, 0);
+    addFilter( $permission, fn ( $perm ) => $perm, 10, 0 );
     // --- FIX 3: Ensure Gate type-hint uses the imported User class ---
-    Gate::define($permission, fn (User $user) => true);
+    Gate::define( $permission, fn ( User $user ) => true );
 }
 
-test('unauthenticated user cannot get settings', function (): void {
-    getJson('/api/v1/settings')
+test( 'unauthenticated user cannot get settings', function (): void {
+    getJson( '/api/v1/settings' )
         ->assertUnauthorized();
-});
+} );
 
-test('user without permission cannot list settings', function (): void {
-    actingAs($this->user)
-        ->getJson('/api/v1/settings')
+test( 'user without permission cannot list settings', function (): void {
+    actingAs( $this->user )
+        ->getJson( '/api/v1/settings' )
         ->assertForbidden();
-});
+} );
 
-test('user with permission can list settings', function (): void {
-    grantPermission('settings.manage'); // Assumes 'settings.manage' grants viewAny via filter default
-    Setting::create(['key' => 'test-1', 'value' => 'value-1']);
-    Setting::create(['key' => 'test-2', 'value' => 'value-2']);
+test( 'user with permission can list settings', function (): void {
+    grantPermission( 'settings.manage' ); // Assumes 'settings.manage' grants viewAny via filter default
+    Setting::create( ['key' => 'test-1', 'value' => 'value-1'] );
+    Setting::create( ['key' => 'test-2', 'value' => 'value-2'] );
 
-    actingAs($this->user)
-        ->getJson('/api/v1/settings')
+    actingAs( $this->user )
+        ->getJson( '/api/v1/settings' )
         ->assertOk()
-        ->assertJsonCount(2, 'data')
-        ->assertJsonFragment(['key' => 'test-1']);
-});
+        ->assertJsonCount( 2, 'data' )
+        ->assertJsonFragment( ['key' => 'test-1'] );
+} );
 
-test('user can store setting', function (): void {
-    grantPermission('settings.manage'); // Assumes 'settings.manage' grants create
+test( 'user can store setting', function (): void {
+    grantPermission( 'settings.manage' ); // Assumes 'settings.manage' grants create
 
     $data = [
         'key'   => 'new-setting',
@@ -101,16 +100,16 @@ test('user can store setting', function (): void {
         'type'  => 'string',
     ];
 
-    actingAs($this->user)
-        ->postJson('/api/v1/settings', $data)
+    actingAs( $this->user )
+        ->postJson( '/api/v1/settings', $data )
         ->assertCreated()
-        ->assertJsonFragment(['key' => 'new-setting']);
+        ->assertJsonFragment( ['key' => 'new-setting'] );
 
-    $this->assertDatabaseHas('settings', ['key' => 'new-setting', 'value' => 'new-value']);
-});
+    $this->assertDatabaseHas( 'settings', ['key' => 'new-setting', 'value' => 'new-value'] );
+} );
 
-test('store setting fails validation', function (): void {
-    grantPermission('settings.manage');
+test( 'store setting fails validation', function (): void {
+    grantPermission( 'settings.manage' );
 
     $data = [
         'key'   => 'INVALID KEY WITH SPACES',
@@ -118,15 +117,15 @@ test('store setting fails validation', function (): void {
         'type'  => 'string',
     ];
 
-    actingAs($this->user)
-        ->postJson('/api/v1/settings', $data)
-        ->assertStatus(422) // Unprocessable Entity
-        ->assertJsonValidationErrors(['key', 'value']);
-});
+    actingAs( $this->user )
+        ->postJson( '/api/v1/settings', $data )
+        ->assertStatus( 422 ) // Unprocessable Entity
+        ->assertJsonValidationErrors( ['key', 'value'] );
+} );
 
-test('user can update setting', function (): void {
-    grantPermission('settings.manage'); // Assumes 'settings.manage' grants update
-    $setting = Setting::create(['key' => 'update-key', 'value' => 'old']);
+test( 'user can update setting', function (): void {
+    grantPermission( 'settings.manage' ); // Assumes 'settings.manage' grants update
+    $setting = Setting::create( ['key' => 'update-key', 'value' => 'old'] );
 
     $data = [
         'key'   => 'update-key', // Use the key in the route for PUT
@@ -134,24 +133,24 @@ test('user can update setting', function (): void {
         'type'  => 'string',
     ];
 
-    actingAs($this->user)
-        ->putJson('/api/v1/settings/'.$setting->key, $data) // Use key in URL
+    actingAs( $this->user )
+        ->putJson( '/api/v1/settings/' . $setting->key, $data ) // Use key in URL
         ->assertOk()
-        ->assertJsonFragment(['value' => 'new-value']);
+        ->assertJsonFragment( ['value' => 'new-value'] );
 
-    $this->assertDatabaseHas('settings', ['key' => 'update-key', 'value' => 'new-value']);
-});
+    $this->assertDatabaseHas( 'settings', ['key' => 'update-key', 'value' => 'new-value'] );
+} );
 
-test('user can delete setting', function (): void {
+test( 'user can delete setting', function (): void {
     // Grant the specific 'settings.delete' permission
-    addFilter('settings.delete', fn () => 'settings.delete');
-    grantPermission('settings.delete');
+    addFilter( 'settings.delete', fn () => 'settings.delete' );
+    grantPermission( 'settings.delete' );
 
-    $setting = Setting::create(['key' => 'delete-key', 'value' => 'old']);
+    $setting = Setting::create( ['key' => 'delete-key', 'value' => 'old'] );
 
-    actingAs($this->user)
-        ->deleteJson('/api/v1/settings/'.$setting->key) // Use key in URL
+    actingAs( $this->user)
+        ->deleteJson( '/api/v1/settings/' . $setting->key) // Use key in URL
         ->assertNoContent(); // 204 No Content
 
-    $this->assertDatabaseMissing('settings', ['key' => 'delete-key']);
+    $this->assertDatabaseMissing( 'settings', ['key' => 'delete-key']);
 });

@@ -9,15 +9,15 @@
  * read paths and at controller boundaries that bypass the Form Request (e.g.
  * the route slug on PUT/DELETE).
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class SlugValidator
 {
@@ -26,23 +26,23 @@ final class SlugValidator
      * hyphens between groups. Rejects path-traversal segments (`..`),
      * separators (`/`, `\`), null bytes, uppercase, and any other character.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public const PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public static function isValid(string $slug): bool
+    public static function isValid( string $slug ): bool
     {
-        return (bool) preg_match(self::PATTERN, $slug);
+        return (bool) preg_match( self::PATTERN, $slug );
     }
 
     /**
      * Pattern fragment for use in Laravel validation rule strings
      * (`'regex:' . SlugValidator::patternRule()`).
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public static function patternRule(): string
     {

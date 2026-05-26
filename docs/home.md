@@ -12,10 +12,13 @@ The CMS Framework is designed to help developers quickly build content managemen
 
 - **User Management System**: Complete CRUD operations for users with role-based access control
 - **Content Management**: Blog posts, pages, custom content types, and taxonomies
+- **Site Editor** *(2.0.0)*: WordPress-style templates, template parts, patterns, global styles, and menus
+- **Visual Editor Integration** *(2.0.0)*: Opt-in bridge to the optional `artisanpack-ui/visual-editor` package
 - **Notification System**: In-app notifications with email support and user preferences
 - **Settings Management**: Application-wide configuration with type casting and sanitization
 - **Admin Framework**: Menu system, widgets, and authorization helpers
-- **Theme & Plugin Architecture**: Extensible system for themes and plugins
+- **Theme & Plugin Architecture**: Theme discovery, activation, ZIP upload, lifecycle hooks, and plugin support
+- **RBAC** *(2.0.0)*: Roles and permissions powered by the shared `artisanpack-ui/rbac` package
 - **RESTful API**: Clean API endpoints for all operations with standardized error responses
 - **Bulk Actions**: Bulk operations for posts, pages, and users
 - **On-Demand Relationships**: Control eager loading via the `include` query parameter
@@ -72,6 +75,7 @@ Application-wide configuration storage with type casting.
 - [[settings/Sanitization and Types]] - Type casting and validation
 - [[settings/Hooks and Events]] - Extending the settings system
 - [[settings/Database and Migrations]] - Database structure
+- [[settings/Site Settings]] - Built-in `site.*` settings and WP-shape envelope *(2.0.0)*
 
 ### Notifications Module
 
@@ -92,6 +96,22 @@ Complete notification system with email support and preferences.
 Flexible theme management with WordPress-style template hierarchy.
 
 - [[Themes]] - Theme system overview and usage
+- [[themes/Installing From Zip]] - Upload a theme as a ZIP archive *(2.0.0)*
+- [[themes/Lifecycle Hooks]] - Listen to install/activate hooks *(2.0.0)*
+
+### Site Editor Module *(2.0.0)*
+
+WordPress-style site-editor back-end — templates, parts, patterns, global styles, and menus.
+
+- [[Site Editor]] - Module overview
+- [[site-editor/Getting Started]] - File + DB authority chain
+- [[site-editor/Templates]] - Templates and template parts (H1)
+- [[site-editor/Patterns]] - Synced and unsynced block patterns (H2)
+- [[site-editor/Global Styles]] - `theme.json`-driven styles, variations, CSS emission (H3)
+- [[site-editor/Menus]] - Menus, items, theme-declared locations (H4)
+- [[site-editor/Visual Editor Integration]] - `HasBlockContent` adoption and the `block_content` column
+- [[site-editor/API Reference]] - Full REST endpoint listing
+- [[site-editor/Hooks and Events]] - `ap.visual-editor.*` filters and the `@cmsGlobalStyles` directive
 
 ---
 
@@ -101,6 +121,8 @@ Flexible theme management with WordPress-style template hierarchy.
 
 Full-featured blog with posts, categories, and tags.
 
+- [[Blog]] - Module overview
+- [[blog/Query Runtime]] - `QueryRuntime` service for `core/query` block loops *(2.0.0)*
 - Posts with drafts, scheduling, and publishing
 - Categories with hierarchical structure
 - Tags for flexible content organization
@@ -181,13 +203,14 @@ System update management for keeping the CMS current.
 
 | Module | Purpose | Status |
 |--------|---------|--------|
-| Users | User management, roles, permissions | Stable |
+| Users | User management — now powered by `artisanpack-ui/rbac` | Stable |
 | Admin | Admin menu, pages, widgets | Stable |
 | Core | Assets, utilities | Stable |
-| Settings | Application configuration | Stable |
+| Settings | Application configuration + WP-shape `site.*` envelope *(2.0.0)* | Stable |
 | Notifications | In-app and email notifications | Stable |
-| Themes | Theme management | Stable |
-| Blog | Posts, categories, tags | Stable |
+| Themes | Theme management + ZIP upload + lifecycle hooks *(2.0.0)* | Stable |
+| Site Editor | Templates, parts, patterns, global styles, menus | New in 2.0.0 |
+| Blog | Posts, categories, tags, `QueryRuntime` for `core/query` *(2.0.0)* | Stable |
 | Pages | Hierarchical pages | Stable |
 | Content Types | Custom content types | Stable |
 | Plugins | Plugin system | Experimental |
@@ -215,9 +238,23 @@ All API endpoints use the `/api/cms` prefix with Sanctum authentication.
 
 ### System
 - `GET/POST /settings` - Settings management
+- `GET/PUT /settings/site` - WP-shape site-meta envelope *(2.0.0)*
 - `GET/POST /notifications` - Notification operations
 - `GET/POST /themes` - Theme management
+- `POST /themes` - Upload a theme as a ZIP archive *(2.0.0)*
 - `GET/POST /plugins` - Plugin management (experimental)
+
+### Site Editor *(2.0.0)*
+- `GET/POST/PUT/DELETE /templates` - Templates (file + DB merged)
+- `GET/POST/PUT/DELETE /template-parts` - Template parts (with `area`)
+- `GET/POST/PUT/DELETE /blocks` - Synced patterns (WP `wp_block` shape)
+- `GET/POST/PUT/DELETE /block-patterns/patterns` - Unsynced patterns (theme + user)
+- `GET/PUT/DELETE /global-styles` - Singleton-per-theme global styles
+- `GET /global-styles/variations` - Theme-shipped style variations
+- `GET /global-styles/css` - Resolved CSS payload
+- `GET/POST/PUT/DELETE /menus` - Navigation menus
+- `GET/POST/PUT/DELETE /menu-items` - Menu items
+- `GET/PUT/DELETE /menu-locations` - Menu location assignments
 
 ### Documentation
 - `GET /docs/api/cms` - Swagger UI (when OpenAPI enabled)
@@ -251,4 +288,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers CMS Framework v1.1.0*
+*This documentation covers CMS Framework v2.0.0*

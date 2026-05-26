@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Notification Manager
@@ -60,8 +60,8 @@ class NotificationManager
          */
         addFilter(
             'ap.notifications.registeredNotifications',
-            function ($notifications) use ($key, $title, $content, $type, $sendEmail, $metadata) {
-                $notifications[$key] = [
+            function ( $notifications ) use ( $key, $title, $content, $type, $sendEmail, $metadata ) {
+                $notifications[ $key ] = [
                     'title'      => $title,
                     'content'    => $content,
                     'type'       => $type,
@@ -92,7 +92,7 @@ class NotificationManager
          *
          * @return array Filtered notifications array.
          */
-        return applyFilters('ap.notifications.registeredNotifications', []);
+        return applyFilters( 'ap.notifications.registeredNotifications', [] );
     }
 
     /**
@@ -106,36 +106,36 @@ class NotificationManager
      *
      * @return Notification|null The created notification instance.
      */
-    public function sendNotification(string $key, array $userIds, array $overrides = []): ?Notification
+    public function sendNotification( string $key, array $userIds, array $overrides = [] ): ?Notification
     {
         $registered = $this->getRegisteredNotifications();
-        $defaults   = $registered[$key] ?? [];
+        $defaults   = $registered[ $key ] ?? [];
 
         // Merge defaults with overrides
         $title      = $overrides['title'] ?? $defaults['title'] ?? $key;
         $content    = $overrides['content'] ?? $defaults['content'] ?? '';
         $type       = $overrides['type'] ?? $defaults['type'] ?? NotificationType::Info;
         $sendEmail  = $overrides['send_email'] ?? $defaults['send_email'] ?? false;
-        $metadata   = array_merge($defaults['metadata'] ?? [], $overrides['metadata'] ?? []);
+        $metadata   = array_merge( $defaults['metadata'] ?? [], $overrides['metadata'] ?? [] );
 
         // Filter users based on their notification preferences
-        $userIds = $this->filterUsersByPreferences($userIds, $key);
+        $userIds = $this->filterUsersByPreferences( $userIds, $key );
 
-        if (empty($userIds)) {
+        if ( empty( $userIds ) ) {
             return null;
         }
 
         // Create the notification
-        $notification = Notification::create([
+        $notification = Notification::create( [
             'type'       => $type,
             'title'      => $title,
             'content'    => $content,
             'metadata'   => $metadata,
             'send_email' => $sendEmail,
-        ]);
+        ] );
 
         // Attach users to the notification
-        $notification->users()->attach($userIds);
+        $notification->users()->attach( $userIds );
 
         /**
          * Fires after a notification has been sent.
@@ -148,13 +148,13 @@ class NotificationManager
          * @param  array  $userIds  Array of user IDs the notification was sent to.
          * @param  string  $key  The notification key.
          */
-        doAction('ap.notifications.sendNotification', $notification, $userIds, $key);
+        doAction( 'ap.notifications.sendNotification', $notification, $userIds, $key );
 
         // Queue email sending if enabled
-        if ($sendEmail) {
-            $emailUserIds = $this->filterUsersForEmail($userIds, $key);
-            if (! empty($emailUserIds)) {
-                SendNotificationEmail::dispatch($notification, $emailUserIds);
+        if ( $sendEmail ) {
+            $emailUserIds = $this->filterUsersForEmail( $userIds, $key );
+            if ( ! empty( $emailUserIds ) ) {
+                SendNotificationEmail::dispatch( $notification, $emailUserIds );
             }
         }
 
@@ -170,14 +170,14 @@ class NotificationManager
      * @param  string  $role  The role name to send to.
      * @param  array  $overrides  Array to override default values.
      */
-    public function sendNotificationByRole(string $key, string $role, array $overrides = []): ?Notification
+    public function sendNotificationByRole( string $key, string $role, array $overrides = [] ): ?Notification
     {
-        $userModel = config('auth.providers.users.model');
-        $userIds   = $userModel::whereHas('roles', function ($query) use ($role): void {
-            $query->where('name', sanitizeText($role));
-        })->pluck('id')->toArray();
+        $userModel = config( 'auth.providers.users.model' );
+        $userIds   = $userModel::whereHas( 'roles', function ( $query ) use ( $role ): void {
+            $query->where( 'name', sanitizeText( $role ) );
+        } )->pluck( 'id' )->toArray();
 
-        return $this->sendNotification($key, $userIds, $overrides);
+        return $this->sendNotification( $key, $userIds, $overrides );
     }
 
     /**
@@ -188,13 +188,13 @@ class NotificationManager
      * @param  string  $key  The registered notification key.
      * @param  array  $overrides  Array to override default values.
      */
-    public function sendNotificationToCurrentUser(string $key, array $overrides = []): ?Notification
+    public function sendNotificationToCurrentUser( string $key, array $overrides = [] ): ?Notification
     {
-        if (! auth()->check()) {
+        if ( ! auth()->check() ) {
             return null;
         }
 
-        return $this->sendNotification($key, [auth()->id()], $overrides);
+        return $this->sendNotification( $key, [auth()->id()], $overrides );
     }
 
     /**
@@ -206,23 +206,23 @@ class NotificationManager
      * @param  int  $limit  Maximum number of notifications to retrieve.
      * @param  bool  $unreadOnly  Whether to retrieve only unread notifications.
      */
-    public function getUserNotifications(int $userId, int $limit = 10, bool $unreadOnly = false): Collection
+    public function getUserNotifications( int $userId, int $limit = 10, bool $unreadOnly = false ): Collection
     {
-        $query = Notification::whereHas('users', function ($q) use ($userId): void {
-            $q->where('user_id', sanitizeInt($userId))
-                ->where('is_dismissed', false);
-        })
-            ->with(['users' => function ($q) use ($userId): void {
-                $q->where('user_id', sanitizeInt($userId));
-            }])
-            ->orderByDesc('created_at')
-            ->limit($limit);
+        $query = Notification::whereHas( 'users', function ( $q ) use ( $userId ): void {
+            $q->where( 'user_id', sanitizeInt( $userId ) )
+                ->where( 'is_dismissed', false );
+        } )
+            ->with( ['users' => function ( $q ) use ( $userId ): void {
+                $q->where( 'user_id', sanitizeInt( $userId ) );
+            }] )
+            ->orderByDesc( 'created_at' )
+            ->limit( $limit );
 
-        if ($unreadOnly) {
-            $query->whereHas('users', function ($q) use ($userId): void {
-                $q->where('user_id', sanitizeInt($userId))
-                    ->where('is_read', false);
-            });
+        if ( $unreadOnly ) {
+            $query->whereHas( 'users', function ( $q ) use ( $userId ): void {
+                $q->where( 'user_id', sanitizeInt( $userId ) )
+                    ->where( 'is_read', false );
+            } );
         }
 
         return $query->get();
@@ -236,15 +236,15 @@ class NotificationManager
      * @param  int  $notificationId  The notification ID.
      * @param  int  $userId  The user ID.
      */
-    public function markAsRead(int $notificationId, int $userId): bool
+    public function markAsRead( int $notificationId, int $userId ): bool
     {
-        $updated = Notification::find($notificationId)?->users()
-            ->updateExistingPivot($userId, [
+        $updated = Notification::find( $notificationId )?->users()
+            ->updateExistingPivot( $userId, [
                 'is_read' => true,
                 'read_at' => now(),
-            ]);
+            ] );
 
-        if ($updated) {
+        if ( $updated ) {
             /**
              * Fires after a notification has been marked as read.
              *
@@ -255,7 +255,7 @@ class NotificationManager
              * @param  int  $notificationId  The notification ID.
              * @param  int  $userId  The user ID.
              */
-            doAction('ap.notifications.readNotification', $notificationId, $userId);
+            doAction( 'ap.notifications.readNotification', $notificationId, $userId );
         }
 
         return $updated > 0;
@@ -269,15 +269,15 @@ class NotificationManager
      * @param  int  $notificationId  The notification ID.
      * @param  int  $userId  The user ID.
      */
-    public function dismissNotification(int $notificationId, int $userId): bool
+    public function dismissNotification( int $notificationId, int $userId ): bool
     {
-        $updated = Notification::find($notificationId)?->users()
-            ->updateExistingPivot($userId, [
+        $updated = Notification::find( $notificationId )?->users()
+            ->updateExistingPivot( $userId, [
                 'is_dismissed' => true,
                 'dismissed_at' => now(),
-            ]);
+            ] );
 
-        if ($updated) {
+        if ( $updated ) {
             /**
              * Fires after a notification has been dismissed.
              *
@@ -288,7 +288,7 @@ class NotificationManager
              * @param  int  $notificationId  The notification ID.
              * @param  int  $userId  The user ID.
              */
-            doAction('ap.notifications.dismissNotification', $notificationId, $userId);
+            doAction( 'ap.notifications.dismissNotification', $notificationId, $userId );
         }
 
         return $updated > 0;
@@ -303,15 +303,15 @@ class NotificationManager
      *
      * @return int The number of notifications marked as read.
      */
-    public function markAllAsRead(int $userId): int
+    public function markAllAsRead( int $userId ): int
     {
-        return Notification::whereHas('users', function ($q) use ($userId): void {
-            $q->where('user_id', sanitizeInt($userId))
-                ->where('is_read', false)
-                ->where('is_dismissed', false);
-        })->get()->sum(function ($notification) use ($userId) {
-            return $this->markAsRead($notification->id, $userId) ? 1 : 0;
-        });
+        return Notification::whereHas( 'users', function ( $q ) use ( $userId ): void {
+            $q->where( 'user_id', sanitizeInt( $userId ) )
+                ->where( 'is_read', false )
+                ->where( 'is_dismissed', false );
+        } )->get()->sum( function ( $notification ) use ( $userId ) {
+            return $this->markAsRead( $notification->id, $userId ) ? 1 : 0;
+        } );
     }
 
     /**
@@ -323,14 +323,14 @@ class NotificationManager
      *
      * @return int The number of notifications dismissed.
      */
-    public function dismissAll(int $userId): int
+    public function dismissAll( int $userId ): int
     {
-        return Notification::whereHas('users', function ($q) use ($userId): void {
-            $q->where('user_id', sanitizeInt($userId))
-                ->where('is_dismissed', false);
-        })->get()->sum(function ($notification) use ($userId) {
-            return $this->dismissNotification($notification->id, $userId) ? 1 : 0;
-        });
+        return Notification::whereHas( 'users', function ( $q ) use ( $userId ): void {
+            $q->where( 'user_id', sanitizeInt( $userId ) )
+                ->where( 'is_dismissed', false );
+        } )->get()->sum( function ( $notification ) use ( $userId ) {
+            return $this->dismissNotification( $notification->id, $userId ) ? 1 : 0;
+        } );
     }
 
     /**
@@ -340,9 +340,9 @@ class NotificationManager
      *
      * @param  int  $userId  The user ID.
      */
-    public function getUnreadCount(int $userId): int
+    public function getUnreadCount( int $userId ): int
     {
-        return Notification::unreadForUser($userId)->count();
+        return Notification::unreadForUser( $userId )->count();
     }
 
     /**
@@ -355,16 +355,16 @@ class NotificationManager
      *
      * @return array Filtered user IDs.
      */
-    protected function filterUsersByPreferences(array $userIds, string $notificationKey): array
+    protected function filterUsersByPreferences( array $userIds, string $notificationKey ): array
     {
-        $userModel = config('auth.providers.users.model');
+        $userModel = config( 'auth.providers.users.model' );
 
-        return $userModel::whereIn('id', $userIds)
-            ->whereDoesntHave('notificationPreferences', function ($query) use ($notificationKey): void {
-                $query->where('notification_type', sanitizeText($notificationKey))
-                    ->where('is_enabled', false);
-            })
-            ->pluck('id')
+        return $userModel::whereIn( 'id', $userIds )
+            ->whereDoesntHave( 'notificationPreferences', function ( $query ) use ( $notificationKey ): void {
+                $query->where( 'notification_type', sanitizeText( $notificationKey ) )
+                    ->where( 'is_enabled', false );
+            } )
+            ->pluck( 'id' )
             ->toArray();
     }
 
@@ -378,16 +378,16 @@ class NotificationManager
      *
      * @return array Filtered user IDs.
      */
-    protected function filterUsersForEmail(array $userIds, string $notificationKey): array
+    protected function filterUsersForEmail( array $userIds, string $notificationKey ): array
     {
-        $userModel = config('auth.providers.users.model');
+        $userModel = config( 'auth.providers.users.model');
 
-        return $userModel::whereIn('id', $userIds)
-            ->whereDoesntHave('notificationPreferences', function ($query) use ($notificationKey): void {
-                $query->where('notification_type', sanitizeText($notificationKey))
-                    ->where('email_enabled', false);
+        return $userModel::whereIn( 'id', $userIds)
+            ->whereDoesntHave( 'notificationPreferences', function ( $query) use ( $notificationKey): void {
+                $query->where( 'notification_type', sanitizeText( $notificationKey))
+                    ->where( 'email_enabled', false);
             })
-            ->pluck('id')
+            ->pluck( 'id')
             ->toArray();
     }
 }

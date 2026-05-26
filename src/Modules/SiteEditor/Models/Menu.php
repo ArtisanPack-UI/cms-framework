@@ -12,10 +12,10 @@
  * themes leaves prior menus untouched (data preservation per §5.5);
  * switching back surfaces the same menus and their assignments again.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -41,12 +41,12 @@ class Menu extends Model
     use HasFactory;
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'menus';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -73,39 +73,39 @@ class Menu extends Model
      * `position` (which can happen mid-edit before the client has
      * resequenced positions).
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function items(): HasMany
     {
-        return $this->hasMany(MenuItem::class)
-            ->orderByRaw('COALESCE(parent_id, 0)')
-            ->orderBy('position')
-            ->orderBy('id');
+        return $this->hasMany( MenuItem::class )
+            ->orderByRaw( 'COALESCE(parent_id, 0)' )
+            ->orderBy( 'position' )
+            ->orderBy( 'id' );
     }
 
     /**
      * Locations this menu is assigned to. A single menu can satisfy
      * multiple locations within the same theme.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function locationAssignments(): HasMany
     {
-        return $this->hasMany(MenuLocationAssignment::class);
+        return $this->hasMany( MenuLocationAssignment::class );
     }
 
     /**
      * The user who created this menu.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
+        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, string>
      */
@@ -123,12 +123,12 @@ class Menu extends Model
      * enabled). Cascading at the model layer keeps the behavior consistent
      * regardless of how the connection is configured.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected static function booted(): void
     {
-        static::deleting(static function (Menu $menu): void {
-            $menu->items()->each(static fn (MenuItem $item): ?bool => $item->delete());
+        static::deleting( static function ( Menu $menu ): void {
+            $menu->items()->each( static fn ( MenuItem $item ): ?bool => $item->delete() );
             $menu->locationAssignments()->delete();
         });
     }

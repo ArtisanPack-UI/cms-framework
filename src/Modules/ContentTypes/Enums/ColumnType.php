@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Column Type Enum
@@ -31,20 +31,20 @@ enum ColumnType: string
      */
     public function label(): string
     {
-        return match ($this) {
-            self::String     => __('String'),
-            self::Text       => __('Text'),
-            self::Integer    => __('Integer'),
-            self::BigInteger => __('Big Integer'),
-            self::Decimal    => __('Decimal'),
-            self::Float      => __('Float'),
-            self::Double     => __('Double'),
-            self::Boolean    => __('Boolean'),
-            self::Date       => __('Date'),
-            self::DateTime   => __('DateTime'),
-            self::Time       => __('Time'),
-            self::Json       => __('JSON'),
-            self::Binary     => __('Binary'),
+        return match ( $this ) {
+            self::String     => __( 'String' ),
+            self::Text       => __( 'Text' ),
+            self::Integer    => __( 'Integer' ),
+            self::BigInteger => __( 'Big Integer' ),
+            self::Decimal    => __( 'Decimal' ),
+            self::Float      => __( 'Float' ),
+            self::Double     => __( 'Double' ),
+            self::Boolean    => __( 'Boolean' ),
+            self::Date       => __( 'Date' ),
+            self::DateTime   => __( 'DateTime' ),
+            self::Time       => __( 'Time' ),
+            self::Json       => __( 'JSON' ),
+            self::Binary     => __( 'Binary' ),
         };
     }
 
@@ -57,7 +57,7 @@ enum ColumnType: string
      */
     public static function validationRule(): Enum
     {
-        return Rule::enum(self::class);
+        return Rule::enum( self::class );
     }
     case String     = 'string';
     case Text       = 'text';

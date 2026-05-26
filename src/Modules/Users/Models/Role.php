@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Models;
 
@@ -31,7 +31,7 @@ class Role extends RbacRole
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(
-            config('artisanpack.cms-framework.user_model'),
+            config( 'artisanpack.cms-framework.user_model' ),
             'role_user',
             'role_id',
             'user_id',
@@ -46,9 +46,9 @@ class Role extends RbacRole
      *
      * @param  array<int, Permission|string>|Collection  $permissions
      */
-    public function syncPermissions(Collection|array $permissions): self
+    public function syncPermissions( Collection|array $permissions ): self
     {
-        $this->permissions()->sync($this->resolvePermissionKeys($permissions));
+        $this->permissions()->sync( $this->resolvePermissionKeys( $permissions ) );
 
         return $this;
     }
@@ -58,9 +58,9 @@ class Role extends RbacRole
      *
      * @param  array<int, Permission|string>|Collection  $permissions
      */
-    public function givePermissionTo(Collection|array $permissions): self
+    public function givePermissionTo( Collection|array $permissions ): self
     {
-        $this->permissions()->syncWithoutDetaching($this->resolvePermissionKeys($permissions));
+        $this->permissions()->syncWithoutDetaching( $this->resolvePermissionKeys( $permissions ) );
 
         return $this;
     }
@@ -73,23 +73,23 @@ class Role extends RbacRole
      *
      * @return array<int, int|string>
      */
-    protected function resolvePermissionKeys(Collection|array $permissions): array
+    protected function resolvePermissionKeys( Collection|array $permissions ): array
     {
-        $permissionModel = config('artisanpack.rbac.models.permission', Permission::class);
+        $permissionModel = config( 'artisanpack.rbac.models.permission', Permission::class );
 
-        return collect($permissions)
-            ->map(function ($permission) use ($permissionModel) {
-                if ($permission instanceof Permission) {
+        return collect( $permissions )
+            ->map( function ( $permission ) use ( $permissionModel ) {
+                if ( $permission instanceof Permission ) {
                     return $permission->getKey();
                 }
 
                 // Name first, slug fallback — same lookup order as
                 // rbac's HasRoles / HasPermissions helpers.
-                $resolved = $permissionModel::query()->where('name', $permission)->first()
-                    ?? $permissionModel::query()->where('slug', $permission)->first();
+                $resolved = $permissionModel::query()->where( 'name', $permission )->first()
+                    ?? $permissionModel::query()->where( 'slug', $permission )->first();
 
                 return $resolved?->getKey();
-            })
+            } )
             ->filter()
             ->values()
             ->all();

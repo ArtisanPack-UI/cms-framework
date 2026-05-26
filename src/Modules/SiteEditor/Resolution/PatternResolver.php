@@ -12,10 +12,10 @@
  * form so visual-editor's `ap.visual-editor.patterns` consumer can route to
  * the right code path per source.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
@@ -27,41 +27,42 @@ use Illuminate\Support\Facades\File;
 use RuntimeException;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 class PatternResolver
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function __construct(
         private ThemeManager $themeManager,
-    ) {}
+    ) {
+    }
 
     /**
      * Resolve a single pattern by either user-facing slug or storage-form
      * slug. Looks up user patterns first (DB), then falls back to theme files.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public function resolve(string $slug): ?ResolvedPattern
+    public function resolve( string $slug ): ?ResolvedPattern
     {
-        $userFacing = BlockPattern::stripUserPrefix($slug);
+        $userFacing = BlockPattern::stripUserPrefix( $slug );
 
-        if (! SlugValidator::isValid($userFacing)) {
+        if ( ! SlugValidator::isValid( $userFacing ) ) {
             return null;
         }
 
         $row = BlockPattern::query()
-            ->where('slug', BlockPattern::withUserPrefix($userFacing))
-            ->where('source', BlockPattern::SOURCE_USER)
+            ->where( 'slug', BlockPattern::withUserPrefix( $userFacing ) )
+            ->where( 'source', BlockPattern::SOURCE_USER )
             ->first();
 
-        if (null !== $row) {
-            return $this->fromUserRow($row);
+        if ( null !== $row ) {
+            return $this->fromUserRow( $row );
         }
 
-        return $this->resolveThemePattern($userFacing);
+        return $this->resolveThemePattern( $userFacing );
     }
 
     /**
@@ -71,7 +72,7 @@ class PatternResolver
      * patterns by their `user/`-prefixed slug. This matches the expected key
      * shape on the visual-editor consumer side ({@see \ArtisanPackUI\VisualEditor\SiteEditor\Resolution\PatternResolver}).
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, ResolvedPattern>
      */
@@ -79,16 +80,16 @@ class PatternResolver
     {
         $resolved = [];
 
-        foreach ($this->resolveThemePatterns() as $themePattern) {
-            $resolved[$themePattern->slug] = $themePattern;
+        foreach ( $this->resolveThemePatterns() as $themePattern ) {
+            $resolved[ $themePattern->slug ] = $themePattern;
         }
 
-        foreach (BlockPattern::query()->where('source', BlockPattern::SOURCE_USER)->get() as $row) {
-            $entity                     = $this->fromUserRow($row);
-            $resolved[$entity->slug]    = $entity;
+        foreach ( BlockPattern::query()->where( 'source', BlockPattern::SOURCE_USER )->get() as $row ) {
+            $entity                       = $this->fromUserRow( $row );
+            $resolved[ $entity->slug ]    = $entity;
         }
 
-        ksort($resolved);
+        ksort( $resolved );
 
         return $resolved;
     }
@@ -97,7 +98,7 @@ class PatternResolver
      * Convert all resolved patterns to the array shape expected by visual-editor's
      * `ap.visual-editor.patterns` filter.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, array<string, mixed>>
      */
@@ -105,8 +106,8 @@ class PatternResolver
     {
         $map = [];
 
-        foreach ($this->all() as $key => $pattern) {
-            $map[$key] = $pattern->toFilterEntry();
+        foreach ( $this->all() as $key => $pattern ) {
+            $map[ $key ] = $pattern->toFilterEntry();
         }
 
         return $map;
@@ -117,19 +118,19 @@ class PatternResolver
      * the same user-facing slug and inherits title / description / categories /
      * block types from the theme file.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @throws RuntimeException When no theme pattern exists for the slug.
      */
-    public function cloneToUser(string $themeSlug): BlockPattern
+    public function cloneToUser( string $themeSlug ): BlockPattern
     {
-        $themePattern = $this->resolveThemePattern($themeSlug);
+        $themePattern = $this->resolveThemePattern( $themeSlug );
 
-        if (null === $themePattern) {
-            throw new RuntimeException("No theme pattern found for slug '{$themeSlug}'.");
+        if ( null === $themePattern ) {
+            throw new RuntimeException( "No theme pattern found for slug '{$themeSlug}'." );
         }
 
-        return BlockPattern::create([
+        return BlockPattern::create( [
             'slug'        => $themePattern->userFacingSlug,
             'theme'       => null,
             'title'       => $themePattern->title,
@@ -138,17 +139,17 @@ class PatternResolver
             'synced'      => false,
             'categories'  => $themePattern->categories,
             'block_types' => $themePattern->blockTypes,
-        ]);
+        ] );
     }
 
     /**
      * Build a {@see ResolvedPattern} from a user-source DB row.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function fromUserRow(BlockPattern $row): ResolvedPattern
+    protected function fromUserRow( BlockPattern $row ): ResolvedPattern
     {
-        $blocks = is_array($row->block_content) ? $row->block_content : [];
+        $blocks = is_array( $row->block_content ) ? $row->block_content : [];
 
         return new ResolvedPattern(
             slug           : $row->slug,
@@ -160,8 +161,8 @@ class PatternResolver
             synced         : (bool) $row->synced,
             rawContent     : '',
             blocks         : $blocks,
-            categories     : is_array($row->categories) ? array_values(array_filter($row->categories, 'is_string')) : [],
-            blockTypes     : is_array($row->block_types) ? array_values(array_filter($row->block_types, 'is_string')) : [],
+            categories     : is_array( $row->categories ) ? array_values( array_filter( $row->categories, 'is_string' ) ) : [],
+            blockTypes     : is_array( $row->block_types ) ? array_values( array_filter( $row->block_types, 'is_string' ) ) : [],
             model          : $row,
         );
     }
@@ -170,30 +171,30 @@ class PatternResolver
      * Read a single theme pattern by user-facing slug. Returns null when no
      * matching file exists in the active theme.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function resolveThemePattern(string $slug): ?ResolvedPattern
+    protected function resolveThemePattern( string $slug ): ?ResolvedPattern
     {
         $theme = $this->activeThemeSlug();
 
-        if (null === $theme) {
+        if ( null === $theme ) {
             return null;
         }
 
-        $file = $this->themeFilePath($theme, $slug);
+        $file = $this->themeFilePath( $theme, $slug );
 
-        if (null === $file) {
+        if ( null === $file ) {
             return null;
         }
 
-        return $this->buildThemePattern($theme, $slug, File::get($file));
+        return $this->buildThemePattern( $theme, $slug, File::get( $file ) );
     }
 
     /**
      * Walk the active theme's `patterns/` directory and build entities for each
      * `.php` file found.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<int, ResolvedPattern>
      */
@@ -201,30 +202,30 @@ class PatternResolver
     {
         $theme = $this->activeThemeSlug();
 
-        if (null === $theme) {
+        if ( null === $theme ) {
             return [];
         }
 
-        $directory = $this->themePatternsDirectory($theme);
+        $directory = $this->themePatternsDirectory( $theme );
 
-        if (! File::isDirectory($directory)) {
+        if ( ! File::isDirectory( $directory ) ) {
             return [];
         }
 
         $patterns = [];
 
-        foreach (File::files($directory) as $file) {
-            if ('php' !== $file->getExtension()) {
+        foreach ( File::files( $directory ) as $file ) {
+            if ( 'php' !== $file->getExtension() ) {
                 continue;
             }
 
             $slug = $file->getFilenameWithoutExtension();
 
-            if (! SlugValidator::isValid($slug)) {
+            if ( ! SlugValidator::isValid( $slug ) ) {
                 continue;
             }
 
-            $patterns[] = $this->buildThemePattern($theme, $slug, File::get($file->getRealPath()));
+            $patterns[] = $this->buildThemePattern( $theme, $slug, File::get( $file->getRealPath() ) );
         }
 
         return $patterns;
@@ -233,17 +234,17 @@ class PatternResolver
     /**
      * Build a theme {@see ResolvedPattern} from a parsed file's contents.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function buildThemePattern(string $theme, string $slug, string $contents): ResolvedPattern
+    protected function buildThemePattern( string $theme, string $slug, string $contents ): ResolvedPattern
     {
-        $parsed = PatternFileParser::parse($contents);
+        $parsed = PatternFileParser::parse( $contents );
 
         return new ResolvedPattern(
             slug           : $slug,
             userFacingSlug : $slug,
             theme          : $theme,
-            title          : '' !== $parsed['title'] ? $parsed['title'] : $this->humanizeSlug($slug),
+            title          : '' !== $parsed['title'] ? $parsed['title'] : $this->humanizeSlug( $slug ),
             description    : $parsed['description'],
             source         : BlockPattern::SOURCE_THEME,
             synced         : false,
@@ -256,43 +257,43 @@ class PatternResolver
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function activeThemeSlug(): ?string
     {
         $theme = $this->themeManager->getActiveTheme();
 
-        return null !== $theme && ! empty($theme['slug']) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function themeFilePath(string $theme, string $slug): ?string
+    protected function themeFilePath( string $theme, string $slug ): ?string
     {
-        $path = $this->themePatternsDirectory($theme).'/'.$slug.'.php';
+        $path = $this->themePatternsDirectory( $theme ) . '/' . $slug . '.php';
 
-        return File::exists($path) ? $path : null;
+        return File::exists( $path ) ? $path : null;
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function themePatternsDirectory(string $theme): string
+    protected function themePatternsDirectory( string $theme ): string
     {
-        $directory = (string) config('cms.themes.directory', 'themes');
+        $directory = (string) config( 'cms.themes.directory', 'themes' );
 
-        return base_path($directory).'/'.$theme.'/patterns';
+        return base_path( $directory ) . '/' . $theme . '/patterns';
     }
 
     /**
      * Convert a slug like `hero-banner` to a human title `Hero Banner`. Used
      * as the default title when a theme pattern omits the `Title:` header.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function humanizeSlug(string $slug): string
+    protected function humanizeSlug( string $slug): string
     {
-        return ucwords(str_replace(['-', '_'], ' ', $slug));
+        return ucwords( str_replace( ['-', '_'], ' ', $slug));
     }
 }

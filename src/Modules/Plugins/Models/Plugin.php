@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Models;
 
@@ -30,9 +30,9 @@ class Plugin extends Model
     /**
      * Scope to get only active plugins.
      */
-    public function scopeActive(Builder $query)
+    public function scopeActive( Builder $query )
     {
-        return $query->where('is_active', true);
+        return $query->where( 'is_active', true );
     }
 
     /**
@@ -40,7 +40,7 @@ class Plugin extends Model
      */
     public function getPath(): string
     {
-        return base_path(config('cms.plugins.directory', 'plugins').'/'.$this->slug);
+        return base_path( config( 'cms.plugins.directory', 'plugins' ) . '/' . $this->slug );
     }
 
     /**
@@ -56,6 +56,6 @@ class Plugin extends Model
      */
     public function hasServiceProvider(): bool
     {
-        return ! empty($this->service_provider);
+        return ! empty( $this->service_provider );
     }
 }

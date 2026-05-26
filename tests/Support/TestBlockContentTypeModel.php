@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Test fixture: a content-type model that uses HasBlockContent.
@@ -11,7 +11,7 @@ declare(strict_types=1);
  * trait. No table is required — the bridge only inspects the class
  * for the trait, never instantiates or queries the model.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Tests\Support;

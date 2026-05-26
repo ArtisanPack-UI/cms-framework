@@ -7,10 +7,10 @@
  * (header, footer, sidebar, or general). Either a DB-stored override of a
  * theme file, or a fully custom part authored in the admin.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -45,7 +45,7 @@ class TemplatePart extends Model
      * Matches WordPress's default template-part areas. Open-ended user-defined
      * areas are deferred to V1.1 per plan 14 §8.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public const AREAS = [
         'header',
@@ -66,19 +66,19 @@ class TemplatePart extends Model
     ];
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'template_parts';
 
     /**
      * The column that stores the visual editor block tree JSON.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected string $blockContentColumn = 'block_content';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -97,15 +97,15 @@ class TemplatePart extends Model
     /**
      * The user who last authored or edited this template part.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
+        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function casts(): array
     {

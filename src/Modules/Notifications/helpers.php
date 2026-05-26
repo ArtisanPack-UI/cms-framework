@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Notification helper functions.
@@ -16,7 +16,7 @@ use ArtisanPackUI\CMSFramework\Modules\Notifications\Managers\NotificationManage
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use Illuminate\Support\Collection;
 
-if (! function_exists('apRegisterNotification')) {
+if ( ! function_exists( 'apRegisterNotification' ) ) {
     /**
      * Register a notification type with defaults.
      *
@@ -37,7 +37,7 @@ if (! function_exists('apRegisterNotification')) {
         bool $sendEmail = false,
         array $metadata = [],
     ): void {
-        app(NotificationManager::class)->registerNotification(
+        app( NotificationManager::class )->registerNotification(
             $key,
             $title,
             $content,
@@ -48,7 +48,7 @@ if (! function_exists('apRegisterNotification')) {
     }
 }
 
-if (! function_exists('apSendNotification')) {
+if ( ! function_exists( 'apSendNotification' ) ) {
     /**
      * Send a notification to specified users.
      *
@@ -60,13 +60,13 @@ if (! function_exists('apSendNotification')) {
      *
      * @return Notification|null The created notification instance.
      */
-    function apSendNotification(string $key, array $userIds, array $overrides = []): ?Notification
+    function apSendNotification( string $key, array $userIds, array $overrides = [] ): ?Notification
     {
-        return app(NotificationManager::class)->sendNotification($key, $userIds, $overrides);
+        return app( NotificationManager::class )->sendNotification( $key, $userIds, $overrides );
     }
 }
 
-if (! function_exists('apSendNotificationByRole')) {
+if ( ! function_exists( 'apSendNotificationByRole' ) ) {
     /**
      * Send notification to users by role.
      *
@@ -76,13 +76,13 @@ if (! function_exists('apSendNotificationByRole')) {
      * @param  string  $role  The role name to send to.
      * @param  array  $overrides  Array to override default values.
      */
-    function apSendNotificationByRole(string $key, string $role, array $overrides = []): ?Notification
+    function apSendNotificationByRole( string $key, string $role, array $overrides = [] ): ?Notification
     {
-        return app(NotificationManager::class)->sendNotificationByRole($key, $role, $overrides);
+        return app( NotificationManager::class )->sendNotificationByRole( $key, $role, $overrides );
     }
 }
 
-if (! function_exists('apSendNotificationToCurrentUser')) {
+if ( ! function_exists( 'apSendNotificationToCurrentUser' ) ) {
     /**
      * Send notification to the current authenticated user.
      *
@@ -91,13 +91,13 @@ if (! function_exists('apSendNotificationToCurrentUser')) {
      * @param  string  $key  The registered notification key.
      * @param  array  $overrides  Array to override default values.
      */
-    function apSendNotificationToCurrentUser(string $key, array $overrides = []): ?Notification
+    function apSendNotificationToCurrentUser( string $key, array $overrides = [] ): ?Notification
     {
-        return app(NotificationManager::class)->sendNotificationToCurrentUser($key, $overrides);
+        return app( NotificationManager::class )->sendNotificationToCurrentUser( $key, $overrides );
     }
 }
 
-if (! function_exists('apGetNotifications')) {
+if ( ! function_exists( 'apGetNotifications' ) ) {
     /**
      * Get notifications for a specific user.
      *
@@ -107,13 +107,13 @@ if (! function_exists('apGetNotifications')) {
      * @param  int  $limit  Maximum number of notifications to retrieve.
      * @param  bool  $unreadOnly  Whether to retrieve only unread notifications.
      */
-    function apGetNotifications(int $userId, int $limit = 10, bool $unreadOnly = false): Collection
+    function apGetNotifications( int $userId, int $limit = 10, bool $unreadOnly = false ): Collection
     {
-        return app(NotificationManager::class)->getUserNotifications($userId, $limit, $unreadOnly);
+        return app( NotificationManager::class )->getUserNotifications( $userId, $limit, $unreadOnly );
     }
 }
 
-if (! function_exists('apMarkNotificationAsRead')) {
+if ( ! function_exists( 'apMarkNotificationAsRead' ) ) {
     /**
      * Mark a notification as read for a user.
      *
@@ -122,13 +122,13 @@ if (! function_exists('apMarkNotificationAsRead')) {
      * @param  int  $notificationId  The notification ID.
      * @param  int  $userId  The user ID.
      */
-    function apMarkNotificationAsRead(int $notificationId, int $userId): bool
+    function apMarkNotificationAsRead( int $notificationId, int $userId ): bool
     {
-        return app(NotificationManager::class)->markAsRead($notificationId, $userId);
+        return app( NotificationManager::class )->markAsRead( $notificationId, $userId );
     }
 }
 
-if (! function_exists('apDismissNotification')) {
+if ( ! function_exists( 'apDismissNotification' ) ) {
     /**
      * Dismiss a notification for a user.
      *
@@ -137,13 +137,13 @@ if (! function_exists('apDismissNotification')) {
      * @param  int  $notificationId  The notification ID.
      * @param  int  $userId  The user ID.
      */
-    function apDismissNotification(int $notificationId, int $userId): bool
+    function apDismissNotification( int $notificationId, int $userId ): bool
     {
-        return app(NotificationManager::class)->dismissNotification($notificationId, $userId);
+        return app( NotificationManager::class )->dismissNotification( $notificationId, $userId );
     }
 }
 
-if (! function_exists('apMarkAllNotificationsAsRead')) {
+if ( ! function_exists( 'apMarkAllNotificationsAsRead' ) ) {
     /**
      * Mark all notifications as read for a user.
      *
@@ -153,13 +153,13 @@ if (! function_exists('apMarkAllNotificationsAsRead')) {
      *
      * @return int The number of notifications marked as read.
      */
-    function apMarkAllNotificationsAsRead(int $userId): int
+    function apMarkAllNotificationsAsRead( int $userId ): int
     {
-        return app(NotificationManager::class)->markAllAsRead($userId);
+        return app( NotificationManager::class )->markAllAsRead( $userId );
     }
 }
 
-if (! function_exists('apDismissAllNotifications')) {
+if ( ! function_exists( 'apDismissAllNotifications' ) ) {
     /**
      * Dismiss all notifications for a user.
      *
@@ -169,13 +169,13 @@ if (! function_exists('apDismissAllNotifications')) {
      *
      * @return int The number of notifications dismissed.
      */
-    function apDismissAllNotifications(int $userId): int
+    function apDismissAllNotifications( int $userId ): int
     {
-        return app(NotificationManager::class)->dismissAll($userId);
+        return app( NotificationManager::class )->dismissAll( $userId );
     }
 }
 
-if (! function_exists('apGetUnreadNotificationCount')) {
+if ( ! function_exists( 'apGetUnreadNotificationCount' ) ) {
     /**
      * Get the count of unread notifications for a user.
      *
@@ -183,13 +183,13 @@ if (! function_exists('apGetUnreadNotificationCount')) {
      *
      * @param  int  $userId  The user ID.
      */
-    function apGetUnreadNotificationCount(int $userId): int
+    function apGetUnreadNotificationCount( int $userId ): int
     {
-        return app(NotificationManager::class)->getUnreadCount($userId);
+        return app( NotificationManager::class )->getUnreadCount( $userId );
     }
 }
 
-if (! function_exists('apGetRegisteredNotifications')) {
+if ( ! function_exists( 'apGetRegisteredNotifications')) {
     /**
      * Get all registered notifications.
      *
@@ -197,6 +197,6 @@ if (! function_exists('apGetRegisteredNotifications')) {
      */
     function apGetRegisteredNotifications(): array
     {
-        return app(NotificationManager::class)->getRegisteredNotifications();
+        return app( NotificationManager::class)->getRegisteredNotifications();
     }
 }

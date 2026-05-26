@@ -6,10 +6,10 @@
  * Represents a site-editor template — either a DB-stored override of a theme
  * file, or a fully custom template authored in the admin.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -38,19 +38,19 @@ class Template extends Model
     use HasFactory;
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'templates';
 
     /**
      * The column that stores the visual editor block tree JSON.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected string $blockContentColumn = 'block_content';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -68,15 +68,15 @@ class Template extends Model
     /**
      * The user who last authored or edited this template.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
+        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function casts(): array
     {

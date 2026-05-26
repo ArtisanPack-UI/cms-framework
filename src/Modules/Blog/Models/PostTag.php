@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PostTag Model
@@ -56,7 +56,7 @@ class PostTag extends Model
      */
     public function posts(): BelongsToMany
     {
-        return $this->belongsToMany(Post::class, 'post_tag_pivots', 'post_tag_id', 'post_id');
+        return $this->belongsToMany( Post::class, 'post_tag_pivots', 'post_tag_id', 'post_id' );
     }
 
     /**
@@ -66,7 +66,7 @@ class PostTag extends Model
      */
     public function getPermalinkAttribute(): string
     {
-        return url("/blog/tag/{$this->slug}");
+        return url( "/blog/tag/{$this->slug}" );
     }
 
     /**

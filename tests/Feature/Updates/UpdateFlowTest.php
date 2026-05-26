@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Feature\Updates;
 
@@ -39,16 +39,16 @@ class UpdateFlowTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
         $result = $manager->checkForUpdate();
 
-        $this->assertTrue($result->hasUpdate());
-        $this->assertEquals('2.0.0', $result->latestVersion);
-        $this->assertEquals('1.0.0', $result->currentVersion);
+        $this->assertTrue( $result->hasUpdate() );
+        $this->assertEquals( '2.0.0', $result->latestVersion );
+        $this->assertEquals( '1.0.0', $result->currentVersion );
     }
 
     /**
@@ -58,12 +58,12 @@ class UpdateFlowTest extends TestCase
      */
     public function test_update_check_command(): void
     {
-        Config::set('cms.updates.update_source_url', 'https://github.com/test/repo');
+        Config::set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
 
-        $exitCode = Artisan::call('update:check', ['--clear-cache' => true]);
+        $exitCode = Artisan::call( 'update:check', ['--clear-cache' => true] );
 
         // Command may fail due to no real repository, but it should execute
-        $this->assertContains($exitCode, [0, 1]);
+        $this->assertContains( $exitCode, [0, 1] );
     }
 
     /**
@@ -73,13 +73,13 @@ class UpdateFlowTest extends TestCase
      */
     public function test_scheduled_update_check_command(): void
     {
-        Config::set('cms.updates.update_source_url', 'https://github.com/test/repo');
-        Config::set('cms.updates.auto_update_enabled', false);
+        Config::set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
+        Config::set( 'cms.updates.auto_update_enabled', false );
 
-        $exitCode = Artisan::call('update:check-scheduled');
+        $exitCode = Artisan::call( 'update:check-scheduled' );
 
         // Command may fail due to no real repository, but it should execute
-        $this->assertContains($exitCode, [0, 1]);
+        $this->assertContains( $exitCode, [0, 1] );
     }
 
     /**
@@ -89,12 +89,12 @@ class UpdateFlowTest extends TestCase
      */
     public function test_rollback_command_with_no_backups(): void
     {
-        $exitCode = Artisan::call('update:rollback', ['--force' => true]);
+        $exitCode = Artisan::call( 'update:rollback', ['--force' => true] );
 
-        $this->assertEquals(1, $exitCode);
+        $this->assertEquals( 1, $exitCode );
 
         $output = Artisan::output();
-        $this->assertStringContainsString('No backups found', $output);
+        $this->assertStringContainsString( 'No backups found', $output );
     }
 
     /**
@@ -106,10 +106,10 @@ class UpdateFlowTest extends TestCase
     {
         $commands = Artisan::all();
 
-        $this->assertArrayHasKey('update:check', $commands);
-        $this->assertArrayHasKey('update:perform', $commands);
-        $this->assertArrayHasKey('update:rollback', $commands);
-        $this->assertArrayHasKey('update:check-scheduled', $commands);
+        $this->assertArrayHasKey( 'update:check', $commands );
+        $this->assertArrayHasKey( 'update:perform', $commands );
+        $this->assertArrayHasKey( 'update:rollback', $commands );
+        $this->assertArrayHasKey( 'update:check-scheduled', $commands );
     }
 
     /**
@@ -127,13 +127,13 @@ class UpdateFlowTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->expects($this->once())->method('clearCache');
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->expects( $this->once() )->method( 'clearCache' );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
         $manager->clearCache();
 
-        $this->assertTrue(true); // If we get here, test passed
+        $this->assertTrue( true ); // If we get here, test passed
     }
 
     /**
@@ -143,10 +143,10 @@ class UpdateFlowTest extends TestCase
      */
     public function test_configuration_is_loaded(): void
     {
-        $this->assertIsInt(config('cms.updates.cache_ttl'));
-        $this->assertIsBool(config('cms.updates.backup_enabled'));
-        $this->assertIsArray(config('cms.updates.exclude_from_update'));
-        $this->assertIsString(config('cms.updates.composer_install_command'));
+        $this->assertIsInt( config( 'cms.updates.cache_ttl' ) );
+        $this->assertIsBool( config( 'cms.updates.backup_enabled' ) );
+        $this->assertIsArray( config( 'cms.updates.exclude_from_update' ) );
+        $this->assertIsString( config( 'cms.updates.composer_install_command' ) );
     }
 
     /**
@@ -158,7 +158,7 @@ class UpdateFlowTest extends TestCase
      *
      * @return array<int, class-string>
      */
-    protected function getPackageProviders($app): array
+    protected function getPackageProviders( $app ): array
     {
         return [
             CoreServiceProvider::class,
@@ -172,10 +172,10 @@ class UpdateFlowTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment($app): void
+    protected function defineEnvironment( $app ): void
     {
-        $app['config']->set('cms.updates.update_source_url', 'https://github.com/test/repo');
-        $app['config']->set('cms.updates.backup_enabled', false); // Disable for tests
-        $app['config']->set('cms.updates.verify_checksum', false);
+        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
+        $app['config']->set( 'cms.updates.backup_enabled', false); // Disable for tests
+        $app['config']->set( 'cms.updates.verify_checksum', false);
     }
 }

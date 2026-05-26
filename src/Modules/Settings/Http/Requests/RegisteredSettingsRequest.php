@@ -11,7 +11,7 @@ declare( strict_types=1 );
  * `SettingsManager::registerSetting()` so the controller can route each
  * write through the manager (applying the per-key sanitizer and type).
  *
- * @since   1.2.0
+ * @since   2.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests;
@@ -26,14 +26,14 @@ use Illuminate\Foundation\Http\FormRequest;
  * this request only guarantees the payload shape and that each supplied
  * key is registered.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 class RegisteredSettingsRequest extends FormRequest
 {
     /**
      * Authorization is delegated to the controller's policy check.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function authorize(): bool
     {
@@ -47,7 +47,7 @@ class RegisteredSettingsRequest extends FormRequest
      * setting keys are dynamic (and dotted, e.g. `site.title`), which the
      * static rule array cannot express.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
@@ -65,7 +65,7 @@ class RegisteredSettingsRequest extends FormRequest
      * would store a raw, untyped value — the exact gap this endpoint exists
      * to close — so unknown keys fail validation instead.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  Validator  $validator  The validator instance for this request.
      */
@@ -88,6 +88,6 @@ class RegisteredSettingsRequest extends FormRequest
                     );
                 }
             }
-        });
+        } );
     }
 }

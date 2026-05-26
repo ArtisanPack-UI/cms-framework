@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Post Factory for the CMS Framework Blog Module.
@@ -51,12 +51,12 @@ class PostFactory extends Factory
      */
     public function definition(): array
     {
-        $title = fake()->sentence(6, true);
+        $title = fake()->sentence( 6, true );
 
         return [
             'title'        => $title,
-            'slug'         => Str::slug($title),
-            'content'      => fake()->paragraphs(5, true),
+            'slug'         => Str::slug( $title ),
+            'content'      => fake()->paragraphs( 5, true ),
             'excerpt'      => fake()->paragraph(),
             'author_id'    => User::factory(),
             'status'       => ContentStatus::Published->value,
@@ -79,10 +79,10 @@ class PostFactory extends Factory
      */
     public function draft(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'status'       => ContentStatus::Draft->value,
             'published_at' => null,
-        ]);
+        ] );
     }
 
     /**
@@ -96,10 +96,10 @@ class PostFactory extends Factory
      */
     public function scheduled(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'status'       => ContentStatus::Published->value,
-            'published_at' => now()->addDays(rand(1, 30)),
-        ]);
+            'published_at' => now()->addDays( rand( 1, 30 ) ),
+        ] );
     }
 
     /**
@@ -113,10 +113,10 @@ class PostFactory extends Factory
      */
     public function published(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'status'       => ContentStatus::Published->value,
-            'published_at' => now()->subDays(rand(0, 365)),
-        ]);
+            'published_at' => now()->subDays( rand( 0, 365 ) ),
+        ] );
     }
 
     /**
@@ -128,12 +128,12 @@ class PostFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function publishedAt($date): static
+    public function publishedAt( $date ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'status'       => ContentStatus::Published->value,
             'published_at' => $date,
-        ]);
+        ] );
     }
 
     /**
@@ -145,9 +145,9 @@ class PostFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function byAuthor(int $authorId): static
+    public function byAuthor( int $authorId ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'author_id' => $authorId,
         ]);
     }

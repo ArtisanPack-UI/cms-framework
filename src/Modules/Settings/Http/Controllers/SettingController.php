@@ -77,7 +77,7 @@ class SettingController extends Controller
      * echoes the freshly-read values so callers observe exactly what was
      * persisted (sanitized and cast).
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  RegisteredSettingsRequest  $request  The request carrying the `settings` key/value map.
      *

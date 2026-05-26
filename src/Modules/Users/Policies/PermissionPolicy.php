@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Policies;
 
@@ -16,38 +16,38 @@ use Illuminate\Contracts\Auth\Authenticatable;
  */
 class PermissionPolicy
 {
-    public function viewAny(Authenticatable $user): bool
+    public function viewAny( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.viewAny', 'permissions.viewAny'));
+        return $user->can( applyFilters( 'permissions.viewAny', 'permissions.viewAny' ) );
     }
 
-    public function view(Authenticatable $user): bool
+    public function view( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.view', 'permissions.view'));
+        return $user->can( applyFilters( 'permissions.view', 'permissions.view' ) );
     }
 
-    public function create(Authenticatable $user): bool
+    public function create( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.create', 'permissions.create'));
+        return $user->can( applyFilters( 'permissions.create', 'permissions.create' ) );
     }
 
-    public function update(Authenticatable $user): bool
+    public function update( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.update', 'permissions.update'));
+        return $user->can( applyFilters( 'permissions.update', 'permissions.update' ) );
     }
 
-    public function delete(Authenticatable $user): bool
+    public function delete( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.delete', 'permissions.delete'));
+        return $user->can( applyFilters( 'permissions.delete', 'permissions.delete' ) );
     }
 
-    public function restore(Authenticatable $user): bool
+    public function restore( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.restore', 'permissions.restore'));
+        return $user->can( applyFilters( 'permissions.restore', 'permissions.restore' ) );
     }
 
-    public function forceDelete(Authenticatable $user): bool
+    public function forceDelete( Authenticatable $user ): bool
     {
-        return $user->can(applyFilters('permissions.forceDelete', 'permissions.forceDelete'));
+        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete'));
     }
 }

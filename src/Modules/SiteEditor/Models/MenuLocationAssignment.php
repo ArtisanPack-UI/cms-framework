@@ -9,10 +9,10 @@
  * names are theme-scoped — switching themes can leave a menu unassigned
  * without orphaning the menu itself.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -34,12 +34,12 @@ class MenuLocationAssignment extends Model
     use HasFactory;
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'menu_location_assignments';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -50,10 +50,10 @@ class MenuLocationAssignment extends Model
     ];
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function menu(): BelongsTo
     {
-        return $this->belongsTo(Menu::class);
+        return $this->belongsTo( Menu::class );
     }
 }

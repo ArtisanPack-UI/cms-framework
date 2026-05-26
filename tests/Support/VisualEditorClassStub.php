@@ -10,16 +10,18 @@
  * without pulling visual-editor into cms-framework's composer dev deps.
  *
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\VisualEditor;
 
-if (! class_exists(__NAMESPACE__.'\\VisualEditor', false)) {
+if ( ! class_exists( __NAMESPACE__ . '\\VisualEditor', false ) ) {
     /**
      * Stub. The real class lives in artisanpack-ui/visual-editor.
      */
-    class VisualEditor {}
+    class VisualEditor
+    {
+    }
 }

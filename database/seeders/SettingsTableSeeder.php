@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Seeder for default settings.
@@ -131,7 +131,7 @@ class SettingsTableSeeder extends Seeder
             ],
         ];
 
-        foreach ($settings as $setting) {
+        foreach ( $settings as $setting ) {
             Setting::firstOrCreate(
                 ['key' => $setting['key']],
                 $setting,

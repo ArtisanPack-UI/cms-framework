@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PostTag Factory for the CMS Framework Blog Module.
@@ -50,12 +50,12 @@ class PostTagFactory extends Factory
         $name = fake()->unique()->word();
 
         return [
-            'name'        => ucfirst($name),
-            'slug'        => Str::slug($name),
+            'name'        => ucfirst( $name ),
+            'slug'        => Str::slug( $name ),
             'description' => fake()->sentence(),
             'order'       => 0,
             'metadata'    => [
-                'seo_title'       => ucfirst($name),
+                'seo_title'       => ucfirst( $name ),
                 'seo_description' => fake()->sentence(),
             ],
         ];

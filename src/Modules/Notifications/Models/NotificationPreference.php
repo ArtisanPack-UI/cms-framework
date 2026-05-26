@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * NotificationPreference Model
@@ -54,7 +54,7 @@ class NotificationPreference extends Model
      */
     public function user(): BelongsTo
     {
-        return $this->belongsTo(config('auth.providers.users.model'));
+        return $this->belongsTo( config( 'auth.providers.users.model' ) );
     }
 
     /**

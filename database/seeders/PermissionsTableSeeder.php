@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Seeder for default permissions.
@@ -97,7 +97,7 @@ class PermissionsTableSeeder extends Seeder
             ],
         ];
 
-        foreach ($permissions as $permission) {
+        foreach ( $permissions as $permission ) {
             Permission::firstOrCreate(
                 ['slug' => $permission['slug']],
                 $permission,
@@ -123,30 +123,30 @@ class PermissionsTableSeeder extends Seeder
         // assignments without removing anything an operator added.
 
         // Admin gets all permissions.
-        $admin = Role::where('slug', 'admin')->first();
-        if ($admin) {
+        $admin = Role::where( 'slug', 'admin' )->first();
+        if ( $admin ) {
             $admin->permissions()->syncWithoutDetaching(
-                Permission::pluck('id')->all(),
+                Permission::pluck( 'id' )->all(),
             );
         }
 
         // Editor gets content and access permissions.
-        $editor = Role::where('slug', 'editor')->first();
-        if ($editor) {
+        $editor = Role::where( 'slug', 'editor' )->first();
+        if ( $editor ) {
             $editor->permissions()->syncWithoutDetaching(
-                Permission::whereIn('slug', [
+                Permission::whereIn( 'slug', [
                     'manage-content',
                     'publish-content',
                     'access-admin',
-                ])->pluck('id')->all(),
+                ] )->pluck( 'id' )->all(),
             );
         }
 
         // User gets only access permission.
-        $user = Role::where('slug', 'user')->first();
-        if ($user) {
+        $user = Role::where( 'slug', 'user' )->first();
+        if ( $user ) {
             $user->permissions()->syncWithoutDetaching(
-                Permission::where('slug', 'access-admin')->pluck('id')->all(),
+                Permission::where( 'slug', 'access-admin' )->pluck( 'id' )->all(),
             );
         }
     }

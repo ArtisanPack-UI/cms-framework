@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns;
 
@@ -35,6 +35,6 @@ trait HasRolesAndPermissions
             \ArtisanPackUI\CMSFramework\Modules\Users\Models\Role::class,
         );
 
-        return $this->belongsToMany($roleModel, 'role_user', 'user_id', 'role_id');
+        return $this->belongsToMany( $roleModel, 'role_user', 'user_id', 'role_id' );
     }
 }

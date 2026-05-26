@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * HasCustomFields Trait
@@ -32,18 +32,18 @@ trait HasCustomFields
      *
      * @return mixed
      */
-    public function __get($key)
+    public function __get( $key )
     {
         // First try to get the attribute from the parent
         try {
-            return parent::__get($key);
-        } catch (Exception $e) {
+            return parent::__get( $key );
+        } catch ( Exception $e ) {
             // If it doesn't exist, check if it's a custom field
             $customFields = $this->getCustomFieldsForType();
 
-            foreach ($customFields as $field) {
-                if ($field->key === $key) {
-                    return $this->attributes[$key] ?? $field->default_value;
+            foreach ( $customFields as $field ) {
+                if ( $field->key === $key ) {
+                    return $this->attributes[ $key ] ?? $field->default_value;
                 }
             }
 
@@ -60,23 +60,23 @@ trait HasCustomFields
      * @param  string  $key
      * @param  mixed  $value
      */
-    public function __set($key, $value): void
+    public function __set( $key, $value ): void
     {
         // Check if it's a custom field
         $customFields  = $this->getCustomFieldsForType();
         $isCustomField = false;
 
-        foreach ($customFields as $field) {
-            if ($field->key === $key) {
+        foreach ( $customFields as $field ) {
+            if ( $field->key === $key ) {
                 $isCustomField = true;
                 break;
             }
         }
 
-        if ($isCustomField) {
-            $this->attributes[$key] = $value;
+        if ( $isCustomField ) {
+            $this->attributes[ $key ] = $value;
         } else {
-            parent::__set($key, $value);
+            parent::__set( $key, $value );
         }
     }
 
@@ -89,6 +89,6 @@ trait HasCustomFields
     {
         $contentType = $this->getTable();
 
-        return app(CustomFieldManager::class)->getFieldsForContentType($contentType);
+        return app( CustomFieldManager::class )->getFieldsForContentType( $contentType);
     }
 }

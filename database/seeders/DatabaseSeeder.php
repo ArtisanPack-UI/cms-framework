@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Main database seeder for the CMS Framework.
@@ -46,6 +46,6 @@ class DatabaseSeeder extends Seeder
         // Most consumers (Keystone, application repos) maintain their
         // own role / permission inventories and don't want
         // cms-framework's defaults forced on them.
-        $this->call(SettingsTableSeeder::class);
+        $this->call( SettingsTableSeeder::class );
     }
 }

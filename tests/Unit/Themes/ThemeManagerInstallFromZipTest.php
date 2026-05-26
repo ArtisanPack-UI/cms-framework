@@ -48,7 +48,7 @@ function buildThemeZip( string $tmpPath, string $slug, ?array $manifest, array &
 
     $zip = new ZipArchive;
     if ( true !== $zip->open( $zipPath, ZipArchive::CREATE ) ) {
-        throw new \RuntimeException( "Failed to create test ZIP at {$zipPath}" );
+        throw new RuntimeException( "Failed to create test ZIP at {$zipPath}" );
     }
 
     $zip->addEmptyDir( $slug );
@@ -157,7 +157,7 @@ describe( 'ThemeManager::installFromZip()', function (): void {
         $zipPath = $this->tmpPath . '/' . $slug . '.zip';
         $zip     = new ZipArchive;
         if ( true !== $zip->open( $zipPath, ZipArchive::CREATE ) ) {
-            throw new \RuntimeException( "Failed to create test ZIP at {$zipPath}" );
+            throw new RuntimeException( "Failed to create test ZIP at {$zipPath}" );
         }
         $zip->addEmptyDir( $slug );
         $zip->addFromString( $slug . '/theme.json', json_encode( [
@@ -183,7 +183,7 @@ describe( 'ThemeManager::installFromZip()', function (): void {
         $zipPath = $this->tmpPath . '/' . $slug . '.zip';
         $zip     = new ZipArchive;
         if ( true !== $zip->open( $zipPath, ZipArchive::CREATE ) ) {
-            throw new \RuntimeException( "Failed to create test ZIP at {$zipPath}" );
+            throw new RuntimeException( "Failed to create test ZIP at {$zipPath}" );
         }
         $zip->addEmptyDir( $slug );
         $zip->addFromString( $slug . '/theme.json', json_encode( [
@@ -209,12 +209,12 @@ describe( 'ThemeManager::installFromZip()', function (): void {
             'name' => 'Broken Theme',
         ];
 
-        $zipPath = buildThemeZip( $this->tmpPath, 'broken-theme', $manifest, $this->testSlugs);
+        $zipPath = buildThemeZip( $this->tmpPath, 'broken-theme', $manifest, $this->testSlugs );
 
-        expect( fn () => $this->manager->installFromZip( $zipPath))
-            ->toThrow( ThemeValidationException::class);
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( ThemeValidationException::class );
 
         // Rollback: the extracted directory should not remain on disk.
-        expect( File::exists( $this->themesPath . '/broken-theme'))->toBeFalse();
-    })->skip(); // depends on schema strictness — covered by ThemeManagerSchemaValidationTest
+        expect( File::exists( $this->themesPath . '/broken-theme' ) )->toBeFalse();
+    } )->skip(); // depends on schema strictness — covered by ThemeManagerSchemaValidationTest
 });

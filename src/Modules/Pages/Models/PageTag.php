@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PageTag Model
@@ -56,7 +56,7 @@ class PageTag extends Model
      */
     public function pages(): BelongsToMany
     {
-        return $this->belongsToMany(Page::class, 'page_tag_pivots', 'page_tag_id', 'page_id');
+        return $this->belongsToMany( Page::class, 'page_tag_pivots', 'page_tag_id', 'page_id' );
     }
 
     /**
@@ -66,7 +66,7 @@ class PageTag extends Model
      */
     public function getPermalinkAttribute(): string
     {
-        return url("/pages/tag/{$this->slug}");
+        return url( "/pages/tag/{$this->slug}" );
     }
 
     /**

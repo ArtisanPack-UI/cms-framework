@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Page Request for the CMS Framework Pages Module.
@@ -48,7 +48,7 @@ class PageRequest extends FormRequest
      */
     public function rules(): array
     {
-        $id = $this->route('id');
+        $id = $this->route( 'id' );
 
         return [
             'title' => ['required', 'string', 'max:255'],
@@ -57,7 +57,7 @@ class PageRequest extends FormRequest
                 'string',
                 'max:255',
                 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/',
-                Rule::unique('pages', 'slug')->ignore($id),
+                Rule::unique( 'pages', 'slug' )->ignore( $id ),
             ],
             'content'      => ['nullable', 'string'],
             'excerpt'      => ['nullable', 'string'],
@@ -85,13 +85,13 @@ class PageRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'title.required'     => __('The page title is required.'),
-            'slug.required'      => __('The page slug is required.'),
-            'slug.regex'         => __('The slug must be lowercase letters, numbers, and hyphens only.'),
-            'slug.unique'        => __('A page with this slug already exists.'),
-            'author_id.required' => __('The author is required.'),
-            'status.required'    => __('The page status is required.'),
-            'parent_id.exists'   => __('The selected parent page does not exist.'),
+            'title.required'     => __( 'The page title is required.' ),
+            'slug.required'      => __( 'The page slug is required.' ),
+            'slug.regex'         => __( 'The slug must be lowercase letters, numbers, and hyphens only.' ),
+            'slug.unique'        => __( 'A page with this slug already exists.' ),
+            'author_id.required' => __( 'The author is required.' ),
+            'status.required'    => __( 'The page status is required.' ),
+            'parent_id.exists'   => __( 'The selected parent page does not exist.'),
         ];
     }
 }

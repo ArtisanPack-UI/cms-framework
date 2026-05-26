@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * ContentTypes Module Helper Functions
@@ -13,7 +13,7 @@ declare(strict_types=1);
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 
-if (! function_exists('getContentType')) {
+if ( ! function_exists( 'getContentType' ) ) {
     /**
      * Get a content type by slug.
      *
@@ -23,13 +23,13 @@ if (! function_exists('getContentType')) {
      *
      * @return ContentType|null The content type instance or null if not found.
      */
-    function getContentType(string $slug): ?ContentType
+    function getContentType( string $slug ): ?ContentType
     {
-        return app(ContentTypeManager::class)->getContentType($slug);
+        return app( ContentTypeManager::class )->getContentType( $slug );
     }
 }
 
-if (! function_exists('contentTypeExists')) {
+if ( ! function_exists( 'contentTypeExists' ) ) {
     /**
      * Check if a content type exists by slug.
      *
@@ -39,8 +39,8 @@ if (! function_exists('contentTypeExists')) {
      *
      * @return bool True if the content type exists, false otherwise.
      */
-    function contentTypeExists(string $slug): bool
+    function contentTypeExists( string $slug ): bool
     {
-        return app(ContentTypeManager::class)->contentTypeExists($slug);
+        return app( ContentTypeManager::class )->contentTypeExists( $slug);
     }
 }

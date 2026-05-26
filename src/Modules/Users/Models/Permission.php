@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Models;
 
@@ -15,4 +15,6 @@ use ArtisanPackUI\Rbac\Models\Permission as RbacPermission;
  * cms-framework's permission-specific behavior in one place if they
  * need to.
  */
-class Permission extends RbacPermission {}
+class Permission extends RbacPermission
+{
+}

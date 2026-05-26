@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * ContentType Resource for the CMS Framework ContentTypes Module.
@@ -38,7 +38,7 @@ class ContentTypeResource extends JsonResource
      *
      * @return array<string, mixed> The transformed content type data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'                  => $this->id,

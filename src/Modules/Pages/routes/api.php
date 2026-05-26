@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Pages Module API Routes
@@ -19,17 +19,17 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('pages')->middleware('auth')->group(function (): void {
-    Route::get('/', [PageController::class, 'index']);
-    Route::post('/', [PageController::class, 'store']);
-    Route::post('/bulk', [PageController::class, 'bulk']);
-    Route::get('/tree', [PageController::class, 'tree']);
-    Route::post('/reorder', [PageController::class, 'reorder']);
-    Route::post('/{id}/move', [PageController::class, 'move']);
-    Route::get('/{id}', [PageController::class, 'show']);
-    Route::put('/{id}', [PageController::class, 'update']);
-    Route::delete('/{id}', [PageController::class, 'destroy']);
-});
+Route::prefix( 'pages' )->middleware( 'auth' )->group( function (): void {
+    Route::get( '/', [PageController::class, 'index'] );
+    Route::post( '/', [PageController::class, 'store'] );
+    Route::post( '/bulk', [PageController::class, 'bulk'] );
+    Route::get( '/tree', [PageController::class, 'tree'] );
+    Route::post( '/reorder', [PageController::class, 'reorder'] );
+    Route::post( '/{id}/move', [PageController::class, 'move'] );
+    Route::get( '/{id}', [PageController::class, 'show'] );
+    Route::put( '/{id}', [PageController::class, 'update'] );
+    Route::delete( '/{id}', [PageController::class, 'destroy'] );
+} );
 
 /*
 |--------------------------------------------------------------------------
@@ -37,13 +37,13 @@ Route::prefix('pages')->middleware('auth')->group(function (): void {
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('page-categories')->middleware('auth')->group(function (): void {
-    Route::get('/', [PageCategoryController::class, 'index']);
-    Route::post('/', [PageCategoryController::class, 'store']);
-    Route::get('/{id}', [PageCategoryController::class, 'show']);
-    Route::put('/{id}', [PageCategoryController::class, 'update']);
-    Route::delete('/{id}', [PageCategoryController::class, 'destroy']);
-});
+Route::prefix( 'page-categories' )->middleware( 'auth' )->group( function (): void {
+    Route::get( '/', [PageCategoryController::class, 'index'] );
+    Route::post( '/', [PageCategoryController::class, 'store'] );
+    Route::get( '/{id}', [PageCategoryController::class, 'show'] );
+    Route::put( '/{id}', [PageCategoryController::class, 'update'] );
+    Route::delete( '/{id}', [PageCategoryController::class, 'destroy'] );
+} );
 
 /*
 |--------------------------------------------------------------------------
@@ -51,10 +51,10 @@ Route::prefix('page-categories')->middleware('auth')->group(function (): void {
 |--------------------------------------------------------------------------
 */
 
-Route::prefix('page-tags')->middleware('auth')->group(function (): void {
-    Route::get('/', [PageTagController::class, 'index']);
-    Route::post('/', [PageTagController::class, 'store']);
-    Route::get('/{id}', [PageTagController::class, 'show']);
-    Route::put('/{id}', [PageTagController::class, 'update']);
-    Route::delete('/{id}', [PageTagController::class, 'destroy']);
+Route::prefix( 'page-tags' )->middleware( 'auth' )->group( function (): void {
+    Route::get( '/', [PageTagController::class, 'index'] );
+    Route::post( '/', [PageTagController::class, 'store'] );
+    Route::get( '/{id}', [PageTagController::class, 'show'] );
+    Route::put( '/{id}', [PageTagController::class, 'update']);
+    Route::delete( '/{id}', [PageTagController::class, 'destroy']);
 });

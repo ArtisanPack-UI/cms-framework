@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Providers;
 
@@ -30,8 +30,8 @@ class UserServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(RoleManager::class, fn () => new RoleManager);
-        $this->app->singleton(PermissionManager::class, fn () => new PermissionManager);
+        $this->app->singleton( RoleManager::class, fn () => new RoleManager );
+        $this->app->singleton( PermissionManager::class, fn () => new PermissionManager );
     }
 
     public function boot(): void
@@ -40,9 +40,9 @@ class UserServiceProvider extends ServiceProvider
         $this->registerMiddleware();
         $this->registerPolicies();
 
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
     }
 
     /**
@@ -52,8 +52,8 @@ class UserServiceProvider extends ServiceProvider
      */
     protected function registerPolicies(): void
     {
-        Gate::policy(Role::class, RolePolicy::class);
-        Gate::policy(Permission::class, PermissionPolicy::class);
+        Gate::policy( Role::class, RolePolicy::class );
+        Gate::policy( Permission::class, PermissionPolicy::class );
     }
 
     /**
@@ -64,10 +64,10 @@ class UserServiceProvider extends ServiceProvider
      */
     protected function bindRbacModels(): void
     {
-        config([
+        config( [
             'artisanpack.rbac.models.role'       => Role::class,
             'artisanpack.rbac.models.permission' => Permission::class,
-        ]);
+        ] );
     }
 
     /**
@@ -78,6 +78,6 @@ class UserServiceProvider extends ServiceProvider
      */
     protected function registerMiddleware(): void
     {
-        $this->app['router']->aliasMiddleware('role', CheckRole::class);
+        $this->app['router']->aliasMiddleware( 'role', CheckRole::class);
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Manages the registration and creation of admin dashboard widgets.
@@ -39,10 +39,10 @@ class AdminWidgetManager
      * @param  string  $type  The unique identifier for the widget type.
      * @param  string  $class  The fully qualified class name of the widget component.
      */
-    public function register(string $type, string $class): void
+    public function register( string $type, string $class ): void
     {
-        if (in_array(AdminWidgetInterface::class, class_implements($class), true)) {
-            $this->widgets[$type] = $class;
+        if ( in_array( AdminWidgetInterface::class, class_implements( $class ), true ) ) {
+            $this->widgets[ $type ] = $class;
         }
     }
 
@@ -55,13 +55,13 @@ class AdminWidgetManager
      *
      * @return array|null The default widget data array, or null if type is not registered.
      */
-    public function createWidget(string $type): ?array
+    public function createWidget( string $type ): ?array
     {
-        if (! isset($this->widgets[$type])) {
+        if ( ! isset( $this->widgets[ $type ] ) ) {
             return null;
         }
 
-        $class    = $this->widgets[$type];
+        $class    = $this->widgets[ $type ];
         $info     = $class::getWidgetInfo();
         $defaults = $info['default_options'] ?? [];
 
@@ -106,27 +106,27 @@ class AdminWidgetManager
      *
      * @return array Available widgets for the user.
      */
-    public function getAvailableWidgetsForUser($user = null): array
+    public function getAvailableWidgetsForUser( $user = null ): array
     {
         $available = $this->getAvailableWidgets();
 
-        if (! $user) {
+        if ( ! $user ) {
             return $available;
         }
 
         // Get admin-configured capability overrides
-        $widgetCapabilities = apGetSetting('admin.dashboardWidgets', []);
+        $widgetCapabilities = apGetSetting( 'admin.dashboardWidgets', [] );
 
-        return array_filter($available, function ($widgetInfo, $type) use ($user, $widgetCapabilities) {
+        return array_filter( $available, function ( $widgetInfo, $type ) use ( $user, $widgetCapabilities ) {
             // Check if admin has overridden the capability
-            $capability = $widgetCapabilities[$type] ?? $widgetInfo['capability'] ?? null;
+            $capability = $widgetCapabilities[ $type ] ?? $widgetInfo['capability'] ?? null;
 
-            if (! $capability) {
+            if ( ! $capability ) {
                 return true; // No capability required
             }
 
-            return $user->hasPermissionTo($capability);
-        }, ARRAY_FILTER_USE_BOTH);
+            return $user->hasPermissionTo( $capability );
+        }, ARRAY_FILTER_USE_BOTH );
     }
 
     /**
@@ -139,8 +139,8 @@ class AdminWidgetManager
     public function getAvailableWidgets(): array
     {
         $available = [];
-        foreach ($this->widgets as $type => $class) {
-            $available[$type] = $class::getWidgetInfo();
+        foreach ( $this->widgets as $type => $class ) {
+            $available[ $type ] = $class::getWidgetInfo();
         }
 
         return $available;

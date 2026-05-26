@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PageCategory Resource for the CMS Framework Pages Module.
@@ -38,7 +38,7 @@ class PageCategoryResource extends JsonResource
      *
      * @return array<string, mixed> The transformed category data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'          => $this->id,
@@ -46,14 +46,14 @@ class PageCategoryResource extends JsonResource
             'slug'        => $this->slug,
             'description' => $this->description,
             'parent_id'   => $this->parent_id,
-            'parent'      => $this->whenLoaded('parent', function () {
+            'parent'      => $this->whenLoaded( 'parent', function () {
                 return [
                     'id'   => $this->parent->id,
                     'name' => $this->parent->name,
                     'slug' => $this->parent->slug,
                 ];
-            }),
-            'children'   => self::collection($this->whenLoaded('children')),
+            } ),
+            'children'   => self::collection( $this->whenLoaded( 'children' ) ),
             'order'      => $this->order,
             'permalink'  => $this->permalink,
             'metadata'   => $this->metadata,

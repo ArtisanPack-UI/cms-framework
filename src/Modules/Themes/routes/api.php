@@ -35,5 +35,5 @@ Route::middleware( ['auth:sanctum'] )
         Route::get( '/themes', [ThemesController::class, 'index'] )->name( 'themes.index' );
         Route::post( '/themes', [ThemesController::class, 'upload'] )->name( 'themes.upload' );
         Route::get( '/themes/{slug}', [ThemesController::class, 'show'] )->name( 'themes.show' );
-        Route::post( '/themes/{slug}/activate', [ThemesController::class, 'activate'] )->name( 'themes.activate');
-    });
+        Route::post( '/themes/{slug}/activate', [ThemesController::class, 'activate'] )->name( 'themes.activate' );
+    } );

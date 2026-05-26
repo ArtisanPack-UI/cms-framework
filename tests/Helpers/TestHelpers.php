@@ -1,8 +1,8 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
-if (! function_exists('invokeMethod')) {
+if ( ! function_exists( 'invokeMethod' ) ) {
     /**
      * Helper function to invoke protected/private methods for testing.
      *
@@ -12,12 +12,12 @@ if (! function_exists('invokeMethod')) {
      *
      * @return mixed The method's return value
      */
-    function invokeMethod(object $object, string $methodName, array $parameters = []): mixed
+    function invokeMethod( object $object, string $methodName, array $parameters = [] ): mixed
     {
-        $reflection = new ReflectionClass(get_class($object));
-        $method     = $reflection->getMethod($methodName);
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( get_class( $object ) );
+        $method     = $reflection->getMethod( $methodName );
+        $method->setAccessible( true );
 
-        return $method->invokeArgs($object, $parameters);
+        return $method->invokeArgs( $object, $parameters);
     }
 }

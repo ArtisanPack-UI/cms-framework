@@ -14,10 +14,10 @@
  * with `object_id: 0`) to nulls in {@see prepareForValidation()} so
  * upstream WP-shape clients pass without rewriting their payloads.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
@@ -30,12 +30,12 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 class MenuItemRequest extends FormRequest
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function authorize(): bool
     {
@@ -43,44 +43,44 @@ class MenuItemRequest extends FormRequest
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
     public function rules(): array
     {
-        $isPost   = $this->isMethod('post');
+        $isPost   = $this->isMethod( 'post' );
         $required = $isPost ? 'required' : 'sometimes';
 
         return [
             'menus'       => [$isPost ? 'required' : 'prohibited', 'integer', $this->menuExistsRule()],
             'parent'      => ['nullable', 'integer', $this->parentExistsRule()],
             'menu_order'  => ['nullable', 'integer', 'min:0'],
-            'type'        => [$required, 'string', Rule::in(MenuItem::TYPES)],
+            'type'        => [$required, 'string', Rule::in( MenuItem::TYPES )],
             'title'       => [$required, 'string', 'max:255'],
             'url'         => ['nullable', 'string', 'max:2048'],
-            'target'      => ['nullable', 'string', Rule::in(['_self', '_blank'])],
+            'target'      => ['nullable', 'string', Rule::in( ['_self', '_blank'] )],
             'xfn'         => ['nullable', 'string', 'max:255'],
             'classes'     => ['nullable', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'object'      => ['nullable', 'string', 'max:64', $this->objectPairing()],
             'object_id'   => ['nullable', 'integer', $this->objectPairing()],
-            'kind'        => ['nullable', 'string', 'max:32', Rule::in(array_keys(MenuItemResource::KIND_TO_TYPE))],
+            'kind'        => ['nullable', 'string', 'max:32', Rule::in( array_keys( MenuItemResource::KIND_TO_TYPE ) )],
         ];
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, string>
      */
     public function messages(): array
     {
         return [
-            'menus.required'    => __('A parent menu id is required.'),
-            'menus.prohibited'  => __('The parent menu cannot be reassigned via update.'),
-            'type.in'           => __('Type must be one of link, submenu, or page-list.'),
-            'target.in'         => __('Target must be _self or _blank.'),
+            'menus.required'    => __( 'A parent menu id is required.' ),
+            'menus.prohibited'  => __( 'The parent menu cannot be reassigned via update.' ),
+            'type.in'           => __( 'Type must be one of link, submenu, or page-list.' ),
+            'target.in'         => __( 'Target must be _self or _blank.' ),
         ];
     }
 
@@ -94,29 +94,29 @@ class MenuItemRequest extends FormRequest
      *   on one side but `0` as filled on the other, raising a spurious
      *   "must be provided together" error).
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function prepareForValidation(): void
     {
         $merge = [];
 
-        if ($this->has('parent') && self::isZeroSentinel($this->input('parent'))) {
+        if ( $this->has( 'parent' ) && self::isZeroSentinel( $this->input( 'parent' ) ) ) {
             $merge['parent'] = null;
         }
 
-        $object   = $this->input('object');
-        $objectId = $this->input('object_id');
+        $object   = $this->input( 'object' );
+        $objectId = $this->input( 'object_id' );
 
         if (
-            ('' === $object || null === $object)
-            && (null === $objectId || self::isZeroSentinel($objectId))
+            ( '' === $object || null === $object )
+            && ( null === $objectId || self::isZeroSentinel( $objectId ) )
         ) {
             $merge['object']    = null;
             $merge['object_id'] = null;
         }
 
-        if (! empty($merge)) {
-            $this->merge($merge);
+        if ( ! empty( $merge ) ) {
+            $this->merge( $merge );
         }
     }
 
@@ -127,9 +127,9 @@ class MenuItemRequest extends FormRequest
      * a sentinel — `object` is a non-numeric type vocabulary). Used by
      * {@see prepareForValidation()} on integer-typed fields only.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected static function isZeroSentinel(mixed $value): bool
+    protected static function isZeroSentinel( mixed $value ): bool
     {
         return 0 === $value || '0' === $value;
     }
@@ -146,19 +146,19 @@ class MenuItemRequest extends FormRequest
      * truly-nonexistent id, instead of distinguishing the two through
      * controller-level 404 vs validation-level 422.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function menuExistsRule(): mixed
     {
         $themeSlug = $this->activeThemeSlug();
 
-        if (null === $themeSlug) {
+        if ( null === $themeSlug ) {
             return 'exists:menus,id';
         }
 
-        return Rule::exists('menus', 'id')->where(static function ($query) use ($themeSlug): void {
-            $query->where('theme', $themeSlug);
-        });
+        return Rule::exists( 'menus', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
+            $query->where( 'theme', $themeSlug );
+        } );
     }
 
     /**
@@ -167,56 +167,56 @@ class MenuItemRequest extends FormRequest
      * active theme. The further "same menu" constraint runs in
      * {@see passedValidation()}.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function parentExistsRule(): mixed
     {
         $themeSlug = $this->activeThemeSlug();
 
-        if (null === $themeSlug) {
+        if ( null === $themeSlug ) {
             return 'exists:menu_items,id';
         }
 
-        return Rule::exists('menu_items', 'id')->where(static function ($query) use ($themeSlug): void {
+        return Rule::exists( 'menu_items', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
             $query->whereIn(
                 'menu_id',
-                Menu::query()->where('theme', $themeSlug)->select('id'),
+                Menu::query()->where( 'theme', $themeSlug )->select( 'id' ),
             );
-        });
+        } );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function activeThemeSlug(): ?string
     {
-        $theme = app(ThemeManager::class)->getActiveTheme();
+        $theme = app( ThemeManager::class )->getActiveTheme();
 
-        return null !== $theme && ! empty($theme['slug']) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
     }
 
     /**
      * Closure rule that enforces the `(object, object_id)` pairing — both
      * fields must be present together, or both absent.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function objectPairing(): Closure
     {
-        return function (string $attribute, mixed $value, Closure $fail): void {
+        return function ( string $attribute, mixed $value, Closure $fail ): void {
             $other = 'object' === $attribute ? 'object_id' : 'object';
 
             $thisFilled  = null !== $value && '' !== $value;
-            $otherFilled = $this->filled($other);
+            $otherFilled = $this->filled( $other );
 
-            if ($thisFilled !== $otherFilled) {
-                $fail(__('object and object_id must be provided together.'));
+            if ( $thisFilled !== $otherFilled ) {
+                $fail( __( 'object and object_id must be provided together.' ) );
             }
         };
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function passedValidation(): void
     {
@@ -224,28 +224,28 @@ class MenuItemRequest extends FormRequest
         // (rather than in `rules()`) so we have both the validated parent
         // and the menu_id together, including the existing item's menu on
         // updates where `menus` is prohibited.
-        $parentId = $this->input('parent');
+        $parentId = $this->input( 'parent' );
 
-        if (null === $parentId) {
+        if ( null === $parentId ) {
             return;
         }
 
         $menuId = $this->resolvedMenuId();
 
-        if (null === $menuId) {
+        if ( null === $menuId ) {
             return;
         }
 
-        $parent = MenuItem::query()->find($parentId);
+        $parent = MenuItem::query()->find( $parentId );
 
-        if (null !== $parent && (int) $parent->menu_id !== (int) $menuId) {
+        if ( null !== $parent && (int) $parent->menu_id !== (int) $menuId ) {
             $this->failedValidation(
-                tap(validator($this->all(), []), function ($validator): void {
+                tap( validator( $this->all(), [] ), function ( $validator ): void {
                     $validator->errors()->add(
                         'parent',
-                        __('parent must reference an item belonging to the same menu.'),
+                        __( 'parent must reference an item belonging to the same menu.' ),
                     );
-                }),
+                } ),
             );
         }
     }
@@ -254,23 +254,23 @@ class MenuItemRequest extends FormRequest
      * Resolve the effective menu id for the current request: the `menus`
      * input on POST, or the existing item's `menu_id` on update.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function resolvedMenuId(): ?int
     {
-        if ($this->isMethod('post')) {
-            $menuId = $this->input('menus');
+        if ( $this->isMethod( 'post' ) ) {
+            $menuId = $this->input( 'menus' );
 
-            return is_numeric($menuId) ? (int) $menuId : null;
+            return is_numeric( $menuId ) ? (int) $menuId : null;
         }
 
-        $itemId = $this->route('id');
+        $itemId = $this->route( 'id' );
 
-        if (null === $itemId) {
+        if ( null === $itemId) {
             return null;
         }
 
-        $item = MenuItem::query()->find($itemId);
+        $item = MenuItem::query()->find( $itemId);
 
         return null !== $item ? (int) $item->menu_id : null;
     }

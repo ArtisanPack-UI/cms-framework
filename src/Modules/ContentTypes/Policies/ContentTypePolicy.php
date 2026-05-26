@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * ContentType Policy for the CMS Framework ContentTypes Module.
@@ -35,7 +35,7 @@ class ContentTypePolicy
      *
      * @return bool True if the user can view content types, false otherwise.
      */
-    public function viewAny(Authenticatable $user): bool
+    public function viewAny( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any content types.
@@ -48,7 +48,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('contentTypes.viewAny', 'contentTypes.manage'));
+        return $user->can( applyFilters( 'contentTypes.viewAny', 'contentTypes.manage' ) );
     }
 
     /**
@@ -61,7 +61,7 @@ class ContentTypePolicy
      *
      * @return bool True if the user can view the content type, false otherwise.
      */
-    public function view(Authenticatable $user, ContentType $contentType): bool
+    public function view( Authenticatable $user, ContentType $contentType ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a content type.
@@ -75,7 +75,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('contentTypes.view', 'contentTypes.manage', $contentType));
+        return $user->can( applyFilters( 'contentTypes.view', 'contentTypes.manage', $contentType ) );
     }
 
     /**
@@ -87,7 +87,7 @@ class ContentTypePolicy
      *
      * @return bool True if the user can create content types, false otherwise.
      */
-    public function create(Authenticatable $user): bool
+    public function create( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can create content types.
@@ -100,7 +100,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('contentTypes.create', 'contentTypes.manage'));
+        return $user->can( applyFilters( 'contentTypes.create', 'contentTypes.manage' ) );
     }
 
     /**
@@ -113,7 +113,7 @@ class ContentTypePolicy
      *
      * @return bool True if the user can update the content type, false otherwise.
      */
-    public function update(Authenticatable $user, ContentType $contentType): bool
+    public function update( Authenticatable $user, ContentType $contentType ): bool
     {
         /**
          * Filters the capability used to determine whether a user can update content types.
@@ -127,7 +127,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('contentTypes.update', 'contentTypes.manage', $contentType));
+        return $user->can( applyFilters( 'contentTypes.update', 'contentTypes.manage', $contentType ) );
     }
 
     /**
@@ -140,7 +140,7 @@ class ContentTypePolicy
      *
      * @return bool True if the user can delete the content type, false otherwise.
      */
-    public function delete(Authenticatable $user, ContentType $contentType): bool
+    public function delete( Authenticatable $user, ContentType $contentType ): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete content types.
@@ -154,6 +154,6 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('contentTypes.delete', 'contentTypes.manage', $contentType));
+        return $user->can( applyFilters( 'contentTypes.delete', 'contentTypes.manage', $contentType));
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -26,13 +26,13 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_supports_gitlab_urls(): void
     {
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->assertTrue($source->supports('https://gitlab.com/user/repo'));
-        $this->assertTrue($source->supports('https://gitlab.com/another-user/another-repo'));
-        $this->assertFalse($source->supports('https://github.com/user/repo'));
-        $this->assertFalse($source->supports('https://example.com/updates.json'));
-        $this->assertFalse($source->supports('https://example.com/gitlab.com/user/repo'));
+        $this->assertTrue( $source->supports( 'https://gitlab.com/user/repo' ) );
+        $this->assertTrue( $source->supports( 'https://gitlab.com/another-user/another-repo' ) );
+        $this->assertFalse( $source->supports( 'https://github.com/user/repo' ) );
+        $this->assertFalse( $source->supports( 'https://example.com/updates.json' ) );
+        $this->assertFalse( $source->supports( 'https://example.com/gitlab.com/user/repo' ) );
     }
 
     /**
@@ -42,21 +42,21 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_excludes_query_strings_from_project_id(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo?ref=main', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo?ref=main', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
-        $this->assertEquals('2.0.0', $updateInfo->latestVersion);
+        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
+        $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
     }
 
     /**
@@ -66,9 +66,9 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_returns_correct_name(): void
     {
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->assertEquals('GitLab', $source->getName());
+        $this->assertEquals( 'GitLab', $source->getName() );
     }
 
     /**
@@ -78,25 +78,25 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_can_check_for_updates(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release notes here',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
-        $this->assertEquals('1.0.0', $updateInfo->currentVersion);
-        $this->assertEquals('2.0.0', $updateInfo->latestVersion);
-        $this->assertTrue($updateInfo->hasUpdate());
-        $this->assertStringContainsString('gitlab.com', $updateInfo->downloadUrl);
-        $this->assertEquals('Release notes here', $updateInfo->changelog);
+        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
+        $this->assertEquals( '1.0.0', $updateInfo->currentVersion );
+        $this->assertEquals( '2.0.0', $updateInfo->latestVersion );
+        $this->assertTrue( $updateInfo->hasUpdate() );
+        $this->assertStringContainsString( 'gitlab.com', $updateInfo->downloadUrl );
+        $this->assertEquals( 'Release notes here', $updateInfo->changelog );
     }
 
     /**
@@ -106,14 +106,14 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_throws_exception_when_no_releases(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([], 200),
-        ]);
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [], 200 ),
+        ] );
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('No releases found');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'No releases found' );
 
         $source->checkForUpdate();
     }
@@ -125,14 +125,14 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_handles_api_errors(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([], 500),
-        ]);
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [], 500 ),
+        ] );
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('GitLab API error');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'GitLab API error' );
 
         $source->checkForUpdate();
     }
@@ -144,24 +144,24 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_can_set_authentication(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
-        $source->setAuthentication('glpat-test_token');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+        $source->setAuthentication( 'glpat-test_token' );
 
         $source->checkForUpdate();
 
-        Http::assertSent(function ($request) {
-            return $request->hasHeader('PRIVATE-TOKEN', 'glpat-test_token');
-        });
+        Http::assertSent( function ( $request ) {
+            return $request->hasHeader( 'PRIVATE-TOKEN', 'glpat-test_token' );
+        } );
     }
 
     /**
@@ -171,21 +171,21 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_parses_repository_url_correctly(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/test-group%2Ftest-repo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/test-group%2Ftest-repo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v1.0.0',
                     'description' => 'First release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/test-group/test-repo', '0.9.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/test-group/test-repo', '0.9.0' );
         $updateInfo = $source->checkForUpdate();
 
         // If we get here without exception, the URL was parsed correctly
-        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
+        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
     }
 
     /**
@@ -195,20 +195,20 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_handles_nested_group_paths(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/group%2Fsubgroup%2Fproject/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/group%2Fsubgroup%2Fproject/releases' => Http::response( [
                 [
                     'tag_name'    => 'v1.0.0',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/group/subgroup/project', '0.9.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/group/subgroup/project', '0.9.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertInstanceOf(UpdateInfo::class, $updateInfo);
+        $this->assertInstanceOf( UpdateInfo::class, $updateInfo );
     }
 
     /**
@@ -218,10 +218,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_throws_exception_for_invalid_urls(): void
     {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid GitLab URL');
+        $this->expectException( InvalidArgumentException::class );
+        $this->expectExceptionMessage( 'Invalid GitLab URL' );
 
-        new GitLabUpdateSource('https://invalid-url.com', '1.0.0');
+        new GitLabUpdateSource( 'https://invalid-url.com', '1.0.0' );
     }
 
     /**
@@ -231,20 +231,20 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_strips_v_prefix_from_version_tags(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.5.1',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertEquals('2.5.1', $updateInfo->latestVersion);
+        $this->assertEquals( '2.5.1', $updateInfo->latestVersion );
     }
 
     /**
@@ -254,21 +254,21 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_generates_correct_download_url(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertStringContainsString('gitlab.com/api/v4/projects/user%2Frepo/repository/archive.zip', $updateInfo->downloadUrl);
-        $this->assertStringContainsString('sha=v2.0.0', $updateInfo->downloadUrl);
+        $this->assertStringContainsString( 'gitlab.com/api/v4/projects/user%2Frepo/repository/archive.zip', $updateInfo->downloadUrl );
+        $this->assertStringContainsString( 'sha=v2.0.0', $updateInfo->downloadUrl );
     }
 
     /**
@@ -278,21 +278,21 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_includes_metadata(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertEquals('gitlab', $updateInfo->metadata['source']);
-        $this->assertArrayHasKey('release_url', $updateInfo->metadata);
+        $this->assertEquals( 'gitlab', $updateInfo->metadata['source'] );
+        $this->assertArrayHasKey( 'release_url', $updateInfo->metadata );
     }
 
     /**
@@ -302,10 +302,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_populates_sha256_from_sidecar_link(): void
     {
-        $expectedHash = str_repeat('a', 64);
+        $expectedHash = str_repeat( 'a', 64 );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release notes',
@@ -323,17 +323,17 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
+            ], 200 ),
             'example.com/releases/v2.0.0/source.zip.sha256' => Http::response(
-                $expectedHash."  source.zip\n",
+                $expectedHash . "  source.zip\n",
                 200,
             ),
-        ]);
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame($expectedHash, $updateInfo->sha256);
+        $this->assertSame( $expectedHash, $updateInfo->sha256 );
     }
 
     /**
@@ -343,22 +343,22 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_populates_sha256_from_description_marker(): void
     {
-        $expectedHash = str_repeat('b', 64);
+        $expectedHash = str_repeat( 'b', 64 );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => "Release notes\n\nSHA-256: {$expectedHash}\n",
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame($expectedHash, $updateInfo->sha256);
+        $this->assertSame( $expectedHash, $updateInfo->sha256 );
     }
 
     /**
@@ -368,27 +368,27 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_logs_warning_and_leaves_sha256_null_when_absent(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'No checksum here.',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        Log::shouldReceive('warning')
+        Log::shouldReceive( 'warning' )
             ->once()
-            ->withArgs(function (string $message, array $context): bool {
-                return str_contains($message, 'SHA-256')
-                    && 'v2.0.0' === ($context['tag_name'] ?? null);
-            });
+            ->withArgs( function ( string $message, array $context ): bool {
+                return str_contains( $message, 'SHA-256' )
+                    && 'v2.0.0' === ( $context['tag_name'] ?? null );
+            } );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertNull($updateInfo->sha256);
+        $this->assertNull( $updateInfo->sha256 );
     }
 
     /**
@@ -398,10 +398,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_falls_back_to_description_when_sidecar_fetch_fails(): void
     {
-        $expectedHash = str_repeat('c', 64);
+        $expectedHash = str_repeat( 'c', 64 );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => "Notes\nSHA256: {$expectedHash}",
@@ -415,18 +415,18 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-            'example.com/missing.sha256' => Http::response('not found', 404),
-        ]);
+            ], 200 ),
+            'example.com/missing.sha256' => Http::response( 'not found', 404 ),
+        ] );
 
         // The sidecar fetch failure should be logged, but the source should still
         // surface a checksum extracted from the description.
-        Log::shouldReceive('warning')->atLeast()->once();
+        Log::shouldReceive( 'warning' )->atLeast()->once();
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame($expectedHash, $updateInfo->sha256);
+        $this->assertSame( $expectedHash, $updateInfo->sha256 );
     }
 
     /**
@@ -436,8 +436,8 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_returns_null_when_sidecar_body_is_not_hex(): void
     {
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'No description checksum.',
@@ -451,16 +451,16 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-            'example.com/bad.sha256' => Http::response('garbage payload without a hash', 200),
-        ]);
+            ], 200 ),
+            'example.com/bad.sha256' => Http::response( 'garbage payload without a hash', 200 ),
+        ] );
 
-        Log::shouldReceive('warning')->atLeast()->once();
+        Log::shouldReceive( 'warning' )->atLeast()->once();
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertNull($updateInfo->sha256);
+        $this->assertNull( $updateInfo->sha256 );
     }
 
     /**
@@ -471,8 +471,8 @@ class GitLabUpdateSourceTest extends TestCase
     public function test_uses_auto_archive_url_by_default(): void
     {
         // No `gitlab_update_strategy` set — should default to auto_archive.
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -486,14 +486,14 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertStringContainsString('/repository/archive.zip', $updateInfo->downloadUrl);
-        $this->assertStringContainsString('sha=v2.0.0', $updateInfo->downloadUrl);
+        $this->assertStringContainsString( '/repository/archive.zip', $updateInfo->downloadUrl );
+        $this->assertStringContainsString( 'sha=v2.0.0', $updateInfo->downloadUrl );
     }
 
     /**
@@ -503,10 +503,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_uses_release_asset_url_when_strategy_is_release_asset(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -524,13 +524,13 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame('https://example.com/releases/app-2.0.0.zip', $updateInfo->downloadUrl);
+        $this->assertSame( 'https://example.com/releases/app-2.0.0.zip', $updateInfo->downloadUrl );
     }
 
     /**
@@ -540,11 +540,11 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_release_asset_pattern_is_configurable(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
-        config()->set('cms.updates.gitlab_release_asset_pattern', '*-release.zip');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
+        config()->set( 'cms.updates.gitlab_release_asset_pattern', '*-release.zip' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -562,13 +562,13 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame('https://example.com/app-2.0.0-release.zip', $updateInfo->downloadUrl);
+        $this->assertSame( 'https://example.com/app-2.0.0-release.zip', $updateInfo->downloadUrl );
     }
 
     /**
@@ -578,10 +578,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_release_asset_pattern_matches_case_insensitively(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -595,13 +595,13 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame('https://example.com/App-2.0.0.ZIP', $updateInfo->downloadUrl);
+        $this->assertSame( 'https://example.com/App-2.0.0.ZIP', $updateInfo->downloadUrl );
     }
 
     /**
@@ -611,10 +611,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_release_asset_matches_against_url_basename_when_name_missing(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -627,13 +627,13 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame('https://example.com/builds/app-2.0.0.zip?token=abc', $updateInfo->downloadUrl);
+        $this->assertSame( 'https://example.com/builds/app-2.0.0.zip?token=abc', $updateInfo->downloadUrl );
     }
 
     /**
@@ -643,12 +643,12 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_release_asset_strategy_skips_sha256_sidecars(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
         // Set a permissive pattern that would otherwise match the sidecar.
-        config()->set('cms.updates.gitlab_release_asset_pattern', '*');
+        config()->set( 'cms.updates.gitlab_release_asset_pattern', '*' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -666,13 +666,13 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
         $updateInfo = $source->checkForUpdate();
 
-        $this->assertSame('https://example.com/app-2.0.0.zip', $updateInfo->downloadUrl);
+        $this->assertSame( 'https://example.com/app-2.0.0.zip', $updateInfo->downloadUrl );
     }
 
     /**
@@ -682,10 +682,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_throws_when_release_asset_strategy_and_no_matching_asset(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
@@ -699,13 +699,13 @@ class GitLabUpdateSourceTest extends TestCase
                         ],
                     ],
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage("No release asset link matched pattern '*.zip'");
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( "No release asset link matched pattern '*.zip'" );
 
         $source->checkForUpdate();
     }
@@ -717,21 +717,21 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_throws_when_release_asset_strategy_and_no_asset_links(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release without assets',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->expectException(UpdateException::class);
+        $this->expectException( UpdateException::class );
 
         $source->checkForUpdate();
     }
@@ -743,22 +743,22 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_throws_for_unsupported_gitlab_update_strategy(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'bogus_strategy');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'bogus_strategy' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
                 [
                     'tag_name'    => 'v2.0.0',
                     'description' => 'Release',
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                 ],
-            ], 200),
-        ]);
+            ], 200 ),
+        ] );
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage("Unsupported `cms.updates.gitlab_update_strategy` value 'bogus_strategy'");
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( "Unsupported `cms.updates.gitlab_update_strategy` value 'bogus_strategy'" );
 
         $source->checkForUpdate();
     }
@@ -770,10 +770,10 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_release_asset_strategy_is_applied_for_explicit_version_downloads(): void
     {
-        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
 
-        Http::fake([
-            'gitlab.com/api/v4/projects/user%2Frepo/releases/v2.0.0' => Http::response([
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases/v2.0.0' => Http::response( [
                 'tag_name'    => 'v2.0.0',
                 'description' => 'Release',
                 'created_at'  => '2024-12-15T10:00:00.000Z',
@@ -786,13 +786,13 @@ class GitLabUpdateSourceTest extends TestCase
                     ],
                 ],
             ], 200),
-            'example.com/app-2.0.0.zip' => Http::response('zip-bytes', 200),
+            'example.com/app-2.0.0.zip' => Http::response( 'zip-bytes', 200),
         ]);
 
-        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
-        $source->downloadUpdate('v2.0.0');
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0');
+        $source->downloadUpdate( 'v2.0.0');
 
-        Http::assertSent(function ($request) {
+        Http::assertSent( function ( $request) {
             return 'https://example.com/app-2.0.0.zip' === $request->url();
         });
     }
@@ -804,9 +804,9 @@ class GitLabUpdateSourceTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment($app): void
+    protected function defineEnvironment( $app): void
     {
-        $app['config']->set('cms.updates.http_timeout', 15);
-        $app['config']->set('cms.updates.download_timeout', 300);
+        $app['config']->set( 'cms.updates.http_timeout', 15);
+        $app['config']->set( 'cms.updates.download_timeout', 300);
     }
 }

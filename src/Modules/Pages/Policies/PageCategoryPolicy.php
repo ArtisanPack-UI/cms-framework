@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PageCategory Policy for the CMS Framework Pages Module.
@@ -35,7 +35,7 @@ class PageCategoryPolicy
      *
      * @return bool True if the user can view page categories, false otherwise.
      */
-    public function viewAny(Authenticatable $user): bool
+    public function viewAny( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any page categories.
@@ -48,7 +48,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('pageCategories.viewAny', 'pageCategories.manage'));
+        return $user->can( applyFilters( 'pageCategories.viewAny', 'pageCategories.manage' ) );
     }
 
     /**
@@ -61,7 +61,7 @@ class PageCategoryPolicy
      *
      * @return bool True if the user can view the category, false otherwise.
      */
-    public function view(Authenticatable $user, PageCategory $category): bool
+    public function view( Authenticatable $user, PageCategory $category ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a page category.
@@ -75,7 +75,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('pageCategories.view', 'pageCategories.manage', $category));
+        return $user->can( applyFilters( 'pageCategories.view', 'pageCategories.manage', $category ) );
     }
 
     /**
@@ -87,7 +87,7 @@ class PageCategoryPolicy
      *
      * @return bool True if the user can create page categories, false otherwise.
      */
-    public function create(Authenticatable $user): bool
+    public function create( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can create page categories.
@@ -100,7 +100,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('pageCategories.create', 'pageCategories.manage'));
+        return $user->can( applyFilters( 'pageCategories.create', 'pageCategories.manage' ) );
     }
 
     /**
@@ -113,7 +113,7 @@ class PageCategoryPolicy
      *
      * @return bool True if the user can update the category, false otherwise.
      */
-    public function update(Authenticatable $user, PageCategory $category): bool
+    public function update( Authenticatable $user, PageCategory $category ): bool
     {
         /**
          * Filters the capability used to determine whether a user can update page categories.
@@ -127,7 +127,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('pageCategories.update', 'pageCategories.manage', $category));
+        return $user->can( applyFilters( 'pageCategories.update', 'pageCategories.manage', $category ) );
     }
 
     /**
@@ -140,7 +140,7 @@ class PageCategoryPolicy
      *
      * @return bool True if the user can delete the category, false otherwise.
      */
-    public function delete(Authenticatable $user, PageCategory $category): bool
+    public function delete( Authenticatable $user, PageCategory $category ): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete page categories.
@@ -154,6 +154,6 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('pageCategories.delete', 'pageCategories.manage', $category));
+        return $user->can( applyFilters( 'pageCategories.delete', 'pageCategories.manage', $category));
     }
 }

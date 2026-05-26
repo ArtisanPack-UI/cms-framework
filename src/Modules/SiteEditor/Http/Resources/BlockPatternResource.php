@@ -8,10 +8,10 @@
  * inserter-catalogue shape Gutenberg uses for unsynced patterns. Both
  * theme-shipped and user-authored unsynced patterns surface here.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources;
 
@@ -19,16 +19,16 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedPattern;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class BlockPatternResource
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
-    public static function toArray(ResolvedPattern $pattern): array
+    public static function toArray( ResolvedPattern $pattern ): array
     {
         return [
             // WP's `name` field on block-pattern responses carries the
@@ -47,23 +47,23 @@ final class BlockPatternResource
             'theme'       => $pattern->theme,
             'wp_id'       => BlockPattern::SOURCE_USER === $pattern->source ? $pattern->wpId() : null,
             'modified'    => null !== $pattern->model
-                ? optional($pattern->model->updated_at)->toIso8601String()
+                ? optional( $pattern->model->updated_at )->toIso8601String()
                 : null,
         ];
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<int|string, ResolvedPattern>  $patterns
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function collection(array $patterns): array
+    public static function collection( array $patterns ): array
     {
-        return array_values(array_map(
-            static fn (ResolvedPattern $p) => self::toArray($p),
+        return array_values( array_map(
+            static fn ( ResolvedPattern $p ) => self::toArray( $p ),
             $patterns,
-        ));
+        ) );
     }
 }

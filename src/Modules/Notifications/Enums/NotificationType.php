@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Notification Type Enum
@@ -28,11 +28,11 @@ enum NotificationType: string
      */
     public function label(): string
     {
-        return match ($this) {
-            self::Error   => __('Error'),
-            self::Warning => __('Warning'),
-            self::Success => __('Success'),
-            self::Info    => __('Info'),
+        return match ( $this ) {
+            self::Error   => __( 'Error' ),
+            self::Warning => __( 'Warning' ),
+            self::Success => __( 'Success' ),
+            self::Info    => __( 'Info' ),
         };
     }
 
@@ -45,7 +45,7 @@ enum NotificationType: string
      */
     public function icon(): string
     {
-        return match ($this) {
+        return match ( $this ) {
             self::Error   => 'fas.circle-exclamation',
             self::Warning => 'fas.triangle-exclamation',
             self::Success => 'fas.circle-check',
@@ -62,7 +62,7 @@ enum NotificationType: string
      */
     public function colorClass(): string
     {
-        return match ($this) {
+        return match ( $this ) {
             self::Error   => 'text-red-600 dark:text-red-400',
             self::Warning => 'text-yellow-600 dark:text-yellow-400',
             self::Success => 'text-green-600 dark:text-green-400',

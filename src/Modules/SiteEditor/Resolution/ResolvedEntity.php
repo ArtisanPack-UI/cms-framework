@@ -7,10 +7,10 @@
  * source-of-truth content for a slug, plus enough metadata to reconstruct
  * a WP-shape REST response.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
@@ -18,12 +18,12 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\TemplatePart;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class ResolvedEntity
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $slug  The entity slug.
      * @param  string  $theme  The active theme slug at resolution time.
@@ -51,14 +51,15 @@ final class ResolvedEntity
         public readonly bool $isCustom,
         public readonly ?string $area,
         public readonly Template|TemplatePart|null $model,
-    ) {}
+    ) {
+    }
 
     /**
      * The integer ID of the backing DB row, or 0 when none exists.
      *
      * Maps to WP's `wp_id` field on template / template-part responses.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function wpId(): int
     {
@@ -74,7 +75,7 @@ final class ResolvedEntity
      * while the filter expects `slug`, `theme`, top-level `raw_content`/`blocks`,
      * and a plain string `title`.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
@@ -96,11 +97,11 @@ final class ResolvedEntity
                 ? (int) $this->model->author_id
                 : null,
             'modified_at'    => null !== $this->model
-                ? optional($this->model->updated_at)->toIso8601String()
+                ? optional( $this->model->updated_at )->toIso8601String()
                 : null,
         ];
 
-        if (null !== $this->area) {
+        if ( null !== $this->area ) {
             $entry['area'] = $this->area;
         }
 

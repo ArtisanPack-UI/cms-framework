@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Base exception for the CMS Framework.
@@ -62,9 +62,9 @@ class CMSFrameworkException extends Exception
      *
      * @since 1.0.0
      */
-    public function __construct(string $message = '', int $code = 0, ?Exception $previous = null)
+    public function __construct( string $message = '', int $code = 0, ?Exception $previous = null )
     {
-        parent::__construct($message, $code, $previous);
+        parent::__construct( $message, $code, $previous );
     }
 
     /**
@@ -99,9 +99,9 @@ class CMSFrameworkException extends Exception
      *
      * @return JsonResponse|null The JSON response or null to fall back to default rendering.
      */
-    public function render(Request $request): ?JsonResponse
+    public function render( Request $request ): ?JsonResponse
     {
-        if (! $request->expectsJson()) {
+        if ( ! $request->expectsJson() ) {
             return null;
         }
 

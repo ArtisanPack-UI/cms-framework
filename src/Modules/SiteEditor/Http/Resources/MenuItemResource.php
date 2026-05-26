@@ -9,17 +9,17 @@
  * link-style flag (`link` / `submenu` / `page-list`) lives on `link_type`
  * for visual-editor's adapter to consume.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\MenuItem;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class MenuItemResource
 {
@@ -31,7 +31,7 @@ final class MenuItemResource
      * can pin its `kind` allow-list to the same set of keys without
      * duplicating the vocabulary.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<string, string>
      */
@@ -42,14 +42,14 @@ final class MenuItemResource
     ];
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
-    public static function toArray(MenuItem $item): array
+    public static function toArray( MenuItem $item ): array
     {
         $kind = $item->kind ?? 'custom';
-        $type = self::KIND_TO_TYPE[$kind] ?? 'custom';
+        $type = self::KIND_TO_TYPE[ $kind ] ?? 'custom';
 
         return [
             'id'          => (int) $item->id,
@@ -59,35 +59,35 @@ final class MenuItemResource
             ],
             'url'         => $item->url ?? '',
             'attr_title'  => $item->description ?? '',
-            'classes'     => self::splitTokens($item->classes),
+            'classes'     => self::splitTokens( $item->classes ),
             'description' => $item->description ?? '',
             'menu_order'  => (int) $item->position,
             'menus'       => (int) $item->menu_id,
             'parent'      => null !== $item->parent_id ? (int) $item->parent_id : 0,
             'target'      => $item->target ?? '_self',
             'type'        => $type,
-            'type_label'  => self::typeLabel($type),
+            'type_label'  => self::typeLabel( $type ),
             'object'      => $item->object_type ?? '',
             'object_id'   => null !== $item->object_id ? (int) $item->object_id : 0,
-            'xfn'         => self::splitTokens($item->rel),
+            'xfn'         => self::splitTokens( $item->rel ),
             'link_type'   => $item->type,
             'meta'        => [],
         ];
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  iterable<int, MenuItem>  $items
      *
      * @return array<int, array<string, mixed>>
      */
-    public static function collection(iterable $items): array
+    public static function collection( iterable $items ): array
     {
         $out = [];
 
-        foreach ($items as $item) {
-            $out[] = self::toArray($item);
+        foreach ( $items as $item ) {
+            $out[] = self::toArray( $item );
         }
 
         return $out;
@@ -98,33 +98,33 @@ final class MenuItemResource
      * a list, collapsing runs of whitespace and dropping empty tokens.
      * Returns `[]` for null or whitespace-only input.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<int, string>
      */
-    protected static function splitTokens(?string $value): array
+    protected static function splitTokens( ?string $value ): array
     {
-        if (null === $value) {
+        if ( null === $value ) {
             return [];
         }
 
-        $trimmed = trim($value);
+        $trimmed = trim( $value );
 
-        if ('' === $trimmed) {
+        if ( '' === $trimmed ) {
             return [];
         }
 
-        $parts = preg_split('/\s+/', $trimmed);
+        $parts = preg_split( '/\s+/', $trimmed );
 
-        return false === $parts ? [] : array_values(array_filter($parts, static fn (string $p): bool => '' !== $p));
+        return false === $parts ? [] : array_values( array_filter( $parts, static fn ( string $p ): bool => '' !== $p ) );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected static function typeLabel(string $type): string
+    protected static function typeLabel( string $type ): string
     {
-        return match ($type) {
+        return match ( $type ) {
             'post_type' => 'Post Type',
             'taxonomy'  => 'Taxonomy',
             default     => 'Custom Link',

@@ -5,7 +5,7 @@
  *
  * Exception thrown when a theme ZIP cannot be extracted or installed.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
 declare( strict_types=1 );
@@ -21,14 +21,14 @@ use ArtisanPackUI\CMSFramework\Exceptions\CMSFrameworkException;
  * extracted into the themes directory, or when the resulting theme
  * conflicts with an already-installed theme of the same slug.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 class ThemeInstallationException extends CMSFrameworkException
 {
     /**
      * Creates a new exception for a failed extraction.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $slug  The theme slug (or 'unknown' if unresolved).
      *
@@ -42,7 +42,7 @@ class ThemeInstallationException extends CMSFrameworkException
     /**
      * Creates a new exception for an already-installed theme.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $slug  The conflicting theme slug.
      *
@@ -56,7 +56,7 @@ class ThemeInstallationException extends CMSFrameworkException
     /**
      * Creates a new exception for a ZIP-slip / path-traversal attempt.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $entry  The offending ZIP entry name.
      *

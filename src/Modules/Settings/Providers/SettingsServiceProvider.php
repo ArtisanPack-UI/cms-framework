@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Service provider for the Settings module.
@@ -30,7 +30,7 @@ class SettingsServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(SettingsManager::class, fn () => new SettingsManager);
+        $this->app->singleton( SettingsManager::class, fn () => new SettingsManager );
     }
 
     /**
@@ -38,11 +38,11 @@ class SettingsServiceProvider extends ServiceProvider
      *
      * @since 1.0.0
      */
-    public function boot(Router $router): void
+    public function boot( Router $router ): void
     {
-        Route::prefix('api/v1')
-            ->middleware('api')
-            ->group(__DIR__.'/../routes/api.php');
+        Route::prefix( 'api/v1' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/../routes/api.php' );
 
         $this->registerSiteSettings();
     }
@@ -56,17 +56,17 @@ class SettingsServiceProvider extends ServiceProvider
      * until the host configures media in the admin UI. Sanitizers are
      * the standard `artisanpack-ui/security` helpers.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function registerSiteSettings(): void
     {
         /** @var SettingsManager $settings */
-        $settings = $this->app->make(SettingsManager::class);
+        $settings = $this->app->make( SettingsManager::class );
 
-        $settings->registerSetting('site.title', config('app.name', ''), 'sanitizeText', SettingType::String);
-        $settings->registerSetting('site.tagline', '', 'sanitizeText', SettingType::String);
-        $settings->registerSetting('site.url', config('app.url', ''), 'sanitizeUrl', SettingType::String);
-        $settings->registerSetting('site.logo_id', null, 'sanitizeInt', SettingType::Integer);
-        $settings->registerSetting('site.icon_id', null, 'sanitizeInt', SettingType::Integer);
+        $settings->registerSetting( 'site.title', config( 'app.name', '' ), 'sanitizeText', SettingType::String );
+        $settings->registerSetting( 'site.tagline', '', 'sanitizeText', SettingType::String );
+        $settings->registerSetting( 'site.url', config( 'app.url', '' ), 'sanitizeUrl', SettingType::String );
+        $settings->registerSetting( 'site.logo_id', null, 'sanitizeInt', SettingType::Integer );
+        $settings->registerSetting( 'site.icon_id', null, 'sanitizeInt', SettingType::Integer);
     }
 }

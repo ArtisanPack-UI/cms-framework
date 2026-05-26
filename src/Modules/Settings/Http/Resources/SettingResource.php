@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Setting Resource for the CMS Framework Settings Module.
@@ -39,7 +39,7 @@ class SettingResource extends JsonResource
      *
      * @return array<string, mixed> The transformed setting data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'         => $this->id,

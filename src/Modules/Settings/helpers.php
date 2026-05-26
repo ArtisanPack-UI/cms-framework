@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Helper functions for the CMS Framework Settings Module.
@@ -13,7 +13,7 @@ declare(strict_types=1);
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 
-if (! function_exists('apGetSetting')) {
+if ( ! function_exists( 'apGetSetting' ) ) {
     /**
      * Retrieve a setting value with optional default fallback.
      *
@@ -27,13 +27,13 @@ if (! function_exists('apGetSetting')) {
      *
      * @return mixed The setting value.
      */
-    function apGetSetting(string $key, mixed $default = null): mixed
+    function apGetSetting( string $key, mixed $default = null ): mixed
     {
-        return app(SettingsManager::class)->getSetting($key, $default);
+        return app( SettingsManager::class )->getSetting( $key, $default );
     }
 }
 
-if (! function_exists('apRegisterSetting')) {
+if ( ! function_exists( 'apRegisterSetting' ) ) {
     /**
      * Register a setting definition that includes type and sanitization callback.
      *
@@ -44,13 +44,13 @@ if (! function_exists('apRegisterSetting')) {
      * @param  callable  $callback  Sanitization callback to clean values on update.
      * @param  SettingType  $type  Data type of the setting.
      */
-    function apRegisterSetting(string $key, mixed $defaultValue, callable $callback, SettingType $type = SettingType::String): void
+    function apRegisterSetting( string $key, mixed $defaultValue, callable $callback, SettingType $type = SettingType::String ): void
     {
-        app(SettingsManager::class)->registerSetting($key, $defaultValue, $callback, $type);
+        app( SettingsManager::class )->registerSetting( $key, $defaultValue, $callback, $type );
     }
 }
 
-if (! function_exists('apUpdateSetting')) {
+if ( ! function_exists( 'apUpdateSetting' ) ) {
     /**
      * Update a setting value after sanitizing it using the registered callback.
      *
@@ -59,8 +59,8 @@ if (! function_exists('apUpdateSetting')) {
      * @param  string  $key  Unique key for the setting.
      * @param  mixed  $value  The new value to store.
      */
-    function apUpdateSetting(string $key, mixed $value): void
+    function apUpdateSetting( string $key, mixed $value ): void
     {
-        app(SettingsManager::class)->updateSetting($key, $value);
+        app( SettingsManager::class )->updateSetting( $key, $value);
     }
 }

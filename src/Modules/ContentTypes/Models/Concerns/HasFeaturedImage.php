@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * HasFeaturedImage Trait
@@ -46,7 +46,7 @@ trait HasFeaturedImage
             'featurable',
             'featureables',
             null,
-            'media_id'
+            'media_id',
         )
             ->withTimestamps();
     }
@@ -60,12 +60,12 @@ trait HasFeaturedImage
      *
      * @param  int  $mediaId  The ID of the media row to attach.
      */
-    public function setFeaturedImage(int $mediaId): void
+    public function setFeaturedImage( int $mediaId ): void
     {
-        $this->featuredImage()->sync([sanitizeInt($mediaId)]);
+        $this->featuredImage()->sync( [sanitizeInt( $mediaId )] );
         // Drop any eager-loaded copy so getFeaturedImageUrl() — which
         // reuses the loaded relation — does not return stale data.
-        $this->unsetRelation('featuredImage');
+        $this->unsetRelation( 'featuredImage' );
     }
 
     /**
@@ -78,7 +78,7 @@ trait HasFeaturedImage
     public function removeFeaturedImage(): void
     {
         $this->featuredImage()->detach();
-        $this->unsetRelation('featuredImage');
+        $this->unsetRelation( 'featuredImage' );
     }
 
     /**
@@ -88,12 +88,12 @@ trait HasFeaturedImage
      *
      * @param  string  $size  Reserved for size-aware Media implementations.
      */
-    public function getFeaturedImageUrl(string $size = 'full'): ?string
+    public function getFeaturedImageUrl( string $size = 'full' ): ?string
     {
         // Reuse the eager-loaded relation when available so callers that
         // already loaded `featuredImage` (e.g. via API resources) don't
         // get an N+1 query per row.
-        $media = $this->relationLoaded('featuredImage')
+        $media = $this->relationLoaded( 'featuredImage' )
             ? $this->featuredImage->first()
             : $this->featuredImage()->first();
 

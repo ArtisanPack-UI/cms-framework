@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Notification Policy
@@ -28,7 +28,7 @@ class NotificationPolicy
      *
      * @param  mixed  $user
      */
-    public function viewAny($user): bool
+    public function viewAny( $user ): bool
     {
         return true; // All authenticated users can view their notifications
     }
@@ -40,11 +40,11 @@ class NotificationPolicy
      *
      * @param  mixed  $user
      */
-    public function view($user, Notification $notification): bool
+    public function view( $user, Notification $notification ): bool
     {
         // User can only view notifications sent to them
         // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
-        return $notification->users()->where('user_id', $user->id)->exists();
+        return $notification->users()->where( 'user_id', $user->id )->exists();
     }
 
     /**
@@ -54,10 +54,10 @@ class NotificationPolicy
      *
      * @param  mixed  $user
      */
-    public function create($user): bool
+    public function create( $user ): bool
     {
         // Only users with notification management capability can create
-        return $user->hasCapability('notifications.manage');
+        return $user->hasCapability( 'notifications.manage' );
     }
 
     /**
@@ -67,11 +67,11 @@ class NotificationPolicy
      *
      * @param  mixed  $user
      */
-    public function update($user, Notification $notification): bool
+    public function update( $user, Notification $notification ): bool
     {
         // User can update (mark as read/dismiss) their own notifications
         // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
-        return $notification->users()->where('user_id', $user->id)->exists();
+        return $notification->users()->where( 'user_id', $user->id )->exists();
     }
 
     /**
@@ -81,9 +81,9 @@ class NotificationPolicy
      *
      * @param  mixed  $user
      */
-    public function delete($user, Notification $notification): bool
+    public function delete( $user, Notification $notification ): bool
     {
         // Only users with notification management capability can delete
-        return $user->hasCapability('notifications.manage');
+        return $user->hasCapability( 'notifications.manage');
     }
 }

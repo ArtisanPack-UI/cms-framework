@@ -11,7 +11,7 @@ declare( strict_types=1 );
  * the sanitizer runs, the type is serialized, unregistered keys are rejected,
  * and the `SettingPolicy` gates access.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Tests\Feature;
@@ -173,14 +173,14 @@ test( 'it rejects a request with no settings', function (): void {
     actingAs( $this->user )
         ->putJson( '/api/v1/settings', ['settings' => []] )
         ->assertStatus( 422 )
-        ->assertJsonValidationErrors( ['settings']);
-});
+        ->assertJsonValidationErrors( ['settings'] );
+} );
 
 test( 'it rejects a request missing the settings key entirely', function (): void {
     grantBulkSettingsManage();
 
-    actingAs( $this->user)
-        ->putJson( '/api/v1/settings', [])
-        ->assertStatus( 422)
+    actingAs( $this->user )
+        ->putJson( '/api/v1/settings', [] )
+        ->assertStatus( 422 )
         ->assertJsonValidationErrors( ['settings']);
 });

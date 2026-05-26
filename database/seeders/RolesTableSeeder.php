@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Seeder for default user roles.
@@ -54,7 +54,7 @@ class RolesTableSeeder extends Seeder
             ],
         ];
 
-        foreach ($roles as $role) {
+        foreach ( $roles as $role ) {
             Role::firstOrCreate(
                 ['slug' => $role['slug']],
                 $role,

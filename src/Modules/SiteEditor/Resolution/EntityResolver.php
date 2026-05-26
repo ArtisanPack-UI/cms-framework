@@ -8,15 +8,15 @@
  * Each implementation merges DB overrides with theme-file fallbacks per
  * plan 14 §4.2 — DB row wins when present.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 interface EntityResolver
 {
@@ -27,9 +27,9 @@ interface EntityResolver
      * the active theme + slug, otherwise the theme file. Returns null
      * when neither source has the slug.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public function resolve(string $slug): ?ResolvedEntity;
+    public function resolve( string $slug ): ?ResolvedEntity;
 
     /**
      * List all entities for the active theme (file + DB merged).
@@ -37,7 +37,7 @@ interface EntityResolver
      * Returns one ResolvedEntity per unique slug, with DB rows taking
      * precedence over theme files for slugs present in both.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<int, ResolvedEntity>
      */
@@ -50,7 +50,7 @@ interface EntityResolver
      * For purely custom entities (no theme-file backing), this deletes the
      * entity entirely.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public function revert(string $slug): bool;
+    public function revert( string $slug ): bool;
 }

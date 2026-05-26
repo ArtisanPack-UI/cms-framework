@@ -40,7 +40,7 @@ function makeUploadedThemeZip( string $tmpPath, string $slug, array $manifest, a
 
     $zip = new ZipArchive;
     if ( true !== $zip->open( $zipPath, ZipArchive::CREATE ) ) {
-        throw new \RuntimeException( "Failed to create test ZIP at {$zipPath}" );
+        throw new RuntimeException( "Failed to create test ZIP at {$zipPath}" );
     }
     $zip->addEmptyDir( $slug );
     $zip->addFromString( $slug . '/theme.json', json_encode( $manifest ) );
@@ -111,8 +111,8 @@ describe( 'POST /v1/themes (upload)', function (): void {
     } );
 
     it( 'requires authentication', function (): void {
-        $response = $this->postJson( '/v1/themes', []);
+        $response = $this->postJson( '/v1/themes', [] );
 
-        $response->assertStatus( 401);
-    });
+        $response->assertStatus( 401 );
+    } );
 });

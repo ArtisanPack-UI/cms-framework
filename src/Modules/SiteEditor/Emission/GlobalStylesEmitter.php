@@ -18,10 +18,10 @@
  *     and the cached entry is keyed by content hash, so the next resolve
  *     produces a fresh hash).
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission;
 
@@ -30,7 +30,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyle
 use Illuminate\Support\Facades\Cache;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 class GlobalStylesEmitter
 {
@@ -58,37 +58,38 @@ class GlobalStylesEmitter
     private const SCHEMA_VERSION = 'v2';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function __construct(
         private GlobalStylesResolver $resolver,
-    ) {}
+    ) {
+    }
 
     /**
      * Return the emitted CSS for the active theme's resolved global styles.
      * Returns an empty string when there is no active theme.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function emit(): string
     {
         $resolved = $this->resolver->resolve();
 
-        if (null === $resolved) {
+        if ( null === $resolved ) {
             return '';
         }
 
-        $cacheKey = $this->cacheKey($resolved);
+        $cacheKey = $this->cacheKey( $resolved );
 
-        $cached = Cache::get($cacheKey);
+        $cached = Cache::get( $cacheKey );
 
-        if (is_string($cached)) {
+        if ( is_string( $cached ) ) {
             return $cached;
         }
 
-        $css = $this->buildCss($resolved);
+        $css = $this->buildCss( $resolved );
 
-        Cache::put($cacheKey, $css, self::CACHE_TTL);
+        Cache::put( $cacheKey, $css, self::CACHE_TTL );
 
         return $css;
     }
@@ -100,56 +101,56 @@ class GlobalStylesEmitter
      *
      * Safe to call when no active theme — drops to a no-op.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function invalidate(): void
     {
         $resolved = $this->resolver->resolve();
 
-        if (null === $resolved) {
+        if ( null === $resolved ) {
             return;
         }
 
-        Cache::forget($this->cacheKey($resolved));
+        Cache::forget( $this->cacheKey( $resolved ) );
     }
 
     /**
      * Compose the cache key. Includes the theme slug so two themes with
      * coincidentally-equal content hashes still occupy distinct entries.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function cacheKey(ResolvedGlobalStyles $resolved): string
+    protected function cacheKey( ResolvedGlobalStyles $resolved ): string
     {
-        return 'cms.global-styles.css.'.self::SCHEMA_VERSION.'.'.$resolved->theme.'.'.$resolved->contentHash();
+        return 'cms.global-styles.css.' . self::SCHEMA_VERSION . '.' . $resolved->theme . '.' . $resolved->contentHash();
     }
 
     /**
      * Build the full emitted CSS document for a resolved styles tree.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function buildCss(ResolvedGlobalStyles $resolved): string
+    protected function buildCss( ResolvedGlobalStyles $resolved ): string
     {
         $rootDeclarations = array_merge(
-            $this->paletteCustomProperties($resolved->settings),
-            $this->fontSizeCustomProperties($resolved->settings),
-            $this->fontFamilyCustomProperties($resolved->settings),
-            $this->spacingCustomProperties($resolved->settings),
-            $this->gradientCustomProperties($resolved->settings),
-            $this->settingsCustomProperties($resolved->settings),
-            $this->stylesRootDeclarations($resolved->styles),
+            $this->paletteCustomProperties( $resolved->settings ),
+            $this->fontSizeCustomProperties( $resolved->settings ),
+            $this->fontFamilyCustomProperties( $resolved->settings ),
+            $this->spacingCustomProperties( $resolved->settings ),
+            $this->gradientCustomProperties( $resolved->settings ),
+            $this->settingsCustomProperties( $resolved->settings ),
+            $this->stylesRootDeclarations( $resolved->styles ),
         );
 
         $blocks = [];
 
-        if ([] !== $rootDeclarations) {
-            $blocks[] = ':root {'."\n".$this->formatDeclarations($rootDeclarations)."\n".'}';
+        if ( [] !== $rootDeclarations ) {
+            $blocks[] = ':root {' . "\n" . $this->formatDeclarations( $rootDeclarations ) . "\n" . '}';
         }
 
-        $elementRules = $this->elementStyleBlocks($resolved->styles);
+        $elementRules = $this->elementStyleBlocks( $resolved->styles );
 
-        foreach ($elementRules as $rule) {
+        foreach ( $elementRules as $rule ) {
             $blocks[] = $rule;
         }
 
@@ -161,11 +162,11 @@ class GlobalStylesEmitter
         // visually applies — the picker swatch lights up but neither
         // the canvas nor the front-end shows the color change
         // (Keystone #53).
-        foreach ($this->presetClassBindings($resolved->settings) as $rule) {
+        foreach ( $this->presetClassBindings( $resolved->settings ) as $rule ) {
             $blocks[] = $rule;
         }
 
-        return implode("\n\n", $blocks);
+        return implode( "\n\n", $blocks );
     }
 
     /**
@@ -177,42 +178,42 @@ class GlobalStylesEmitter
      * selection always overrides cascading default styles, the way
      * the upstream block editor and front-end already behave.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, string>
      */
-    protected function presetClassBindings(array $settings): array
+    protected function presetClassBindings( array $settings ): array
     {
         $rules = [];
 
-        $palette = is_array($settings['color']['palette'] ?? null)
+        $palette = is_array( $settings['color']['palette'] ?? null )
             ? $settings['color']['palette']
             : [];
 
-        foreach ($this->presetSlugs($palette, 'color') as $slug) {
-            $var = '--wp--preset--color--'.$slug;
+        foreach ( $this->presetSlugs( $palette, 'color' ) as $slug ) {
+            $var = '--wp--preset--color--' . $slug;
 
-            $rules[] = '.has-'.$slug.'-color { color: var('.$var.') !important; }';
-            $rules[] = '.has-'.$slug.'-background-color { background-color: var('.$var.') !important; }';
-            $rules[] = '.has-'.$slug.'-border-color { border-color: var('.$var.') !important; }';
+            $rules[] = '.has-' . $slug . '-color { color: var(' . $var . ') !important; }';
+            $rules[] = '.has-' . $slug . '-background-color { background-color: var(' . $var . ') !important; }';
+            $rules[] = '.has-' . $slug . '-border-color { border-color: var(' . $var . ') !important; }';
         }
 
-        $fontSizes = is_array($settings['typography']['fontSizes'] ?? null)
+        $fontSizes = is_array( $settings['typography']['fontSizes'] ?? null )
             ? $settings['typography']['fontSizes']
             : [];
 
-        foreach ($this->presetSlugs($fontSizes, 'size') as $slug) {
-            $rules[] = '.has-'.$slug.'-font-size { font-size: var(--wp--preset--font-size--'.$slug.') !important; }';
+        foreach ( $this->presetSlugs( $fontSizes, 'size' ) as $slug ) {
+            $rules[] = '.has-' . $slug . '-font-size { font-size: var(--wp--preset--font-size--' . $slug . ') !important; }';
         }
 
-        $gradients = is_array($settings['color']['gradients'] ?? null)
+        $gradients = is_array( $settings['color']['gradients'] ?? null )
             ? $settings['color']['gradients']
             : [];
 
-        foreach ($this->presetSlugs($gradients, 'gradient') as $slug) {
-            $rules[] = '.has-'.$slug.'-gradient-background { background: var(--wp--preset--gradient--'.$slug.') !important; }';
+        foreach ( $this->presetSlugs( $gradients, 'gradient' ) as $slug ) {
+            $rules[] = '.has-' . $slug . '-gradient-background { background: var(--wp--preset--gradient--' . $slug . ') !important; }';
         }
 
         return $rules;
@@ -226,30 +227,30 @@ class GlobalStylesEmitter
      * scalar too. Without the value guard a malformed entry would still
      * emit a `.has-{slug}-*` rule pointing at an undeclared CSS var.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<int, mixed>  $items
      * @param  string             $valueKey  The required-non-empty value key per preset family.
      *
      * @return array<int, string>
      */
-    protected function presetSlugs(array $items, string $valueKey): array
+    protected function presetSlugs( array $items, string $valueKey ): array
     {
         $slugs = [];
 
-        foreach ($items as $item) {
-            if (! is_array($item)) {
+        foreach ( $items as $item ) {
+            if ( ! is_array( $item ) ) {
                 continue;
             }
 
             $slug  = $item['slug'] ?? null;
-            $value = $item[$valueKey] ?? null;
+            $value = $item[ $valueKey ] ?? null;
 
-            if (! is_string($slug) || '' === $slug || ! is_scalar($value)) {
+            if ( ! is_string( $slug ) || '' === $slug || ! is_scalar( $value ) ) {
                 continue;
             }
 
-            $slugs[] = $this->kebab($slug);
+            $slugs[] = $this->kebab( $slug );
         }
 
         return $slugs;
@@ -259,93 +260,93 @@ class GlobalStylesEmitter
      * Translate `settings.color.palette[].(slug, color)` into
      * `--wp--preset--color--{slug}: {color};` declarations.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function paletteCustomProperties(array $settings): array
+    protected function paletteCustomProperties( array $settings ): array
     {
         $palette = $settings['color']['palette'] ?? [];
 
-        if (! is_array($palette)) {
+        if ( ! is_array( $palette ) ) {
             return [];
         }
 
-        return $this->presetCustomProperties($palette, 'color', 'color');
+        return $this->presetCustomProperties( $palette, 'color', 'color' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function fontSizeCustomProperties(array $settings): array
+    protected function fontSizeCustomProperties( array $settings ): array
     {
         $sizes = $settings['typography']['fontSizes'] ?? [];
 
-        if (! is_array($sizes)) {
+        if ( ! is_array( $sizes ) ) {
             return [];
         }
 
-        return $this->presetCustomProperties($sizes, 'font-size', 'size');
+        return $this->presetCustomProperties( $sizes, 'font-size', 'size' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function fontFamilyCustomProperties(array $settings): array
+    protected function fontFamilyCustomProperties( array $settings ): array
     {
         $families = $settings['typography']['fontFamilies'] ?? [];
 
-        if (! is_array($families)) {
+        if ( ! is_array( $families ) ) {
             return [];
         }
 
-        return $this->presetCustomProperties($families, 'font-family', 'fontFamily');
+        return $this->presetCustomProperties( $families, 'font-family', 'fontFamily' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function spacingCustomProperties(array $settings): array
+    protected function spacingCustomProperties( array $settings ): array
     {
         $sizes = $settings['spacing']['spacingSizes'] ?? [];
 
-        if (! is_array($sizes)) {
+        if ( ! is_array( $sizes ) ) {
             return [];
         }
 
-        return $this->presetCustomProperties($sizes, 'spacing', 'size');
+        return $this->presetCustomProperties( $sizes, 'spacing', 'size' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function gradientCustomProperties(array $settings): array
+    protected function gradientCustomProperties( array $settings ): array
     {
         $gradients = $settings['color']['gradients'] ?? [];
 
-        if (! is_array($gradients)) {
+        if ( ! is_array( $gradients ) ) {
             return [];
         }
 
-        return $this->presetCustomProperties($gradients, 'gradient', 'gradient');
+        return $this->presetCustomProperties( $gradients, 'gradient', 'gradient' );
     }
 
     /**
@@ -353,46 +354,46 @@ class GlobalStylesEmitter
      * with `--wp--custom--`. Nested objects deepen the prefix, matching WP's
      * `wp_get_global_settings()` translation.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $settings
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function settingsCustomProperties(array $settings): array
+    protected function settingsCustomProperties( array $settings ): array
     {
         $custom = $settings['custom'] ?? [];
 
-        if (! is_array($custom)) {
+        if ( ! is_array( $custom ) ) {
             return [];
         }
 
         $declarations = [];
 
-        $this->flattenCustom($custom, '--wp--custom', $declarations);
+        $this->flattenCustom( $custom, '--wp--custom', $declarations );
 
         return $declarations;
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $node
      * @param  array<int, array{0: string, 1: string}>  $declarations
      */
-    protected function flattenCustom(array $node, string $prefix, array &$declarations): void
+    protected function flattenCustom( array $node, string $prefix, array &$declarations ): void
     {
-        foreach ($node as $key => $value) {
-            $segment = '--'.$this->kebab((string) $key);
+        foreach ( $node as $key => $value ) {
+            $segment = '--' . $this->kebab( (string) $key );
 
-            if (is_array($value) && $this->isAssoc($value)) {
-                $this->flattenCustom($value, $prefix.$segment, $declarations);
+            if ( is_array( $value ) && $this->isAssoc( $value ) ) {
+                $this->flattenCustom( $value, $prefix . $segment, $declarations );
 
                 continue;
             }
 
-            if (is_scalar($value)) {
-                $declarations[] = [$prefix.$segment, (string) $value];
+            if ( is_scalar( $value ) ) {
+                $declarations[] = [$prefix . $segment, (string) $value];
             }
         }
     }
@@ -402,33 +403,33 @@ class GlobalStylesEmitter
      * etc. — top-level styles get applied to `:root` so they cascade. Per-block /
      * per-element styles get their own selectors below.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $styles
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function stylesRootDeclarations(array $styles): array
+    protected function stylesRootDeclarations( array $styles ): array
     {
         $declarations = [];
 
-        if (isset($styles['color']['background']) && is_string($styles['color']['background'])) {
+        if ( isset( $styles['color']['background'] ) && is_string( $styles['color']['background'] ) ) {
             $declarations[] = ['background-color', $styles['color']['background']];
         }
 
-        if (isset($styles['color']['text']) && is_string($styles['color']['text'])) {
+        if ( isset( $styles['color']['text'] ) && is_string( $styles['color']['text'] ) ) {
             $declarations[] = ['color', $styles['color']['text']];
         }
 
-        if (isset($styles['typography']['fontSize']) && is_scalar($styles['typography']['fontSize'])) {
+        if ( isset( $styles['typography']['fontSize'] ) && is_scalar( $styles['typography']['fontSize'] ) ) {
             $declarations[] = ['font-size', (string) $styles['typography']['fontSize']];
         }
 
-        if (isset($styles['typography']['fontFamily']) && is_string($styles['typography']['fontFamily'])) {
+        if ( isset( $styles['typography']['fontFamily'] ) && is_string( $styles['typography']['fontFamily'] ) ) {
             $declarations[] = ['font-family', $styles['typography']['fontFamily']];
         }
 
-        if (isset($styles['typography']['lineHeight']) && is_scalar($styles['typography']['lineHeight'])) {
+        if ( isset( $styles['typography']['lineHeight'] ) && is_scalar( $styles['typography']['lineHeight'] ) ) {
             $declarations[] = ['line-height', (string) $styles['typography']['lineHeight']];
         }
 
@@ -439,17 +440,17 @@ class GlobalStylesEmitter
      * Per-element rule blocks: `styles.elements.link`, `styles.elements.heading`,
      * `styles.elements.button`. Each renders as its own selector.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<string, mixed>  $styles
      *
      * @return array<int, string>
      */
-    protected function elementStyleBlocks(array $styles): array
+    protected function elementStyleBlocks( array $styles ): array
     {
         $elements = $styles['elements'] ?? [];
 
-        if (! is_array($elements)) {
+        if ( ! is_array( $elements ) ) {
             return [];
         }
 
@@ -461,18 +462,18 @@ class GlobalStylesEmitter
 
         $blocks = [];
 
-        foreach ($selectors as $element => $selector) {
-            if (! isset($elements[$element]) || ! is_array($elements[$element])) {
+        foreach ( $selectors as $element => $selector ) {
+            if ( ! isset( $elements[ $element ] ) || ! is_array( $elements[ $element ] ) ) {
                 continue;
             }
 
-            $declarations = $this->stylesRootDeclarations($elements[$element]);
+            $declarations = $this->stylesRootDeclarations( $elements[ $element ] );
 
-            if ([] === $declarations) {
+            if ( [] === $declarations ) {
                 continue;
             }
 
-            $blocks[] = $selector.' {'."\n".$this->formatDeclarations($declarations)."\n".'}';
+            $blocks[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
         }
 
         return $blocks;
@@ -482,72 +483,72 @@ class GlobalStylesEmitter
      * Walk a preset list (`palette`, `fontSizes`, …) and emit its
      * `--wp--preset--{prefix}--{slug}: {value};` form.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<int, mixed>  $items
      *
      * @return array<int, array{0: string, 1: string}>
      */
-    protected function presetCustomProperties(array $items, string $prefix, string $valueKey): array
+    protected function presetCustomProperties( array $items, string $prefix, string $valueKey ): array
     {
         $declarations = [];
 
-        foreach ($items as $item) {
-            if (! is_array($item)) {
+        foreach ( $items as $item ) {
+            if ( ! is_array( $item ) ) {
                 continue;
             }
 
             $slug  = $item['slug'] ?? null;
-            $value = $item[$valueKey] ?? null;
+            $value = $item[ $valueKey ] ?? null;
 
-            if (! is_string($slug) || '' === $slug || ! is_scalar($value)) {
+            if ( ! is_string( $slug ) || '' === $slug || ! is_scalar( $value ) ) {
                 continue;
             }
 
-            $declarations[] = ['--wp--preset--'.$prefix.'--'.$this->kebab($slug), (string) $value];
+            $declarations[] = ['--wp--preset--' . $prefix . '--' . $this->kebab( $slug ), (string) $value];
         }
 
         return $declarations;
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<int, array{0: string, 1: string}>  $declarations
      */
-    protected function formatDeclarations(array $declarations): string
+    protected function formatDeclarations( array $declarations ): string
     {
         $lines = [];
 
-        foreach ($declarations as [$property, $value]) {
-            $lines[] = "\t".$property.': '.$value.';';
+        foreach ( $declarations as [$property, $value] ) {
+            $lines[] = "\t" . $property . ': ' . $value . ';';
         }
 
-        return implode("\n", $lines);
+        return implode( "\n", $lines );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    protected function kebab(string $value): string
+    protected function kebab( string $value ): string
     {
-        $value = preg_replace('/([a-z\d])([A-Z])/', '$1-$2', $value) ?? $value;
-        $value = strtolower($value);
+        $value = preg_replace( '/([a-z\d])([A-Z])/', '$1-$2', $value) ?? $value;
+        $value = strtolower( $value);
 
-        return str_replace('_', '-', $value);
+        return str_replace( '_', '-', $value);
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array<int|string, mixed>  $value
      */
-    protected function isAssoc(array $value): bool
+    protected function isAssoc( array $value): bool
     {
-        if ([] === $value) {
+        if ( [] === $value) {
             return false;
         }
 
-        return array_keys($value) !== range(0, count($value) - 1);
+        return array_keys( $value) !== range( 0, count( $value) - 1);
     }
 }

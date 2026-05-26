@@ -13,10 +13,10 @@
  * survive the deletion of the linked resource and continue rendering with the
  * stored `label` + `url`. Pruning dead links is deferred to V1.1.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -51,7 +51,7 @@ class MenuItem extends Model
     /**
      * Menu-item link types matching the upstream navigation block family.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public const TYPE_LINK = 'link';
 
@@ -60,7 +60,7 @@ class MenuItem extends Model
     public const TYPE_PAGE_LIST = 'page-list';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -71,12 +71,12 @@ class MenuItem extends Model
     ];
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'menu_items';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -97,34 +97,34 @@ class MenuItem extends Model
     ];
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function menu(): BelongsTo
     {
-        return $this->belongsTo(Menu::class);
+        return $this->belongsTo( Menu::class );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(self::class, 'parent_id');
+        return $this->belongsTo( self::class, 'parent_id' );
     }
 
     /**
      * Direct children of this item, ordered by `(position, id)`. The `id`
      * tiebreaker keeps ordering stable when two siblings share `position`.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function children(): HasMany
     {
-        return $this->hasMany(self::class, 'parent_id')->orderBy('position')->orderBy('id');
+        return $this->hasMany( self::class, 'parent_id' )->orderBy( 'position' )->orderBy( 'id' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, string>
      */
@@ -141,12 +141,12 @@ class MenuItem extends Model
      * consistent regardless of whether the underlying driver enforces the
      * `parent_id` foreign key constraint declared in the migration.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected static function booted(): void
     {
-        static::deleting(static function (MenuItem $item): void {
-            $item->children()->each(static fn (MenuItem $child): ?bool => $child->delete());
+        static::deleting( static function ( MenuItem $item ): void {
+            $item->children()->each( static fn ( MenuItem $child ): ?bool => $child->delete() );
         });
     }
 }

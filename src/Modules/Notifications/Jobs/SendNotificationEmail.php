@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Send Notification Email Job
@@ -55,7 +55,7 @@ class SendNotificationEmail implements ShouldQueue
      * @param  Notification  $notification  The notification to send.
      * @param  array  $userIds  Array of user IDs to send to.
      */
-    public function __construct(Notification $notification, array $userIds)
+    public function __construct( Notification $notification, array $userIds )
     {
         $this->notification = $notification;
         $this->userIds      = $userIds;
@@ -68,12 +68,12 @@ class SendNotificationEmail implements ShouldQueue
      */
     public function handle(): void
     {
-        $userModel = config('auth.providers.users.model');
-        $users     = $userModel::whereIn('id', $this->userIds)->get();
+        $userModel = config( 'auth.providers.users.model' );
+        $users     = $userModel::whereIn( 'id', $this->userIds )->get();
 
-        foreach ($users as $user) {
-            Mail::to($user->email)->send(
-                new NotificationMail($this->notification, $user),
+        foreach ( $users as $user ) {
+            Mail::to( $user->email )->send(
+                new NotificationMail( $this->notification, $user ),
             );
         }
     }

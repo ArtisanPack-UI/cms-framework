@@ -13,22 +13,22 @@
  * pattern-specific metadata (sync flag, categories, block types) that wouldn't
  * fit cleanly on the templates DTO.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class ResolvedPattern
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $slug  Storage-form slug. Theme patterns use the raw slug
      *                        (`my-pattern`); user patterns carry the `user/`
@@ -58,14 +58,15 @@ final class ResolvedPattern
         public readonly array $categories,
         public readonly array $blockTypes,
         public readonly ?BlockPattern $model,
-    ) {}
+    ) {
+    }
 
     /**
      * The integer ID of the backing DB row, or 0 for theme patterns.
      *
      * Maps to WP's `wp_id` field on pattern responses.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function wpId(): int
     {
@@ -76,7 +77,7 @@ final class ResolvedPattern
      * Convert to the array shape consumed by visual-editor's
      * {@see \ArtisanPackUI\VisualEditor\SiteEditor\Resolution\ResolvedPattern::fromArray()}.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */

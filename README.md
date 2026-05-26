@@ -11,10 +11,13 @@ A comprehensive Laravel package that provides back-end support for building a CM
 
 - **Content Management**: Content types, taxonomies, and media management
 - **Admin Interface**: Admin pages, dashboard widgets, and settings management
-- **User Management**: User roles, permissions, and profiles
+- **User Management**: User roles, permissions, and profiles (powered by `artisanpack-ui/rbac` in 2.0.0)
 - **Authentication**: Two-factor authentication with Laravel Sanctum integration
 - **Notifications**: Comprehensive notification system
-- **Themes & Plugins**: Support for themes and plugins ⚠️ **Experimental in Beta**
+- **Site Editor** *(new in 2.0.0)*: WordPress-style templates, template parts, patterns, global styles, and menus
+- **Visual Editor Integration** *(new in 2.0.0)*: Opt-in bridge to the optional `artisanpack-ui/visual-editor` package
+- **Themes**: Discovery, activation, ZIP upload, and lifecycle hooks
+- **Plugins**: Plugin system ⚠️ **Experimental**
 - **Core Updates**: Automatic update checking and management with rollback support
 - **PWA Support**: Progressive Web App features
 - **Audit Logging**: Track changes and user actions

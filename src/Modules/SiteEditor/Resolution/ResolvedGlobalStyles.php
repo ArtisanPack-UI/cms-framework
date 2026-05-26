@@ -11,22 +11,22 @@
  * Distinct from {@see ResolvedEntity} — global styles are a singleton per
  * theme with no slug keyspace, so the shape is intentionally narrower.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
 
 /**
- * @since 1.2.0
+ * @since 2.0.0
  */
 final class ResolvedGlobalStyles
 {
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $theme  Active theme slug.
      * @param  array<string, mixed>  $settings  Resolved settings tree (theme.json `settings` + variation + DB overrides merged).
@@ -42,14 +42,15 @@ final class ResolvedGlobalStyles
         public readonly ?string $variation,
         public readonly bool $hasUserCustomization,
         public readonly ?GlobalStyles $model,
-    ) {}
+    ) {
+    }
 
     /**
      * The integer ID of the backing DB row, or 0 when none exists.
      *
      * Maps to WP's `id` field on global-styles responses.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function wpId(): int
     {
@@ -61,16 +62,16 @@ final class ResolvedGlobalStyles
      * everything that influences the emitted CSS — theme, variation, and
      * the resolved settings/styles trees — so any change busts the cache.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function contentHash(): string
     {
-        return md5((string) json_encode([
+        return md5( (string) json_encode( [
             'theme'     => $this->theme,
             'variation' => $this->variation,
             'settings'  => $this->settings,
             'styles'    => $this->styles,
-        ]));
+        ] ) );
     }
 
     /**
@@ -78,7 +79,7 @@ final class ResolvedGlobalStyles
      * `\ArtisanPackUI\VisualEditor\SiteEditor\Resolution\ResolvedGlobalStyles::fromArray()`
      * for the `ap.visual-editor.global-styles` filter (singleton).
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
@@ -93,7 +94,7 @@ final class ResolvedGlobalStyles
             'wp_id'                  => $this->wpId(),
             'content_hash'           => $this->contentHash(),
             'modified_at'            => null !== $this->model
-                ? optional($this->model->updated_at)->toIso8601String()
+                ? optional( $this->model->updated_at )->toIso8601String()
                 : null,
         ];
     }

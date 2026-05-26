@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Page Factory for the CMS Framework Pages Module.
@@ -50,16 +50,16 @@ class PageFactory extends Factory
      */
     public function definition(): array
     {
-        $title = fake()->sentence(4, true);
+        $title = fake()->sentence( 4, true );
 
         return [
             'title'        => $title,
-            'slug'         => Str::slug($title),
-            'content'      => fake()->paragraphs(3, true),
+            'slug'         => Str::slug( $title ),
+            'content'      => fake()->paragraphs( 3, true ),
             'excerpt'      => fake()->paragraph(),
             'author_id'    => User::factory(),
             'parent_id'    => null,
-            'order'        => fake()->numberBetween(0, 100),
+            'order'        => fake()->numberBetween( 0, 100 ),
             'template'     => 'default',
             'status'       => ContentStatus::Published->value,
             'published_at' => now(),
@@ -81,10 +81,10 @@ class PageFactory extends Factory
      */
     public function draft(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'status'       => ContentStatus::Draft->value,
             'published_at' => null,
-        ]);
+        ] );
     }
 
     /**
@@ -98,10 +98,10 @@ class PageFactory extends Factory
      */
     public function published(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'status'       => ContentStatus::Published->value,
-            'published_at' => now()->subDays(rand(0, 365)),
-        ]);
+            'published_at' => now()->subDays( rand( 0, 365 ) ),
+        ] );
     }
 
     /**
@@ -113,11 +113,11 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withParent(int $parentId): static
+    public function withParent( int $parentId ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'parent_id' => $parentId,
-        ]);
+        ] );
     }
 
     /**
@@ -129,9 +129,9 @@ class PageFactory extends Factory
      */
     public function topLevel(): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'parent_id' => null,
-        ]);
+        ] );
     }
 
     /**
@@ -143,11 +143,11 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withTemplate(string $template): static
+    public function withTemplate( string $template ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'template' => $template,
-        ]);
+        ] );
     }
 
     /**
@@ -159,11 +159,11 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function byAuthor(int $authorId): static
+    public function byAuthor( int $authorId ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes ) => [
             'author_id' => $authorId,
-        ]);
+        ] );
     }
 
     /**
@@ -175,9 +175,9 @@ class PageFactory extends Factory
      *
      * @return static The factory instance for method chaining.
      */
-    public function withOrder(int $order): static
+    public function withOrder( int $order ): static
     {
-        return $this->state(fn (array $attributes) => [
+        return $this->state( fn ( array $attributes) => [
             'order' => $order,
         ]);
     }

@@ -13,10 +13,10 @@
  * The unprefixed user-facing slug is exposed via {@see self::userFacingSlug()}
  * and used by the REST surface.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -51,7 +51,7 @@ class BlockPattern extends Model
      * recorded here for symmetry and to keep the door open to future cached
      * theme-pattern rows without a schema change.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public const SOURCE_THEME = 'theme';
 
@@ -67,24 +67,24 @@ class BlockPattern extends Model
      * theme/user namespaces distinct in the merged `ap.visual-editor.patterns`
      * map at the visual-editor consumer side.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public const USER_SLUG_PREFIX = 'user/';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'block_patterns';
 
     /**
      * The column that stores the visual editor block tree JSON.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected string $blockContentColumn = 'block_content';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -104,11 +104,11 @@ class BlockPattern extends Model
     /**
      * The user who last authored or edited this pattern.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
+        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
     }
 
     /**
@@ -118,36 +118,36 @@ class BlockPattern extends Model
      * remains accessible via `$pattern->slug` for queries that need the
      * namespaced form.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function userFacingSlug(): string
     {
-        return self::stripUserPrefix($this->slug);
+        return self::stripUserPrefix( $this->slug );
     }
 
     /**
      * Adds the `user/` prefix to a slug if missing. Idempotent — safe to call
      * on already-prefixed values.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public static function withUserPrefix(string $slug): string
+    public static function withUserPrefix( string $slug ): string
     {
-        return str_starts_with($slug, self::USER_SLUG_PREFIX)
+        return str_starts_with( $slug, self::USER_SLUG_PREFIX )
             ? $slug
-            : self::USER_SLUG_PREFIX.$slug;
+            : self::USER_SLUG_PREFIX . $slug;
     }
 
     /**
      * Removes the `user/` prefix if present. Returns the slug unchanged when
      * no prefix is present.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public static function stripUserPrefix(string $slug): string
+    public static function stripUserPrefix( string $slug ): string
     {
-        return str_starts_with($slug, self::USER_SLUG_PREFIX)
-            ? substr($slug, strlen(self::USER_SLUG_PREFIX))
+        return str_starts_with( $slug, self::USER_SLUG_PREFIX )
+            ? substr( $slug, strlen( self::USER_SLUG_PREFIX ) )
             : $slug;
     }
 
@@ -159,19 +159,19 @@ class BlockPattern extends Model
      * because the prefix decision depends on the sibling `source` field, and
      * the cast layer cannot read peer attributes during resolution.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
-    public function setSlugAttribute(string $value): void
+    public function setSlugAttribute( string $value ): void
     {
         $source = $this->attributes['source'] ?? self::SOURCE_USER;
 
         $this->attributes['slug'] = self::SOURCE_USER === $source
-            ? self::withUserPrefix($value)
+            ? self::withUserPrefix( $value )
             : $value;
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected function casts(): array
     {

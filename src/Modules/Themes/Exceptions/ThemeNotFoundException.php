@@ -8,7 +8,7 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions;
 
@@ -36,8 +36,8 @@ class ThemeNotFoundException extends CMSFrameworkException
      *
      * @return self The exception instance.
      */
-    public static function forSlug(string $slug): self
+    public static function forSlug( string $slug ): self
     {
-        return new self("Theme with slug '{$slug}' was not found.");
+        return new self( "Theme with slug '{$slug}' was not found." );
     }
 }

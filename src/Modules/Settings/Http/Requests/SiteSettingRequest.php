@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Site Setting Request.
@@ -9,7 +9,7 @@ declare(strict_types=1);
  * endpoint. Each field is optional so the editor (and admin UI) can PATCH a
  * single attribute without re-supplying the rest.
  *
- * @since   1.2.0
+ * @since   2.0.0
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Settings\Http\Requests;
@@ -23,14 +23,14 @@ use Illuminate\Foundation\Http\FormRequest;
  * description, url, site_logo, site_icon); mapping back to the
  * underlying `site.*` setting keys is the controller's job.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 class SiteSettingRequest extends FormRequest
 {
     /**
      * Authorization is delegated to the controller's policy check.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function authorize(): bool
     {
@@ -40,7 +40,7 @@ class SiteSettingRequest extends FormRequest
     /**
      * Validation rules for the WP-shape body.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, mixed>
      */
@@ -58,18 +58,18 @@ class SiteSettingRequest extends FormRequest
     /**
      * Friendlier attribute names for validator errors.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, string>
      */
     public function attributes(): array
     {
         return [
-            'title'       => __('site title'),
-            'description' => __('site description'),
-            'url'         => __('site URL'),
-            'site_logo'   => __('site logo'),
-            'site_icon'   => __('site icon'),
+            'title'       => __( 'site title' ),
+            'description' => __( 'site description' ),
+            'url'         => __( 'site URL' ),
+            'site_logo'   => __( 'site logo' ),
+            'site_icon'   => __( 'site icon' ),
         ];
     }
 }

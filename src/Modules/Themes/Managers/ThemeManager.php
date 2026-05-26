@@ -196,7 +196,7 @@ class ThemeManager
      * The first top-level directory in the ZIP becomes the theme slug, matching
      * the Plugins module convention.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $zipPath  Absolute path to the uploaded ZIP file.
      *
@@ -411,7 +411,7 @@ class ThemeManager
      * exists, has an allowed MIME type, is within the configured size limit,
      * opens as a valid ZIP archive, and contains a theme.json manifest.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $zipPath  Absolute path to the ZIP file.
      *
@@ -478,7 +478,7 @@ class ThemeManager
      * destination falls outside the themes base directory causes extraction to
      * abort and the partial directory to be removed.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $zipPath  Absolute path to the ZIP file.
      *
@@ -665,7 +665,7 @@ class ThemeManager
      * hints (e.g. `keystone.installer`, `keystone.seed.pages[]`) and is
      * intentionally opaque to the framework.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  array  $manifest  Parsed theme.json contents.
      *

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PageCategory Model
@@ -60,7 +60,7 @@ class PageCategory extends Model
      */
     public function pages(): BelongsToMany
     {
-        return $this->belongsToMany(Page::class, 'page_category_pivots', 'page_category_id', 'page_id');
+        return $this->belongsToMany( Page::class, 'page_category_pivots', 'page_category_id', 'page_id' );
     }
 
     /**
@@ -70,7 +70,7 @@ class PageCategory extends Model
      */
     public function parent(): BelongsTo
     {
-        return $this->belongsTo(PageCategory::class, 'parent_id');
+        return $this->belongsTo( PageCategory::class, 'parent_id' );
     }
 
     /**
@@ -80,7 +80,7 @@ class PageCategory extends Model
      */
     public function children(): HasMany
     {
-        return $this->hasMany(PageCategory::class, 'parent_id');
+        return $this->hasMany( PageCategory::class, 'parent_id' );
     }
 
     /**
@@ -90,7 +90,7 @@ class PageCategory extends Model
      */
     public function getPermalinkAttribute(): string
     {
-        return url("/pages/category/{$this->slug}");
+        return url( "/pages/category/{$this->slug}" );
     }
 
     /**

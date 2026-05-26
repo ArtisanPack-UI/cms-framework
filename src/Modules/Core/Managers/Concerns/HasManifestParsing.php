@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * HasManifestParsing Trait
@@ -39,16 +39,16 @@ trait HasManifestParsing
      *
      * @return array|null Parsed manifest data, or null on error.
      */
-    protected function parseManifest(string $manifestPath): ?array
+    protected function parseManifest( string $manifestPath ): ?array
     {
-        if (! File::exists($manifestPath)) {
+        if ( ! File::exists( $manifestPath ) ) {
             return null;
         }
 
-        $content  = File::get($manifestPath);
-        $manifest = json_decode($content, true);
+        $content  = File::get( $manifestPath );
+        $manifest = json_decode( $content, true );
 
-        if (JSON_ERROR_NONE !== json_last_error()) {
+        if ( JSON_ERROR_NONE !== json_last_error() ) {
             return null;
         }
 
@@ -67,9 +67,9 @@ trait HasManifestParsing
      *
      * @return bool True if the slug is valid, false otherwise.
      */
-    protected function validateSlug(string $slug): bool
+    protected function validateSlug( string $slug ): bool
     {
-        return (bool) preg_match('/^[a-zA-Z0-9_-]+$/', $slug);
+        return (bool) preg_match( '/^[a-zA-Z0-9_-]+$/', $slug );
     }
 
     /**
@@ -85,17 +85,17 @@ trait HasManifestParsing
      *
      * @return string|null The resolved real path, or null if invalid or outside base directory.
      */
-    protected function resolveSecurePath(string $itemPath, string $basePath): ?string
+    protected function resolveSecurePath( string $itemPath, string $basePath ): ?string
     {
-        $realItemPath = realpath($itemPath);
+        $realItemPath = realpath( $itemPath );
 
-        if (false === $realItemPath) {
+        if ( false === $realItemPath ) {
             return null;
         }
 
-        $realBasePath = realpath($basePath);
+        $realBasePath = realpath( $basePath );
 
-        if (false === $realBasePath || 0 !== strpos($realItemPath, $realBasePath.DIRECTORY_SEPARATOR)) {
+        if ( false === $realBasePath || 0 !== strpos( $realItemPath, $realBasePath . DIRECTORY_SEPARATOR ) ) {
             return null;
         }
 

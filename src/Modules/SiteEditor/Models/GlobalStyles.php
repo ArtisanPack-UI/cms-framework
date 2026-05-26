@@ -8,10 +8,10 @@
  * created lazily on the first user write. Switching themes leaves prior
  * rows untouched (data preservation per plan 14 §5.5).
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models;
 
@@ -36,12 +36,12 @@ class GlobalStyles extends Model
     use HasFactory;
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     protected $table = 'global_styles';
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @var array<int, string>
      */
@@ -55,15 +55,15 @@ class GlobalStyles extends Model
     ];
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      */
     public function author(): BelongsTo
     {
-        return $this->belongsTo(config('artisanpack.cms-framework.user_model'), 'author_id');
+        return $this->belongsTo( config( 'artisanpack.cms-framework.user_model' ), 'author_id' );
     }
 
     /**
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @return array<string, string>
      */

@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * Taxonomy Resource for the CMS Framework ContentTypes Module.
@@ -38,20 +38,20 @@ class TaxonomyResource extends JsonResource
      *
      * @return array<string, mixed> The transformed taxonomy data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'                => $this->id,
             'name'              => $this->name,
             'slug'              => $this->slug,
             'content_type_slug' => $this->content_type_slug,
-            'content_type'      => $this->whenLoaded('contentType', function () {
+            'content_type'      => $this->whenLoaded( 'contentType', function () {
                 return [
                     'id'   => $this->contentType->id,
                     'name' => $this->contentType->name,
                     'slug' => $this->contentType->slug,
                 ];
-            }),
+            } ),
             'description'   => $this->description,
             'hierarchical'  => $this->hierarchical,
             'show_in_admin' => $this->show_in_admin,

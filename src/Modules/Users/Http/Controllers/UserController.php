@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * User Controller for the CMS Framework Users Module.
@@ -35,7 +35,7 @@ use Throwable;
  *
  * @since 1.0.0
  */
-#[Group('Users', weight: 10)]
+#[Group( 'Users', weight: 10 )]
 class UserController extends Controller
 {
     use HasIncludableRelationships;
@@ -68,13 +68,13 @@ class UserController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of user resources.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index( Request $request ): AnonymousResourceCollection
     {
-        $userModel = config('artisanpack.cms-framework.user_model');
-        $includes  = $this->getRequestedIncludes($request);
-        $users     = $userModel::with($includes)->paginate(15);
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $includes  = $this->getRequestedIncludes( $request );
+        $users     = $userModel::with( $includes )->paginate( 15 );
 
-        return UserResource::collection($users);
+        return UserResource::collection( $users );
     }
 
     /**
@@ -89,22 +89,22 @@ class UserController extends Controller
      *
      * @return JsonResponse The created user resource with a 201 status code.
      */
-    public function store(Request $request): JsonResponse
+    public function store( Request $request ): JsonResponse
     {
-        $userModel = config('artisanpack.cms-framework.user_model');
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
 
-        $validated = $request->validate([
+        $validated = $request->validate( [
             'name'     => 'required|string|max:255',
             'email'    => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8',
-        ]);
+        ] );
 
-        $validated['password'] = bcrypt($validated['password']);
+        $validated['password'] = bcrypt( $validated['password'] );
 
-        $user = $userModel::create($validated);
-        $user->load($this->getRequestedIncludes($request));
+        $user = $userModel::create( $validated );
+        $user->load( $this->getRequestedIncludes( $request ) );
 
-        return (new UserResource($user))->response()->setStatusCode(201);
+        return (new UserResource( $user ))->response()->setStatusCode( 201 );
     }
 
     /**
@@ -119,13 +119,13 @@ class UserController extends Controller
      *
      * @return UserResource The user resource with loaded roles.
      */
-    public function show(Request $request, string|int $id): UserResource
+    public function show( Request $request, string|int $id ): UserResource
     {
-        $userModel = config('artisanpack.cms-framework.user_model');
-        $includes  = $this->getRequestedIncludes($request);
-        $user      = $userModel::with($includes)->findOrFail($id);
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $includes  = $this->getRequestedIncludes( $request );
+        $user      = $userModel::with( $includes )->findOrFail( $id );
 
-        return new UserResource($user);
+        return new UserResource( $user );
     }
 
     /**
@@ -142,24 +142,24 @@ class UserController extends Controller
      *
      * @return UserResource The updated user resource with loaded roles.
      */
-    public function update(Request $request, string|int $id): UserResource
+    public function update( Request $request, string|int $id ): UserResource
     {
-        $userModel = config('artisanpack.cms-framework.user_model');
-        $user      = $userModel::findOrFail($id);
-        $validated = $request->validate([
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
+        $validated = $request->validate( [
             'name'     => 'sometimes|required|string|max:255',
-            'email'    => 'sometimes|required|string|email|max:255|unique:users,email,'.$user->id,
+            'email'    => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
             'password' => 'sometimes|required|string|min:8',
-        ]);
+        ] );
 
-        if (isset($validated['password'])) {
-            $validated['password'] = bcrypt($validated['password']);
+        if ( isset( $validated['password'] ) ) {
+            $validated['password'] = bcrypt( $validated['password'] );
         }
 
-        $user->update($validated);
-        $user->load($this->getRequestedIncludes($request));
+        $user->update( $validated );
+        $user->load( $this->getRequestedIncludes( $request ) );
 
-        return new UserResource($user);
+        return new UserResource( $user );
     }
 
     /**
@@ -174,10 +174,10 @@ class UserController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy(string|int $id): Response
+    public function destroy( string|int $id ): Response
     {
-        $userModel = config('artisanpack.cms-framework.user_model');
-        $user      = $userModel::findOrFail($id);
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $user      = $userModel::findOrFail( $id );
         $user->delete();
 
         return response()->noContent();
@@ -195,53 +195,53 @@ class UserController extends Controller
      *
      * @return JsonResponse Summary with processed count, failed count, and error details.
      */
-    public function bulk(BulkUserRequest $request): JsonResponse
+    public function bulk( BulkUserRequest $request ): JsonResponse
     {
-        $action     = $request->validated('action');
-        $ids        = $request->validated('ids');
-        $permission = $this->getBulkPermission($action);
+        $action     = $request->validated( 'action' );
+        $ids        = $request->validated( 'ids' );
+        $permission = $this->getBulkPermission( $action );
         $processed  = 0;
         $errors     = [];
 
-        $userModel = config('artisanpack.cms-framework.user_model');
-        $users     = $userModel::whereIn('id', $ids)->get()->keyBy('id');
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $users     = $userModel::whereIn( 'id', $ids )->get()->keyBy( 'id' );
 
-        foreach ($ids as $id) {
-            $user = $users->get($id);
+        foreach ( $ids as $id ) {
+            $user = $users->get( $id );
 
-            if (null === $user) {
-                $errors[$id] = __('User not found.');
+            if ( null === $user ) {
+                $errors[ $id ] = __( 'User not found.' );
 
                 continue;
             }
 
             // Prevent users from performing bulk actions on themselves
-            if ($request->user() && $user->id === $request->user()->id) {
-                $errors[$id] = __('You cannot perform bulk actions on your own account.');
+            if ( $request->user() && $user->id === $request->user()->id ) {
+                $errors[ $id ] = __( 'You cannot perform bulk actions on your own account.' );
 
                 continue;
             }
 
-            if (! Gate::forUser($request->user())->allows($permission, $user)) {
-                $errors[$id] = __('You do not have permission to :action this user.', ['action' => $action]);
+            if ( ! Gate::forUser( $request->user() )->allows( $permission, $user ) ) {
+                $errors[ $id ] = __( 'You do not have permission to :action this user.', ['action' => $action] );
 
                 continue;
             }
 
             try {
-                $this->executeBulkAction($action, $user);
+                $this->executeBulkAction( $action, $user );
                 $processed++;
-            } catch (Throwable $e) {
-                report($e);
-                $errors[$id] = __('Failed to :action user.', ['action' => $action]);
+            } catch ( Throwable $e ) {
+                report( $e );
+                $errors[ $id ] = __( 'Failed to :action user.', ['action' => $action] );
             }
         }
 
-        return response()->json([
+        return response()->json( [
             'processed' => $processed,
-            'failed'    => count($errors),
+            'failed'    => count( $errors ),
             'errors'    => $errors,
-        ]);
+        ] );
     }
 
     /**
@@ -253,12 +253,12 @@ class UserController extends Controller
      *
      * @return string The Gate permission name.
      */
-    protected function getBulkPermission(string $action): string
+    protected function getBulkPermission( string $action ): string
     {
-        return match ($action) {
-            'delete'              => 'users.delete',
+        return match ( $action ) {
+            'delete'                 => 'users.delete',
             'activate', 'deactivate' => 'users.manage',
-            default               => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
+            default                  => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action] ) ),
         };
     }
 
@@ -270,13 +270,13 @@ class UserController extends Controller
      * @param  string  $action  The bulk action to perform.
      * @param  mixed  $user  The user model instance to perform the action on.
      */
-    protected function executeBulkAction(string $action, mixed $user): void
+    protected function executeBulkAction( string $action, mixed $user ): void
     {
-        match ($action) {
+        match ( $action ) {
             'delete'     => $user->delete(),
-            'activate'   => $user->update(['email_verified_at' => now()]),
-            'deactivate' => $user->update(['email_verified_at' => null]),
-            default      => throw new InvalidArgumentException(__('Unsupported bulk action: :action', ['action' => $action])),
+            'activate'   => $user->update( ['email_verified_at' => now()]),
+            'deactivate' => $user->update( ['email_verified_at' => null]),
+            default      => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action])),
         };
     }
 }

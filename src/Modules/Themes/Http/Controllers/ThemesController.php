@@ -107,7 +107,7 @@ class ThemesController extends Controller
      *
      * Endpoint: POST /v1/themes
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  Request  $request  Incoming request carrying the uploaded theme_zip.
      *
@@ -172,8 +172,8 @@ class ThemesController extends Controller
             report( $e );
 
             return response()->json( [
-                'message' => __( 'An unexpected error occurred while activating the theme.'),
-            ], 500);
+                'message' => __( 'An unexpected error occurred while activating the theme.' ),
+            ], 500 );
         }
     }
 }

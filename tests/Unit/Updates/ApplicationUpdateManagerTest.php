@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -34,16 +34,16 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
         $result = $manager->checkForUpdate();
 
-        $this->assertInstanceOf(UpdateInfo::class, $result);
-        $this->assertTrue($result->hasUpdate());
-        $this->assertEquals('2.0.0', $result->latestVersion);
+        $this->assertInstanceOf( UpdateInfo::class, $result );
+        $this->assertTrue( $result->hasUpdate() );
+        $this->assertEquals( '2.0.0', $result->latestVersion );
     }
 
     /**
@@ -53,12 +53,12 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_throws_exception_when_no_update_url(): void
     {
-        config(['cms.updates.update_source_url' => null]);
+        config( ['cms.updates.update_source_url' => null] );
 
         $manager = new ApplicationUpdateManager;
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('Update URL not configured');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'Update URL not configured' );
 
         $manager->checkForUpdate();
     }
@@ -78,13 +78,13 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('No update available');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'No update available' );
 
         $manager->performUpdate();
     }
@@ -98,13 +98,13 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->expects($this->once())->method('clearCache');
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->expects( $this->once() )->method( 'clearCache' );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
         $manager->clearCache();
 
-        $this->assertTrue(true); // If we get here, the test passed
+        $this->assertTrue( true ); // If we get here, the test passed
     }
 
     /**
@@ -116,21 +116,21 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $reflection = new ReflectionClass($manager);
-        $method     = $reflection->getMethod('isPathExcluded');
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'isPathExcluded' );
+        $method->setAccessible( true );
 
         // Test exact match
-        $this->assertTrue($method->invoke($manager, 'storage/logs/test.log', ['storage']));
+        $this->assertTrue( $method->invoke( $manager, 'storage/logs/test.log', ['storage'] ) );
 
         // Test non-match
-        $this->assertFalse($method->invoke($manager, 'app/Models/User.php', ['storage']));
+        $this->assertFalse( $method->invoke( $manager, 'app/Models/User.php', ['storage'] ) );
 
         // Test wildcard match
-        $this->assertTrue($method->invoke($manager, 'bootstrap/cache/config.php', ['bootstrap/cache/*.php']));
+        $this->assertTrue( $method->invoke( $manager, 'bootstrap/cache/config.php', ['bootstrap/cache/*.php'] ) );
 
         // Test no match with wildcard
-        $this->assertFalse($method->invoke($manager, 'bootstrap/app.php', ['bootstrap/cache/*.php']));
+        $this->assertFalse( $method->invoke( $manager, 'bootstrap/app.php', ['bootstrap/cache/*.php'] ) );
     }
 
     /**
@@ -142,10 +142,10 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('Backup not found');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'Backup not found' );
 
-        $manager->rollback('/nonexistent/backup.zip');
+        $manager->rollback( '/nonexistent/backup.zip' );
     }
 
     /**
@@ -163,14 +163,14 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
         $result = $manager->checkForUpdate();
 
-        $this->assertEquals('2.0.0', $result->latestVersion);
+        $this->assertEquals( '2.0.0', $result->latestVersion );
     }
 
     /**
@@ -182,20 +182,20 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'cmsfw-update-');
-        file_put_contents($zipPath, 'fake zip contents');
+        $zipPath = tempnam( sys_get_temp_dir(), 'cmsfw-update-' );
+        file_put_contents( $zipPath, 'fake zip contents' );
 
         try {
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('verifyChecksum');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyChecksum' );
+            $method->setAccessible( true );
 
-            $this->expectException(UpdateException::class);
-            $this->expectExceptionMessage('Checksum mismatch');
+            $this->expectException( UpdateException::class );
+            $this->expectExceptionMessage( 'Checksum mismatch' );
 
-            $method->invoke($manager, $zipPath, str_repeat('0', 64));
+            $method->invoke( $manager, $zipPath, str_repeat( '0', 64 ) );
         } finally {
-            @unlink($zipPath);
+            @unlink( $zipPath );
         }
     }
 
@@ -208,19 +208,19 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'cmsfw-update-');
-        file_put_contents($zipPath, 'matching zip contents');
+        $zipPath = tempnam( sys_get_temp_dir(), 'cmsfw-update-' );
+        file_put_contents( $zipPath, 'matching zip contents' );
 
         try {
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('verifyChecksum');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyChecksum' );
+            $method->setAccessible( true );
 
-            $method->invoke($manager, $zipPath, hash_file('sha256', $zipPath));
+            $method->invoke( $manager, $zipPath, hash_file( 'sha256', $zipPath ) );
 
-            $this->assertTrue(true); // No exception means success.
+            $this->assertTrue( true ); // No exception means success.
         } finally {
-            @unlink($zipPath);
+            @unlink( $zipPath );
         }
     }
 
@@ -231,7 +231,7 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_maybe_verify_checksum_logs_warning_when_sha256_missing(): void
     {
-        config(['cms.updates.verify_checksum' => true]);
+        config( ['cms.updates.verify_checksum' => true] );
 
         $manager = new ApplicationUpdateManager;
 
@@ -243,19 +243,19 @@ class ApplicationUpdateManagerTest extends TestCase
             metadata: ['source' => 'gitlab'],
         );
 
-        Log::shouldReceive('warning')
+        Log::shouldReceive( 'warning' )
             ->once()
-            ->withArgs(function (string $message, array $context): bool {
-                return str_contains($message, 'Skipping update integrity verification')
-                    && '2.0.0' === ($context['target_version'] ?? null)
-                    && 'gitlab' === ($context['source'] ?? null);
-            });
+            ->withArgs( function ( string $message, array $context ): bool {
+                return str_contains( $message, 'Skipping update integrity verification' )
+                    && '2.0.0' === ( $context['target_version'] ?? null )
+                    && 'gitlab' === ( $context['source'] ?? null );
+            } );
 
-        $reflection = new ReflectionClass($manager);
-        $method     = $reflection->getMethod('maybeVerifyChecksum');
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
+        $method->setAccessible( true );
 
-        $method->invoke($manager, '/does/not/matter.zip', $updateInfo, '2.0.0');
+        $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
     }
 
     /**
@@ -265,7 +265,7 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_maybe_verify_checksum_is_silent_when_disabled(): void
     {
-        config(['cms.updates.verify_checksum' => false]);
+        config( ['cms.updates.verify_checksum' => false] );
 
         $manager = new ApplicationUpdateManager;
 
@@ -276,13 +276,13 @@ class ApplicationUpdateManagerTest extends TestCase
             sha256: null,
         );
 
-        Log::shouldReceive('warning')->never();
+        Log::shouldReceive( 'warning' )->never();
 
-        $reflection = new ReflectionClass($manager);
-        $method     = $reflection->getMethod('maybeVerifyChecksum');
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
+        $method->setAccessible( true );
 
-        $method->invoke($manager, '/does/not/matter.zip', $updateInfo, '2.0.0');
+        $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
     }
 
     /**
@@ -292,15 +292,15 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment($app): void
+    protected function defineEnvironment( $app ): void
     {
-        $app['config']->set('cms.updates.update_source_url', 'https://github.com/test/repo');
-        $app['config']->set('cms.updates.backup_enabled', true);
-        $app['config']->set('cms.updates.backup_path', 'backups/application');
-        $app['config']->set('cms.updates.backup_retention_days', 30);
-        $app['config']->set('cms.updates.verify_checksum', false); // Disable for tests
-        $app['config']->set('cms.updates.composer_install_command', 'composer install --no-dev');
-        $app['config']->set('cms.updates.composer_timeout', 600);
-        $app['config']->set('cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
+        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
+        $app['config']->set( 'cms.updates.backup_enabled', true );
+        $app['config']->set( 'cms.updates.backup_path', 'backups/application' );
+        $app['config']->set( 'cms.updates.backup_retention_days', 30);
+        $app['config']->set( 'cms.updates.verify_checksum', false); // Disable for tests
+        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev');
+        $app['config']->set( 'cms.updates.composer_timeout', 600);
+        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
     }
 }

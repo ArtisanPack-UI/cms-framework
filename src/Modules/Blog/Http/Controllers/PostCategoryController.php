@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PostCategory Controller for the CMS Framework Blog Module.
@@ -33,7 +33,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Post Categories', weight: 2)]
+#[Group( 'Post Categories', weight: 2 )]
 class PostCategoryController extends Controller
 {
     use AuthorizesRequests;
@@ -66,13 +66,13 @@ class PostCategoryController extends Controller
      *
      * @return AnonymousResourceCollection The paginated collection of category resources.
      */
-    public function index(Request $request): AnonymousResourceCollection
+    public function index( Request $request ): AnonymousResourceCollection
     {
-        $this->authorize('viewAny', PostCategory::class);
+        $this->authorize( 'viewAny', PostCategory::class );
 
-        $categories = PostCategory::with($this->getRequestedIncludes($request))->orderBy('order')->paginate(15);
+        $categories = PostCategory::with( $this->getRequestedIncludes( $request ) )->orderBy( 'order' )->paginate( 15 );
 
-        return PostCategoryResource::collection($categories);
+        return PostCategoryResource::collection( $categories );
     }
 
     /**
@@ -87,15 +87,15 @@ class PostCategoryController extends Controller
      *
      * @return JsonResponse The JSON response containing the created category resource.
      */
-    public function store(PostCategoryRequest $request): JsonResponse
+    public function store( PostCategoryRequest $request ): JsonResponse
     {
-        $this->authorize('create', PostCategory::class);
+        $this->authorize( 'create', PostCategory::class );
 
         $validated = $request->validated();
-        $category  = PostCategory::create($validated);
-        $category->load($this->getRequestedIncludes($request));
+        $category  = PostCategory::create( $validated );
+        $category->load( $this->getRequestedIncludes( $request ) );
 
-        return response()->json(new PostCategoryResource($category), 201);
+        return response()->json( new PostCategoryResource( $category ), 201 );
     }
 
     /**
@@ -109,14 +109,14 @@ class PostCategoryController extends Controller
      *
      * @return PostCategoryResource The category resource.
      */
-    public function show(Request $request, int $id): PostCategoryResource
+    public function show( Request $request, int $id ): PostCategoryResource
     {
-        $category = PostCategory::findOrFail($id);
-        $this->authorize('view', $category);
+        $category = PostCategory::findOrFail( $id );
+        $this->authorize( 'view', $category );
 
-        $category->load($this->getRequestedIncludes($request));
+        $category->load( $this->getRequestedIncludes( $request ) );
 
-        return new PostCategoryResource($category);
+        return new PostCategoryResource( $category );
     }
 
     /**
@@ -132,16 +132,16 @@ class PostCategoryController extends Controller
      *
      * @return PostCategoryResource The updated category resource.
      */
-    public function update(PostCategoryRequest $request, int $id): PostCategoryResource
+    public function update( PostCategoryRequest $request, int $id ): PostCategoryResource
     {
-        $category = PostCategory::findOrFail($id);
-        $this->authorize('update', $category);
+        $category = PostCategory::findOrFail( $id );
+        $this->authorize( 'update', $category );
 
         $validated = $request->validated();
-        $category->update($validated);
-        $category->load($this->getRequestedIncludes($request));
+        $category->update( $validated );
+        $category->load( $this->getRequestedIncludes( $request ) );
 
-        return new PostCategoryResource($category);
+        return new PostCategoryResource( $category );
     }
 
     /**
@@ -156,10 +156,10 @@ class PostCategoryController extends Controller
      *
      * @return Response A response with 204 status code.
      */
-    public function destroy(int $id): Response
+    public function destroy( int $id ): Response
     {
-        $category = PostCategory::findOrFail($id);
-        $this->authorize('delete', $category);
+        $category = PostCategory::findOrFail( $id );
+        $this->authorize( 'delete', $category);
 
         $category->delete();
 

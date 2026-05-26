@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PostTag Policy for the CMS Framework Blog Module.
@@ -35,7 +35,7 @@ class PostTagPolicy
      *
      * @return bool True if the user can view post tags, false otherwise.
      */
-    public function viewAny(Authenticatable $user): bool
+    public function viewAny( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view any post tags.
@@ -48,7 +48,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('postTags.viewAny', 'postTags.manage'));
+        return $user->can( applyFilters( 'postTags.viewAny', 'postTags.manage' ) );
     }
 
     /**
@@ -61,7 +61,7 @@ class PostTagPolicy
      *
      * @return bool True if the user can view the tag, false otherwise.
      */
-    public function view(Authenticatable $user, PostTag $tag): bool
+    public function view( Authenticatable $user, PostTag $tag ): bool
     {
         /**
          * Filters the capability used to determine whether a user can view a post tag.
@@ -75,7 +75,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('postTags.view', 'postTags.manage', $tag));
+        return $user->can( applyFilters( 'postTags.view', 'postTags.manage', $tag ) );
     }
 
     /**
@@ -87,7 +87,7 @@ class PostTagPolicy
      *
      * @return bool True if the user can create post tags, false otherwise.
      */
-    public function create(Authenticatable $user): bool
+    public function create( Authenticatable $user ): bool
     {
         /**
          * Filters the capability used to determine whether a user can create post tags.
@@ -100,7 +100,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('postTags.create', 'postTags.manage'));
+        return $user->can( applyFilters( 'postTags.create', 'postTags.manage' ) );
     }
 
     /**
@@ -113,7 +113,7 @@ class PostTagPolicy
      *
      * @return bool True if the user can update the tag, false otherwise.
      */
-    public function update(Authenticatable $user, PostTag $tag): bool
+    public function update( Authenticatable $user, PostTag $tag ): bool
     {
         /**
          * Filters the capability used to determine whether a user can update post tags.
@@ -127,7 +127,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('postTags.update', 'postTags.manage', $tag));
+        return $user->can( applyFilters( 'postTags.update', 'postTags.manage', $tag ) );
     }
 
     /**
@@ -140,7 +140,7 @@ class PostTagPolicy
      *
      * @return bool True if the user can delete the tag, false otherwise.
      */
-    public function delete(Authenticatable $user, PostTag $tag): bool
+    public function delete( Authenticatable $user, PostTag $tag ): bool
     {
         /**
          * Filters the capability used to determine whether a user can delete post tags.
@@ -154,6 +154,6 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can(applyFilters('postTags.delete', 'postTags.manage', $tag));
+        return $user->can( applyFilters( 'postTags.delete', 'postTags.manage', $tag));
     }
 }

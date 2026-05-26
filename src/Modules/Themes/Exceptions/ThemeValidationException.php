@@ -5,7 +5,7 @@
  *
  * Exception thrown when a theme ZIP or manifest fails validation.
  *
- * @since      1.2.0
+ * @since      2.0.0
  */
 
 declare( strict_types=1 );
@@ -21,14 +21,14 @@ use ArtisanPackUI\CMSFramework\Exceptions\CMSFrameworkException;
  * (MIME type, size, integrity, missing manifest) or when the parsed
  * theme.json manifest does not satisfy the required schema.
  *
- * @since 1.2.0
+ * @since 2.0.0
  */
 class ThemeValidationException extends CMSFrameworkException
 {
     /**
      * Creates a new exception for an invalid theme manifest.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $reason  Human-readable description of the failure.
      *
@@ -42,7 +42,7 @@ class ThemeValidationException extends CMSFrameworkException
     /**
      * Creates a new exception for an invalid theme ZIP file.
      *
-     * @since 1.2.0
+     * @since 2.0.0
      *
      * @param  string  $reason  Human-readable description of the failure.
      *

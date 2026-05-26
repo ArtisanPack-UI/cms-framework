@@ -1,16 +1,16 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidationResult;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 
-beforeEach(function (): void {
+beforeEach( function (): void {
     $this->validator = new WpThemeJsonValidator;
-});
+} );
 
-describe('pre-Phase-H themes (cms-framework manifest fields only)', function (): void {
-    it('passes a manifest carrying only legacy fields', function (): void {
+describe( 'pre-Phase-H themes (cms-framework manifest fields only)', function (): void {
+    it( 'passes a manifest carrying only legacy fields', function (): void {
         $manifest = [
             'name'        => 'Digital Shopfront',
             'slug'        => 'digital-shopfront',
@@ -20,23 +20,23 @@ describe('pre-Phase-H themes (cms-framework manifest fields only)', function ():
             'screenshot'  => 'screenshot.png',
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result)
-            ->toBeInstanceOf(WpThemeJsonValidationResult::class)
-            ->and($result->valid)->toBeTrue()
-            ->and($result->offendingKey)->toBeNull();
-    });
+        expect( $result )
+            ->toBeInstanceOf( WpThemeJsonValidationResult::class )
+            ->and( $result->valid )->toBeTrue()
+            ->and( $result->offendingKey )->toBeNull();
+    } );
 
-    it('passes an empty manifest', function (): void {
-        $result = $this->validator->validate([]);
+    it( 'passes an empty manifest', function (): void {
+        $result = $this->validator->validate( [] );
 
-        expect($result->valid)->toBeTrue();
-    });
-});
+        expect( $result->valid )->toBeTrue();
+    } );
+} );
 
-describe('WP-shape keys', function (): void {
-    it('accepts a manifest with a full WP-shape settings + styles block', function (): void {
+describe( 'WP-shape keys', function (): void {
+    it( 'accepts a manifest with a full WP-shape settings + styles block', function (): void {
         $manifest = [
             'name'     => 'Phase H Theme',
             'slug'     => 'phase-h',
@@ -69,13 +69,13 @@ describe('WP-shape keys', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeTrue()
-            ->and($result->offendingKey)->toBeNull();
-    });
+        expect( $result->valid )->toBeTrue()
+            ->and( $result->offendingKey )->toBeNull();
+    } );
 
-    it('accepts customTemplates, templateParts, and patterns arrays', function (): void {
+    it( 'accepts customTemplates, templateParts, and patterns arrays', function (): void {
         $manifest = [
             'slug'            => 'phase-h',
             'customTemplates' => [
@@ -94,12 +94,12 @@ describe('WP-shape keys', function (): void {
             'patterns' => ['my-namespace/cta'],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeTrue();
-    });
+        expect( $result->valid )->toBeTrue();
+    } );
 
-    it('rejects an invalid settings.color.palette entry and names the offending key', function (): void {
+    it( 'rejects an invalid settings.color.palette entry and names the offending key', function (): void {
         $manifest = [
             'slug'     => 'broken',
             'settings' => [
@@ -110,28 +110,28 @@ describe('WP-shape keys', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toContain('settings')
-            ->and($result->message)->not->toBeEmpty();
-    });
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toContain( 'settings' )
+            ->and( $result->message )->not->toBeEmpty();
+    } );
 
-    it('rejects when styles is the wrong type', function (): void {
+    it( 'rejects when styles is the wrong type', function (): void {
         $manifest = [
             'slug'   => 'broken-styles',
             'styles' => 'not-an-object',
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->not->toBeNull();
-    });
-});
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->not->toBeNull();
+    } );
+} );
 
-describe('menus.locations cms-framework extension', function (): void {
-    it('accepts a flat object of string keys and string labels', function (): void {
+describe( 'menus.locations cms-framework extension', function (): void {
+    it( 'accepts a flat object of string keys and string labels', function (): void {
         $manifest = [
             'slug'  => 'with-menus',
             'menus' => [
@@ -142,47 +142,47 @@ describe('menus.locations cms-framework extension', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeTrue();
-    });
+        expect( $result->valid )->toBeTrue();
+    } );
 
-    it('accepts menus without locations (empty extension)', function (): void {
+    it( 'accepts menus without locations (empty extension)', function (): void {
         $manifest = [
             'slug'  => 'with-empty-menus',
             'menus' => [],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeTrue();
-    });
+        expect( $result->valid )->toBeTrue();
+    } );
 
-    it('rejects menus when not an object', function (): void {
+    it( 'rejects menus when not an object', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',
             'menus' => 'not-an-object',
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toBe('menus');
-    });
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' );
+    } );
 
-    it('rejects menus when it is a list (numeric keys)', function (): void {
+    it( 'rejects menus when it is a list (numeric keys)', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',
             'menus' => ['primary', 'footer'],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toBe('menus');
-    });
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' );
+    } );
 
-    it('rejects unknown sibling keys under menus', function (): void {
+    it( 'rejects unknown sibling keys under menus', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',
             'menus' => [
@@ -191,14 +191,14 @@ describe('menus.locations cms-framework extension', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toBe('menus')
-            ->and($result->message)->toContain('colors');
-    });
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' )
+            ->and( $result->message )->toContain( 'colors' );
+    } );
 
-    it('rejects menus with only unknown keys (no locations)', function (): void {
+    it( 'rejects menus with only unknown keys (no locations)', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',
             'menus' => [
@@ -206,14 +206,14 @@ describe('menus.locations cms-framework extension', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toBe('menus')
-            ->and($result->message)->toContain('fonts');
-    });
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus' )
+            ->and( $result->message )->toContain( 'fonts' );
+    } );
 
-    it('rejects menus.locations when it is a list (numeric keys)', function (): void {
+    it( 'rejects menus.locations when it is a list (numeric keys)', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',
             'menus' => [
@@ -221,13 +221,13 @@ describe('menus.locations cms-framework extension', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toBe('menus.locations');
-    });
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus.locations' );
+    } );
 
-    it('rejects a menus.locations entry whose label is not a string', function (): void {
+    it( 'rejects a menus.locations entry whose label is not a string', function (): void {
         $manifest = [
             'slug'  => 'broken-menus',
             'menus' => [
@@ -237,37 +237,37 @@ describe('menus.locations cms-framework extension', function (): void {
             ],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest );
 
-        expect($result->valid)->toBeFalse()
-            ->and($result->offendingKey)->toBe('menus.locations.primary');
-    });
-});
+        expect( $result->valid )->toBeFalse()
+            ->and( $result->offendingKey )->toBe( 'menus.locations.primary' );
+    } );
+} );
 
-describe('configurable schema version', function (): void {
-    it('throws when the configured schema version has no bundled file', function (): void {
-        config()->set('cms.themes.wpThemeJsonSchemaVersion', '99');
+describe( 'configurable schema version', function (): void {
+    it( 'throws when the configured schema version has no bundled file', function (): void {
+        config()->set( 'cms.themes.wpThemeJsonSchemaVersion', '99' );
 
         $manifest = [
             'slug'     => 'any',
             'settings' => ['color' => ['background' => true]],
         ];
 
-        expect(fn () => $this->validator->validate($manifest))
-            ->toThrow(RuntimeException::class, 'wp-theme-json-v99');
-    });
+        expect( fn () => $this->validator->validate( $manifest ) )
+            ->toThrow( RuntimeException::class, 'wp-theme-json-v99' );
+    } );
 
-    it('reads the configured version when validating WP-shape keys', function (): void {
+    it( 'reads the configured version when validating WP-shape keys', function (): void {
         // Default is '3'. Re-asserting it is loadable is sufficient.
-        config()->set('cms.themes.wpThemeJsonSchemaVersion', '3');
+        config()->set( 'cms.themes.wpThemeJsonSchemaVersion', '3');
 
         $manifest = [
             'slug'     => 'configurable',
             'settings' => ['appearanceTools' => true],
         ];
 
-        $result = $this->validator->validate($manifest);
+        $result = $this->validator->validate( $manifest);
 
-        expect($result->valid)->toBeTrue();
+        expect( $result->valid)->toBeTrue();
     });
 });

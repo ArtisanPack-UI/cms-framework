@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
@@ -48,7 +48,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
         protected string $url,
         protected string $currentVersion,
     ) {
-        $this->parseUrl($url);
+        $this->parseUrl( $url );
     }
 
     /**
@@ -60,9 +60,9 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return bool True if URL is a GitLab repository
      */
-    public function supports(string $url): bool
+    public function supports( string $url ): bool
     {
-        $host = parse_url($url, PHP_URL_HOST);
+        $host = parse_url( $url, PHP_URL_HOST );
 
         return 'gitlab.com' === $host;
     }
@@ -80,33 +80,33 @@ class GitLabUpdateSource implements UpdateSourceInterface
     {
         $releases = $this->fetchReleases();
 
-        if (empty($releases)) {
-            throw UpdateException::versionCheckFailed('No releases found on GitLab');
+        if ( empty( $releases ) ) {
+            throw UpdateException::versionCheckFailed( 'No releases found on GitLab' );
         }
 
         // Filter out prereleases and get latest stable
-        $latest = collect($releases)
-            ->filter(fn ($release) => empty($release['upcoming_release']))
+        $latest = collect( $releases )
+            ->filter( fn ( $release ) => empty( $release['upcoming_release'] ) )
             ->first();
 
-        if (! $latest) {
-            throw UpdateException::versionCheckFailed('No stable releases found');
+        if ( ! $latest ) {
+            throw UpdateException::versionCheckFailed( 'No stable releases found' );
         }
 
-        $downloadUrl = $this->resolveDownloadUrl($latest);
+        $downloadUrl = $this->resolveDownloadUrl( $latest );
 
-        $sha256 = $this->extractChecksum($latest);
+        $sha256 = $this->extractChecksum( $latest );
 
-        if (null === $sha256) {
-            Log::warning('GitLab release does not advertise a SHA-256 checksum; update integrity verification will be skipped.', [
+        if ( null === $sha256 ) {
+            Log::warning( 'GitLab release does not advertise a SHA-256 checksum; update integrity verification will be skipped.', [
                 'project_id' => $this->projectId,
                 'tag_name'   => $latest['tag_name'] ?? null,
-            ]);
+            ] );
         }
 
         return new UpdateInfo(
             currentVersion: $this->currentVersion,
-            latestVersion: ltrim($latest['tag_name'], 'v'),
+            latestVersion: ltrim( $latest['tag_name'], 'v' ),
             downloadUrl: $downloadUrl,
             changelog: $latest['description'] ?? null,
             releaseDate: $latest['created_at'] ?? null,
@@ -129,37 +129,37 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string Path to downloaded ZIP file
      */
-    public function downloadUpdate(string $version): string
+    public function downloadUpdate( string $version ): string
     {
         // Get release info for the specified version
-        if ('latest' === $version || empty($version)) {
+        if ( 'latest' === $version || empty( $version ) ) {
             $updateInfo  = $this->checkForUpdate();
             $downloadUrl = $updateInfo->downloadUrl;
         } else {
-            $release     = $this->getReleaseByVersion($version);
-            $downloadUrl = $this->extractDownloadUrl($release);
+            $release     = $this->getReleaseByVersion( $version );
+            $downloadUrl = $this->extractDownloadUrl( $release );
         }
 
-        $tempPath = storage_path('app/temp/update-'.bin2hex(random_bytes(16)).'.zip');
+        $tempPath = storage_path( 'app/temp/update-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
 
-        if (! File::exists(dirname($tempPath))) {
-            File::makeDirectory(dirname($tempPath), 0755, true);
+        if ( ! File::exists( dirname( $tempPath ) ) ) {
+            File::makeDirectory( dirname( $tempPath ), 0755, true );
         }
 
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders($headers)
-            ->timeout(config('cms.updates.download_timeout', 300))
-            ->get($downloadUrl);
+        $response = Http::withHeaders( $headers )
+            ->timeout( config( 'cms.updates.download_timeout', 300 ) )
+            ->get( $downloadUrl );
 
-        if (! $response->successful()) {
-            throw UpdateException::downloadFailed($downloadUrl);
+        if ( ! $response->successful() ) {
+            throw UpdateException::downloadFailed( $downloadUrl );
         }
 
-        File::put($tempPath, $response->body());
+        File::put( $tempPath, $response->body() );
 
         return $tempPath;
     }
@@ -171,9 +171,9 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @param  array|string  $credentials  GitLab token or credentials array
      */
-    public function setAuthentication(string|array $credentials): void
+    public function setAuthentication( string|array $credentials ): void
     {
-        $this->accessToken = is_string($credentials) ? $credentials : $credentials['token'] ?? null;
+        $this->accessToken = is_string( $credentials ) ? $credentials : $credentials['token'] ?? null;
     }
 
     /**
@@ -197,22 +197,22 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @throws InvalidArgumentException If URL is invalid
      */
-    protected function parseUrl(string $url): void
+    protected function parseUrl( string $url ): void
     {
-        $host = parse_url($url, PHP_URL_HOST);
+        $host = parse_url( $url, PHP_URL_HOST );
 
-        if ('gitlab.com' !== $host) {
-            throw new InvalidArgumentException('Invalid GitLab URL');
+        if ( 'gitlab.com' !== $host ) {
+            throw new InvalidArgumentException( 'Invalid GitLab URL' );
         }
 
-        $path = parse_url($url, PHP_URL_PATH);
+        $path = parse_url( $url, PHP_URL_PATH );
 
-        if (! $path || '' === trim($path, '/')) {
-            throw new InvalidArgumentException('Invalid GitLab URL');
+        if ( ! $path || '' === trim( $path, '/' ) ) {
+            throw new InvalidArgumentException( 'Invalid GitLab URL' );
         }
 
         // URL-encode the project path for API
-        $this->projectId = urlencode(trim($path, '/'));
+        $this->projectId = urlencode( trim( $path, '/' ) );
     }
 
     /**
@@ -229,16 +229,16 @@ class GitLabUpdateSource implements UpdateSourceInterface
         $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases";
 
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders($headers)
-            ->timeout(config('cms.updates.http_timeout', 15))
-            ->get($apiUrl);
+        $response = Http::withHeaders( $headers )
+            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+            ->get( $apiUrl );
 
-        if (! $response->successful()) {
-            throw UpdateException::versionCheckFailed("GitLab API error: {$response->status()}");
+        if ( ! $response->successful() ) {
+            throw UpdateException::versionCheckFailed( "GitLab API error: {$response->status()}" );
         }
 
         return $response->json();
@@ -255,33 +255,33 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return array Release data
      */
-    protected function getReleaseByVersion(string $version): array
+    protected function getReleaseByVersion( string $version ): array
     {
         // Try with 'v' prefix first (common convention)
-        $tag = str_starts_with($version, 'v') ? $version : "v{$version}";
+        $tag = str_starts_with( $version, 'v' ) ? $version : "v{$version}";
 
         $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases/{$tag}";
 
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders($headers)
-            ->timeout(config('cms.updates.http_timeout', 15))
-            ->get($apiUrl);
+        $response = Http::withHeaders( $headers )
+            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+            ->get( $apiUrl );
 
-        if (! $response->successful()) {
+        if ( ! $response->successful() ) {
             // Try without 'v' prefix
-            $tag    = ltrim($version, 'v');
+            $tag    = ltrim( $version, 'v' );
             $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases/{$tag}";
 
-            $response = Http::withHeaders($headers)
-                ->timeout(config('cms.updates.http_timeout', 15))
-                ->get($apiUrl);
+            $response = Http::withHeaders( $headers )
+                ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+                ->get( $apiUrl );
 
-            if (! $response->successful()) {
-                throw UpdateException::downloadFailed("Release not found for version: {$version}");
+            if ( ! $response->successful() ) {
+                throw UpdateException::downloadFailed( "Release not found for version: {$version}" );
             }
         }
 
@@ -299,13 +299,13 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string Download URL
      */
-    protected function extractDownloadUrl(array $release): string
+    protected function extractDownloadUrl( array $release ): string
     {
-        if (! isset($release['tag_name'])) {
-            throw UpdateException::downloadFailed('No tag_name found in release');
+        if ( ! isset( $release['tag_name'] ) ) {
+            throw UpdateException::downloadFailed( 'No tag_name found in release' );
         }
 
-        return $this->resolveDownloadUrl($release);
+        return $this->resolveDownloadUrl( $release );
     }
 
     /**
@@ -324,32 +324,32 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string Resolved download URL.
      */
-    protected function resolveDownloadUrl(array $release): string
+    protected function resolveDownloadUrl( array $release ): string
     {
-        $strategy = (string) config('cms.updates.gitlab_update_strategy', 'auto_archive');
+        $strategy = (string) config( 'cms.updates.gitlab_update_strategy', 'auto_archive' );
 
-        if ('release_asset' === $strategy) {
-            $pattern = (string) config('cms.updates.gitlab_release_asset_pattern', '*.zip');
-            $assetUrl = $this->findReleaseAssetUrl($release, $pattern);
+        if ( 'release_asset' === $strategy ) {
+            $pattern  = (string) config( 'cms.updates.gitlab_release_asset_pattern', '*.zip' );
+            $assetUrl = $this->findReleaseAssetUrl( $release, $pattern );
 
-            if (null === $assetUrl) {
+            if ( null === $assetUrl ) {
                 throw UpdateException::downloadFailed(
                     "No release asset link matched pattern '{$pattern}' for tag '{$release['tag_name']}'. "
-                    .'Either upload a matching asset, adjust `cms.updates.gitlab_release_asset_pattern`, '
-                    ."or set `cms.updates.gitlab_update_strategy` to 'auto_archive'.",
+                    . 'Either upload a matching asset, adjust `cms.updates.gitlab_release_asset_pattern`, '
+                    . "or set `cms.updates.gitlab_update_strategy` to 'auto_archive'.",
                 );
             }
 
             return $assetUrl;
         }
 
-        if ('auto_archive' === $strategy) {
-            return $this->buildAutoArchiveUrl($release['tag_name']);
+        if ( 'auto_archive' === $strategy ) {
+            return $this->buildAutoArchiveUrl( $release['tag_name'] );
         }
 
         throw UpdateException::downloadFailed(
             "Unsupported `cms.updates.gitlab_update_strategy` value '{$strategy}'. "
-            ."Expected 'auto_archive' or 'release_asset'.",
+            . "Expected 'auto_archive' or 'release_asset'.",
         );
     }
 
@@ -362,7 +362,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string Auto-archive download URL.
      */
-    protected function buildAutoArchiveUrl(string $tagName): string
+    protected function buildAutoArchiveUrl( string $tagName ): string
     {
         return "https://gitlab.com/api/v4/projects/{$this->projectId}/repository/archive.zip?sha={$tagName}";
     }
@@ -381,39 +381,39 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string|null Matching asset URL, or null when no link matches.
      */
-    protected function findReleaseAssetUrl(array $release, string $pattern): ?string
+    protected function findReleaseAssetUrl( array $release, string $pattern ): ?string
     {
         $links = $release['assets']['links'] ?? [];
 
-        if (! is_array($links)) {
+        if ( ! is_array( $links ) ) {
             return null;
         }
 
-        $patternLower = strtolower($pattern);
+        $patternLower = strtolower( $pattern );
 
-        foreach ($links as $link) {
-            if (! is_array($link)) {
+        foreach ( $links as $link ) {
+            if ( ! is_array( $link ) ) {
                 continue;
             }
 
-            $url = isset($link['url']) && is_string($link['url']) ? $link['url'] : '';
+            $url = isset( $link['url'] ) && is_string( $link['url'] ) ? $link['url'] : '';
 
-            if ('' === $url) {
+            if ( '' === $url ) {
                 continue;
             }
 
-            $name = isset($link['name']) && is_string($link['name']) && '' !== $link['name']
+            $name = isset( $link['name'] ) && is_string( $link['name'] ) && '' !== $link['name']
                 ? $link['name']
-                : basename(parse_url($url, PHP_URL_PATH) ?: $url);
+                : basename( parse_url( $url, PHP_URL_PATH ) ?: $url );
 
-            $nameLower = strtolower($name);
+            $nameLower = strtolower( $name );
 
             // Never select a sidecar checksum as the download target.
-            if (str_ends_with($nameLower, '.sha256')) {
+            if ( str_ends_with( $nameLower, '.sha256' ) ) {
                 continue;
             }
 
-            if (fnmatch($patternLower, $nameLower)) {
+            if ( fnmatch( $patternLower, $nameLower ) ) {
                 return $url;
             }
         }
@@ -434,15 +434,15 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string|null Lowercase 64-character hex digest, or null when no checksum is published.
      */
-    protected function extractChecksum(array $release): ?string
+    protected function extractChecksum( array $release ): ?string
     {
-        $sidecarHash = $this->extractChecksumFromSidecar($release);
+        $sidecarHash = $this->extractChecksumFromSidecar( $release );
 
-        if (null !== $sidecarHash) {
+        if ( null !== $sidecarHash ) {
             return $sidecarHash;
         }
 
-        return $this->extractChecksumFromDescription($release['description'] ?? null);
+        return $this->extractChecksumFromDescription( $release['description'] ?? null );
     }
 
     /**
@@ -454,33 +454,33 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string|null Lowercase hex digest, or null if no usable sidecar is found.
      */
-    protected function extractChecksumFromSidecar(array $release): ?string
+    protected function extractChecksumFromSidecar( array $release ): ?string
     {
         $links = $release['assets']['links'] ?? [];
 
-        if (! is_array($links)) {
+        if ( ! is_array( $links ) ) {
             return null;
         }
 
-        foreach ($links as $link) {
-            if (! is_array($link)) {
+        foreach ( $links as $link ) {
+            if ( ! is_array( $link ) ) {
                 continue;
             }
 
-            $name = isset($link['name']) && is_string($link['name']) ? $link['name'] : '';
-            $url  = isset($link['url']) && is_string($link['url']) ? $link['url'] : '';
+            $name = isset( $link['name'] ) && is_string( $link['name'] ) ? $link['name'] : '';
+            $url  = isset( $link['url'] ) && is_string( $link['url'] ) ? $link['url'] : '';
 
-            if ('' === $url) {
+            if ( '' === $url ) {
                 continue;
             }
 
-            if (! str_ends_with(strtolower($name), '.sha256') && ! str_ends_with(strtolower($url), '.sha256')) {
+            if ( ! str_ends_with( strtolower( $name ), '.sha256' ) && ! str_ends_with( strtolower( $url ), '.sha256' ) ) {
                 continue;
             }
 
-            $hash = $this->fetchSidecarHash($url);
+            $hash = $this->fetchSidecarHash( $url );
 
-            if (null !== $hash) {
+            if ( null !== $hash ) {
                 return $hash;
             }
         }
@@ -499,40 +499,40 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string|null Lowercase hex digest, or null on failure / unparseable contents.
      */
-    protected function fetchSidecarHash(string $url): ?string
+    protected function fetchSidecarHash( string $url ): ?string
     {
         $headers = [];
-        if ($this->accessToken) {
+        if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
         try {
-            $response = Http::withHeaders($headers)
-                ->timeout(config('cms.updates.http_timeout', 15))
-                ->get($url);
-        } catch (Throwable $e) {
-            Log::warning('Failed to fetch GitLab SHA-256 sidecar.', [
+            $response = Http::withHeaders( $headers )
+                ->timeout( config( 'cms.updates.http_timeout', 15 ) )
+                ->get( $url );
+        } catch ( Throwable $e ) {
+            Log::warning( 'Failed to fetch GitLab SHA-256 sidecar.', [
                 'url'   => $url,
                 'error' => $e->getMessage(),
-            ]);
+            ] );
 
             return null;
         }
 
-        if (! $response->successful()) {
-            Log::warning('GitLab SHA-256 sidecar request returned a non-success status.', [
+        if ( ! $response->successful() ) {
+            Log::warning( 'GitLab SHA-256 sidecar request returned a non-success status.', [
                 'url'    => $url,
                 'status' => $response->status(),
-            ]);
+            ] );
 
             return null;
         }
 
-        if (preg_match('/\b([a-f0-9]{64})\b/i', $response->body(), $matches)) {
-            return strtolower($matches[1]);
+        if ( preg_match( '/\b([a-f0-9]{64})\b/i', $response->body(), $matches )) {
+            return strtolower( $matches[1]);
         }
 
-        Log::warning('GitLab SHA-256 sidecar did not contain a 64-character hex digest.', [
+        Log::warning( 'GitLab SHA-256 sidecar did not contain a 64-character hex digest.', [
             'url' => $url,
         ]);
 
@@ -548,14 +548,14 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *
      * @return string|null Lowercase hex digest, or null when no marker is present.
      */
-    protected function extractChecksumFromDescription(?string $description): ?string
+    protected function extractChecksumFromDescription( ?string $description): ?string
     {
-        if (! is_string($description) || '' === $description) {
+        if ( ! is_string( $description) || '' === $description) {
             return null;
         }
 
-        if (preg_match('/SHA-?256\s*[:=]\s*`?([a-f0-9]{64})`?/i', $description, $matches)) {
-            return strtolower($matches[1]);
+        if ( preg_match( '/SHA-?256\s*[:=]\s*`?([a-f0-9]{64})`?/i', $description, $matches)) {
+            return strtolower( $matches[1]);
         }
 
         return null;

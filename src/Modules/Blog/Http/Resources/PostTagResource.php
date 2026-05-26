@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 /**
  * PostTag Resource for the CMS Framework Blog Module.
@@ -38,7 +38,7 @@ class PostTagResource extends JsonResource
      *
      * @return array<string, mixed> The transformed tag data array.
      */
-    public function toArray(Request $request): array
+    public function toArray( Request $request ): array
     {
         return [
             'id'          => $this->id,
