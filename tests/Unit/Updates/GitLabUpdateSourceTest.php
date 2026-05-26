@@ -464,6 +464,340 @@ class GitLabUpdateSourceTest extends TestCase
     }
 
     /**
+     * Test GitLab source defaults to auto-archive URL when strategy is unset.
+     *
+     * @since 2.0.0
+     */
+    public function test_uses_auto_archive_url_by_default(): void
+    {
+        // No `gitlab_update_strategy` set — should default to auto_archive.
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'app-2.0.0.tar.gz',
+                                'url'  => 'https://example.com/app-2.0.0.tar.gz',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertStringContainsString('/repository/archive.zip', $updateInfo->downloadUrl);
+        $this->assertStringContainsString('sha=v2.0.0', $updateInfo->downloadUrl);
+    }
+
+    /**
+     * Test GitLab source resolves download URL from release assets when strategy is release_asset.
+     *
+     * @since 2.0.0
+     */
+    public function test_uses_release_asset_url_when_strategy_is_release_asset(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'app-2.0.0.zip',
+                                'url'  => 'https://example.com/releases/app-2.0.0.zip',
+                            ],
+                            [
+                                'name' => 'app-2.0.0.zip.sha256',
+                                'url'  => 'https://example.com/releases/app-2.0.0.zip.sha256',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame('https://example.com/releases/app-2.0.0.zip', $updateInfo->downloadUrl);
+    }
+
+    /**
+     * Test GitLab source honors a configurable release asset glob pattern.
+     *
+     * @since 2.0.0
+     */
+    public function test_release_asset_pattern_is_configurable(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        config()->set('cms.updates.gitlab_release_asset_pattern', '*-release.zip');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'app-2.0.0.tar.gz',
+                                'url'  => 'https://example.com/app-2.0.0.tar.gz',
+                            ],
+                            [
+                                'name' => 'app-2.0.0-release.zip',
+                                'url'  => 'https://example.com/app-2.0.0-release.zip',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame('https://example.com/app-2.0.0-release.zip', $updateInfo->downloadUrl);
+    }
+
+    /**
+     * Test GitLab source matches the asset pattern case-insensitively.
+     *
+     * @since 2.0.0
+     */
+    public function test_release_asset_pattern_matches_case_insensitively(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'App-2.0.0.ZIP',
+                                'url'  => 'https://example.com/App-2.0.0.ZIP',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame('https://example.com/App-2.0.0.ZIP', $updateInfo->downloadUrl);
+    }
+
+    /**
+     * Test GitLab source falls back to URL basename when asset link has no name.
+     *
+     * @since 2.0.0
+     */
+    public function test_release_asset_matches_against_url_basename_when_name_missing(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'url' => 'https://example.com/builds/app-2.0.0.zip?token=abc',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame('https://example.com/builds/app-2.0.0.zip?token=abc', $updateInfo->downloadUrl);
+    }
+
+    /**
+     * Test GitLab source never selects a SHA-256 sidecar as the download target.
+     *
+     * @since 2.0.0
+     */
+    public function test_release_asset_strategy_skips_sha256_sidecars(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+        // Set a permissive pattern that would otherwise match the sidecar.
+        config()->set('cms.updates.gitlab_release_asset_pattern', '*');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'app-2.0.0.zip.sha256',
+                                'url'  => 'https://example.com/app-2.0.0.zip.sha256',
+                            ],
+                            [
+                                'name' => 'app-2.0.0.zip',
+                                'url'  => 'https://example.com/app-2.0.0.zip',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source     = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame('https://example.com/app-2.0.0.zip', $updateInfo->downloadUrl);
+    }
+
+    /**
+     * Test GitLab source throws when release_asset strategy is set but no asset matches.
+     *
+     * @since 2.0.0
+     */
+    public function test_throws_when_release_asset_strategy_and_no_matching_asset(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'docs.pdf',
+                                'url'  => 'https://example.com/docs.pdf',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200),
+        ]);
+
+        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+
+        $this->expectException(UpdateException::class);
+        $this->expectExceptionMessage("No release asset link matched pattern '*.zip'");
+
+        $source->checkForUpdate();
+    }
+
+    /**
+     * Test GitLab source throws when release_asset strategy is set but no asset links exist.
+     *
+     * @since 2.0.0
+     */
+    public function test_throws_when_release_asset_strategy_and_no_asset_links(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release without assets',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200),
+        ]);
+
+        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+
+        $this->expectException(UpdateException::class);
+
+        $source->checkForUpdate();
+    }
+
+    /**
+     * Test GitLab source throws for an unsupported `gitlab_update_strategy` value.
+     *
+     * @since 2.0.0
+     */
+    public function test_throws_for_unsupported_gitlab_update_strategy(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'bogus_strategy');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response([
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ], 200),
+        ]);
+
+        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+
+        $this->expectException(UpdateException::class);
+        $this->expectExceptionMessage("Unsupported `cms.updates.gitlab_update_strategy` value 'bogus_strategy'");
+
+        $source->checkForUpdate();
+    }
+
+    /**
+     * Test GitLab source uses release_asset URL when downloading an explicit version.
+     *
+     * @since 2.0.0
+     */
+    public function test_release_asset_strategy_is_applied_for_explicit_version_downloads(): void
+    {
+        config()->set('cms.updates.gitlab_update_strategy', 'release_asset');
+
+        Http::fake([
+            'gitlab.com/api/v4/projects/user%2Frepo/releases/v2.0.0' => Http::response([
+                'tag_name'    => 'v2.0.0',
+                'description' => 'Release',
+                'created_at'  => '2024-12-15T10:00:00.000Z',
+                'assets'      => [
+                    'links' => [
+                        [
+                            'name' => 'app-2.0.0.zip',
+                            'url'  => 'https://example.com/app-2.0.0.zip',
+                        ],
+                    ],
+                ],
+            ], 200),
+            'example.com/app-2.0.0.zip' => Http::response('zip-bytes', 200),
+        ]);
+
+        $source = new GitLabUpdateSource('https://gitlab.com/user/repo', '1.0.0');
+        $source->downloadUpdate('v2.0.0');
+
+        Http::assertSent(function ($request) {
+            return 'https://example.com/app-2.0.0.zip' === $request->url();
+        });
+    }
+
+    /**
      * Define environment setup.
      *
      * @since 1.0.0
