@@ -318,7 +318,7 @@ describe( 'ThemeManager::validateManifest() via installFromZip()', function (): 
         expect( $result['keystone']['seed']['pages'] )->toBe( ['home', 'about'] );
     } );
 
-    it( 'rejects optional fields that are present but null', function ( string $field ): void {
+    it( 'rejects optional fields that are present but null', function ( string $field, string $message ): void {
         $slug    = "null-{$field}-theme";
         $zipPath = buildValidateZip( $this->tmpPath, $slug, [
             'slug'    => $slug,
@@ -328,10 +328,15 @@ describe( 'ThemeManager::validateManifest() via installFromZip()', function (): 
         ], $this->testSlugs );
 
         expect( fn () => $this->manager->installFromZip( $zipPath ) )
-            ->toThrow( ThemeValidationException::class );
+            ->toThrow( ThemeValidationException::class, $message );
 
         expect( File::exists( $this->themesPath . '/' . $slug ) )->toBeFalse();
-    } )->with( ['screenshot', 'requires', 'templates', 'supports'] );
+    } )->with( [
+        ['screenshot', "Field 'screenshot' must be a non-empty string."],
+        ['requires', "Field 'requires' must be a semver string"],
+        ['templates', "Field 'templates' must be an object."],
+        ['supports', "Field 'supports' must be an object."],
+    ] );
 
     it( 'rolls back the extracted theme directory when validation fails', function (): void {
         $zipPath = buildValidateZip( $this->tmpPath, 'rollback-theme', [
