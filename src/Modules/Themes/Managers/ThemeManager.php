@@ -24,6 +24,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\View;
+use Throwable;
 use ZipArchive;
 
 /**
@@ -153,6 +154,10 @@ class ThemeManager
             throw ThemeNotFoundException::forSlug( $slug );
         }
 
+        // Pre-activation hook: listeners may throw to short-circuit activation
+        // before any persistent state changes.
+        doAction( 'theme.activating', $slug, $theme );
+
         $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
 
         // Clear theme cache
@@ -170,6 +175,8 @@ class ThemeManager
                 ] );
             }
         }
+
+        doAction( 'theme.activated', $slug, $theme );
 
         return true;
     }
@@ -230,7 +237,22 @@ class ThemeManager
             throw $e;
         }
 
+        // Pre-install hook: listeners may throw to abort the install. The
+        // extracted directory is rolled back so we never leave a half-installed
+        // theme on disk after a vetoed install. We catch Throwable (not just
+        // Exception) so that Error/TypeError thrown from listener callbacks
+        // also trigger rollback before propagating.
+        try {
+            doAction( 'theme.installing', $slug, $manifest );
+        } catch ( Throwable $e ) {
+            File::deleteDirectory( $themePath );
+
+            throw $e;
+        }
+
         Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
+
+        doAction( 'theme.installed', $slug, $manifest );
 
         return $manifest;
     }
