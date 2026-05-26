@@ -8,15 +8,18 @@
  * @since      1.0.0
  */
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Dedoc\Scramble\Attributes\Group;
 use Exception;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 
 /**
@@ -29,7 +32,7 @@ use Illuminate\Routing\Controller;
  *
  * @since 1.0.0
  */
-#[Group('Themes', weight: 16)]
+#[Group( 'Themes', weight: 16 )]
 class ThemesController extends Controller
 {
     /**
@@ -41,7 +44,8 @@ class ThemesController extends Controller
      */
     public function __construct(
         private ThemeManager $themeManager,
-    ) {}
+    ) {
+    }
 
     /**
      * Lists all available themes.
@@ -60,10 +64,10 @@ class ThemesController extends Controller
         $themes      = $this->themeManager->discoverThemes();
         $activeTheme = $this->themeManager->getActiveTheme();
 
-        return response()->json([
+        return response()->json( [
             'themes' => $themes,
             'active' => $activeTheme['slug'] ?? null,
-        ]);
+        ] );
     }
 
     /**
@@ -80,17 +84,60 @@ class ThemesController extends Controller
      *
      * @return JsonResponse JSON response with theme data or error message.
      */
-    public function show(string $slug): JsonResponse
+    public function show( string $slug ): JsonResponse
     {
-        $theme = $this->themeManager->getTheme($slug);
+        $theme = $this->themeManager->getTheme( $slug );
 
-        if (! $theme) {
-            return response()->json([
-                'message' => __('Theme not found.'),
-            ], 404);
+        if ( ! $theme ) {
+            return response()->json( [
+                'message' => __( 'Theme not found.' ),
+            ], 404 );
         }
 
-        return response()->json($theme);
+        return response()->json( $theme );
+    }
+
+    /**
+     * Uploads and installs a theme from a ZIP archive.
+     *
+     * Accepts a multipart upload, validates the ZIP, extracts it into the
+     * themes directory, and returns the parsed manifest of the newly installed
+     * theme. Mirrors the Plugins module's install endpoint, with theme-named
+     * exceptions and config keys plus a ZIP-slip guard during extraction.
+     *
+     * Endpoint: POST /v1/themes
+     *
+     * @since 1.2.0
+     *
+     * @param  Request  $request  Incoming request carrying the uploaded theme_zip.
+     *
+     * @return JsonResponse JSON response with the installed theme manifest, or an error.
+     */
+    public function upload( Request $request ): JsonResponse
+    {
+        $request->validate( [
+            'theme_zip' => 'required|file|mimes:zip|max:' . (int) ( config( 'cms.themes.maxUploadSize', 10 * 1024 * 1024 ) / 1024 ),
+        ] );
+
+        try {
+            $zipPath  = $request->file( 'theme_zip' )->path();
+            $manifest = $this->themeManager->installFromZip( $zipPath );
+
+            return response()->json( [
+                'message' => __( 'Theme installed successfully.' ),
+                'theme'   => $manifest,
+            ], 201 );
+        } catch ( ThemeValidationException|ThemeInstallationException $e ) {
+            return response()->json( [
+                'message' => $e->getMessage(),
+            ], 422 );
+        } catch ( Exception $e ) {
+            report( $e );
+
+            return response()->json( [
+                'message' => __( 'An unexpected error occurred while installing the theme.' ),
+            ], 500 );
+        }
     }
 
     /**
@@ -108,24 +155,24 @@ class ThemesController extends Controller
      *
      * @return JsonResponse JSON response with success message and theme data, or error.
      */
-    public function activate(string $slug): JsonResponse
+    public function activate( string $slug ): JsonResponse
     {
         try {
-            $this->themeManager->activateTheme($slug);
+            $this->themeManager->activateTheme( $slug );
 
-            return response()->json([
-                'message' => __('Theme activated successfully.'),
-                'theme'   => $this->themeManager->getTheme($slug),
-            ]);
-        } catch (ThemeNotFoundException) {
-            return response()->json([
-                'message' => __('Theme ":slug" not found.', ['slug' => $slug]),
-            ], 404);
-        } catch (Exception $e) {
-            report($e);
+            return response()->json( [
+                'message' => __( 'Theme activated successfully.' ),
+                'theme'   => $this->themeManager->getTheme( $slug ),
+            ] );
+        } catch ( ThemeNotFoundException ) {
+            return response()->json( [
+                'message' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
+            ], 404 );
+        } catch ( Exception $e ) {
+            report( $e );
 
-            return response()->json([
-                'message' => __('An unexpected error occurred while activating the theme.'),
+            return response()->json( [
+                'message' => __( 'An unexpected error occurred while activating the theme.'),
             ], 500);
         }
     }

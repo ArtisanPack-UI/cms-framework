@@ -70,4 +70,18 @@ return [
     |
     */
     'wpThemeJsonSchemaVersion' => '3',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Upload Settings
+    |--------------------------------------------------------------------------
+    |
+    | Security settings for theme ZIP uploads via the POST /v1/themes endpoint.
+    |
+    */
+    'maxUploadSize'    => 10 * 1024 * 1024, // 10MB in bytes
+    'allowedMimeTypes' => [
+        'application/zip',
+        'application/x-zip-compressed',
+    ],
 ];
