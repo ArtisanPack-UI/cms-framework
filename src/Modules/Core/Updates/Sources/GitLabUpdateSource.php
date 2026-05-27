@@ -95,7 +95,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
 
         $downloadUrl = $this->resolveDownloadUrl( $latest );
 
-        $sha256 = $this->extractChecksum( $latest );
+        $sha256 = $this->extractChecksum( $latest, $downloadUrl );
 
         if ( null === $sha256 ) {
             Log::warning( 'GitLab release does not advertise a SHA-256 checksum; update integrity verification will be skipped.', [
@@ -428,14 +428,29 @@ class GitLabUpdateSource implements UpdateSourceInterface
      *   1. An asset link whose name or URL ends with `.sha256` (fetched and parsed).
      *   2. A `SHA-256: <64-hex>` line embedded in the release description.
      *
+     * The sidecar lookup is skipped when the download URL points at GitLab's
+     * auto-generated source archive (`/repository/archive.zip`). Sidecars
+     * accompany uploaded release assets — their digest does not match the
+     * auto-archive, and attaching one would produce a deterministic checksum
+     * mismatch on download.
+     *
      * @since 2.0.0
      *
-     * @param  array<string, mixed>  $release  Release payload from the GitLab API.
+     * @param  array<string, mixed>  $release      Release payload from the GitLab API.
+     * @param  string                $downloadUrl  The resolved download URL the checksum will be paired with.
      *
      * @return string|null Lowercase 64-character hex digest, or null when no checksum is published.
      */
-    protected function extractChecksum( array $release ): ?string
+    protected function extractChecksum( array $release, string $downloadUrl ): ?string
     {
+        // Sidecar checksums describe uploaded release assets; the GitLab
+        // auto-archive endpoint has no published digest of its own, so fall
+        // straight to the description-embedded checksum (which usually
+        // references the same archive content).
+        if ( str_contains( $downloadUrl, '/repository/archive.zip' ) ) {
+            return $this->extractChecksumFromDescription( $release['description'] ?? null );
+        }
+
         $sidecarHash = $this->extractChecksumFromSidecar( $release );
 
         if ( null !== $sidecarHash ) {

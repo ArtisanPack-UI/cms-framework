@@ -59,7 +59,11 @@ final class PatternFileParser
      */
     protected static function extractHeaders( string $contents ): array
     {
-        if ( ! preg_match( '/\A(?:\xEF\xBB\xBF)?\s*(?:<\?php\s+)?\/\*\*?(.*?)\*\//s', $contents, $match ) ) {
+        // `\b\s*` (instead of `\s+`) lets compact files like
+        // `<?php/** ... */` match — common when authors hand-format the
+        // header — while `\b` keeps an accidental `<?phpsomething` from
+        // being treated as a PHP open tag.
+        if ( ! preg_match( '/\A(?:\xEF\xBB\xBF)?\s*(?:<\?php\b\s*)?\/\*\*?(.*?)\*\//s', $contents, $match ) ) {
             return [];
         }
 
@@ -101,7 +105,7 @@ final class PatternFileParser
          */
         $leading = '\A(?:\xEF\xBB\xBF)?\s*';
 
-        if ( preg_match( '/' . $leading . '<\?php\s+\/\*\*?.*?\*\/\s*\?>\s*(.*)$/s', $contents, $match ) ) {
+        if ( preg_match( '/' . $leading . '<\?php\b\s*\/\*\*?.*?\*\/\s*\?>\s*(.*)$/s', $contents, $match ) ) {
             return $match[1];
         }
 

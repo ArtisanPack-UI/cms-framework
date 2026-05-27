@@ -272,6 +272,15 @@ class MenuItemsController extends Controller
             }
         }
 
+        // WP-style payloads carry `parent: 0` to mean "no parent". The
+        // model stores root items as `parent_id => null`, so coerce here
+        // before the create/update — persisting a literal `0` would break
+        // the self-referencing FK and the tree-traversal queries.
+        if ( array_key_exists( 'parent_id', $attributes )
+            && ( 0 === $attributes['parent_id'] || '0' === $attributes['parent_id'] ) ) {
+            $attributes['parent_id'] = null;
+        }
+
         if ( null === $existing && ! array_key_exists( 'position', $attributes ) ) {
             $attributes['position'] = 0;
         }

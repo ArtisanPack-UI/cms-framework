@@ -237,6 +237,19 @@ class ThemeManager
             throw $e;
         }
 
+        // `validateManifest()` already enforced that a non-empty,
+        // well-formed `slug` is present. Now make sure that slug matches
+        // the extracted directory name — `getTheme()`, view-path
+        // registration, and `activateTheme()` all key off the directory,
+        // so a mismatch would leave the theme installed-but-unreachable.
+        if ( $manifest['slug'] !== $slug ) {
+            File::deleteDirectory( $themePath );
+
+            throw ThemeValidationException::invalidManifest(
+                "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
+            );
+        }
+
         // Pre-install hook: listeners may throw to abort the install. The
         // extracted directory is rolled back so we never leave a half-installed
         // theme on disk after a vetoed install. We catch Throwable (not just

@@ -22,6 +22,7 @@ use Dedoc\Scramble\Attributes\Group;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\DB;
 
 /**
  * GET/PUT controller for the WP-shape site-meta envelope.
@@ -85,11 +86,15 @@ class SiteSettingController extends Controller
 
         $validated = $request->validated();
 
-        foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
-            if ( array_key_exists( $envelopeKey, $validated ) ) {
-                $this->settings->updateSetting( $settingKey, $validated[ $envelopeKey ] );
+        // Wrap the per-key writes so a partial failure cannot leave the
+        // five site.* settings in a mixed old/new state.
+        DB::transaction( function () use ( $validated ): void {
+            foreach ( self::FIELD_MAP as $envelopeKey => $settingKey ) {
+                if ( array_key_exists( $envelopeKey, $validated ) ) {
+                    $this->settings->updateSetting( $settingKey, $validated[ $envelopeKey ] );
+                }
             }
-        }
+        } );
 
         // Return the freshly-built payload directly rather than calling
         // show(): the user has already cleared the `update` policy, and

@@ -79,7 +79,15 @@ class Role extends RbacRole
 
         return collect( $permissions )
             ->map( function ( $permission ) use ( $permissionModel ) {
-                if ( $permission instanceof Permission ) {
+                // Fast-path: any instance of the cms-framework subclass *or*
+                // a host-configured permission model is already a saved row,
+                // so its primary key is the authoritative pivot value. Going
+                // back to the DB for a name/slug lookup here would not only
+                // double the query count, it would silently drop callers
+                // that rebind `artisanpack.rbac.models.permission` to a
+                // custom model — those instances wouldn't satisfy the
+                // hard-coded `Permission` check and would fall through.
+                if ( $permission instanceof Permission || $permission instanceof $permissionModel ) {
                     return $permission->getKey();
                 }
 

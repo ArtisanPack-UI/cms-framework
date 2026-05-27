@@ -157,17 +157,53 @@ class BlockPattern extends Model
      *
      * Implemented as a setter mutator rather than an `Attribute::make` cast
      * because the prefix decision depends on the sibling `source` field, and
-     * the cast layer cannot read peer attributes during resolution.
+     * the cast layer cannot read peer attributes during resolution. Pairs with
+     * `setSourceAttribute()` so the slug stays consistent regardless of which
+     * attribute is assigned first.
      *
      * @since 2.0.0
      */
     public function setSlugAttribute( string $value ): void
     {
-        $source = $this->attributes['source'] ?? self::SOURCE_USER;
+        $this->attributes['slug'] = $this->normalizeSlugForSource(
+            $value,
+            $this->attributes['source'] ?? self::SOURCE_USER,
+        );
+    }
 
-        $this->attributes['slug'] = self::SOURCE_USER === $source
-            ? self::withUserPrefix( $value )
-            : $value;
+    /**
+     * Mutator that keeps the stored slug in sync with the source. Without
+     * this, assigning `slug` before `source` (e.g. via mass assignment with
+     * a theme-source row) would silently apply the user-prefix logic against
+     * the wrong source and persist a `user/` prefix on a theme pattern.
+     *
+     * @since 2.0.0
+     */
+    public function setSourceAttribute( string $value ): void
+    {
+        $this->attributes['source'] = $value;
+
+        if ( isset( $this->attributes['slug'] ) ) {
+            $this->attributes['slug'] = $this->normalizeSlugForSource(
+                $this->attributes['slug'],
+                $value,
+            );
+        }
+    }
+
+    /**
+     * Applies (or removes) the `user/` prefix on a slug according to its
+     * source. Theme rows always get the unprefixed slug; user rows always
+     * get the prefixed slug. Idempotent — re-running against an already
+     * correctly-shaped slug is a no-op.
+     *
+     * @since 2.0.0
+     */
+    protected function normalizeSlugForSource( string $slug, string $source ): string
+    {
+        return self::SOURCE_USER === $source
+            ? self::withUserPrefix( self::stripUserPrefix( $slug ) )
+            : self::stripUserPrefix( $slug );
     }
 
     /**

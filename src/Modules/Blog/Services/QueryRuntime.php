@@ -338,10 +338,19 @@ class QueryRuntime
             $orderBy = 'date';
         }
 
+        $hasSearch = isset( $attributes['search'] )
+            && is_string( $attributes['search'] )
+            && '' !== trim( $attributes['search'] );
+
         // The base query already applies a default order via the
         // existing managers — strip those orders before re-applying so
-        // the V1 `orderBy` payload is authoritative when present.
-        $query->reorder();
+        // the V1 `orderBy` payload is authoritative when present. The
+        // `relevance` case with an active search term is the exception:
+        // the manager has already wired its relevance ordering and
+        // calling `reorder()` would discard it.
+        if ( ! ( 'relevance' === $orderBy && $hasSearch ) ) {
+            $query->reorder();
+        }
 
         switch ( $orderBy ) {
             case 'title':
@@ -361,9 +370,11 @@ class QueryRuntime
                 $query->orderByRaw( $expression );
                 break;
             case 'relevance':
-                // Without a search term `relevance` has no signal — fall
-                // through to a date sort so the result is stable.
-                $query->orderBy( 'published_at', $order );
+                if ( ! $hasSearch ) {
+                    // Without a search term `relevance` has no signal — fall
+                    // through to a date sort so the result is stable.
+                    $query->orderBy( 'published_at', $order );
+                }
                 break;
             case 'date':
             default:

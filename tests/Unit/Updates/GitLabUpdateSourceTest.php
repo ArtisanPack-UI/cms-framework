@@ -302,6 +302,11 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_populates_sha256_from_sidecar_link(): void
     {
+        // Sidecars describe uploaded release assets, not the GitLab
+        // auto-archive — switch to `release_asset` so the sidecar lookup
+        // is actually applicable to the chosen download URL.
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
+
         $expectedHash = str_repeat( 'a', 64 );
 
         Http::fake( [
@@ -398,6 +403,11 @@ class GitLabUpdateSourceTest extends TestCase
      */
     public function test_falls_back_to_description_when_sidecar_fetch_fails(): void
     {
+        // Sidecars only apply to release-asset downloads, so this
+        // fallback path is only reachable under `release_asset`.
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
+        config()->set( 'cms.updates.gitlab_release_asset_pattern', 'source.zip' );
+
         $expectedHash = str_repeat( 'c', 64 );
 
         Http::fake( [
@@ -408,6 +418,10 @@ class GitLabUpdateSourceTest extends TestCase
                     'created_at'  => '2024-12-15T10:00:00.000Z',
                     'assets'      => [
                         'links' => [
+                            [
+                                'name' => 'source.zip',
+                                'url'  => 'https://example.com/releases/source.zip',
+                            ],
                             [
                                 'name' => 'source.zip.sha256',
                                 'url'  => 'https://example.com/missing.sha256',
@@ -427,6 +441,50 @@ class GitLabUpdateSourceTest extends TestCase
         $updateInfo = $source->checkForUpdate();
 
         $this->assertSame( $expectedHash, $updateInfo->sha256 );
+    }
+
+    /**
+     * Regression: with the auto-archive download strategy, the sidecar
+     * checksum must be bypassed — it describes the uploaded release asset,
+     * not the GitLab auto-archive, so attaching it would produce a
+     * deterministic checksum mismatch on download. The description-embedded
+     * digest is the only valid source under auto-archive.
+     *
+     * @since 2.0.0
+     */
+    public function test_auto_archive_bypasses_sidecar_and_uses_description_only(): void
+    {
+        // No `gitlab_update_strategy` set — defaults to `auto_archive`.
+
+        $descriptionHash = str_repeat( 'd', 64 );
+        $sidecarHash     = str_repeat( 'e', 64 );
+
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases' => Http::response( [
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => "Notes\nSHA-256: {$descriptionHash}",
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'source.zip.sha256',
+                                'url'  => 'https://example.com/asset.sha256',
+                            ],
+                        ],
+                    ],
+                ],
+            ], 200 ),
+            // If the source ever fetched this, the sidecar hash would win
+            // — which would silently break auto-archive downloads.
+            'example.com/asset.sha256' => Http::response( $sidecarHash . "  source.zip\n", 200 ),
+        ] );
+
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame( $descriptionHash, $updateInfo->sha256 );
+        Http::assertNotSent( fn ( $request ) => str_contains( $request->url(), 'asset.sha256' ) );
     }
 
     /**
@@ -807,6 +865,6 @@ class GitLabUpdateSourceTest extends TestCase
     protected function defineEnvironment( $app ): void
     {
         $app['config']->set( 'cms.updates.http_timeout', 15 );
-        $app['config']->set( 'cms.updates.download_timeout', 300);
+        $app['config']->set( 'cms.updates.download_timeout', 300 );
     }
 }
