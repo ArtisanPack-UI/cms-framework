@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Blog Module Helper Functions for the CMS Framework.
@@ -278,6 +278,6 @@ if ( ! function_exists( 'postTagExists' ) ) {
             return PostTag::where( 'id', sanitizeInt( $identifier ) )->exists();
         }
 
-        return PostTag::where( 'slug', sanitizeText( $identifier ))->exists();
+        return PostTag::where( 'slug', sanitizeText( $identifier))->exists();
     }
 }

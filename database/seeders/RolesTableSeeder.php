@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Seeder for default user roles.
@@ -23,43 +23,42 @@ use Illuminate\Database\Seeder;
  */
 class RolesTableSeeder extends Seeder
 {
-	/**
-	 * Run the database seeds.
-	 *
-	 * Creates three default roles:
-	 * - Admin: Full system access
-	 * - Editor: Content management access
-	 * - User: Basic user access
-	 *
-	 * @return void
-	 *
-	 * @since 1.0.0
-	 */
-	public function run(): void
-	{
-		$roles = [
-			[
-				'name'        => 'Admin',
-				'slug'        => 'admin',
-				'description' => 'Full system access with all permissions',
-			],
-			[
-				'name'        => 'Editor',
-				'slug'        => 'editor',
-				'description' => 'Content management access for creating and editing content',
-			],
-			[
-				'name'        => 'User',
-				'slug'        => 'user',
-				'description' => 'Basic user access with limited permissions',
-			],
-		];
+    /**
+     * Run the database seeds.
+     *
+     * Creates three default roles:
+     * - Admin: Full system access
+     * - Editor: Content management access
+     * - User: Basic user access
+     *
+     *
+     * @since 1.0.0
+     */
+    public function run(): void
+    {
+        $roles = [
+            [
+                'name'        => 'Admin',
+                'slug'        => 'admin',
+                'description' => 'Full system access with all permissions',
+            ],
+            [
+                'name'        => 'Editor',
+                'slug'        => 'editor',
+                'description' => 'Content management access for creating and editing content',
+            ],
+            [
+                'name'        => 'User',
+                'slug'        => 'user',
+                'description' => 'Basic user access with limited permissions',
+            ],
+        ];
 
-		foreach ( $roles as $role ) {
-			Role::firstOrCreate(
-				['slug' => $role['slug']],
-				$role,
-			);
-		}
-	}
+        foreach ( $roles as $role ) {
+            Role::firstOrCreate(
+                ['slug' => $role['slug']],
+                $role,
+            );
+        }
+    }
 }

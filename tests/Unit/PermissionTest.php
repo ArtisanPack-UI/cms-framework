@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 
@@ -98,4 +100,4 @@ test( 'permission relationship works both ways', function (): void {
     // Check both sides of the relationship
     expect( $permission->roles->first()->slug )->toBe( 'publisher' );
     expect( $role->fresh()->permissions->first()->slug )->toBe( 'publish-content' );
-} );
+});

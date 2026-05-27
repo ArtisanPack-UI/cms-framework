@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Jobs\SendNotificationEmail;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Mail\NotificationMail;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;

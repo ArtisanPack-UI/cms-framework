@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Notification helper functions.
@@ -197,6 +197,6 @@ if ( ! function_exists( 'apGetRegisteredNotifications' ) ) {
      */
     function apGetRegisteredNotifications(): array
     {
-        return app( NotificationManager::class )->getRegisteredNotifications();
+        return app( NotificationManager::class)->getRegisteredNotifications();
     }
 }

@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Enums\NotificationType;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser as User;
@@ -191,4 +193,4 @@ test( 'factory withoutEmail state disables email sending', function (): void {
     $notification = Notification::factory()->withoutEmail()->create();
 
     expect( $notification->send_email )->toBeFalse();
-} );
+});

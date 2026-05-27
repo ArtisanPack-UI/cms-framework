@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Http\Controllers\PluginsController;
 use Illuminate\Support\Facades\Route;
@@ -33,4 +33,4 @@ Route::prefix( 'api/v1' )
             // Delete plugin
             Route::delete( '{slug}', [PluginsController::class, 'destroy'] )->name( 'api.plugins.destroy' );
         } );
-    } );
+    });

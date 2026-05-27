@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 /**
  * Unit Tests for the Setting Model.
  *
@@ -131,4 +133,4 @@ test( 'it handles null value', function (): void {
 
     expect( $setting->type )->toBe( 'integer' );
     expect( $setting->value )->toBeNull(); // Getter returns null for null non-string type
-} );
+});

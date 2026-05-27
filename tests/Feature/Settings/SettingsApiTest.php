@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 /**
  * Feature Tests for the Settings API Endpoints.
  *

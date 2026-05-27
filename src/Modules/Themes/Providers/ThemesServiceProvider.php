@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Providers;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -41,10 +42,14 @@ class ThemesServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        // Register WP theme.json validator as singleton
+        $this->app->singleton( WpThemeJsonValidator::class );
+
         // Register ThemeManager as singleton
         $this->app->singleton( ThemeManager::class, function ( $app ) {
             return new ThemeManager(
                 $app->make( SettingsManager::class ),
+                $app->make( WpThemeJsonValidator::class ),
             );
         } );
 

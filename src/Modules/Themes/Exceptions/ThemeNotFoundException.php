@@ -8,7 +8,7 @@
  * @since      1.0.0
  */
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions;
 

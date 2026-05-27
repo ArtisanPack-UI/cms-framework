@@ -190,6 +190,6 @@ class ContentTypeController extends Controller
 
         $customFields = $contentType->getCustomFields();
 
-        return response()->json( $customFields );
+        return response()->json( $customFields);
     }
 }

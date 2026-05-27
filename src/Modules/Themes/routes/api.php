@@ -8,7 +8,7 @@
  * @since      1.0.0
  */
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers\ThemesController;
 use Illuminate\Support\Facades\Route;
@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Route;
 |
 | Available endpoints:
 | - GET    /v1/themes              List all themes
+| - POST   /v1/themes              Upload and install a theme from a ZIP
 | - GET    /v1/themes/{slug}       Get theme details
 | - POST   /v1/themes/{slug}/activate   Activate a theme
 |
@@ -32,6 +33,7 @@ Route::middleware( ['auth:sanctum'] )
     ->prefix( 'v1' )
     ->group( function (): void {
         Route::get( '/themes', [ThemesController::class, 'index'] )->name( 'themes.index' );
+        Route::post( '/themes', [ThemesController::class, 'upload'] )->name( 'themes.upload' );
         Route::get( '/themes/{slug}', [ThemesController::class, 'show'] )->name( 'themes.show' );
         Route::post( '/themes/{slug}/activate', [ThemesController::class, 'activate'] )->name( 'themes.activate' );
     } );

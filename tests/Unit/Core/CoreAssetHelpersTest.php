@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\AssetManager;
 
 beforeEach( function (): void {

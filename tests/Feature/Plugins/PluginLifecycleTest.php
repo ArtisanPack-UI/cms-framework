@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
@@ -267,4 +267,4 @@ describe( 'Active Plugins Loading', function (): void {
         expect( fn () => $this->manager->loadActivePlugins() )
             ->not->toThrow( Exception::class );
     } );
-} );
+});

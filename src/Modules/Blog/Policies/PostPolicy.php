@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Post Policy for the CMS Framework Blog Module.
@@ -185,6 +185,6 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.publish', 'posts.publish', $post ) );
+        return $user->can( applyFilters( 'posts.publish', 'posts.publish', $post ));
     }
 }

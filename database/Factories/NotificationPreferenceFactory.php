@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 namespace ArtisanPackUI\Database\Factories;
 
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference;

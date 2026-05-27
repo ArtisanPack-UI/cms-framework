@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Enums\NotificationType;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser as User;
@@ -146,4 +148,4 @@ test( 'apGetRegisteredNotifications helper returns all registered notifications'
 
     expect( $registered )->toHaveKey( 'test.one' )
         ->and( $registered )->toHaveKey( 'test.two' );
-} );
+});

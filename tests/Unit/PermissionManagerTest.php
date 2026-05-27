@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 
@@ -64,13 +66,15 @@ test( 'permission manager register method works with app container', function ()
     expect( $permission->name )->toBe( 'Manage Users' );
 } );
 
-test( 'permission manager handles empty slug gracefully', function (): void {
+test( 'permission manager auto-derives slug from name when slug is empty', function (): void {
+    // The rbac base auto-derives slug from name via Str::slug() when
+    // slug is empty on save, so an empty input no longer round-trips.
     $permissionManager = new PermissionManager;
 
     $permission = $permissionManager->register( '', 'Empty Slug Permission' );
 
     expect( $permission )->toBeInstanceOf( Permission::class );
-    expect( $permission->slug )->toBe( '' );
+    expect( $permission->slug )->toBe( 'empty-slug-permission' );
     expect( $permission->name )->toBe( 'Empty Slug Permission' );
 } );
 
@@ -115,4 +119,4 @@ test( 'permission manager registers permissions with long names', function (): v
     expect( $permission )->toBeInstanceOf( Permission::class );
     expect( $permission->slug )->toBe( 'long-permission' );
     expect( $permission->name )->toBe( $longName );
-} );
+});

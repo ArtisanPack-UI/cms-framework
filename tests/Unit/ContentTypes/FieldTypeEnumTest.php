@@ -74,5 +74,5 @@ test( 'field type enum label returns translatable string', function (): void {
 test( 'field type enum validationRule returns enum rule', function (): void {
     $rule = FieldType::validationRule();
 
-    expect( $rule )->toBeInstanceOf( Enum::class );
-} );
+    expect( $rule )->toBeInstanceOf( Enum::class);
+});

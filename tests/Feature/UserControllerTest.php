@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 use Illuminate\Support\Facades\Hash;
 
@@ -8,23 +10,35 @@ beforeEach( function (): void {
 
     // Set up configuration
     config( ['artisanpack.cms-framework.user_model' => 'App\Models\User'] );
+    config( ['auth.providers.users.model' => 'App\Models\User'] );
 
     // Create a test user model class if it doesn't exist
     if ( ! class_exists( 'App\Models\User' ) ) {
         eval( '
             namespace App\Models {
-                use Illuminate\Database\Eloquent\Model;
+                use Illuminate\Foundation\Auth\User as Authenticatable;
                 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns\HasRolesAndPermissions;
-                
-                class User extends Model {
+
+                class User extends Authenticatable {
                     use HasRolesAndPermissions;
-                    
+
                     protected $fillable = ["name", "email", "password"];
                     protected $hidden = ["password"];
                 }
             }
         ' );
     }
+
+    // The Users-module routes are now gated behind `auth` (Wave 4 bug
+    // fix #129). Tests authenticate via a transient (un-persisted)
+    // actor so the user list assertions aren't polluted, and bypass
+    // the policies via a Gate::before stub — these tests exercise
+    // controller wiring + payload shape, not the policies themselves.
+    $actor     = new App\Models\User( ['name' => 'Test Actor', 'email' => 'actor@example.com'] );
+    $actor->id = 999_999;
+    $this->actingAs( $actor );
+
+    Illuminate\Support\Facades\Gate::before( fn () => true );
 } );
 
 test( 'user controller index returns paginated users with roles', function (): void {
@@ -284,5 +298,5 @@ test( 'user controller destroy deletes user', function (): void {
 test( 'user controller destroy returns 404 for non-existent user', function (): void {
     $response = $this->deleteJson( '/api/v1/users/999' );
 
-    $response->assertStatus( 404 );
-} );
+    $response->assertStatus( 404);
+});

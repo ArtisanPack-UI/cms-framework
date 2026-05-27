@@ -223,4 +223,4 @@ test( 'bulk user action returns correct response structure', function (): void {
 
     $response->assertSuccessful();
     $response->assertJsonStructure( ['processed', 'failed', 'errors'] );
-} );
+});

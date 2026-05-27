@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\AssetManager;
 
 beforeEach( function (): void {
@@ -92,4 +94,4 @@ test( 'auth: enqueuing assets registers and lists them', function (): void {
             'path'     => '/auth/app.js',
             'inFooter' => true,
         ] );
-} );
+});

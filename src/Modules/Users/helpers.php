@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Helper Functions for the CMS Framework Users Module.
@@ -107,6 +107,6 @@ if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
             $sections[ $key ] = compact( 'label', 'order' );
 
             return $sections;
-        } );
+        });
     }
 }

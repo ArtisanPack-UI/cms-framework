@@ -52,6 +52,20 @@ function authenticatedRoleManager(): TestUser
     return $user;
 }
 
+/**
+ * Wave 4 (#129): the apiResource routes are now gated behind `auth`.
+ * The tests in this file exercise the includable-relationship behavior,
+ * not the authorization layer, so a transient actor + open Gate
+ * suffices.
+ */
+beforeEach( function (): void {
+    $actor     = new TestUser( ['name' => 'Test Actor', 'email' => 'inc-actor@example.com'] );
+    $actor->id = 999_999;
+    $this->actingAs( $actor );
+
+    Gate::before( fn () => true );
+} );
+
 // --- User Controller: include parameter tests ---
 
 test( 'user index returns roles by default when no include param', function (): void {
@@ -215,5 +229,5 @@ test( 'role index ignores invalid include values', function (): void {
     $response = $this->actingAs( $actor )->getJson( '/api/v1/roles?include=nonexistent' );
 
     $response->assertSuccessful();
-    expect( $response->json( 'data.0' ) )->not->toHaveKey( 'permissions' );
-} );
+    expect( $response->json( 'data.0' ) )->not->toHaveKey( 'permissions');
+});

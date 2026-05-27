@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Policies\NotificationPolicy;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser as User;

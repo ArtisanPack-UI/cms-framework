@@ -262,7 +262,7 @@ class PageManager
         $this->applySearchFilter( $query, $filters );
 
         // Apply template filter (page-specific)
-        if ( isset( $filters['template'] ) ) {
+        if ( isset( $filters['template'])) {
             $query->byTemplate( $filters['template']);
         }
     }

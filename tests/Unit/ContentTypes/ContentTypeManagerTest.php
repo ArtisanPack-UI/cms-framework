@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\Hooks\Facades\Filter;
@@ -231,4 +233,4 @@ test( 'registered content types merges database and filtered content types', fun
 
     expect( $registeredTypes )->toHaveKey( 'posts' );
     expect( $registeredTypes )->toHaveKey( 'custom' );
-} );
+});

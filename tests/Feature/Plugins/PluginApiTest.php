@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
@@ -230,4 +230,4 @@ describe( 'Plugin API - Permission Checks', function (): void {
             $response->assertStatus( 401 );
         }
     } );
-} );
+});

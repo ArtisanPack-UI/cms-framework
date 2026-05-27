@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
@@ -333,4 +333,4 @@ describe( 'Scalability Tests', function (): void {
         // Last insertion should not be more than 5x slower than first
         expect( $lastTime )->toBeLessThan( $firstTime * 5 );
     } );
-} );
+});

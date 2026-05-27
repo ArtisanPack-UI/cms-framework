@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\RoleManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
@@ -126,4 +128,4 @@ test( 'role manager addPermissionToRole method works with app container', functi
 
     $role->refresh();
     expect( $role->permissions->first()->slug )->toBe( 'publish-posts' );
-} );
+});

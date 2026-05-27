@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
@@ -302,5 +302,5 @@ describe( 'File System Security', function (): void {
         // When extracting, paths should be validated
         // This is tested implicitly through the ZIP extraction process
         expect( true )->toBeTrue();
-    } );
-} );
+    });
+});

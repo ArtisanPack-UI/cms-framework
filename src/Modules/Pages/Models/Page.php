@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentSt
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\MediaLibrary\Models\Media;
+use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -34,6 +35,7 @@ use Illuminate\Support\Collection;
  * @property string $title
  * @property string $slug
  * @property string|null $content
+ * @property array<int, array<string, mixed>>|null $block_content
  * @property string|null $excerpt
  * @property int $author_id
  * @property int|null $parent_id
@@ -50,11 +52,19 @@ use Illuminate\Support\Collection;
  */
 class Page extends Model
 {
+    use HasBlockContent;
     use HasContentStatus;
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
     use SoftDeletes;
+
+    /**
+     * The column that stores the visual editor block tree JSON.
+     *
+     * @since 2.0.0
+     */
+    protected string $blockContentColumn = 'block_content';
 
     /**
      * The attributes that are mass assignable.

@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Enums\NotificationType;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Jobs\SendNotificationEmail;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Managers\NotificationManager;
@@ -365,4 +367,4 @@ test( 'getUnreadCount returns correct unread count', function (): void {
     $count = $manager->getUnreadCount( $user->id );
 
     expect( $count )->toBe( 2 );
-} );
+});

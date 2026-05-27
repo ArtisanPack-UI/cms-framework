@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 
@@ -130,4 +130,4 @@ it( 'checks if has service provider', function (): void {
 
     expect( $pluginWithSP->hasServiceProvider() )->toBeTrue()
         ->and( $pluginWithoutSP->hasServiceProvider() )->toBeFalse();
-} );
+});

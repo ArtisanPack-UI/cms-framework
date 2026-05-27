@@ -3,13 +3,14 @@
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
   "license": "MIT",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\CMSFramework\\": "src/",
       "ArtisanPackUI\\Database\\": "database/"
     },
     "files": [
+      "src/Compatibility/visual-editor.php",
       "src/Modules/Users/helpers.php",
       "src/Modules/Admin/helpers.php",
       "src/Modules/Core/helpers.php",
@@ -27,16 +28,20 @@
       "email": "me@jacobmartella.com"
     }
   ],
+  "prefer-stable": true,
   "require": {
     "php": "^8.2",
     "illuminate/support": "^12.17.0",
     "laravel/framework": "^12.0",
     "laravel/tinker": "^2.10.1",
     "artisanpack-ui/accessibility": "^2.1.0",
-    "artisanpack-ui/security": "^1.0.3",
+    "artisanpack-ui/security": "^1.0.3|^2.0",
     "artisanpack-ui/core": "^1.0",
     "artisanpack-ui/hooks": "^1.1",
-    "dedoc/scramble": "^0.12 || ^0.13"
+    "artisanpack-ui/rbac": "^1.0",
+    "dedoc/scramble": "^0.12 || ^0.13",
+    "justinrainbow/json-schema": "^6.0",
+    "laravel/sanctum": "^4.0.8"
   },
   "require-dev": {
     "pestphp/pest": "^3.8",

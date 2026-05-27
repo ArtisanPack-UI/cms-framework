@@ -127,4 +127,46 @@ return [
     |
     */
     'verify_checksum' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | GitLab Update Strategy
+    |--------------------------------------------------------------------------
+    |
+    | Controls how `GitLabUpdateSource` resolves the download URL for a
+    | release. Two strategies are supported:
+    |
+    | - 'auto_archive' (default): use the auto-generated source archive at
+    |   `/api/v4/projects/{id}/repository/archive.zip?sha={tag}`. This works
+    |   for any repository regardless of whether CI uploaded release assets.
+    |
+    | - 'release_asset': resolve the download URL from `release.assets.links[]`
+    |   by matching against `gitlab_release_asset_pattern`. This lets CI-built
+    |   ZIP archives (with curated contents and a sidecar checksum) be consumed
+    |   by the updater. The matched asset must be a ZIP — the extractor in
+    |   `ApplicationUpdateManager::extractUpdate()` uses `ZipArchive`, so other
+    |   archive formats (e.g. tarballs) are not supported until that extractor
+    |   is extended. If no link matches the pattern, the update fails loudly
+    |   rather than silently falling back to the auto-archive.
+    |
+    */
+    'gitlab_update_strategy' => env( 'GITLAB_UPDATE_STRATEGY', 'auto_archive' ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | GitLab Release Asset Pattern
+    |--------------------------------------------------------------------------
+    |
+    | Glob pattern (compatible with `fnmatch`) used to select the release
+    | asset link when `gitlab_update_strategy` is `'release_asset'`. Matched
+    | case-insensitively against the asset link's `name` field, falling back
+    | to the basename of its `url` when the name is missing.
+    |
+    | The default is `*.zip` because the update extractor uses `ZipArchive`.
+    | Customizing this glob only changes which asset link is selected; the
+    | matched asset must still be a ZIP. Supporting other archive formats
+    | (tarballs, etc.) would require extending `ApplicationUpdateManager::extractUpdate()`.
+    |
+    */
+    'gitlab_release_asset_pattern' => env( 'GITLAB_RELEASE_ASSET_PATTERN', '*.zip' ),
 ];

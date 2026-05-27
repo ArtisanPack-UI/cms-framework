@@ -169,5 +169,5 @@ test( 'export command supports pretty print', function (): void {
 
     // Pretty-printed JSON is longer and contains indentation
     expect( strlen( $prettyContent ) )->toBeGreaterThan( strlen( $compactContent ) );
-    expect( $prettyContent )->toContain( "\n    " );
-} );
+    expect( $prettyContent )->toContain( "\n    ");
+});

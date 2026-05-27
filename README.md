@@ -11,10 +11,13 @@ A comprehensive Laravel package that provides back-end support for building a CM
 
 - **Content Management**: Content types, taxonomies, and media management
 - **Admin Interface**: Admin pages, dashboard widgets, and settings management
-- **User Management**: User roles, permissions, and profiles
+- **User Management**: User roles, permissions, and profiles (powered by `artisanpack-ui/rbac` in 2.0.0)
 - **Authentication**: Two-factor authentication with Laravel Sanctum integration
 - **Notifications**: Comprehensive notification system
-- **Themes & Plugins**: Support for themes and plugins ⚠️ **Experimental in Beta**
+- **Site Editor** *(new in 2.0.0)*: WordPress-style templates, template parts, patterns, global styles, and menus
+- **Visual Editor Integration** *(new in 2.0.0)*: Opt-in bridge to the optional `artisanpack-ui/visual-editor` package
+- **Themes**: Discovery, activation, ZIP upload, and lifecycle hooks
+- **Plugins**: Plugin system ⚠️ **Experimental**
 - **Core Updates**: Automatic update checking and management with rollback support
 - **PWA Support**: Progressive Web App features
 - **Audit Logging**: Track changes and user actions
@@ -155,12 +158,30 @@ The theme system allows customization of the CMS appearance.
 - Theme activation mechanism
 - JSON manifest validation
 - Basic theme structure
+- Lifecycle hooks for install/activate (see below)
 
 **Known Limitations:**
 - Asset compilation not implemented
 - No child theme support
 - Limited theme customization API
 - No theme preview functionality
+
+**Theme Lifecycle Hooks**
+
+The Themes module fires `doAction()` callbacks around `installFromZip()` and `activateTheme()` so host applications can subscribe listeners (seed content, register theme-supplied service providers, etc.) without forking the framework.
+
+| Hook | Fires | Payload | Throwing semantics |
+|------|-------|---------|--------------------|
+| `theme.installing` | After the ZIP is extracted and the manifest is validated, before the install is finalized. | `string $slug, array $manifest` | Throwing aborts the install; the extracted directory is rolled back. |
+| `theme.installed` | After the install completes and the discovery cache is cleared. | `string $slug, array $manifest` | Throwing propagates to the caller (install is already complete). |
+| `theme.activating` | After the target theme is resolved, before `themes.activeTheme` is updated. | `string $slug, array $manifest` | Throwing aborts activation; the active theme setting is not changed. |
+| `theme.activated` | After `themes.activeTheme` is updated and cache invalidation is attempted (including `view:clear`, which is logged-and-continued on failure). | `string $slug, array $manifest` | Throwing propagates to the caller (activation is already complete). |
+
+```php
+addAction('theme.activated', function (string $slug, array $manifest): void {
+    // Seed pages, register navigation entries, etc.
+});
+```
 
 **Recommendation:** Use for testing and development. Full theme support including asset compilation and child themes will be added in a future release.
 

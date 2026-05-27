@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Notification Manager
@@ -384,7 +384,7 @@ class NotificationManager
 
         return $userModel::whereIn( 'id', $userIds )
             ->whereDoesntHave( 'notificationPreferences', function ( $query ) use ( $notificationKey ): void {
-                $query->where( 'notification_type', sanitizeText( $notificationKey ))
+                $query->where( 'notification_type', sanitizeText( $notificationKey))
                     ->where( 'email_enabled', false);
             })
             ->pluck( 'id')

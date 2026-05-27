@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
@@ -201,5 +201,5 @@ describe( 'Manifest Parsing', function (): void {
         expect( $manifest )->toBeNull();
 
         File::delete( $tempFile );
-    } );
-} );
+    });
+});

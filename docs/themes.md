@@ -19,6 +19,8 @@ The Themes module provides a flexible, WordPress‑inspired theme system with:
 - [Template Hierarchy](Themes-Template-Hierarchy) — How templates are resolved
 - [Theme Manifest](Themes-Theme-Manifest) — The theme.json file format
 - [API Reference](Themes-Api-Reference) — REST endpoints and helper functions
+- [[themes/Installing From Zip]] — Upload a theme as a ZIP archive *(2.0.0)*
+- [[themes/Lifecycle Hooks]] — Listen to `theme.activating`, `theme.activated`, `theme.installing`, `theme.installed` *(2.0.0)*
 
 ## Overview
 
@@ -73,9 +75,121 @@ return [
         'cacheEnabled' => env('THEMES_CACHE_ENABLED', true),
         'cacheKey' => 'cms.themes.discovered',
         'cacheTtl' => 3600, // 1 hour
+
+        // WordPress theme.json schema version used to validate the WP-shape
+        // subset of theme.json. Pinned to match the @wordpress/* package
+        // versions in artisanpack-ui/visual-editor.
+        'wpThemeJsonSchemaVersion' => '3',
     ],
 ];
 ```
+
+## Theme Manifest
+
+`theme.json` carries cms-framework metadata plus an optional WordPress-shape subset for site-editor integration.
+
+### cms-framework manifest fields
+
+```json
+{
+    "name": "Digital Shopfront",
+    "slug": "digital-shopfront",
+    "version": "1.0.0",
+    "description": "A reference theme.",
+    "author": "Jacob Martella",
+    "screenshot": "screenshot.png"
+}
+```
+
+These fields are unchanged from earlier versions and are required for theme discovery.
+
+### WordPress theme.json subset
+
+Themes can additionally carry the WordPress `theme.json` top-level keys to drive global styles, custom templates, template parts, and patterns:
+
+```json
+{
+    "name": "Digital Shopfront",
+    "slug": "digital-shopfront",
+    "version": "1.0.0",
+    "$schema": "https://schemas.wp.org/wp/6.8/theme.json",
+
+    "settings": {
+        "color": {
+            "palette": [
+                { "slug": "primary", "name": "Primary", "color": "#3b82f6" }
+            ]
+        },
+        "typography": {
+            "fontSizes": [
+                { "slug": "small", "name": "Small", "size": "0.875rem" }
+            ]
+        }
+    },
+    "styles": {
+        "color": { "background": "#ffffff", "text": "#111827" }
+    },
+    "customTemplates": [
+        { "name": "page-with-sidebar", "title": "Page with sidebar" }
+    ],
+    "templateParts": [
+        { "name": "header", "title": "Header", "area": "header" }
+    ],
+    "patterns": [ "my-namespace/cta" ]
+}
+```
+
+The WP-shape subset is validated against the WordPress `theme.json` schema version pinned in `cms.themes.wpThemeJsonSchemaVersion` (default `'3'`, matching WordPress 6.8). Bumping the pinned version requires also updating the bundled schema file at `src/Modules/Themes/Validation/schemas/wp-theme-json-v{N}.json`.
+
+### `menus.locations` extension
+
+cms-framework adds a `menus.locations` extension that overrides the default menu locations configured in `config('cms.menus.locations')`. Theme entries replace app-defined locations by key:
+
+```json
+{
+    "menus": {
+        "locations": {
+            "primary": "Primary Menu",
+            "footer":  "Footer Menu"
+        }
+    }
+}
+```
+
+`menus.locations` must be an object mapping location keys (strings) to display labels (strings). Lists or non-string values are rejected.
+
+### Validation behavior
+
+When `ThemeManager::discoverThemes()` runs, each theme is validated in three stages:
+
+1. The theme directory exists.
+2. All `cms.themes.requiredFiles` entries are present.
+3. The `theme.json` manifest passes the pinned WP schema (for any WP-shape keys it carries) and the `menus.locations` extension shape.
+
+Themes that fail any stage are skipped from discovery. Schema failures log a warning naming the offending key (e.g. `settings.color.palette`) so theme authors can correct their manifest.
+
+### Strict install validation
+
+`ThemeManager::installFromZip()` runs an additional `validateManifest()` check after extraction. This stricter pass is the contract every uploadable theme must satisfy. It is not applied to themes already on disk so existing installations are not broken by tightened rules.
+
+**Required fields:**
+
+- `slug` — alphanumeric, hyphens, and underscores only (`/^[a-zA-Z0-9_-]+$/`).
+- `name` — non-empty string.
+- `version` — anchored semver `MAJOR.MINOR.PATCH` (`/^\d+\.\d+\.\d+$/`). Anchoring is deliberate; it prevents injection suffixes such as `1.0.0'; DROP TABLE`.
+
+**Optional fields, validated when present:**
+
+- `screenshot` — basename only, no path separators (`/` or `\`), with an allowlisted image extension (`png`, `jpg`, `jpeg`, `webp`).
+- `requires` — anchored semver, same shape as `version`.
+- `templates.layouts`, `templates.pages`, `templates.partials` — arrays of strings.
+- `supports.*` — booleans (e.g. `supports.menus`, `supports.widgets`).
+
+If validation fails, the freshly extracted theme directory is removed and a `ThemeValidationException` is thrown.
+
+### Reserved `keystone` namespace
+
+The `keystone` top-level key is reserved for consumer-specific install hints (e.g. `keystone.installer`, `keystone.seed.pages[]`). cms-framework treats this namespace as opaque — it is preserved through parsing but not interpreted. Downstream CMSes can layer their own installer/seed contracts under `keystone` without forking the manifest spec.
 
 ## Template Hierarchy
 

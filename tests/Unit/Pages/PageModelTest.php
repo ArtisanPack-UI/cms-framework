@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\PageCategory;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\PageTag;
@@ -590,4 +592,4 @@ test( 'page uses soft deletes', function (): void {
 
     expect( Page::find( $pageId ) )->toBeNull();
     expect( Page::withTrashed()->find( $pageId ) )->not->toBeNull();
-} );
+});

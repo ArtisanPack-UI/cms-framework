@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Page Policy for the CMS Framework Pages Module.
@@ -185,6 +185,6 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.publish', 'pages.publish', $page ) );
+        return $user->can( applyFilters( 'pages.publish', 'pages.publish', $page ));
     }
 }

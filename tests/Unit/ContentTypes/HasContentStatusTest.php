@@ -202,4 +202,4 @@ test( 'scopePublished includes content with null published_at via trait', functi
 
     expect( $published )->toHaveCount( 1 );
     expect( $published->first()->title )->toBe( 'Published No Date' );
-} );
+});

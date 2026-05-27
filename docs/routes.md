@@ -195,6 +195,100 @@ Standard RESTful resource routes for theme management.
 
 Standard RESTful resource routes for application settings management.
 
+### Site Settings *(2.0.0)*
+
+**Base Path**: `/api/v1/settings/site`
+**Middleware**: `auth:sanctum`
+
+WP-shape envelope over the built-in `site.*` settings (title, tagline, URL, logo, icon).
+
+| Method | URI | Controller Method | Description |
+|--------|-----|-------------------|-------------|
+| GET | `/site` | `SiteSettingController@show` | Read the WP-shape site-meta envelope |
+| PUT | `/site` | `SiteSettingController@update` | Partial update (omit fields to leave unchanged) |
+
+See [[settings/Site Settings]] for the envelope shape.
+
+---
+
+## Site Editor Module *(2.0.0)*
+
+**Base Path**: `/api/v1/`
+**Middleware**: `auth:sanctum`
+
+The Site Editor module exposes WP-shape endpoints for templates, parts, patterns, global styles, and menus. See [[site-editor/API Reference]] for the full listing and response shapes.
+
+### Templates and Template Parts
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| GET | `/templates` | List resolved templates (file + DB merged) |
+| GET | `/templates/{slug}` | Show one resolved template |
+| POST | `/templates` | Create DB-stored template |
+| PUT | `/templates/{slug}` | Upsert DB-stored template |
+| DELETE | `/templates/{slug}` | Revert (DB row deletion) |
+| GET | `/template-parts` | List template parts |
+| GET | `/template-parts/{slug}` | Show one template part |
+| POST | `/template-parts` | Create DB-stored template part |
+| PUT | `/template-parts/{slug}` | Upsert |
+| DELETE | `/template-parts/{slug}` | Revert |
+
+### Patterns
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| GET | `/blocks` | List synced user patterns (`wp_block` shape) |
+| GET | `/blocks/{slug}` | Show one synced pattern |
+| POST | `/blocks` | Create synced user pattern |
+| PUT | `/blocks/{slug}` | Upsert synced user pattern |
+| DELETE | `/blocks/{slug}` | Delete synced user pattern |
+| GET | `/block-patterns/patterns` | List theme + user-source unsynced patterns merged |
+| GET | `/block-patterns/patterns/{slug}` | Show one unsynced pattern |
+| POST | `/block-patterns/patterns` | Create unsynced user pattern |
+| PUT | `/block-patterns/patterns/{slug}` | Upsert (403 for theme slugs) |
+| DELETE | `/block-patterns/patterns/{slug}` | Delete (403 for theme slugs) |
+
+### Global Styles
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| GET | `/global-styles` | Resolved styles for the active theme |
+| PUT | `/global-styles` | Create or update the user customization row |
+| DELETE | `/global-styles` | Revert to file-only authority |
+| GET | `/global-styles/variations` | List theme-shipped variations |
+| GET | `/global-styles/css` | Emit resolved CSS as `text/css` |
+
+### Menus
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| GET | `/menus` | List menus for the active theme |
+| POST | `/menus` | Create a menu |
+| GET | `/menus/{id_or_slug}` | Show one menu |
+| PUT | `/menus/{id_or_slug}` | Update menu metadata |
+| DELETE | `/menus/{id_or_slug}` | Delete menu (cascades to items and assignments) |
+| GET | `/menu-items?menus={id}` | List items for a menu |
+| POST | `/menu-items` | Create item |
+| GET | `/menu-items/{id}` | Show item |
+| PUT | `/menu-items/{id}` | Update item |
+| DELETE | `/menu-items/{id}` | Delete item (cascades to children) |
+| GET | `/menu-locations` | List declared locations + assignments |
+| PUT | `/menu-locations/{location}` | Assign a menu to a location |
+| DELETE | `/menu-locations/{location}` | Unassign |
+
+---
+
+## Themes Upload *(2.0.0)*
+
+**Base Path**: `/api/v1/themes`
+**Middleware**: `auth:sanctum`
+
+| Method | URI | Description |
+|--------|-----|-------------|
+| POST | `/` | Upload a theme ZIP archive (multipart `theme` field) |
+
+See [[themes/Installing From Zip]] for usage and validation behavior.
+
 ---
 
 ## Route Registration

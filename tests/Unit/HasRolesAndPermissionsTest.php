@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns\HasRolesAndPermissions;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
@@ -168,4 +170,4 @@ test( 'hasPermissionTo works with role that has multiple permissions', function 
     expect( $user->hasPermissionTo( 'edit-posts' ) )->toBeTrue();
     expect( $user->hasPermissionTo( 'delete-posts' ) )->toBeTrue();
     expect( $user->hasPermissionTo( 'non-existent-permission' ) )->toBeFalse();
-} );
+});

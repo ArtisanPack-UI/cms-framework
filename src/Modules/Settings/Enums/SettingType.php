@@ -34,11 +34,11 @@ enum SettingType: string
     public static function fromValue( mixed $value ): self
     {
         return match ( true ) {
-            is_bool( $value )                        => self::Boolean,
-            is_int( $value )                         => self::Integer,
-            is_float( $value )                       => self::Float,
+            is_bool( $value )                          => self::Boolean,
+            is_int( $value )                           => self::Integer,
+            is_float( $value )                         => self::Float,
             is_array( $value ), is_object( $value )    => self::Json,
-            default                                => self::String,
+            default                                    => self::String,
         };
     }
 

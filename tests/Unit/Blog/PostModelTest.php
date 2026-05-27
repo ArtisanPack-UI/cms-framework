@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
@@ -487,4 +489,4 @@ test( 'post uses soft deletes', function (): void {
 
     expect( Post::find( $postId ) )->toBeNull();
     expect( Post::withTrashed()->find( $postId ) )->not->toBeNull();
-} );
+});

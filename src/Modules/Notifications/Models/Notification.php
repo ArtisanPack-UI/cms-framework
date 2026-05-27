@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Notification Model
@@ -90,8 +90,6 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
     public function scopeUnreadForUser( Builder $query, int $userId )
@@ -107,8 +105,6 @@ class Notification extends Model
      * Scope a query to only include read notifications for a user.
      *
      * @since 1.0.0
-     *
-     * @param  Builder  $query
      *
      * @return Builder
      */
@@ -126,8 +122,6 @@ class Notification extends Model
      *
      * @since 1.0.0
      *
-     * @param  Builder  $query
-     *
      * @return Builder
      */
     public function scopeNotDismissedForUser( Builder $query, int $userId )
@@ -142,8 +136,6 @@ class Notification extends Model
      * Scope a query to filter by notification type.
      *
      * @since 1.0.0
-     *
-     * @param  Builder  $query
      *
      * @return Builder
      */

@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types = 1 );
+declare( strict_types=1 );
 
 /**
  * Blog Service Provider
@@ -19,7 +19,9 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostCategoryPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostTagPolicy;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Services\QueryRuntime;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +43,19 @@ class BlogServiceProvider extends ServiceProvider
     {
         // Register BlogManager as singleton
         $this->app->singleton( BlogManager::class, fn () => new BlogManager );
+
+        // G4c-1 — QueryRuntime resolves `core/query` block attributes to a
+        // paginated Eloquent result. Bound here so visual-editor's REST
+        // endpoint and any in-process caller share one orchestration
+        // layer over BlogManager / PageManager / ContentTypeManager.
+        $this->app->singleton(
+            QueryRuntime::class,
+            fn ( $app ) => new QueryRuntime(
+                $app->make( BlogManager::class ),
+                $app->make( PageManager::class ),
+                $app->make( ContentTypeManager::class ),
+            ),
+        );
 
         // Load helpers
         $this->loadHelpers();

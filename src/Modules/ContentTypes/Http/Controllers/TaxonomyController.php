@@ -174,6 +174,6 @@ class TaxonomyController extends Controller
 
         $taxonomies = $this->taxonomyManager->getTaxonomiesForContentType( $contentTypeSlug );
 
-        return TaxonomyResource::collection( $taxonomies );
+        return TaxonomyResource::collection( $taxonomies);
     }
 }

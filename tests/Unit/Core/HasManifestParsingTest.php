@@ -166,4 +166,4 @@ describe( 'resolveSecurePath', function (): void {
 
         expect( $result )->toBeNull();
     } );
-} );
+});

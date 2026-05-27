@@ -1,5 +1,7 @@
 <?php
 
+declare( strict_types=1 );
+
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser as User;
@@ -149,4 +151,4 @@ test( 'user can get unread notifications count', function (): void {
     $count = $user->unreadSystemNotificationsCount();
 
     expect( $count )->toBe( 2 );
-} );
+});
