@@ -16,6 +16,7 @@ A comprehensive Laravel package that provides back-end support for building a CM
 - **Notifications**: Comprehensive notification system
 - **Site Editor** *(new in 2.0.0)*: WordPress-style templates, template parts, patterns, global styles, and menus
 - **Visual Editor Integration** *(new in 2.0.0)*: Opt-in bridge to the optional `artisanpack-ui/visual-editor` package
+- **Blog Comments** *(new in 2.1.0)*: Threaded post comments with public read / guest submit, rate-limited public submission, and auth-gated moderation
 - **Themes**: Discovery, activation, ZIP upload, and lifecycle hooks
 - **Plugins**: Plugin system ⚠️ **Experimental**
 - **Core Updates**: Automatic update checking and management with rollback support

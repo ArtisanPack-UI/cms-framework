@@ -148,4 +148,4 @@ test( 'apGetRegisteredNotifications helper returns all registered notifications'
 
     expect( $registered )->toHaveKey( 'test.one' )
         ->and( $registered )->toHaveKey( 'test.two' );
-});
+} );

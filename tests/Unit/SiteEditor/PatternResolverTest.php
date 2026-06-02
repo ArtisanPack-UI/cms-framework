@@ -297,5 +297,5 @@ describe( 'BlockPattern slug prefix', function (): void {
         ] );
 
         expect( $row->slug )->toBe( 'user/already' );
-    });
-});
+    } );
+} );

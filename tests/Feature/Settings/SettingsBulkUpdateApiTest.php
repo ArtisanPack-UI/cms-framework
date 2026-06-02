@@ -183,4 +183,4 @@ test( 'it rejects a request missing the settings key entirely', function (): voi
         ->putJson( '/api/v1/settings', [] )
         ->assertStatus( 422 )
         ->assertJsonValidationErrors( ['settings'] );
-});
+} );

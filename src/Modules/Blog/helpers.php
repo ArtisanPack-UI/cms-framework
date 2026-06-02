@@ -278,6 +278,6 @@ if ( ! function_exists( 'postTagExists' ) ) {
             return PostTag::where( 'id', sanitizeInt( $identifier ) )->exists();
         }
 
-        return PostTag::where( 'slug', sanitizeText( $identifier))->exists();
+        return PostTag::where( 'slug', sanitizeText( $identifier ))->exists();
     }
 }

@@ -65,5 +65,5 @@ test( 'column type enum label returns translatable string', function (): void {
 test( 'column type enum validationRule returns enum rule', function (): void {
     $rule = ColumnType::validationRule();
 
-    expect( $rule )->toBeInstanceOf( Enum::class);
-});
+    expect( $rule )->toBeInstanceOf( Enum::class );
+} );

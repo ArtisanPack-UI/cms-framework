@@ -9,6 +9,7 @@ The Blog module provides a full-featured blog with posts, categories, tags, and 
 ## Blog Guides
 
 - [[blog/Query Runtime]] — The `QueryRuntime` service that resolves visual-editor `core/query` block loops *(2.0.0)*
+- [[blog/Comments]] — Threaded post comments with public read / guest submit + auth-gated moderation *(2.1.0)*
 
 ## Overview
 

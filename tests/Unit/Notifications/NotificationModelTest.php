@@ -193,4 +193,4 @@ test( 'factory withoutEmail state disables email sending', function (): void {
     $notification = Notification::factory()->withoutEmail()->create();
 
     expect( $notification->send_email )->toBeFalse();
-});
+} );

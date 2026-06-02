@@ -215,5 +215,5 @@ describe( 'MenuResolver::revert()', function (): void {
 
     it( 'returns false when no assignment exists', function (): void {
         expect( $this->resolver->revert( 'primary' ) )->toBeFalse();
-    });
-});
+    } );
+} );

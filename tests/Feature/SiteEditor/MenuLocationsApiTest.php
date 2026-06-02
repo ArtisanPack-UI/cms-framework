@@ -121,4 +121,4 @@ describe( 'DELETE /api/v1/menu-locations/{location}', function (): void {
 
         $this->deleteJson( '/api/v1/menu-locations/primary' )->assertNotFound();
     } );
-});
+} );

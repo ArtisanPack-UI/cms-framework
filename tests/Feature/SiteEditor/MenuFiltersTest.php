@@ -103,4 +103,4 @@ describe( 'ap.visual-editor.navigation filter wiring', function (): void {
         expect( $entries['primary']['wp_id'] )->toBe( 999 )
             ->and( $entries )->toHaveKey( 'footer' );
     } );
-});
+} );

@@ -176,4 +176,4 @@ test( 'post model still uses HasFeaturedImage trait', function (): void {
 
 test( 'page model still uses HasFeaturedImage trait', function (): void {
     expect( in_array( HasFeaturedImage::class, class_uses_recursive( Page::class ), true ) )->toBeTrue();
-});
+} );

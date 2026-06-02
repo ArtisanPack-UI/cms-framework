@@ -19,6 +19,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.1.0] - 2026-06-02
+
+### Added
+
+- **Comments submodule** for the Blog module ([#151](https://github.com/ArtisanPack-UI/cms-framework/pull/152)):
+  - `Comment` model with `post_id`, `parent_id` threading, optional `user_id`, guest author fields (`author_name`, `author_email`, `author_url`), `content`, `status` (`pending` / `approved` / `spam` / `trash`), and `approved_at` timestamp; soft-deletable
+  - `post_comments` migration with indexes for post, parent, status, and approved-at lookups
+  - `Post` model gains `comments()` (approved-only, newest-first) and `commentsIncludingUnapproved()` relations, plus `comments_count` and `comments_url` accessors for visual-editor integration
+  - REST endpoints under `/api/v1/comments` — public `GET` (`index`, `show`) returns the approved set, public `POST` creates a `pending` comment for guests, and `PUT` / `PATCH` / `DELETE` are auth-gated
+  - `CommentRequest` form request with separate `store` / `update` rule sets and guest-vs-authenticated branching
+  - `CommentResource` API resource shaping the response payload — mirrors the shape `CommentResolver` reads in `artisanpack-ui/visual-editor` to stamp `_resolved*` attributes on `artisanpack/comment-*` blocks
+  - `CommentPolicy` with hookable abilities and a `comments.create.public` filter that defaults to allow
+  - `CommentFactory` with `pending` / `approved` / `spam` / `trash` / `guest` / `forPost` / `replyTo` states
+- **Public `POST /api/v1/comments` rate limiting** — `BlogServiceProvider::registerCommentsRateLimiter()` registers a `throttle:comments` named limiter that defaults to 10/min for guests (keyed by IP) and 60/min for authenticated users (keyed by user id). Both buckets are overridable via the `comments.rate-limit.guest` and `comments.rate-limit.authenticated` hooks filters.
+
+### Security
+
+- Public, unauthenticated `POST /api/v1/comments` is rate-limited by default (see Added) to keep guest commenters from bulk-inserting against `post_comments`.
+
 ## [2.0.0] - 2026-05-26
 
 ### Added

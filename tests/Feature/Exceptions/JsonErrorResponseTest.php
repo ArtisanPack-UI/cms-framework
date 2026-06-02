@@ -243,4 +243,4 @@ test( 'module exceptions that extend CMSFrameworkException inherit JSON renderin
     ] );
     $response->assertJsonPath( 'error.code', 'SERVER_ERROR' );
     $response->assertJsonPath( 'error.message', 'Module error occurred.' );
-});
+} );

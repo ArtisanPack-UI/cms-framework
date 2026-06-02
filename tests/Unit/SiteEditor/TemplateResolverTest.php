@@ -202,5 +202,5 @@ describe( 'slug sanitization', function (): void {
 
         expect( $this->resolver->revert( '../page' ) )->toBeFalse()
             ->and( Template::where( 'slug', 'page' )->exists() )->toBeTrue();
-    });
-});
+    } );
+} );

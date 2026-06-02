@@ -333,4 +333,4 @@ describe( 'Scalability Tests', function (): void {
         // Last insertion should not be more than 5x slower than first
         expect( $lastTime )->toBeLessThan( $firstTime * 5 );
     } );
-});
+} );

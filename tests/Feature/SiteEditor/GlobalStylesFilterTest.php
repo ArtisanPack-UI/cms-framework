@@ -90,4 +90,4 @@ describe( 'ap.visual-editor.global-styles filter wiring', function (): void {
 
         expect( $entry )->toBeNull();
     } );
-});
+} );

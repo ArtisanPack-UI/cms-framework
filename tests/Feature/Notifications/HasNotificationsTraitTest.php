@@ -151,4 +151,4 @@ test( 'user can get unread notifications count', function (): void {
     $count = $user->unreadSystemNotificationsCount();
 
     expect( $count )->toBe( 2 );
-});
+} );

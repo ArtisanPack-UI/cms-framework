@@ -284,5 +284,5 @@ describe( 'ap.visual-editor.patterns filter wiring', function (): void {
         $merged = applyFilters( 'ap.visual-editor.patterns', $existing );
 
         expect( $merged['hero']['title'] )->toBe( 'Static Hero' );
-    });
-});
+    } );
+} );

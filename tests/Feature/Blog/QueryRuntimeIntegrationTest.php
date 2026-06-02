@@ -122,4 +122,4 @@ it( 'falls back to an empty result when no posts match', function (): void {
 
     expect( $result->total() )->toBe( 0 )
         ->and( $result->items() )->toBe( [] );
-});
+} );

@@ -55,4 +55,4 @@ it( 'neutralizes `</style>` payloads so user input cannot break out of the style
     expect( stripos( $stripped, '</style' ) )->toBe( false )
         ->and( $stripped )->toContain( '<\\/style>' )
         ->and( $stripped )->toContain( '<\\/script>' );
-});
+} );

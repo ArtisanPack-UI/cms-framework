@@ -217,5 +217,5 @@ describe( 'theme isolation', function (): void {
         $response->assertOk();
         expect( $response->json( 'has_user_customization' ) )->toBeFalse()
             ->and( $response->json( 'styles.color.background' ) )->toBe( '#ffffff' );
-    });
-});
+    } );
+} );

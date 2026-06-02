@@ -176,5 +176,5 @@ describe( 'theme isolation', function (): void {
         $slugs    = collect( $response->json() )->pluck( 'slug' )->all();
 
         expect( $slugs )->not->toContain( 'header' );
-    });
-});
+    } );
+} );

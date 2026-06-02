@@ -592,4 +592,4 @@ test( 'page uses soft deletes', function (): void {
 
     expect( Page::find( $pageId ) )->toBeNull();
     expect( Page::withTrashed()->find( $pageId ) )->not->toBeNull();
-});
+} );

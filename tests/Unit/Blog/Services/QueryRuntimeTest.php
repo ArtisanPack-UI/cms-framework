@@ -278,4 +278,4 @@ it( 'ignores taxQuery operators outside the V1 IN subset', function (): void {
 
 it( 'throws when an unknown postType is requested', function (): void {
     $this->runtime->resolve( ['postType' => 'something-unregistered'] );
-} )->throws( InvalidArgumentException::class, 'unknown post type');
+} )->throws( InvalidArgumentException::class, 'unknown post type' );

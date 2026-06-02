@@ -76,4 +76,4 @@ Route::prefix( 'api/v1' )
             Route::put( '{location}', [MenuLocationsController::class, 'update'] )->name( 'api.menu-locations.update' );
             Route::delete( '{location}', [MenuLocationsController::class, 'destroy'] )->name( 'api.menu-locations.destroy' );
         } );
-    });
+    } );

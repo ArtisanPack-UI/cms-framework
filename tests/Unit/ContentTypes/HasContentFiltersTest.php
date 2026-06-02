@@ -330,4 +330,4 @@ test( 'blog manager search filter escapes LIKE wildcards', function (): void {
 
     expect( $results )->toHaveCount( 1 );
     expect( $results->first()->title )->toBe( 'Sale: 50% off everything' );
-});
+} );

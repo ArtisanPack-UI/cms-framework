@@ -260,5 +260,5 @@ describe( 'ResolvedGlobalStyles::contentHash()', function (): void {
         $b = $this->resolver->resolve()->contentHash();
 
         expect( $a )->toBe( $b );
-    });
+    } );
 });

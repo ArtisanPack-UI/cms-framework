@@ -24,6 +24,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -118,6 +119,61 @@ class Post extends Model
     public function tags(): BelongsToMany
     {
         return $this->belongsToMany( PostTag::class, 'post_tag_pivots', 'post_id', 'post_tag_id' );
+    }
+
+    /**
+     * Get the comments for the post. Returns approved comments by
+     * default so consumers (e.g. the visual-editor `CommentResolver`)
+     * iterate over the public set out of the box. Use
+     * `$post->commentsIncludingUnapproved()` (or query
+     * `$post->hasMany(Comment::class)` directly with another status
+     * scope) for moderation surfaces.
+     *
+     * @since 2.1.0
+     */
+    public function comments(): HasMany
+    {
+        return $this->hasMany( Comment::class )->approved()->latest();
+    }
+
+    /**
+     * Get every comment on the post (regardless of moderation
+     * status). Used by admin / moderation surfaces; public consumers
+     * should use `comments()` above.
+     *
+     * @since 2.1.0
+     */
+    public function commentsIncludingUnapproved(): HasMany
+    {
+        return $this->hasMany( Comment::class );
+    }
+
+    /**
+     * Convenience integer count of approved comments. Read by the
+     * visual-editor's `PostResolver` when stamping
+     * `_resolvedCommentCount` onto post-comments-* display blocks.
+     *
+     * @since 2.1.0
+     */
+    public function getCommentsCountAttribute(): int
+    {
+        if ( $this->relationLoaded( 'comments' ) ) {
+            return $this->comments->count();
+        }
+
+        return $this->comments()->count();
+    }
+
+    /**
+     * Public URL to the comments section on the post permalink. The
+     * visual-editor's `PostResolver` reads this when stamping
+     * `_resolvedCommentsUrl` onto the `post-comments-link` block.
+     *
+     * @since 2.1.0
+     */
+    public function getCommentsUrlAttribute(): string
+    {
+        return $this->permalink . '#comments';
     }
 
     /**

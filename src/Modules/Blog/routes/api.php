@@ -8,6 +8,7 @@ declare( strict_types=1 );
  * @since 1.0.0
  */
 
+use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\CommentController;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\PostCategoryController;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\PostController;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\PostTagController;
@@ -67,4 +68,41 @@ Route::prefix( 'post-tags' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/{id}', [PostTagController::class, 'show'] );
     Route::put( '/{id}', [PostTagController::class, 'update'] );
     Route::delete( '/{id}', [PostTagController::class, 'destroy'] );
+} );
+
+/*
+|--------------------------------------------------------------------------
+| Comments API Routes
+|--------------------------------------------------------------------------
+|
+| Read endpoints (`index`, `show`) are public — `CommentPolicy` filters
+| the approved set so guest visitors can fetch comments without an auth
+| token. `store` is also publicly reachable (the policy's
+| `comments.create.public` filter defaults to allow); guest commenters
+| supply `author_name` / `author_email` / `author_url` and the
+| controller defaults the resulting comment to `pending` so a
+| moderator can approve it. Update / delete are auth-gated.
+|
+| The public `POST /comments` route is throttled via the
+| `throttle:comments` named limiter (defined in
+| `BlogServiceProvider::registerCommentsRateLimiter()`) to keep
+| unauthenticated callers from bulk-inserting against `post_comments`.
+| Default buckets: 10/min for guests (keyed by IP), 60/min for
+| authenticated users (keyed by user id) — overridable via the
+| `comments.rate-limit.guest` / `comments.rate-limit.authenticated`
+| hooks filters.
+|
+*/
+
+Route::prefix( 'comments' )->group( function (): void {
+    Route::get( '/', [CommentController::class, 'index'] );
+    Route::get( '/{comment}', [CommentController::class, 'show'] );
+    Route::post( '/', [CommentController::class, 'store'] )
+        ->middleware( 'throttle:comments' );
+
+    Route::middleware( 'auth' )->group( function (): void {
+        Route::put( '/{comment}', [CommentController::class, 'update'] );
+        Route::patch( '/{comment}', [CommentController::class, 'update'] );
+        Route::delete( '/{comment}', [CommentController::class, 'destroy'] );
+    } );
 } );
