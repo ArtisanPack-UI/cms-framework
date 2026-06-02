@@ -13,9 +13,11 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Comment;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\CommentPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostCategoryPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostTagPolicy;
@@ -80,6 +82,7 @@ class BlogServiceProvider extends ServiceProvider
         Gate::policy( Post::class, PostPolicy::class );
         Gate::policy( PostCategory::class, PostCategoryPolicy::class );
         Gate::policy( PostTag::class, PostTagPolicy::class );
+        Gate::policy( Comment::class, CommentPolicy::class );
 
         // Register blog content type
         $this->registerBlogContentType();

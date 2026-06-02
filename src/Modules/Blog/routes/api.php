@@ -8,6 +8,7 @@ declare( strict_types=1 );
  * @since 1.0.0
  */
 
+use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\CommentController;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\PostCategoryController;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\PostController;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Http\Controllers\PostTagController;
@@ -67,4 +68,28 @@ Route::prefix( 'post-tags' )->middleware( 'auth' )->group( function (): void {
     Route::get( '/{id}', [PostTagController::class, 'show'] );
     Route::put( '/{id}', [PostTagController::class, 'update'] );
     Route::delete( '/{id}', [PostTagController::class, 'destroy'] );
+} );
+
+/*
+|--------------------------------------------------------------------------
+| Comments API Routes
+|--------------------------------------------------------------------------
+|
+| Read endpoints (`index`, `show`) are public — `CommentPolicy` filters
+| the approved set so guest visitors can fetch comments without an auth
+| token. Create / update / delete go through the policy's authenticated
+| capability checks (`comments.create`, `comments.update`, etc.).
+|
+*/
+
+Route::prefix( 'comments' )->group( function (): void {
+    Route::get( '/', [CommentController::class, 'index'] );
+    Route::get( '/{comment}', [CommentController::class, 'show'] );
+
+    Route::middleware( 'auth' )->group( function (): void {
+        Route::post( '/', [CommentController::class, 'store'] );
+        Route::put( '/{comment}', [CommentController::class, 'update'] );
+        Route::patch( '/{comment}', [CommentController::class, 'update'] );
+        Route::delete( '/{comment}', [CommentController::class, 'destroy'] );
+    } );
 } );
