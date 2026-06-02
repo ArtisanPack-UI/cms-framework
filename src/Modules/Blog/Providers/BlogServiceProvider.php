@@ -13,17 +13,22 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Comment;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
+use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\CommentPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostCategoryPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Policies\PostTagPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Services\QueryRuntime;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -71,6 +76,11 @@ class BlogServiceProvider extends ServiceProvider
         // Load migrations
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
 
+        // Register the `comments` rate limiter BEFORE the routes load
+        // so the `throttle:comments` middleware attached to the
+        // public `POST /api/v1/comments` route resolves.
+        $this->registerCommentsRateLimiter();
+
         // Load API routes
         Route::prefix( 'api/v1' )
             ->middleware( 'api' )
@@ -80,6 +90,7 @@ class BlogServiceProvider extends ServiceProvider
         Gate::policy( Post::class, PostPolicy::class );
         Gate::policy( PostCategory::class, PostCategoryPolicy::class );
         Gate::policy( PostTag::class, PostTagPolicy::class );
+        Gate::policy( Comment::class, CommentPolicy::class );
 
         // Register blog content type
         $this->registerBlogContentType();
@@ -110,6 +121,44 @@ class BlogServiceProvider extends ServiceProvider
             'icon'          => 'fas-newspaper',
             'menu_position' => 20,
         ] );
+    }
+
+    /**
+     * Register the `comments` rate limiter used by the public
+     * `POST /api/v1/comments` route. Authenticated callers get a
+     * generous bucket keyed by user id; unauthenticated guests get
+     * a tighter bucket keyed by IP so a single host can't bulk-spam
+     * the table. Host apps can override either bucket via the
+     * `comments.rate-limit.authenticated` / `comments.rate-limit.guest`
+     * hooks filters, or replace the limiter entirely by re-calling
+     * `RateLimiter::for( 'comments', ... )` from their own provider
+     * after this package boots.
+     *
+     * @since 2.1.0
+     */
+    protected function registerCommentsRateLimiter(): void
+    {
+        RateLimiter::for( 'comments', function ( Request $request ): Limit {
+            $user = $request->user();
+
+            if ( null !== $user ) {
+                $authenticatedLimit = ( int ) applyFilters(
+                    'comments.rate-limit.authenticated',
+                    60
+                );
+
+                return Limit::perMinute( $authenticatedLimit )
+                    ->by( 'comments:user:' . $user->getAuthIdentifier() );
+            }
+
+            $guestLimit = ( int ) applyFilters(
+                'comments.rate-limit.guest',
+                10
+            );
+
+            return Limit::perMinute( $guestLimit )
+                ->by( 'comments:ip:' . ( $request->ip() ?? 'unknown' ) );
+        } );
     }
 
     /**
