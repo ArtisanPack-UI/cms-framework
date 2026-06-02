@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Comments submodule** for the Blog module ([#151](https://github.com/ArtisanPack-UI/cms-framework/pull/152)):
   - `Comment` model with `post_id`, `parent_id` threading, optional `user_id`, guest author fields (`author_name`, `author_email`, `author_url`), `content`, `status` (`pending` / `approved` / `spam` / `trash`), and `approved_at` timestamp; soft-deletable
   - `post_comments` migration with indexes for post, parent, status, and approved-at lookups
-  - `Post` model gains `comments()` / `approvedComments()` relations and a `comments_count` accessor
+  - `Post` model gains `comments()` (approved-only, newest-first) and `commentsIncludingUnapproved()` relations, plus `comments_count` and `comments_url` accessors for visual-editor integration
   - REST endpoints under `/api/v1/comments` — public `GET` (`index`, `show`) returns the approved set, public `POST` creates a `pending` comment for guests, and `PUT` / `PATCH` / `DELETE` are auth-gated
   - `CommentRequest` form request with separate `store` / `update` rule sets and guest-vs-authenticated branching
   - `CommentResource` API resource shaping the response payload — mirrors the shape `CommentResolver` reads in `artisanpack-ui/visual-editor` to stamp `_resolved*` attributes on `artisanpack/comment-*` blocks

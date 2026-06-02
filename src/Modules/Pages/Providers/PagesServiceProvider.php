@@ -54,7 +54,7 @@ class PagesServiceProvider extends ServiceProvider
     public function boot( Router $router ): void
     {
         // Load migrations
-        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+        $this->loadMigrationsFrom( __DIR__ . '/../Database/migrations' );
 
         // Load API routes
         Route::prefix( 'api/v1' )

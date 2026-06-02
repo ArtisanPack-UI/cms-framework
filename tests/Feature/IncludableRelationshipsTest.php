@@ -230,4 +230,4 @@ test( 'role index ignores invalid include values', function (): void {
 
     $response->assertSuccessful();
     expect( $response->json( 'data.0' ) )->not->toHaveKey( 'permissions' );
-});
+} );

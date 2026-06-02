@@ -32,9 +32,10 @@ The table is created by `2026_06_02_000001_create_post_comments_table.php` with 
 
 The `Post` model exposes:
 
-- `comments()` — every comment (including pending / spam / trash)
-- `approvedComments()` — the filtered set used by public reads
+- `comments()` — approved-only, ordered newest first; this is the public read path
+- `commentsIncludingUnapproved()` — every comment regardless of status; use this for moderation surfaces
 - `comments_count` accessor — count of approved comments for the post
+- `comments_url` accessor — post permalink with a `#comments` anchor (used by `artisanpack/comment-*` blocks in the visual editor)
 
 ## REST endpoints
 

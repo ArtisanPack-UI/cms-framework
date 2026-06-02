@@ -74,7 +74,7 @@ class BlogServiceProvider extends ServiceProvider
     public function boot( Router $router ): void
     {
         // Load migrations
-        $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
+        $this->loadMigrationsFrom( __DIR__ . '/../Database/migrations' );
 
         // Register the `comments` rate limiter BEFORE the routes load
         // so the `throttle:comments` middleware attached to the

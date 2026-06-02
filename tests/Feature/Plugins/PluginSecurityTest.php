@@ -303,4 +303,4 @@ describe( 'File System Security', function (): void {
         // This is tested implicitly through the ZIP extraction process
         expect( true )->toBeTrue();
     } );
-});
+} );

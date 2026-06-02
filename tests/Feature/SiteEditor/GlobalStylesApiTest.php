@@ -218,4 +218,4 @@ describe( 'theme isolation', function (): void {
         expect( $response->json( 'has_user_customization' ) )->toBeFalse()
             ->and( $response->json( 'styles.color.background' ) )->toBe( '#ffffff' );
     } );
-});
+} );
