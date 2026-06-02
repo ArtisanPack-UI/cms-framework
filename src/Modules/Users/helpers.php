@@ -107,6 +107,6 @@ if ( ! function_exists( 'apRegisterUserSettingsSection' ) ) {
             $sections[ $key ] = compact( 'label', 'order' );
 
             return $sections;
-        });
+        } );
     }
 }

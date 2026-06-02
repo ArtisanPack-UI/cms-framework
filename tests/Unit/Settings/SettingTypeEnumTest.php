@@ -99,4 +99,4 @@ test( 'serialize throws JsonException for unencodable value', function (): void 
     } finally {
         fclose( $resource );
     }
-} )->throws( JsonException::class);
+} )->throws( JsonException::class );

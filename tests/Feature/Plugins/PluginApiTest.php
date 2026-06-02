@@ -230,4 +230,4 @@ describe( 'Plugin API - Permission Checks', function (): void {
             $response->assertStatus( 401 );
         }
     } );
-});
+} );

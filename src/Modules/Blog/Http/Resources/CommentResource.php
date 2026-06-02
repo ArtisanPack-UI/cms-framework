@@ -56,7 +56,7 @@ class CommentResource extends JsonResource
             'edit_link'      => $this->when( $canModerate, fn () => $this->edit_link ),
             'reply_link'     => $this->reply_link,
             'replies'        => CommentResource::collection(
-                $this->whenLoaded( 'replies' )
+                $this->whenLoaded( 'replies' ),
             ),
         ];
     }

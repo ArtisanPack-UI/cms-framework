@@ -144,7 +144,7 @@ class BlogServiceProvider extends ServiceProvider
             if ( null !== $user ) {
                 $authenticatedLimit = ( int ) applyFilters(
                     'comments.rate-limit.authenticated',
-                    60
+                    60,
                 );
 
                 return Limit::perMinute( $authenticatedLimit )
@@ -153,7 +153,7 @@ class BlogServiceProvider extends ServiceProvider
 
             $guestLimit = ( int ) applyFilters(
                 'comments.rate-limit.guest',
-                10
+                10,
             );
 
             return Limit::perMinute( $guestLimit )

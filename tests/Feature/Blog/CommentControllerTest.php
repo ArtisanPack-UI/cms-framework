@@ -177,8 +177,8 @@ test( 'non-moderator cannot self-approve via the status field on store', functio
 
 test( 'client-supplied user_id is ignored on store', function (): void {
     grantAllCommentPermissions();
-    $post              = createCommentTestPost();
-    $commenter         = TestUser::factory()->create();
+    $post                = createCommentTestPost();
+    $commenter           = TestUser::factory()->create();
     $impersonationTarget = TestUser::factory()->create();
 
     $response = $this->actingAs( $commenter )->postJson( '/api/v1/comments', [
@@ -197,7 +197,7 @@ test( 'public callers cannot request non-approved comments via the status query 
     Comment::factory()->for( $post )->pending()->count( 3 )->create();
 
     $response = $this->getJson(
-        "/api/v1/comments?post_id={$post->id}&status=" . Comment::STATUS_PENDING
+        "/api/v1/comments?post_id={$post->id}&status=" . Comment::STATUS_PENDING,
     );
 
     $response->assertSuccessful();

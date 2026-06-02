@@ -298,5 +298,5 @@ test( 'user controller destroy deletes user', function (): void {
 test( 'user controller destroy returns 404 for non-existent user', function (): void {
     $response = $this->deleteJson( '/api/v1/users/999' );
 
-    $response->assertStatus( 404);
-});
+    $response->assertStatus( 404 );
+} );

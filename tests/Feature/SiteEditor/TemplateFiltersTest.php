@@ -135,5 +135,5 @@ describe( 'ap.visual-editor.template-parts filter wiring', function (): void {
             ->and( $templates )->not->toHaveKey( 'header' )
             ->and( $parts )->toHaveKey( 'header' )
             ->and( $parts )->not->toHaveKey( 'page' );
-    });
-});
+    } );
+} );

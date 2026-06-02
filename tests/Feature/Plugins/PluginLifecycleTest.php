@@ -267,4 +267,4 @@ describe( 'Active Plugins Loading', function (): void {
         expect( fn () => $this->manager->loadActivePlugins() )
             ->not->toThrow( Exception::class );
     } );
-});
+} );

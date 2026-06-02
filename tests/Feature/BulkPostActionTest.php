@@ -298,5 +298,5 @@ test( 'bulk post action returns correct response structure', function (): void {
     ] );
 
     $response->assertSuccessful();
-    $response->assertJsonStructure( ['processed', 'failed', 'errors']);
-});
+    $response->assertJsonStructure( ['processed', 'failed', 'errors'] );
+} );

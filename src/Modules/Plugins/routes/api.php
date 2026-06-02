@@ -33,4 +33,4 @@ Route::prefix( 'api/v1' )
             // Delete plugin
             Route::delete( '{slug}', [PluginsController::class, 'destroy'] )->name( 'api.plugins.destroy' );
         } );
-    });
+    } );

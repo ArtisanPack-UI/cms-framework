@@ -29,6 +29,7 @@ class CommentPolicy
     {
         /**
          * Filters the capability used to determine whether a user can list comments.
+         *
          * @hook  comments.viewAny
          */
         $capability = applyFilters( 'comments.viewAny', 'comments.view' );

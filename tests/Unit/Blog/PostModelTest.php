@@ -489,4 +489,4 @@ test( 'post uses soft deletes', function (): void {
 
     expect( Post::find( $postId ) )->toBeNull();
     expect( Post::withTrashed()->find( $postId ) )->not->toBeNull();
-});
+} );

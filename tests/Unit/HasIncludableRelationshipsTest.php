@@ -101,4 +101,4 @@ test( 'returns empty arrays when properties are not defined', function (): void 
 
     expect( $includable )->toBe( [] );
     expect( $defaults )->toBe( [] );
-});
+} );

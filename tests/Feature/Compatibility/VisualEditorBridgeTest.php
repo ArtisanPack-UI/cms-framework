@@ -175,4 +175,4 @@ test( 'auto-register: a content type that declares editor support but lacks the 
             && str_contains( $message, 'HasBlockContent' ),
         )
         ->once();
-});
+} );

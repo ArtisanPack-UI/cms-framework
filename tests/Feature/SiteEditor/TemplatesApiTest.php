@@ -294,5 +294,5 @@ describe( 'DELETE /api/v1/templates/{slug}', function (): void {
         $this->actingAs( $this->user );
 
         $this->deleteJson( '/api/v1/templates/never-existed' )->assertNotFound();
-    });
-});
+    } );
+} );

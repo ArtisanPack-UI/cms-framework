@@ -36,7 +36,7 @@ test( 'openapi config has default values', function (): void {
 
     expect( $config['enabled'] )->toBeTrue();
     expect( $config['info']['title'] )->toBe( 'ArtisanPack CMS Framework API' );
-    expect( $config['info']['version'] )->toBe( '2.0.0' );
+    expect( $config['info']['version'] )->toBe( '2.1.0' );
     expect( $config['ui_path'] )->toBe( '/docs/api/cms' );
     expect( $config['document_path'] )->toBe( '/docs/api/cms.json' );
 } );
@@ -49,4 +49,4 @@ test( 'openapi config values can be overridden', function (): void {
 
     expect( config( 'artisanpack.cms-framework.openapi.info.title' ) )->toBe( 'Custom API Title' );
     expect( config( 'artisanpack.cms-framework.openapi.info.version' ) )->toBe( '3.0.0' );
-});
+} );

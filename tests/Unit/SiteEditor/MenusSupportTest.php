@@ -170,6 +170,6 @@ describe( 'Menus::assign() / unassign() / assigned()', function (): void {
     it( 'assigned returns the menu model when assigned', function (): void {
         Menus::assign( 'primary', $this->menu->id );
 
-        expect( Menus::assigned( 'primary' )?->id )->toBe( $this->menu->id);
+        expect( Menus::assigned( 'primary' )?->id )->toBe( $this->menu->id );
     });
 });

@@ -424,6 +424,6 @@ test( 'update field handles content type changes', function (): void {
     expect( Schema::hasColumn( 'test_posts_ct', 'custom_field' ) )->toBeTrue();
     expect( Schema::hasColumn( 'test_pages_ct', 'custom_field' ) )->toBeTrue();
 
-    Schema::dropIfExists( 'test_posts_ct');
+    Schema::dropIfExists( 'test_posts_ct' );
     Schema::dropIfExists( 'test_pages_ct');
 });

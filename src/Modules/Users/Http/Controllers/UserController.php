@@ -276,7 +276,7 @@ class UserController extends Controller
             'delete'     => $user->delete(),
             'activate'   => $user->update( ['email_verified_at' => now()] ),
             'deactivate' => $user->update( ['email_verified_at' => null] ),
-            default      => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action] )),
+            default      => throw new InvalidArgumentException( __( 'Unsupported bulk action: :action', ['action' => $action] ) ),
         };
     }
 }

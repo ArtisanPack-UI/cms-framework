@@ -223,5 +223,5 @@ describe( 'DELETE /api/v1/menus/{id_or_slug}', function (): void {
         $this->actingAs( $this->user );
 
         $this->deleteJson( '/api/v1/menus/9999' )->assertNotFound();
-    });
-});
+    } );
+} );

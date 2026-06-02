@@ -411,5 +411,5 @@ describe( 'DELETE /api/v1/menu-items/{id}', function (): void {
 
         expect( MenuItem::query()->find( $parent->id ) )->toBeNull()
             ->and( MenuItem::query()->find( $child->id ) )->toBeNull();
-    });
-});
+    } );
+} );

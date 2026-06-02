@@ -315,5 +315,5 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         $this->emitter->invalidate();
 
         expect( Cache::has( $cacheKey ) )->toBeFalse();
-    });
-});
+    } );
+} );

@@ -270,4 +270,4 @@ describe( 'configurable schema version', function (): void {
 
         expect( $result->valid )->toBeTrue();
     } );
-});
+} );

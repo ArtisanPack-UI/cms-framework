@@ -128,4 +128,4 @@ test( 'role manager addPermissionToRole method works with app container', functi
 
     $role->refresh();
     expect( $role->permissions->first()->slug )->toBe( 'publish-posts' );
-});
+} );

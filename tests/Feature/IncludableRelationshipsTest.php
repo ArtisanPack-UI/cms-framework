@@ -229,5 +229,5 @@ test( 'role index ignores invalid include values', function (): void {
     $response = $this->actingAs( $actor )->getJson( '/api/v1/roles?include=nonexistent' );
 
     $response->assertSuccessful();
-    expect( $response->json( 'data.0' ) )->not->toHaveKey( 'permissions');
+    expect( $response->json( 'data.0' ) )->not->toHaveKey( 'permissions' );
 });

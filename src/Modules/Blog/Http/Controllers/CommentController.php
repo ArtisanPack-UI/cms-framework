@@ -81,7 +81,7 @@ class CommentController extends Controller
         $perPage = max( 1, min( 100, $perPage ) );
 
         return CommentResource::collection(
-            $query->latest()->paginate( $perPage )
+            $query->latest()->paginate( $perPage ),
         );
     }
 

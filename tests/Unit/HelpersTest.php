@@ -143,5 +143,5 @@ test( 'helper functions use app container correctly', function (): void {
 
     $role = ap_register_role( 'test-role', 'Test Role' );
     expect( $role )->toBeInstanceOf( Role::class );
-    expect( $role->slug )->toBe( 'test-role');
+    expect( $role->slug )->toBe( 'test-role' );
 });

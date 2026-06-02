@@ -233,4 +233,4 @@ test( 'registered content types merges database and filtered content types', fun
 
     expect( $registeredTypes )->toHaveKey( 'posts' );
     expect( $registeredTypes )->toHaveKey( 'custom' );
-});
+} );
