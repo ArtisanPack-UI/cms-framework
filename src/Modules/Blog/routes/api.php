@@ -83,12 +83,22 @@ Route::prefix( 'post-tags' )->middleware( 'auth' )->group( function (): void {
 | controller defaults the resulting comment to `pending` so a
 | moderator can approve it. Update / delete are auth-gated.
 |
+| The public `POST /comments` route is throttled via the
+| `throttle:comments` named limiter (defined in
+| `BlogServiceProvider::registerCommentsRateLimiter()`) to keep
+| unauthenticated callers from bulk-inserting against `post_comments`.
+| Default buckets: 10/min for guests (keyed by IP), 60/min for
+| authenticated users (keyed by user id) — overridable via the
+| `comments.rate-limit.guest` / `comments.rate-limit.authenticated`
+| hooks filters.
+|
 */
 
 Route::prefix( 'comments' )->group( function (): void {
     Route::get( '/', [CommentController::class, 'index'] );
     Route::get( '/{comment}', [CommentController::class, 'show'] );
-    Route::post( '/', [CommentController::class, 'store'] );
+    Route::post( '/', [CommentController::class, 'store'] )
+        ->middleware( 'throttle:comments' );
 
     Route::middleware( 'auth' )->group( function (): void {
         Route::put( '/{comment}', [CommentController::class, 'update'] );

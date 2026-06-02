@@ -243,6 +243,32 @@ test( 'per_page values outside the 1..100 window are clamped', function (): void
     expect( $tooLarge->json( 'meta.per_page' ) )->toBe( 100 );
 } );
 
+test( 'public POST /comments is throttled after the guest bucket is exhausted', function (): void {
+    // Tighten the guest limit for the duration of this test so we
+    // don't have to fire ten requests to prove the limiter is wired.
+    addFilter( 'comments.rate-limit.guest', fn () => 2 );
+
+    $post = createCommentTestPost();
+
+    $payload = [
+        'post_id'      => $post->id,
+        'author_name'  => 'Spammy',
+        'author_email' => 'spam@example.com',
+        'content'      => 'Comment under throttle',
+    ];
+
+    $this->postJson( '/api/v1/comments', $payload )->assertCreated();
+    $this->postJson( '/api/v1/comments', $payload )->assertCreated();
+
+    // Third request from the same IP within the minute should trip
+    // the throttle and short-circuit before the controller runs.
+    $this->postJson( '/api/v1/comments', $payload )->assertStatus( 429 );
+
+    // Clean up the filter so neighbouring tests get the default
+    // guest bucket.
+    removeAllFilters( 'comments.rate-limit.guest' );
+} );
+
 test( 'unauthenticated guest can post a comment with author fields, defaulting to pending', function (): void {
     $post = createCommentTestPost();
 
