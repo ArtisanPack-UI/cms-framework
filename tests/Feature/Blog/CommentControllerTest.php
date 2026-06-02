@@ -243,6 +243,27 @@ test( 'per_page values outside the 1..100 window are clamped', function (): void
     expect( $tooLarge->json( 'meta.per_page' ) )->toBe( 100 );
 } );
 
+test( 'unauthenticated guest can post a comment with author fields, defaulting to pending', function (): void {
+    $post = createCommentTestPost();
+
+    // No `actingAs()` — the guest path runs through
+    // CommentPolicy::create's `comments.create.public` filter which
+    // defaults to allow.
+    $response = $this->postJson( '/api/v1/comments', [
+        'post_id'      => $post->id,
+        'author_name'  => 'Jane Guest',
+        'author_email' => 'jane@example.com',
+        'author_url'   => 'https://example.test/jane',
+        'content'      => 'A guest comment',
+    ] );
+
+    $response->assertCreated();
+    expect( $response->json( 'data.author.name' ) )->toBe( 'Jane Guest' )
+        ->and( $response->json( 'data.author.is_guest' ) )->toBeTrue()
+        ->and( $response->json( 'data.status' ) )->toBe( Comment::STATUS_PENDING )
+        ->and( $response->json( 'data.user_id' ) )->toBeNull();
+} );
+
 test( 'parent_id must belong to the same post', function (): void {
     grantAllCommentPermissions();
     $user        = TestUser::factory()->create();

@@ -77,17 +77,20 @@ Route::prefix( 'post-tags' )->middleware( 'auth' )->group( function (): void {
 |
 | Read endpoints (`index`, `show`) are public — `CommentPolicy` filters
 | the approved set so guest visitors can fetch comments without an auth
-| token. Create / update / delete go through the policy's authenticated
-| capability checks (`comments.create`, `comments.update`, etc.).
+| token. `store` is also publicly reachable (the policy's
+| `comments.create.public` filter defaults to allow); guest commenters
+| supply `author_name` / `author_email` / `author_url` and the
+| controller defaults the resulting comment to `pending` so a
+| moderator can approve it. Update / delete are auth-gated.
 |
 */
 
 Route::prefix( 'comments' )->group( function (): void {
     Route::get( '/', [CommentController::class, 'index'] );
     Route::get( '/{comment}', [CommentController::class, 'show'] );
+    Route::post( '/', [CommentController::class, 'store'] );
 
     Route::middleware( 'auth' )->group( function (): void {
-        Route::post( '/', [CommentController::class, 'store'] );
         Route::put( '/{comment}', [CommentController::class, 'update'] );
         Route::patch( '/{comment}', [CommentController::class, 'update'] );
         Route::delete( '/{comment}', [CommentController::class, 'destroy'] );

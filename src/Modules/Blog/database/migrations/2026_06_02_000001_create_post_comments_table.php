@@ -26,7 +26,9 @@ return new class extends Migration {
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index( 'post_id' );
+            // The composite (post_id, status) index covers post_id-only
+            // lookups via its leftmost prefix, so a standalone post_id
+            // index would just be write/storage overhead.
             $table->index( 'parent_id' );
             $table->index( 'status' );
             $table->index( [ 'post_id', 'status' ] );
