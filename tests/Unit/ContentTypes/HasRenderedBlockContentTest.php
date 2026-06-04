@@ -44,9 +44,12 @@ namespace ArtisanPackUI\VisualEditorRendererBlade {
 namespace {
 
     use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
+    use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
     use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
     use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+    use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
     use ArtisanPackUI\VisualEditorRendererBlade\BlockRenderer;
+    use Illuminate\Database\Eloquent\Model;
 
     beforeEach( function (): void {
         $this->artisan( 'migrate', ['--database' => 'testing'] );
@@ -144,6 +147,45 @@ namespace {
         ] );
 
         expect( $post->rendered_content )->toBe( '' );
+    } );
+
+    test( 'renderContent() recovers legacy HTML when the block content column defaults to content (array cast)', function (): void {
+        // Anonymous model that uses HasBlockContent WITHOUT overriding
+        // $blockContentColumn — so the trait registers an `array` cast on
+        // the `content` column. Legacy HTML stored there surfaces as a
+        // non-string via the cast, but the raw original is the HTML bytes.
+        $model = new class extends Model {
+            use HasBlockContent;
+            use HasRenderedBlockContent;
+        };
+
+        $model->setRawAttributes( [ 'content' => '<p>legacy HTML</p>' ], true );
+
+        // Sanity-check: the cast layer hands back something that is NOT a
+        // string (Laravel decodes invalid JSON to null), so the naive
+        // `is_string` fallback would drop the legacy HTML.
+        expect( is_string( $model->getAttribute( 'content' ) ) )->toBeFalse();
+
+        expect( $model->renderContent() )->toBe( '<p>legacy HTML</p>' );
+    } );
+
+    test( 'renderContent() does NOT return raw JSON when the block content column defaults to content', function (): void {
+        // Mirror of the prior test but with the raw column holding a JSON
+        // block tree (i.e. the typical post-2.x record). The fallback must
+        // NOT echo the encoded JSON back as "legacy HTML" — it should drop
+        // to an empty string when the renderer is unavailable or returns
+        // empty for an unknown reason.
+        $model = new class extends Model {
+            use HasBlockContent;
+            use HasRenderedBlockContent;
+        };
+
+        $rawJson = '[{"name":"core/paragraph","attributes":{"content":"hi"},"innerBlocks":[]}]';
+        $model->setRawAttributes( [ 'content' => $rawJson ], true );
+
+        BlockRenderer::$throwOnRender = true;
+
+        expect( $model->renderContent() )->toBe( '' );
     } );
 
     test( 'rendered_content swallows renderer failures and falls back to the content column', function (): void {

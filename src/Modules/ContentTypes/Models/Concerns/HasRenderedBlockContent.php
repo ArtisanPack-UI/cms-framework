@@ -94,6 +94,29 @@ trait HasRenderedBlockContent
 
         $content = $this->getAttribute( 'content' );
 
+        // When `HasBlockContent` defaults to its own `content` column (i.e.
+        // the host model has NOT set `$blockContentColumn`), the trait
+        // registers an `array` cast on `content`. Legacy HTML records then
+        // surface as `null` / an array on `getAttribute()`, not a string,
+        // and the fallback below would silently drop them. Reach past the
+        // cast to recover the raw value — but only when the raw bytes are
+        // NOT JSON, otherwise we'd return the encoded block tree we just
+        // tried to render through the renderer.
+        if ( ! is_string( $content )
+            && method_exists( $this, 'getBlockContentColumn' )
+            && 'content' === $this->getBlockContentColumn()
+        ) {
+            $rawContent = $this->getRawOriginal( 'content' );
+
+            if ( is_string( $rawContent ) ) {
+                json_decode( $rawContent, true );
+
+                if ( JSON_ERROR_NONE !== json_last_error() ) {
+                    $content = $rawContent;
+                }
+            }
+        }
+
         return is_string( $content ) ? $content : '';
     }
 }
