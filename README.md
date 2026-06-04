@@ -166,6 +166,20 @@ if ( class_exists( \ArtisanPackUI\VisualEditor\VisualEditor::class ) ) {
 
 Host-app overrides in `config/artisanpack/visual-editor.php` always win on key collision, so swapping `posts` to a custom `App\Models\Post` is just a config edit. Full filter contract (input/output shape, collision behavior, validation guarantees, contributor timing): plan 12 [§4.1 Resource filter contract](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#41-resource-filter-contract).
 
+### PostResolver accessors
+
+`Post` and `Page` expose a handful of accessors that visual-editor's `PostResolver` reads to stamp `_resolved*` attributes on `core/post-*` and `core/navigation` blocks:
+
+| Accessor | Type | Source | Used by |
+|---|---|---|---|
+| `rendered_content` | `string` | `HasRenderedBlockContent` concern — renders `block_content` through the visual editor's server-side renderer, falling back to the legacy `content` column when `block_content` is null | `_resolvedContent` on `core/post-content` |
+| `previous_post` | `?Post` | adjacent post ordered by `published_at` (ties broken by `id`) | `_resolvedPreviousPost` on `core/post-navigation-link` |
+| `next_post` | `?Post` | adjacent post ordered by `published_at` (ties broken by `id`) | `_resolvedNextPost` on `core/post-navigation-link` |
+| `comments_count` | `int` | approved comments only | `_resolvedCommentsCount` on `core/post-comments-count` |
+| `comments_url` | `string` | canonical `#comments` anchor on the post URL | `_resolvedCommentsUrl` on `core/post-comments-link` |
+
+All accessors are eager-load friendly and safe to call on detached models — the adjacency lookup short-circuits to `null` for unsaved or unpublished posts.
+
 ### Site-meta bridge
 
 cms-framework registers the `site.*` setting family via `SettingsManager` and exposes a WordPress-shape envelope at `GET /api/settings/site` that the editor's `core/site-*` blocks consume:
