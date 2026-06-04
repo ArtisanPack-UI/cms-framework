@@ -16,6 +16,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
 use ArtisanPackUI\MediaLibrary\Models\Media;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use Carbon\Carbon;
@@ -35,6 +36,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property string $slug
  * @property string|null $content
  * @property array<int, array<string, mixed>>|null $block_content
+ * @property-read string $rendered_content
  * @property string|null $excerpt
  * @property int $author_id
  * @property ContentStatus $status
@@ -53,6 +55,7 @@ class Post extends Model
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
+    use HasRenderedBlockContent;
     use SoftDeletes;
 
     /**
