@@ -45,6 +45,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  * @property \Illuminate\Support\Carbon $created_at
  * @property \Illuminate\Support\Carbon $updated_at
  * @property \Illuminate\Support\Carbon|null $deleted_at
+ * @property-read self|null $previous_post
+ * @property-read self|null $next_post
  *
  * @since 1.0.0
  */
@@ -64,6 +66,18 @@ class Post extends Model
      * @since 2.0.0
      */
     protected string $blockContentColumn = 'block_content';
+
+    /**
+     * Per-instance cache for `previous_post` / `next_post` adjacency
+     * lookups so the accessors fire a single query each direction
+     * regardless of how many times the visual-editor resolver (or any
+     * other consumer) reads them during a request.
+     *
+     * @since 2.2.0
+     *
+     * @var array<string, self|null>
+     */
+    protected array $adjacentPostCache = [];
 
     /**
      * The attributes that are mass assignable.
@@ -180,6 +194,41 @@ class Post extends Model
     }
 
     /**
+     * The previous published post ordered by `published_at`. Read by
+     * the visual-editor's `PostResolver::resolvePostNavigationLink()`
+     * when stamping `_resolvedPrevUrl` / `_resolvedPrevTitle` onto
+     * `post-navigation-link` blocks pointed at the previous post.
+     *
+     * Returns null when the current post has no `published_at` (an
+     * unpublished or draft post has no defined adjacency) or when no
+     * earlier published post exists. Result is memoised per-instance
+     * so paint-time block resolution only hits the database once.
+     *
+     * @since 2.2.0
+     */
+    public function getPreviousPostAttribute(): ?self
+    {
+        return $this->resolveAdjacentPost( 'previous' );
+    }
+
+    /**
+     * The next published post ordered by `published_at`. Read by the
+     * visual-editor's `PostResolver::resolvePostNavigationLink()`
+     * when stamping `_resolvedNextUrl` / `_resolvedNextTitle` onto
+     * `post-navigation-link` blocks pointed at the next post.
+     *
+     * Returns null when the current post has no `published_at` or
+     * when no later published post exists. Result is memoised
+     * per-instance.
+     *
+     * @since 2.2.0
+     */
+    public function getNextPostAttribute(): ?self
+    {
+        return $this->resolveAdjacentPost( 'next' );
+    }
+
+    /**
      * Scope a query to posts by a specific author.
      *
      * @since 1.0.0
@@ -264,6 +313,50 @@ class Post extends Model
     public function getPermalinkAttribute(): string
     {
         return url( "/blog/{$this->slug}" );
+    }
+
+    /**
+     * Resolve the adjacent published post in the requested direction
+     * (`'previous'` or `'next'`). Honors the same
+     * status-Published / `published_at <= now()` semantics as
+     * `scopePublished()` while additionally requiring `published_at`
+     * to be non-null so the strict `<` / `>` comparison on
+     * `published_at` produces a defined ordering.
+     *
+     * Memoised on `$adjacentPostCache` for the full lifetime of the
+     * model instance — Eloquent's `refresh()` reloads attributes but
+     * does not reset arbitrary instance state, so re-querying (or
+     * unsetting the property) is the way to invalidate.
+     *
+     * @since 2.2.0
+     */
+    protected function resolveAdjacentPost( string $direction ): ?self
+    {
+        if ( null === $this->published_at ) {
+            return null;
+        }
+
+        if ( array_key_exists( $direction, $this->adjacentPostCache ) ) {
+            return $this->adjacentPostCache[ $direction ];
+        }
+
+        $operator       = 'previous' === $direction ? '<' : '>';
+        $orderDirection = 'previous' === $direction ? 'desc' : 'asc';
+
+        // $operator is a literal '<' or '>' set above; $this->published_at
+        // is a Carbon cast, not user input. Same shape as Page::siblings().
+        // phpcs:disable ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized
+        $post = static::query()
+            ->published()
+            ->whereNotNull( 'published_at' )
+            ->where( 'published_at', $operator, $this->published_at )
+            ->orderBy( 'published_at', $orderDirection )
+            ->first();
+        // phpcs:enable ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized
+
+        $this->adjacentPostCache[ $direction ] = $post;
+
+        return $post;
     }
 
     /**

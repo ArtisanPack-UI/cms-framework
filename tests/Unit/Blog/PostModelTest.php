@@ -490,3 +490,207 @@ test( 'post uses soft deletes', function (): void {
     expect( Post::find( $postId ) )->toBeNull();
     expect( Post::withTrashed()->find( $postId ) )->not->toBeNull();
 } );
+
+test( 'previous_post returns the preceding published post by published_at', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    $older = Post::create( [
+        'title'        => 'Older Post',
+        'slug'         => 'older-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    $current = Post::create( [
+        'title'        => 'Current Post',
+        'slug'         => 'current-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 2, 1, 12 ),
+    ] );
+
+    Post::create( [
+        'title'        => 'Newer Post',
+        'slug'         => 'newer-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 3, 1, 12 ),
+    ] );
+
+    expect( $current->previous_post )->toBeInstanceOf( Post::class );
+    expect( $current->previous_post->is( $older ) )->toBeTrue();
+} );
+
+test( 'next_post returns the following published post by published_at', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    Post::create( [
+        'title'        => 'Older Post',
+        'slug'         => 'older-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    $current = Post::create( [
+        'title'        => 'Current Post',
+        'slug'         => 'current-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 2, 1, 12 ),
+    ] );
+
+    $newer = Post::create( [
+        'title'        => 'Newer Post',
+        'slug'         => 'newer-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 3, 1, 12 ),
+    ] );
+
+    expect( $current->next_post )->toBeInstanceOf( Post::class );
+    expect( $current->next_post->is( $newer ) )->toBeTrue();
+} );
+
+test( 'previous_post and next_post return null at the boundaries', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    $first = Post::create( [
+        'title'        => 'First Post',
+        'slug'         => 'first-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    $last = Post::create( [
+        'title'        => 'Last Post',
+        'slug'         => 'last-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 2, 1, 12 ),
+    ] );
+
+    expect( $first->previous_post )->toBeNull();
+    expect( $last->next_post )->toBeNull();
+} );
+
+test( 'previous_post and next_post skip drafts and scheduled posts', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    $earlierPublished = Post::create( [
+        'title'        => 'Earlier Published',
+        'slug'         => 'earlier-published',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    // Draft between the two published posts — should be skipped.
+    Post::create( [
+        'title'        => 'Draft Between',
+        'slug'         => 'draft-between',
+        'author_id'    => $user->id,
+        'status'       => 'draft',
+        'published_at' => Carbon::create( 2026, 2, 1, 12 ),
+    ] );
+
+    $current = Post::create( [
+        'title'        => 'Current Post',
+        'slug'         => 'current-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 3, 1, 12 ),
+    ] );
+
+    // Scheduled (future) post — should be skipped by next_post.
+    Post::create( [
+        'title'        => 'Scheduled Post',
+        'slug'         => 'scheduled-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => now()->addYear(),
+    ] );
+
+    expect( $current->previous_post )->not->toBeNull();
+    expect( $current->previous_post->is( $earlierPublished ) )->toBeTrue();
+    expect( $current->next_post )->toBeNull();
+} );
+
+test( 'previous_post and next_post return null when current post has no published_at', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    Post::create( [
+        'title'        => 'Older Post',
+        'slug'         => 'older-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    $draft = Post::create( [
+        'title'     => 'Draft Without Date',
+        'slug'      => 'draft-without-date',
+        'author_id' => $user->id,
+        'status'    => 'draft',
+    ] );
+
+    expect( $draft->previous_post )->toBeNull();
+    expect( $draft->next_post )->toBeNull();
+} );
+
+test( 'previous_post and next_post memoize results per instance', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    Post::create( [
+        'title'        => 'Older Post',
+        'slug'         => 'older-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    $current = Post::create( [
+        'title'        => 'Current Post',
+        'slug'         => 'current-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 2, 1, 12 ),
+    ] );
+
+    Illuminate\Support\Facades\DB::enableQueryLog();
+    Illuminate\Support\Facades\DB::flushQueryLog();
+
+    $current->previous_post;
+    $current->previous_post;
+    $current->previous_post;
+
+    expect( Illuminate\Support\Facades\DB::getQueryLog() )->toHaveCount( 1 );
+
+    Illuminate\Support\Facades\DB::disableQueryLog();
+} );
