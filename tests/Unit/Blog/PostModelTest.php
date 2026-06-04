@@ -660,6 +660,54 @@ test( 'previous_post and next_post return null when current post has no publishe
     expect( $draft->next_post )->toBeNull();
 } );
 
+test( 'previous_post and next_post break ties on published_at by id', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    $sharedDate = Carbon::create( 2026, 2, 1, 12 );
+
+    // Three posts sharing the same published_at — order is fully
+    // determined by id, which the factory assigns in creation order.
+    $first = Post::create( [
+        'title'        => 'Tied First',
+        'slug'         => 'tied-first',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => $sharedDate,
+    ] );
+
+    $middle = Post::create( [
+        'title'        => 'Tied Middle',
+        'slug'         => 'tied-middle',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => $sharedDate,
+    ] );
+
+    $last = Post::create( [
+        'title'        => 'Tied Last',
+        'slug'         => 'tied-last',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => $sharedDate,
+    ] );
+
+    expect( $middle->previous_post )->not->toBeNull();
+    expect( $middle->previous_post->is( $first ) )->toBeTrue();
+
+    expect( $middle->next_post )->not->toBeNull();
+    expect( $middle->next_post->is( $last ) )->toBeTrue();
+
+    // First post in the tied cluster has no earlier neighbour; last
+    // has no later one. Without the id tiebreak both would still see
+    // each other through the shared timestamp.
+    expect( $first->previous_post )->toBeNull();
+    expect( $last->next_post )->toBeNull();
+} );
+
 test( 'previous_post and next_post memoize results per instance', function (): void {
     $user = TestUser::create( [
         'name'     => 'Test Author',

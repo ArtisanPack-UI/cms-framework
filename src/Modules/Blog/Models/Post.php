@@ -342,15 +342,31 @@ class Post extends Model
 
         $operator       = 'previous' === $direction ? '<' : '>';
         $orderDirection = 'previous' === $direction ? 'desc' : 'asc';
+        $currentKey     = $this->getKey();
+        $currentDate    = $this->published_at;
 
-        // $operator is a literal '<' or '>' set above; $this->published_at
-        // is a Carbon cast, not user input. Same shape as Page::siblings().
+        // Ties on `published_at` are common (bulk imports, top-of-hour
+        // schedules). Break them with `id` in the same direction so the
+        // adjacency is deterministic and every post in a tied cluster has a
+        // defined previous / next.
+        //
+        // $operator / $idOperator are literals chosen above; $this->published_at
+        // and $this->getKey() are model-internal values. Same shape as
+        // Page::siblings().
         // phpcs:disable ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized
         $post = static::query()
             ->published()
             ->whereNotNull( 'published_at' )
-            ->where( 'published_at', $operator, $this->published_at )
+            ->where( function ( $q ) use ( $operator, $currentDate, $currentKey, $direction ): void {
+                $idOperator = 'previous' === $direction ? '<' : '>';
+                $q->where( 'published_at', $operator, $currentDate )
+                    ->orWhere( function ( $q ) use ( $currentDate, $currentKey, $idOperator ): void {
+                        $q->where( 'published_at', '=', $currentDate )
+                            ->where( 'id', $idOperator, $currentKey );
+                    } );
+            } )
             ->orderBy( 'published_at', $orderDirection )
+            ->orderBy( 'id', $orderDirection )
             ->first();
         // phpcs:enable ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized
 
