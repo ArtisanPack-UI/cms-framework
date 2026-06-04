@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.2.0] - 2026-06-04
+
+### Added
+
+- **`Post::previous_post` and `Post::next_post` accessors** ([#154](https://github.com/ArtisanPack-UI/cms-framework/issues/154), [#157](https://github.com/ArtisanPack-UI/cms-framework/pull/157)) — published-adjacent post lookups so the `artisanpack-ui/visual-editor` `PostResolver` can stamp navigation block payloads. Lookup is ordered by `published_at`, with `id` as a deterministic tie-breaker when timestamps collide.
+- **`HasRenderedBlockContent` concern on `Post` and `Page`** ([#155](https://github.com/ArtisanPack-UI/cms-framework/issues/155), [#156](https://github.com/ArtisanPack-UI/cms-framework/pull/156)) — exposes a `rendered_content` accessor so `PostResolver` in `artisanpack-ui/visual-editor` can stamp the `_resolvedContent` HTML payload directly from the model.
+- **"Using with the visual editor" README section** ([#150](https://github.com/ArtisanPack-UI/cms-framework/issues/150), [#159](https://github.com/ArtisanPack-UI/cms-framework/pull/159)) — documents the opt-in bridge to the `artisanpack-ui/visual-editor` package, including the `block_content` column, `HasBlockContent` polyfill, `_resolved*` attribute flow, and the new `previous_post` / `next_post` / `rendered_content` accessors.
+
+### Security
+
+- **Hardened CI and release GitHub Actions workflows** ([#140](https://github.com/ArtisanPack-UI/cms-framework/issues/140), [#158](https://github.com/ArtisanPack-UI/cms-framework/pull/158)) — added least-privilege `permissions:` blocks to `.github/workflows/ci.yml` and `.github/workflows/release.yml` so workflow tokens no longer inherit broad write scopes by default.
+
 ## [2.1.0] - 2026-06-02
 
 ### Added

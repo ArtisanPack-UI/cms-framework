@@ -128,6 +128,104 @@ addAction('ap.cms.after_content_save', function($content) {
 });
 ```
 
+## Using with the visual editor
+
+cms-framework is fully usable standalone, but pairs with [`artisanpack-ui/visual-editor`](https://github.com/ArtisanPack-UI/visual-editor) to expose its `Post` and `Page` content to a Gutenberg-style block editor, back `core/site-*` blocks with real site settings, and seed `visual_editor.*` permissions into the RBAC tables. The full integration contract lives in visual-editor's [`docs/plans/12-cms-framework-integration.md`](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md); the reciprocal narrative is visual-editor's [Using with cms-framework](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/README.md#using-with-cms-framework) section.
+
+### Install both packages
+
+```bash
+composer require artisanpack-ui/cms-framework artisanpack-ui/visual-editor
+```
+
+Both packages are loosely coupled — every cms-framework hook into the editor is guarded by `class_exists(\ArtisanPackUI\VisualEditor\VisualEditor::class)`, so cms-framework continues to work standalone if visual-editor is not installed.
+
+### Run migrations
+
+```bash
+php artisan migrate
+```
+
+The cms-framework migration set adds a `block_content json nullable` column to the `posts` and `pages` tables (alongside the preserved legacy `content` longText column, which keeps powering search / excerpt / backwards-compatibility). Editing a legacy post in the visual editor populates `block_content` on first save; the legacy column is left untouched. See plan 12 [§4.2 Block content storage](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#42-block-content-storage) for the dual-state guidance.
+
+### Resource map (`ap.visual-editor.resources`)
+
+When visual-editor is detected, cms-framework's service provider auto-registers `Post` and `Page` into the editor's `ap.visual-editor.resources` filter:
+
+```php
+// CMSFrameworkServiceProvider::boot()
+if ( class_exists( \ArtisanPackUI\VisualEditor\VisualEditor::class ) ) {
+    addFilter( 'ap.visual-editor.resources', function ( array $resources ): array {
+        return array_merge( [
+            'posts' => \ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post::class,
+            'pages' => \ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page::class,
+        ], $resources );
+    } );
+}
+```
+
+Host-app overrides in `config/artisanpack/visual-editor.php` always win on key collision, so swapping `posts` to a custom `App\Models\Post` is just a config edit. Full filter contract (input/output shape, collision behavior, validation guarantees, contributor timing): plan 12 [§4.1 Resource filter contract](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#41-resource-filter-contract).
+
+### PostResolver accessors
+
+`Post` and `Page` expose a handful of accessors that visual-editor's `PostResolver` reads to stamp `_resolved*` attributes on `core/post-*` and `core/navigation` blocks:
+
+| Accessor | Type | Source | Used by |
+|---|---|---|---|
+| `rendered_content` | `string` | `HasRenderedBlockContent` concern — renders `block_content` through the visual editor's server-side renderer, falling back to the legacy `content` column when `block_content` is null | `_resolvedContent` on `core/post-content` |
+| `previous_post` | `?Post` | adjacent post ordered by `published_at` (ties broken by `id`) | `_resolvedPreviousPost` on `core/post-navigation-link` |
+| `next_post` | `?Post` | adjacent post ordered by `published_at` (ties broken by `id`) | `_resolvedNextPost` on `core/post-navigation-link` |
+| `comments_count` | `int` | approved comments only | `_resolvedCommentsCount` on `core/post-comments-count` |
+| `comments_url` | `string` | canonical `#comments` anchor on the post URL | `_resolvedCommentsUrl` on `core/post-comments-link` |
+
+All accessors are eager-load friendly and safe to call on detached models — the adjacency lookup short-circuits to `null` for unsaved or unpublished posts.
+
+### Site-meta bridge
+
+cms-framework registers the `site.*` setting family via `SettingsManager` and exposes a WordPress-shape envelope at `GET /api/v1/settings/site` that the editor's `core/site-*` blocks consume:
+
+```php
+$settings->registerSetting( 'site.title',    config( 'app.name', '' ),  'sanitizeText',  SettingType::String );
+$settings->registerSetting( 'site.tagline',  '',                         'sanitizeText',  SettingType::String );
+$settings->registerSetting( 'site.url',      config( 'app.url', '' ),    'sanitizeUrl',   SettingType::String );
+$settings->registerSetting( 'site.logo_id',  null,                       'sanitizeInt',   SettingType::Integer );
+$settings->registerSetting( 'site.icon_id',  null,                       'sanitizeInt',   SettingType::Integer );
+```
+
+```json
+GET /api/v1/settings/site
+{
+    "title": "ArtisanPack UI Demo",
+    "description": "A Laravel CMS",
+    "url": "https://example.test",
+    "site_logo": 42,
+    "site_icon": 17
+}
+```
+
+Mutating endpoints (`PUT /api/v1/settings/site`) update the matching `Setting` rows through `SettingsManager`. See plan 12 [§4.3 Site-meta REST shape](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#43-site-meta-rest-shape).
+
+### Permissions seed (`visual_editor.*`)
+
+When visual-editor is detected, cms-framework seeds the editor's permission family into its RBAC tables so host apps can grant them on roles immediately:
+
+```text
+visual_editor.access
+visual_editor.posts.edit
+visual_editor.pages.edit
+visual_editor.templates.edit
+visual_editor.template-parts.edit
+visual_editor.patterns.edit
+visual_editor.global-styles.edit
+visual_editor.navigation.edit
+```
+
+Permissions are registered but not yet enforced by visual-editor's policies — that flips in a future release behind `artisanpack.visual-editor.authorization.delegate_to_cms_framework`. See plan 12 [§4.6 Permissions seed (G5)](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#46-permissions-seed-g5).
+
+### Version pairing
+
+cms-framework and visual-editor ship as a version pair — the supported combinations are tracked in visual-editor's [Version compatibility](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/README.md#version-compatibility) matrix. Bumping the major on either package without bumping the partner is unsupported.
+
 ## Experimental Features
 
 The following features are **experimental** in the 1.0.0 release and should be used with caution in production environments:
