@@ -195,7 +195,7 @@ Mutating endpoints (`PUT /api/settings/site`) update the matching `Setting` rows
 
 When visual-editor is detected, cms-framework seeds the editor's permission family into its RBAC tables so host apps can grant them on roles immediately:
 
-```
+```text
 visual_editor.access
 visual_editor.posts.edit
 visual_editor.pages.edit
