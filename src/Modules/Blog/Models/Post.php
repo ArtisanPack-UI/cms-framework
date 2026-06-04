@@ -321,7 +321,9 @@ class Post extends Model
      * status-Published / `published_at <= now()` semantics as
      * `scopePublished()` while additionally requiring `published_at`
      * to be non-null so the strict `<` / `>` comparison on
-     * `published_at` produces a defined ordering.
+     * `published_at` produces a defined ordering. Drafts and scheduled
+     * (future-dated) posts are short-circuited to `null` regardless of
+     * whether they have a `published_at` timestamp.
      *
      * Memoised on `$adjacentPostCache` for the full lifetime of the
      * model instance — Eloquent's `refresh()` reloads attributes but
@@ -332,7 +334,11 @@ class Post extends Model
      */
     protected function resolveAdjacentPost( string $direction ): ?self
     {
-        if ( null === $this->published_at ) {
+        // Drafts and scheduled posts (`status !== Published` or `published_at`
+        // in the future) must not resolve public neighbors. `isPublished()`
+        // gates both; the explicit non-null check then guarantees the strict
+        // `<` / `>` ordering below has a defined pivot.
+        if ( ! $this->isPublished() || null === $this->published_at ) {
             return null;
         }
 

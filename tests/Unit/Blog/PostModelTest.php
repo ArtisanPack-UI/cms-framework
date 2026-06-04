@@ -660,6 +660,65 @@ test( 'previous_post and next_post return null when current post has no publishe
     expect( $draft->next_post )->toBeNull();
 } );
 
+test( 'previous_post and next_post return null when current post is a draft with a published_at', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    Post::create( [
+        'title'        => 'Public Neighbor',
+        'slug'         => 'public-neighbor',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    // A draft can carry a `published_at` (e.g. user set a date then
+    // reverted to draft). Adjacency must not leak public neighbors
+    // for it.
+    $draftWithDate = Post::create( [
+        'title'        => 'Draft With Date',
+        'slug'         => 'draft-with-date',
+        'author_id'    => $user->id,
+        'status'       => 'draft',
+        'published_at' => Carbon::create( 2026, 2, 1, 12 ),
+    ] );
+
+    expect( $draftWithDate->previous_post )->toBeNull();
+    expect( $draftWithDate->next_post )->toBeNull();
+} );
+
+test( 'previous_post and next_post return null when current post is scheduled', function (): void {
+    $user = TestUser::create( [
+        'name'     => 'Test Author',
+        'email'    => 'author@example.com',
+        'password' => 'password',
+    ] );
+
+    Post::create( [
+        'title'        => 'Public Neighbor',
+        'slug'         => 'public-neighbor',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => Carbon::create( 2026, 1, 1, 12 ),
+    ] );
+
+    // Status = Published but `published_at` is in the future — the
+    // post is not yet public, so adjacency must short-circuit.
+    $scheduled = Post::create( [
+        'title'        => 'Scheduled Post',
+        'slug'         => 'scheduled-post',
+        'author_id'    => $user->id,
+        'status'       => 'published',
+        'published_at' => now()->addYear(),
+    ] );
+
+    expect( $scheduled->previous_post )->toBeNull();
+    expect( $scheduled->next_post )->toBeNull();
+} );
+
 test( 'previous_post and next_post break ties on published_at by id', function (): void {
     $user = TestUser::create( [
         'name'     => 'Test Author',

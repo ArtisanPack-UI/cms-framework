@@ -182,7 +182,7 @@ All accessors are eager-load friendly and safe to call on detached models — th
 
 ### Site-meta bridge
 
-cms-framework registers the `site.*` setting family via `SettingsManager` and exposes a WordPress-shape envelope at `GET /api/settings/site` that the editor's `core/site-*` blocks consume:
+cms-framework registers the `site.*` setting family via `SettingsManager` and exposes a WordPress-shape envelope at `GET /api/v1/settings/site` that the editor's `core/site-*` blocks consume:
 
 ```php
 $settings->registerSetting( 'site.title',    config( 'app.name', '' ),  'sanitizeText',  SettingType::String );
@@ -193,7 +193,7 @@ $settings->registerSetting( 'site.icon_id',  null,                       'saniti
 ```
 
 ```json
-GET /api/settings/site
+GET /api/v1/settings/site
 {
     "title": "ArtisanPack UI Demo",
     "description": "A Laravel CMS",
@@ -203,7 +203,7 @@ GET /api/settings/site
 }
 ```
 
-Mutating endpoints (`PUT /api/settings/site`) update the matching `Setting` rows through `SettingsManager`. See plan 12 [§4.3 Site-meta REST shape](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#43-site-meta-rest-shape).
+Mutating endpoints (`PUT /api/v1/settings/site`) update the matching `Setting` rows through `SettingsManager`. See plan 12 [§4.3 Site-meta REST shape](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md#43-site-meta-rest-shape).
 
 ### Permissions seed (`visual_editor.*`)
 
