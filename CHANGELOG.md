@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.2.1] - 2026-06-07
+
+### Fixed
+
+- **`update:perform` command `--version` flag collision** ([#162](https://github.com/ArtisanPack-UI/cms-framework/issues/162), [#163](https://github.com/ArtisanPack-UI/cms-framework/pull/163)) — Symfony Console reserves `--version`/`-V` as a global flag on every `Application`, so declaring `--version` on `PerformUpdateCommand` threw "An option named version already exists" at command-registration time, breaking every `php artisan ...` invocation in host apps as soon as the command was discoverable. Renamed the custom option to `--target-version` (and updated the corresponding `$this->option()` lookup). Added a regression test that verifies the command exposes `--target-version` and does not redeclare `--version` on its own definition.
+
 ## [2.2.0] - 2026-06-04
 
 ### Added
