@@ -25,7 +25,7 @@ class PerformUpdateCommand extends Command
      * @var string
      */
     protected $signature = 'update:perform
-                            {--version= : Specific version to update to (default: latest)}
+                            {--target-version= : Specific version to update to (default: latest)}
                             {--force : Skip confirmation prompt}';
 
     /**
@@ -54,7 +54,7 @@ class PerformUpdateCommand extends Command
                 return self::SUCCESS;
             }
 
-            $version = $this->option( 'version' ) ?? $updateInfo->latestVersion;
+            $version = $this->option( 'target-version' ) ?? $updateInfo->latestVersion;
 
             // Show update information
             $this->newLine();

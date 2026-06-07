@@ -113,6 +113,32 @@ class UpdateFlowTest extends TestCase
     }
 
     /**
+     * Test that update:perform does not collide with the global --version flag.
+     *
+     * Symfony Console reserves --version/-V on every Application, so the custom
+     * flag must be named differently (e.g. --target-version). Regression test
+     * for the option-already-exists exception thrown at command registration.
+     *
+     * @since 2.2.1
+     */
+    public function test_update_perform_uses_target_version_option(): void
+    {
+        $command    = Artisan::all()['update:perform'];
+        $definition = $command->getDefinition();
+
+        $this->assertTrue(
+            $definition->hasOption( 'target-version' ),
+            'update:perform must expose --target-version (renamed to avoid Symfony --version global collision).',
+        );
+        $this->assertTrue( $definition->getOption( 'target-version' )->acceptValue() );
+
+        $this->assertFalse(
+            $definition->hasOption( 'version' ),
+            'update:perform must not declare --version; it collides with the Symfony Application global flag.',
+        );
+    }
+
+    /**
      * Test cache clearing.
      *
      * @since 1.0.0
