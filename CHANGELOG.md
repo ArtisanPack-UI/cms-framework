@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Laravel 13 support** ([#161](https://github.com/ArtisanPack-UI/cms-framework/issues/161)) — Widened the `illuminate/support` and `laravel/framework` constraints to additionally allow `^13.0`. Existing users on Laravel 12 are unaffected; Laravel 13 is only selectable on PHP 8.3+ because Laravel 13's own `php` constraint enforces it, so no PHP-floor bump is required for users staying on Laravel 12.
-
 ### Changed
 
 ### Deprecated
@@ -20,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Security
+
+## [2.2.2] - 2026-06-09
+
+### Added
+
+- **Laravel 13 support** ([#161](https://github.com/ArtisanPack-UI/cms-framework/issues/161)) — Widened the `illuminate/support` and `laravel/framework` constraints to additionally allow `^13.0`. Existing users on Laravel 12 are unaffected; Laravel 13 is only selectable on PHP 8.3+ because Laravel 13's own `php` constraint enforces it, so no PHP-floor bump is required for users staying on Laravel 12.
 
 ## [2.2.1] - 2026-06-07
 
