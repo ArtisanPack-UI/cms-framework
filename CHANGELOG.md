@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.2.3] - 2026-06-14
+
+### Changed
+
+- **Widened `laravel/tinker` constraint to allow v3** ([#167](https://github.com/ArtisanPack-UI/cms-framework/issues/167), [#168](https://github.com/ArtisanPack-UI/cms-framework/pull/168)) — `composer.json` `require.laravel/tinker` is now `^2.10.1|^3.0`. `laravel/tinker` v2 caps at `illuminate/* ^12.0`, so Laravel 13 consumer apps require `laravel/tinker ^3.0`; the previous pin blocked the upgrade even though the framework constraint already permitted Laravel 13. No code changes — `tinker` is not referenced in `src/` or `tests/`. Existing Laravel 12 users on `laravel/tinker ^2.10.1` are unaffected.
+
 ## [2.2.2] - 2026-06-09
 
 ### Added
