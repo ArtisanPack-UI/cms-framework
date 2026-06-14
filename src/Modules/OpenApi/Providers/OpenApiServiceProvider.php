@@ -113,7 +113,7 @@ class OpenApiServiceProvider extends ServiceProvider
         $scrambleConfig['ui']       = ['title' => $info['title'] ?? 'ArtisanPack CMS Framework API'];
 
         $scrambleConfig['info'] = [
-            'version'     => $info['version'] ?? '2.2.2',
+            'version'     => $info['version'] ?? '2.2.3',
             'description' => $info['description'] ?? '',
         ];
 
