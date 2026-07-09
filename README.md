@@ -226,6 +226,50 @@ Permissions are registered but not yet enforced by visual-editor's policies — 
 
 cms-framework and visual-editor ship as a version pair — the supported combinations are tracked in visual-editor's [Version compatibility](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/README.md#version-compatibility) matrix. Bumping the major on either package without bumping the partner is unsupported.
 
+## AI features
+
+The framework ships five AI-powered content-authoring agents (added in 2.3.0). Each maps to a feature key in the `artisanpack-ui/ai` foundation and is registered automatically via the service provider's `aiFeatures()` hook — no wiring required in host apps.
+
+| Feature key            | Agent                          | What it does                                                            |
+|------------------------|--------------------------------|-------------------------------------------------------------------------|
+| `cms.post_title`       | `PostTitleSuggestionAgent`     | Generate 3–5 title variants from a draft body.                          |
+| `cms.excerpt`          | `ExcerptGenerationAgent`       | Generate a natural excerpt (default ≤200 chars) from full content.      |
+| `cms.suggest_tags`     | `TagSuggestionAgent`           | Select tags from an existing taxonomy (optionally propose new ones).    |
+| `cms.suggest_category` | `CategorySuggestionAgent`      | Pick a single category (as a slash-delimited path) from a tree.         |
+| `cms.suggest_slug`     | `SlugSuggestionAgent`          | Produce an SEO-friendly slug (short, keyword-forward, no stop words).   |
+
+Every agent honors the feature toggle configured in `artisanpack.ai.features.<key>.enabled` — when the toggle is off, the agent throws `FeatureDisabledException` and no model call is made.
+
+### Trigger surfaces
+
+The same five agents are exposed to every front-end framework:
+
+- **Livewire**: dispatch `ap-cms-ai:{action}` browser events at the `ap-cms-ai-tools` component (`ArtisanPackUI\CMSFramework\Livewire\Ai\AiTools`). Results come back on `ap-cms-ai:{featureKey}:{success|invalid-input|disabled|missing-credentials|error}`.
+- **React / Vue / anything else**: `POST` to the REST endpoints mounted under `/api/v1/cms/ai` (`AiController`). This keeps `@artisanpack-ui/react` and `@artisanpack-ui/vue` framework-agnostic — those packages do NOT need to know anything about CMS AI features.
+
+Available endpoints (all `auth` middleware, JSON body):
+
+| Method | Path                                | Body                                                   |
+|--------|-------------------------------------|--------------------------------------------------------|
+| GET    | `/api/v1/cms/ai/features`           | —                                                      |
+| POST   | `/api/v1/cms/ai/post-title`         | `{ content, tone?, count? }`                           |
+| POST   | `/api/v1/cms/ai/excerpt`            | `{ content, max_chars? }`                              |
+| POST   | `/api/v1/cms/ai/suggest-tags`       | `{ content, available_tags, allow_new?, max_selected? }` |
+| POST   | `/api/v1/cms/ai/suggest-category`   | `{ content, category_tree }`                           |
+| POST   | `/api/v1/cms/ai/suggest-slug`       | `{ title, excerpt?, max_chars? }`                      |
+
+Error responses use consistent status codes: `403 feature_disabled`, `422 invalid_input`, `503 missing_credentials`, `500 internal_error`.
+
+### Requirements
+
+The AI features require `artisanpack-ui/ai ^1.0`. It's declared as a `suggest` in `composer.json` — install it explicitly to opt in:
+
+```bash
+composer require artisanpack-ui/ai:^1.0
+```
+
+Without it, the agents, the Livewire component, and the REST endpoints stay unregistered — the framework boots normally.
+
 ## Experimental Features
 
 The following features are **experimental** in the 1.0.0 release and should be used with caution in production environments:
