@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Minimum PHP raised to 8.3** ([#175](https://github.com/ArtisanPack-UI/cms-framework/pull/175)) — the `artisanpack-ui/ai` foundation this release depends on requires PHP 8.3+, and running a Composer resolution across the two constraints is not possible on PHP 8.2. Hosts still on PHP 8.2 should stay on the 2.2.x line until they can upgrade the runtime. No API changes; the codebase itself does not yet require 8.3-only syntax.
 - **Dependencies** — `artisanpack-ui/ai ^1.0` added as `suggest` + `require-dev`. Without it the AI Livewire component and REST routes stay unregistered and the framework boots normally.
 
 ## [2.2.3] - 2026-06-14

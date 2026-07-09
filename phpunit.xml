@@ -11,11 +11,10 @@
         <testsuite name="Feature">
             <directory>tests/Feature</directory>
             <!--
-                AI suite depends on artisanpack-ui/ai which requires
-                PHP 8.3+. Excluded here and re-registered under a
-                dedicated `Ai` suite so CI on PHP 8.2 can skip it via
-                the exclude-testsuite CLI flag without losing the
-                rest of the Feature coverage.
+                AI tests live under a dedicated `Ai` suite so hosts
+                that opt out of the artisanpack-ui/ai foundation can
+                skip them without losing the rest of the Feature
+                coverage.
             -->
             <exclude>tests/Feature/Ai</exclude>
         </testsuite>

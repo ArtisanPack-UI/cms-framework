@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        php: ['8.2', '8.3', '8.4']
+        php: ['8.3', '8.4']
 
     steps:
       - uses: actions/checkout@v4
@@ -77,17 +77,6 @@ jobs:
           key: ${{ runner.os }}-php${{ matrix.php }}-composer-${{ hashFiles('**/composer.json') }}
           restore-keys: ${{ runner.os }}-php${{ matrix.php }}-composer-
 
-      - name: Remove AI dev deps (PHP 8.2)
-        # `artisanpack-ui/ai` (and by extension the AI trigger surface)
-        # requires PHP 8.3+. Strip both it and livewire (which the ai
-        # component surface depends on) on 8.2 so `composer update`
-        # can resolve; the AI test suite is excluded below via
-        # `--exclude-testsuite=Ai`.
-        if: matrix.php == '8.2'
-        run: |
-          jq 'del(.["require-dev"]["artisanpack-ui/ai"], .["require-dev"]["livewire/livewire"])' composer.json > composer.json.tmp
-          mv composer.json.tmp composer.json
-
       - name: Install dependencies
         run: composer update --no-interaction --prefer-dist
 
@@ -99,10 +88,9 @@ jobs:
       - name: Run Feature tests
         env:
           XDEBUG_MODE: off
-        run: |
-          if [ "${{ matrix.php }}" = "8.2" ]; then
-            vendor/bin/pest --testsuite=Feature --no-coverage
-          else
-            vendor/bin/pest --testsuite=Feature --no-coverage
-            vendor/bin/pest --testsuite=Ai --no-coverage
-          fi
+        run: vendor/bin/pest --testsuite=Feature --no-coverage
+
+      - name: Run AI tests
+        env:
+          XDEBUG_MODE: off
+        run: vendor/bin/pest --testsuite=Ai --no-coverage

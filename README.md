@@ -25,7 +25,7 @@ A comprehensive Laravel package that provides back-end support for building a CM
 
 ## Requirements
 
-- PHP 8.2 or higher (PHP 8.3+ required for Laravel 13)
+- PHP 8.3 or higher
 - Laravel 12.0 or 13.0
 - Laravel Sanctum 4.1 or higher
 
