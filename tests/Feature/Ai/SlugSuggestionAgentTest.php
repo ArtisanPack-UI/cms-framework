@@ -34,6 +34,19 @@ it( 'sanitizes non-kebab output from the model', function (): void {
     expect( $result['slug'] )->toBe( 'how-to-ship-faster' );
 } );
 
+it( 'transliterates non-ASCII characters instead of collapsing them to hyphens', function (): void {
+    $this->prompter->queue( [
+        'slug'       => 'café-culture-año',
+        'alternates' => [],
+    ] );
+
+    $result = SlugSuggestionAgent::for( [ 'title' => 'Café Culture — Año Nuevo' ] )->run();
+
+    // A byte-oriented regex would produce 'caf-culture-a-o' or similar.
+    // Str::slug() transliterates é→e and ñ→n instead.
+    expect( $result['slug'] )->toBe( 'cafe-culture-ano' );
+} );
+
 it( 'clamps the slug to max_chars on a hyphen boundary when possible', function (): void {
     $this->prompter->queue( [
         'slug'       => 'a-b-c-d-e-f-g-h-i-j-k-l-m-n-o-p-q-r-s-t-u-v-w-x-y-z',

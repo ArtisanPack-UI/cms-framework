@@ -15,7 +15,11 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Http\Controllers\Ai\AiController;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware( 'auth' )->group( function (): void {
+// `auth:sanctum` (not plain `auth`) — the parent group is mounted under
+// the `api` middleware stack which strips session state, so the default
+// web-guard would reject Sanctum bearer tokens from React/Vue SPAs and
+// silently 401 exactly the callers this surface is designed for.
+Route::middleware( 'auth:sanctum' )->group( function (): void {
     Route::get( '/features', [ AiController::class, 'features' ] );
     Route::post( '/post-title', [ AiController::class, 'postTitle' ] );
     Route::post( '/excerpt', [ AiController::class, 'excerpt' ] );

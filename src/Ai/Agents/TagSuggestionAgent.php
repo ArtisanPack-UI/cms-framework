@@ -244,7 +244,11 @@ PROMPT;
                 continue;
             }
 
-            $tag = isset( $entry['tag'] ) ? (string) $entry['tag'] : '';
+            // Trim BEFORE the allow-list lookup — `normalizeInput` trimmed
+            // every `available_tags` entry, so a model return of `"laravel "`
+            // (with incidental whitespace) would silently fail the isset
+            // check and drop an otherwise-valid selection.
+            $tag = isset( $entry['tag'] ) ? trim( (string) $entry['tag'] ) : '';
 
             if ( '' === $tag || ! isset( $allowed[ $tag ] ) ) {
                 continue;

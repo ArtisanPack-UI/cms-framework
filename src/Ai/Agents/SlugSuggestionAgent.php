@@ -17,6 +17,7 @@ use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
 use ArtisanPackUI\Ai\Contracts\AgentPrompter;
 use ArtisanPackUI\Ai\Credentials\Credentials;
 use ArtisanPackUI\Ai\Exceptions\FeatureError;
+use Illuminate\Support\Str;
 
 /**
  * Suggest a URL slug for a post from its title (and optional excerpt).
@@ -251,6 +252,13 @@ PROMPT;
      * clamp it to `max_chars`, cutting on a hyphen boundary when
      * possible so we don't truncate mid-word.
      *
+     * Delegates the ASCII-folding + kebab-case pipeline to `Str::slug()`.
+     * The previous byte-oriented `preg_replace( '/[^a-z0-9-]+/', '-', … )`
+     * collapsed every non-ASCII byte to a hyphen, so a model return like
+     * `cafe-culture` (with an acute-e) became `caf-culture`. `Str::slug`
+     * transliterates instead, matching the agent's documented
+     * "transliterate non-ASCII" contract.
+     *
      * @since 2.3.0
      *
      * @param  string  $raw       Raw candidate slug.
@@ -260,10 +268,7 @@ PROMPT;
      */
     protected function sanitizeSlug( string $raw, int $maxChars ): string
     {
-        $slug = strtolower( trim( $raw ) );
-        $slug = preg_replace( '/[^a-z0-9-]+/', '-', $slug ) ?? '';
-        $slug = preg_replace( '/-+/', '-', $slug ) ?? '';
-        $slug = trim( $slug, '-' );
+        $slug = Str::slug( $raw, '-' );
 
         if ( strlen( $slug ) <= $maxChars ) {
             return $slug;

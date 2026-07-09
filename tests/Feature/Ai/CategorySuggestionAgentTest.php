@@ -84,6 +84,33 @@ it( 'clamps confidence to [0, 1]', function (): void {
     expect( $result['confidence'] )->toBe( 1.0 );
 } );
 
+it( 'ignores category nodes whose name contains the path separator', function (): void {
+    $ambiguousTree = [
+        [ 'name' => 'News/Updates' ], // rejected — would collide with the nested form
+        [
+            'name'     => 'News',
+            'children' => [
+                [ 'name' => 'Updates' ],
+            ],
+        ],
+    ];
+
+    $this->prompter->queue( [
+        'selected'   => 'News/Updates',
+        'confidence' => 0.9,
+        'rationale'  => 'nested form',
+    ] );
+
+    $result = CategorySuggestionAgent::for( [
+        'content'       => 'body',
+        'category_tree' => $ambiguousTree,
+    ] )->run();
+
+    // The path resolves unambiguously via the nested form; the ambiguous root
+    // never entered valid_paths, so a hallucination there could not survive.
+    expect( $result['selected'] )->toBe( 'News/Updates' );
+} );
+
 it( 'raises FeatureError on invalid input', function (): void {
     expect( fn () => CategorySuggestionAgent::for( 'nope' )->run() )->toThrow( FeatureError::class );
 

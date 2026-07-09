@@ -195,8 +195,18 @@ PROMPT;
                 continue;
             }
 
-            $path            = '' === $prefix ? $name : $prefix . '/' . $name;
-            $paths[ $path ]  = true;
+            // Reject names containing the path separator. If we accepted them
+            // we would produce paths indistinguishable from real parent/child
+            // paths — e.g. `{name: 'News/Updates'}` and `{name: 'News',
+            // children: [{name: 'Updates'}]}` both serialize to `News/Updates`
+            // and the validator would be unable to disambiguate a hallucinated
+            // model pick from a real one.
+            if ( str_contains( $name, '/' ) ) {
+                continue;
+            }
+
+            $path           = '' === $prefix ? $name : $prefix . '/' . $name;
+            $paths[ $path ] = true;
 
             if ( isset( $node['children'] ) && is_array( $node['children'] ) ) {
                 $this->collectPaths( $node['children'], $path, $paths );

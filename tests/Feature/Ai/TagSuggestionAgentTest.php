@@ -29,6 +29,22 @@ it( 'returns only tags that appear in available_tags', function (): void {
     expect( collect( $result['selected'] )->pluck( 'tag' )->all() )->toBe( [ 'laravel', 'cms' ] );
 } );
 
+it( 'trims incidental whitespace from model-returned tags before allow-list lookup', function (): void {
+    $this->prompter->queue( [
+        'selected' => [
+            [ 'tag' => 'laravel ', 'confidence' => 0.9 ],
+            [ 'tag' => "\tcms\n", 'confidence' => 0.8 ],
+        ],
+    ] );
+
+    $result = TagSuggestionAgent::for( [
+        'content'        => 'body',
+        'available_tags' => [ 'laravel', 'cms' ],
+    ] )->run();
+
+    expect( collect( $result['selected'] )->pluck( 'tag' )->all() )->toBe( [ 'laravel', 'cms' ] );
+} );
+
 it( 'omits suggested_new when allow_new is false', function (): void {
     $this->prompter->queue( [
         'selected'      => [],
