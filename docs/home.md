@@ -19,6 +19,7 @@ The CMS Framework is designed to help developers quickly build content managemen
 - **Admin Framework**: Menu system, widgets, and authorization helpers
 - **Theme & Plugin Architecture**: Theme discovery, activation, ZIP upload, lifecycle hooks, and plugin support
 - **RBAC** *(2.0.0)*: Roles and permissions powered by the shared `artisanpack-ui/rbac` package
+- **AI Features** *(2.3.0)*: Five content-authoring agents (title, excerpt, tags, category, slug) exposed via Livewire and REST for React/Vue front-ends
 - **RESTful API**: Clean API endpoints for all operations with standardized error responses
 - **Bulk Actions**: Bulk operations for posts, pages, and users
 - **On-Demand Relationships**: Control eager loading via the `include` query parameter
@@ -146,6 +147,14 @@ Custom content type builder for extensible content.
 - [[developer/taxonomies]] - Creating custom taxonomies
 - [[developer/enums]] - ContentStatus, FieldType, and ColumnType enums
 - [[developer/traits]] - HasContentStatus and HasContentFilters traits
+
+---
+
+## AI Features *(2.3.0)*
+
+Content-authoring agents built on the `artisanpack-ui/ai` foundation. Five agents (post title, excerpt, tag/category suggestion, SEO slug) exposed through a Livewire component and REST endpoints so Livewire, React, and Vue front-ends can all trigger them without any framework-specific glue.
+
+- [[AI Features]] — Feature keys, trigger surfaces, per-agent contracts, and extension points
 
 ---
 

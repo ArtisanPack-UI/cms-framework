@@ -36,7 +36,7 @@ test( 'openapi config has default values', function (): void {
 
     expect( $config['enabled'] )->toBeTrue();
     expect( $config['info']['title'] )->toBe( 'ArtisanPack CMS Framework API' );
-    expect( $config['info']['version'] )->toBe( '2.2.3' );
+    expect( $config['info']['version'] )->toBe( '2.3.0' );
     expect( $config['ui_path'] )->toBe( '/docs/api/cms' );
     expect( $config['document_path'] )->toBe( '/docs/api/cms.json' );
 } );

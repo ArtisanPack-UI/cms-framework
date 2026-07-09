@@ -19,6 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.3.0] - 2026-07-09
+
+### Added
+
+- **AI content-authoring agents** ([#170](https://github.com/ArtisanPack-UI/cms-framework/issues/170), [#171](https://github.com/ArtisanPack-UI/cms-framework/issues/171), [#172](https://github.com/ArtisanPack-UI/cms-framework/issues/172), [#173](https://github.com/ArtisanPack-UI/cms-framework/issues/173), [#174](https://github.com/ArtisanPack-UI/cms-framework/issues/174), [#175](https://github.com/ArtisanPack-UI/cms-framework/pull/175)) — Five new agents built on the `artisanpack-ui/ai` v1.0 foundation:
+  - `PostTitleSuggestionAgent` (`cms.post_title`) — generate 3–5 title variants from a draft body.
+  - `ExcerptGenerationAgent` (`cms.excerpt`) — generate a natural excerpt (default ≤200 chars) from full post content.
+  - `TagSuggestionAgent` (`cms.suggest_tags`) — pick tags from an existing taxonomy, optionally propose new ones.
+  - `CategorySuggestionAgent` (`cms.suggest_category`) — pick one category (slash-delimited path) from a hierarchical tree.
+  - `SlugSuggestionAgent` (`cms.suggest_slug`) — produce an SEO-friendly kebab-case slug from a title, delegating ASCII folding to `Str::slug()`.
+
+  Every agent honors the `artisanpack.ai.features.<key>.enabled` toggle and is auto-discovered via `CMSFrameworkServiceProvider::aiFeatures()`.
+
+- **AI trigger surfaces** — two consumer surfaces expose the same five agents:
+  - Livewire component `ap-cms-ai-tools` (`ArtisanPackUI\CMSFramework\Livewire\Ai\AiTools`) — dispatch `ap-cms-ai:{action}` browser events, receive results on `ap-cms-ai:{featureKey}:{status}`.
+  - REST controller mounted at `/api/v1/cms/ai/*` (`ArtisanPackUI\CMSFramework\Http\Controllers\Ai\AiController`) — framework-agnostic path for React, Vue, or any HTTP client. Endpoints are guarded by `auth:sanctum` so bearer-token SPAs can authenticate. Adding a new CMS AI feature never requires touching the `@artisanpack-ui/react` or `@artisanpack-ui/vue` packages.
+
+- **`AI_FEATURE_KEYS` constant** on `CMSFrameworkServiceProvider` — canonical list of the five `cms.*` feature keys, consumed by both trigger surfaces.
+
+### Changed
+
+- **Dependencies** — `artisanpack-ui/ai ^1.0` added as `suggest` + `require-dev`. Without it the AI Livewire component and REST routes stay unregistered and the framework boots normally.
+
 ## [2.2.3] - 2026-06-14
 
 ### Changed
