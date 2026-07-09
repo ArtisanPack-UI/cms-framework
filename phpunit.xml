@@ -5,8 +5,22 @@
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
-        <testsuite name="CMS Framework Test Suite">
-            <directory>tests</directory>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+            <!--
+                AI suite depends on artisanpack-ui/ai which requires
+                PHP 8.3+. Excluded here and re-registered under a
+                dedicated `Ai` suite so CI on PHP 8.2 can skip it via
+                the exclude-testsuite CLI flag without losing the
+                rest of the Feature coverage.
+            -->
+            <exclude>tests/Feature/Ai</exclude>
+        </testsuite>
+        <testsuite name="Ai">
+            <directory>tests/Feature/Ai</directory>
         </testsuite>
     </testsuites>
     <source>
