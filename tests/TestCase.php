@@ -10,6 +10,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests;
 
+use ArtisanPackUI\Ai\AiServiceProvider;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
@@ -59,6 +60,7 @@ class TestCase extends \Orchestra\Testbench\TestCase
             SanctumServiceProvider::class,
             CMSFrameworkServiceProvider::class,
             HooksServiceProvider::class,
+            AiServiceProvider::class,
         ];
     }
 

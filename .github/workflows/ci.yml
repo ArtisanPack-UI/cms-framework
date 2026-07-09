@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        php: ['8.2', '8.3', '8.4']
+        php: ['8.3', '8.4']
 
     steps:
       - uses: actions/checkout@v4
@@ -83,9 +83,14 @@ jobs:
       - name: Run Unit tests
         env:
           XDEBUG_MODE: off
-        run: vendor/bin/pest tests/Unit --no-coverage
+        run: vendor/bin/pest --testsuite=Unit --no-coverage
 
       - name: Run Feature tests
         env:
           XDEBUG_MODE: off
-        run: vendor/bin/pest tests/Feature --no-coverage
+        run: vendor/bin/pest --testsuite=Feature --no-coverage
+
+      - name: Run AI tests
+        env:
+          XDEBUG_MODE: off
+        run: vendor/bin/pest --testsuite=Ai --no-coverage

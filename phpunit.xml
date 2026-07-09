@@ -5,8 +5,21 @@
          colors="true"
          cacheDirectory=".phpunit.cache">
     <testsuites>
-        <testsuite name="CMS Framework Test Suite">
-            <directory>tests</directory>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Feature">
+            <directory>tests/Feature</directory>
+            <!--
+                AI tests live under a dedicated `Ai` suite so hosts
+                that opt out of the artisanpack-ui/ai foundation can
+                skip them without losing the rest of the Feature
+                coverage.
+            -->
+            <exclude>tests/Feature/Ai</exclude>
+        </testsuite>
+        <testsuite name="Ai">
+            <directory>tests/Feature/Ai</directory>
         </testsuite>
     </testsuites>
     <source>

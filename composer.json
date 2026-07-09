@@ -3,7 +3,7 @@
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
   "license": "MIT",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\CMSFramework\\": "src/",
@@ -30,7 +30,7 @@
   ],
   "prefer-stable": true,
   "require": {
-    "php": "^8.2",
+    "php": "^8.3",
     "illuminate/support": "^12.17.0|^13.0",
     "laravel/framework": "^12.0|^13.0",
     "laravel/tinker": "^2.10.1|^3.0",
@@ -57,7 +57,12 @@
     "orchestra/testbench": "^10.2",
     "artisanpack-ui/code-style": "^1.1",
     "artisanpack-ui/code-style-pint": "^1.1",
-    "dealerdirect/phpcodesniffer-composer-installer": "^1.0"
+    "artisanpack-ui/ai": "^1.0",
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+    "livewire/livewire": "^3.6"
+  },
+  "suggest": {
+    "artisanpack-ui/ai": "Recommended ^1.0 — enables the AI content-authoring agents (post-title suggestions, excerpt generation, tag/category suggestion, SEO slug suggestion). Without it the `aiFeatures()` service-provider hook is a no-op and the AI trigger surfaces (Livewire component + REST endpoints) stay hidden."
   },
   "config": {
     "allow-plugins": {

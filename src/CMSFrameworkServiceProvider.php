@@ -14,6 +14,13 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework;
 
+use ArtisanPackUI\Ai\Contracts\FeatureRegistry;
+use ArtisanPackUI\CMSFramework\Ai\Agents\CategorySuggestionAgent;
+use ArtisanPackUI\CMSFramework\Ai\Agents\ExcerptGenerationAgent;
+use ArtisanPackUI\CMSFramework\Ai\Agents\PostTitleSuggestionAgent;
+use ArtisanPackUI\CMSFramework\Ai\Agents\SlugSuggestionAgent;
+use ArtisanPackUI\CMSFramework\Ai\Agents\TagSuggestionAgent;
+use ArtisanPackUI\CMSFramework\Livewire\Ai\AiTools;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
@@ -34,9 +41,11 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
+use Livewire\Livewire;
 
 /**
  * Registers and bootstraps the CMS Framework within the application.
@@ -49,6 +58,26 @@ use InvalidArgumentException;
  */
 class CMSFrameworkServiceProvider extends ServiceProvider
 {
+
+    /**
+     * The full set of AI feature keys the cms-framework exposes.
+     *
+     * Single source of truth: {@see AiController::features()},
+     * {@see AiTools::enabledFeatures()}, and any host bundle wiring
+     * (React/Vue apps that hit `/api/v1/cms/ai/features`) all read from
+     * here so a future CMS AI feature only lands in one place.
+     *
+     * @since 2.3.0
+     *
+     * @var array<int, string>
+     */
+    public const AI_FEATURE_KEYS = [
+        'cms.post_title',
+        'cms.excerpt',
+        'cms.suggest_tags',
+        'cms.suggest_category',
+        'cms.suggest_slug',
+    ];
     /**
      * Permission slugs and human-readable names registered into
      * cms-framework's RBAC tables when visual-editor is detected.
@@ -72,6 +101,45 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         'visual_editor.global-styles.edit'  => 'Edit Global Styles in Visual Editor',
         'visual_editor.navigation.edit'     => 'Edit Navigation in Visual Editor',
     ];
+
+    /**
+     * Declare the AI features this package owns.
+     *
+     * Auto-discovered by `artisanpack-ui/ai`'s `FeatureRegistry` (see
+     * AI RFC — GitHub discussion #8). When the AI package is absent
+     * this method is simply never called and has no effect — the
+     * cms-framework still boots without AI wiring, and the AI Livewire
+     * component + REST endpoints stay unregistered.
+     *
+     * @since 2.3.0
+     *
+     * @return array<string, array{ agent: class-string, package: string }>
+     */
+    public function aiFeatures(): array
+    {
+        return [
+            'cms.post_title'       => [
+                'agent'   => PostTitleSuggestionAgent::class,
+                'package' => 'artisanpack-ui/cms-framework',
+            ],
+            'cms.excerpt'          => [
+                'agent'   => ExcerptGenerationAgent::class,
+                'package' => 'artisanpack-ui/cms-framework',
+            ],
+            'cms.suggest_tags'     => [
+                'agent'   => TagSuggestionAgent::class,
+                'package' => 'artisanpack-ui/cms-framework',
+            ],
+            'cms.suggest_category' => [
+                'agent'   => CategorySuggestionAgent::class,
+                'package' => 'artisanpack-ui/cms-framework',
+            ],
+            'cms.suggest_slug'     => [
+                'agent'   => SlugSuggestionAgent::class,
+                'package' => 'artisanpack-ui/cms-framework',
+            ],
+        ];
+    }
 
     /**
      * Boots the CMS framework and loads database migration files.
@@ -101,6 +169,8 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
 
         $this->registerVisualEditorBridge();
+
+        $this->registerAiSurfaces();
     }
 
     /**
@@ -172,6 +242,36 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->register( SiteEditorServiceProvider::class );
         $this->app->register( PluginsServiceProvider::class );
         $this->app->register( OpenApiServiceProvider::class );
+    }
+
+    /**
+     * Registers the CMS AI trigger surfaces (Livewire component +
+     * `/api/v1/cms/ai/*` REST endpoints).
+     *
+     * Both are guarded on the {@see FeatureRegistry} contract from
+     * `artisanpack-ui/ai`: when the AI package isn't installed the
+     * registrations are skipped so the cms-framework still boots.
+     *
+     * The REST endpoints are the framework-agnostic path — React and
+     * Vue apps hit them directly without either shared package
+     * (`@artisanpack-ui/react`, `@artisanpack-ui/vue`) needing to know
+     * anything about CMS AI features.
+     *
+     * @since 2.3.0
+     */
+    protected function registerAiSurfaces(): void
+    {
+        if ( ! interface_exists( FeatureRegistry::class ) ) {
+            return;
+        }
+
+        if ( class_exists( Livewire::class ) ) {
+            Livewire::component( 'ap-cms-ai-tools', AiTools::class );
+        }
+
+        Route::prefix( 'api/v1/cms/ai' )
+            ->middleware( 'api' )
+            ->group( __DIR__ . '/Http/routes/ai.php' );
     }
 
     /**
