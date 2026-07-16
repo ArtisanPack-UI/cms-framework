@@ -2,6 +2,7 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
@@ -425,5 +426,149 @@ test( 'update field handles content type changes', function (): void {
     expect( Schema::hasColumn( 'test_pages_ct', 'custom_field' ) )->toBeTrue();
 
     Schema::dropIfExists( 'test_posts_ct' );
-    Schema::dropIfExists( 'test_pages_ct');
-});
+    Schema::dropIfExists( 'test_pages_ct' );
+} );
+
+test( 'get fields for content type merges DB and filter-registered fields', function (): void {
+    $manager = new CustomFieldManager;
+
+    CustomField::create( [
+        'name'          => 'DB Field',
+        'key'           => 'db_field',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['posts'],
+        'order'         => 1,
+        'required'      => false,
+    ] );
+
+    $manager->registerField( [
+        'name'          => 'Plugin Field',
+        'key'           => 'plugin_field',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['posts'],
+        'order'         => 2,
+        'required'      => false,
+    ] );
+
+    $manager->registerField( [
+        'name'          => 'Other Content Type Field',
+        'key'           => 'wrong_ct',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['pages'],
+    ] );
+
+    $fields = $manager->getFieldsForContentType( 'posts' );
+    $keys   = $fields->pluck( 'key' )->all();
+
+    expect( $keys )->toContain( 'db_field' );
+    expect( $keys )->toContain( 'plugin_field' );
+    expect( $keys )->not->toContain( 'wrong_ct' );
+} );
+
+test( 'filter-registered fields are marked as metadata storage', function (): void {
+    $manager = new CustomFieldManager;
+
+    $manager->registerField( [
+        'name'          => 'Plugin Field',
+        'key'           => 'plugin_stored_field',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['posts'],
+    ] );
+
+    $fields = $manager->getFieldsForContentType( 'posts' );
+    $plugin = $fields->firstWhere( 'key', 'plugin_stored_field' );
+
+    expect( $plugin )->not->toBeNull();
+    expect( $plugin->exists )->toBeFalse();
+    expect( $plugin->storageMode() )->toBe( 'metadata' );
+} );
+
+test( 'createField refuses to run Schema::table against a filter-only content type', function (): void {
+    // A plugin registers a content type with table_name pointing at a real
+    // host table. An admin creating a custom field must NOT trigger a schema
+    // mutation on that table.
+    $manager    = new CustomFieldManager;
+    $ctManager  = app( ContentTypeManager::class );
+
+    Schema::create( 'attacker_target', function ( $table ): void {
+        $table->id();
+        $table->string( 'legit_column' );
+        $table->timestamps();
+    } );
+
+    $ctManager->register( [
+        'name'        => 'Attacker CT',
+        'slug'        => 'attacker-ct',
+        'table_name'  => 'attacker_target', // Plugin picks a real host table.
+        'model_class' => 'App\\Models\\Attacker',
+    ] );
+
+    $field = $manager->createField( [
+        'name'          => 'Injected',
+        'key'           => 'injected_col',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['attacker-ct'],
+        'order'         => 1,
+        'required'      => false,
+    ] );
+
+    expect( $field )->toBeInstanceOf( CustomField::class );
+    expect( Schema::hasColumn( 'attacker_target', 'injected_col' ) )->toBeFalse();
+
+    Schema::dropIfExists( 'attacker_target' );
+} );
+
+test( 'filter-registered custom fields strip persistence-critical keys on hydration', function (): void {
+    $manager = new CustomFieldManager;
+
+    $manager->registerField( [
+        'id'            => 999,
+        'created_at'    => '2020-01-01 00:00:00',
+        'name'          => 'Sneaky Field',
+        'key'           => 'sneaky',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['posts'],
+    ] );
+
+    $field = $manager->getFieldsForContentType( 'posts' )->firstWhere( 'key', 'sneaky' );
+
+    expect( $field )->not->toBeNull();
+    expect( $field->id )->toBeNull();
+    expect( $field->created_at )->toBeNull();
+    expect( $field->exists )->toBeFalse();
+} );
+
+test( 'DB entry wins over filter entry when keys collide', function (): void {
+    $manager = new CustomFieldManager;
+
+    CustomField::create( [
+        'name'          => 'DB Version',
+        'key'           => 'shared_key',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['posts'],
+        'order'         => 1,
+        'required'      => false,
+    ] );
+
+    $manager->registerField( [
+        'name'          => 'Filter Version',
+        'key'           => 'shared_key',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['posts'],
+    ] );
+
+    $fields  = $manager->getFieldsForContentType( 'posts' );
+    $matches = $fields->where( 'key', 'shared_key' );
+
+    expect( $matches )->toHaveCount( 1 );
+    expect( $matches->first()->name )->toBe( 'DB Version' );
+    expect( $matches->first()->exists )->toBeTrue();
+} );

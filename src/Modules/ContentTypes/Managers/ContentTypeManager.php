@@ -22,6 +22,23 @@ use Exception;
  */
 class ContentTypeManager
 {
+
+    /**
+     * Persistence-critical keys a plugin must never be able to seed via the
+     * `ap.contentTypes.registeredContentTypes` filter. Blocking them at
+     * hydration time keeps a filter payload from carrying primary keys or
+     * soft-delete timestamps that would collide with real DB rows or steer
+     * downstream persistence.
+     *
+     * @var array<int,string>
+     */
+    protected const FILTER_HYDRATION_BLOCKLIST = [
+        'id',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+    ];
+
     /**
      * Register a content type programmatically.
      *
@@ -82,11 +99,40 @@ class ContentTypeManager
     /**
      * Get a specific content type by slug.
      *
+     * Checks the database first; falls back to filter-registered content types,
+     * hydrated into an unpersisted `ContentType` model so callers can treat both
+     * sources uniformly. Filter-only entries have no primary key — callers that
+     * need to persist them should re-create via `createContentType()`.
+     *
      * @since 1.0.0
      *
      * @param  string  $slug  Content type slug.
      */
     public function getContentType( string $slug ): ?ContentType
+    {
+        $slug = sanitizeText( $slug );
+
+        $contentType = ContentType::where( 'slug', $slug )->first();
+        if ( $contentType ) {
+            return $contentType;
+        }
+
+        return $this->hydrateFilterContentType( $slug );
+    }
+
+    /**
+     * Get a specific content type by slug, restricted to database-persisted
+     * rows. Never returns a filter-hydrated model.
+     *
+     * Use this instead of `getContentType()` in privileged paths that trust
+     * the returned model's `table_name` — schema mutations, migration
+     * generation, or anything that writes to the database on behalf of the
+     * content type. Filter-registered content types can carry plugin-supplied
+     * `table_name` values and must not steer such operations.
+     *
+     * @since 2.4.0
+     */
+    public function getPersistedContentType( string $slug ): ?ContentType
     {
         return ContentType::where( 'slug', sanitizeText( $slug ) )->first();
     }
@@ -126,7 +172,10 @@ class ContentTypeManager
      */
     public function updateContentType( string $slug, array $data ): ContentType
     {
-        $contentType = $this->getContentType( $slug );
+        // Persisted-only lookup — filter-registered content types have no DB
+        // row and would silently INSERT a phantom row on `update()` because
+        // Eloquent runs performInsert() when `exists === false`.
+        $contentType = $this->getPersistedContentType( $slug );
 
         if ( ! $contentType ) {
             throw new Exception( "Content type {$slug} not found." );
@@ -157,7 +206,11 @@ class ContentTypeManager
      */
     public function deleteContentType( string $slug ): bool
     {
-        $contentType = $this->getContentType( $slug );
+        // Persisted-only lookup — Eloquent `delete()` on an `exists=false`
+        // model is a no-op, so passing a filter-only slug here would return
+        // false but skip firing the `ap.contentTypes.deleted` hook. Keep the
+        // legacy "false == not found" contract by refusing the call outright.
+        $contentType = $this->getPersistedContentType( $slug );
 
         if ( ! $contentType ) {
             return false;
@@ -201,6 +254,38 @@ class ContentTypeManager
      */
     public function contentTypeExists( string $slug ): bool
     {
-        return ContentType::where( 'slug', sanitizeText( $slug ) )->exists();
+        $slug = sanitizeText( $slug );
+
+        if ( ContentType::where( 'slug', $slug )->exists() ) {
+            return true;
+        }
+
+        return null !== $this->hydrateFilterContentType( $slug );
+    }
+
+    /**
+     * Look up a filter-registered content type by slug and hydrate it into an
+     * unpersisted `ContentType` model. Returns null if no filter entry matches.
+     *
+     * @since 2.4.0
+     */
+    protected function hydrateFilterContentType( string $slug ): ?ContentType
+    {
+        $filtered = applyFilters( 'ap.contentTypes.registeredContentTypes', [] );
+
+        if ( ! is_array( $filtered ) || ! isset( $filtered[ $slug ] ) || ! is_array( $filtered[ $slug ] ) ) {
+            return null;
+        }
+
+        $args = array_diff_key( $filtered[ $slug ], array_flip( self::FILTER_HYDRATION_BLOCKLIST ) );
+        if ( ! isset( $args['slug'] ) ) {
+            $args['slug'] = $slug;
+        }
+
+        $model = new ContentType;
+        $model->forceFill( $args );
+        $model->exists = false;
+
+        return $model;
     }
 }

@@ -18,7 +18,7 @@ A comprehensive Laravel package that provides back-end support for building a CM
 - **Visual Editor Integration** *(new in 2.0.0)*: Opt-in bridge to the optional `artisanpack-ui/visual-editor` package
 - **Blog Comments** *(new in 2.1.0)*: Threaded post comments with public read / guest submit, rate-limited public submission, and auth-gated moderation
 - **Themes**: Discovery, activation, ZIP upload, and lifecycle hooks
-- **Plugins**: Plugin system ⚠️ **Experimental**
+- **Plugins**: Plugin system with lifecycle management, hooks, custom field types, admin pages, and Module Federation support — see the [Plugin Author Guide](./docs/plugin-authoring.md)
 - **Core Updates**: Automatic update checking and management with rollback support
 - **PWA Support**: Progressive Web App features
 - **Audit Logging**: Track changes and user actions
@@ -270,27 +270,19 @@ composer require artisanpack-ui/ai:^1.0
 
 Without it, the agents, the Livewire component, and the REST endpoints stay unregistered — the framework boots normally.
 
+## Plugin System
+
+Plugins extend the framework with new admin pages, nav entries, hook
+subscriptions, custom field types, edit-screen panels, and — in hosts that
+ship a Module Federation runtime — React admin components.
+
+- Start with the [Plugin Author Guide](./docs/plugin-authoring.md).
+- Copy the [`examples/hello-world-plugin/`](./examples/hello-world-plugin/) skeleton for a working reference.
+
 ## Experimental Features
 
-The following features are **experimental** in the 1.0.0 release and should be used with caution in production environments:
-
-### Plugin System
-
-The plugin system provides a foundation for extending the CMS with custom functionality.
-
-**What Works:**
-- Plugin model with activation/deactivation tracking
-- Plugin manager for lifecycle management
-- Plugin installation and validation
-- Plugin update manager integration
-
-**Known Limitations:**
-- Plugin lifecycle hooks not fully implemented
-- No plugin dependency management
-- Limited plugin configuration API
-- No plugin marketplace integration
-
-**Recommendation:** Use for testing and development. Not recommended for production until full lifecycle support is added in a future release.
+The following features are **experimental** and should be used with caution in
+production environments:
 
 ### Theme System
 
