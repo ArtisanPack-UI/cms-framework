@@ -11,6 +11,8 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Admin\Managers;
 
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Route;
+use Throwable;
 
 /**
  * Manages the registration and structure of the admin navigation menu.
@@ -83,7 +85,12 @@ class AdminMenuManager
             'icon'       => $options['icon'],
             'capability' => $options['capability'],
             'order'      => $options['order'],
-            'route'      => 'admin.' . $slug,
+            // Route names replace slashes with dots to match what
+            // AdminPageManager::registerRoutes actually names the Laravel
+            // route, so Route::has() lookups (and the decorated `url` field)
+            // resolve correctly for multi-segment slugs like
+            // `packages/visual-editor`.
+            'route'      => 'admin.' . str_replace( '/', '.', $slug ),
             'menuTitle'  => $options['menuTitle'],
         ];
 
@@ -189,8 +196,18 @@ class AdminMenuManager
                 uasort( $item['subItems'], fn ( $a, $b ) => $a['order'] <=> $b['order'] );
             }
         }
+        unset( $item );
 
-        return array_merge( $topLevelItems, $menu );
+        $menu = $this->decorateMenuForConsumers( array_merge( $topLevelItems, $menu ) );
+
+        $menu = applyFilters( 'ap.admin.menu', $menu );
+
+        // Defense-in-depth: re-apply capability filtering AFTER the filter
+        // runs so plugin-injected entries can't bypass the Gate check that
+        // native items go through above. Filter subscribers can push in new
+        // rows freely, but any row declaring a `permission`/`capability` gets
+        // hidden from users who lack it.
+        return $this->enforceCapabilities( $menu );
     }
 
     /**
@@ -205,5 +222,171 @@ class AdminMenuManager
     public function getPageBySlug( string $slug ): ?array
     {
         return $this->items[ $slug ] ?? null;
+    }
+
+    /**
+     * Recursively drop any menu node whose `permission` (or legacy
+     * `capability`) the current user does not hold. Applied after the
+     * `ap.admin.menu` filter so filter-injected entries are gated too.
+     *
+     * @param  array  $menu  The (already-decorated) menu.
+     *
+     * @return array The gated menu.
+     */
+    protected function enforceCapabilities( array $menu ): array
+    {
+        $allowed = [];
+        foreach ( $menu as $key => $node ) {
+            $ability = $node['permission'] ?? ( $node['capability'] ?? null );
+            if ( ! empty( $ability ) && ! Gate::allows( $ability ) ) {
+                continue;
+            }
+
+            if ( isset( $node['items'] ) && is_array( $node['items'] ) ) {
+                $node['items'] = $this->enforceCapabilities( $node['items'] );
+                // Drop sections that end up empty after filtering.
+                if ( empty( $node['items'] ) ) {
+                    continue;
+                }
+            }
+            if ( isset( $node['subItems'] ) && is_array( $node['subItems'] ) ) {
+                $node['subItems'] = $this->enforceCapabilities( $node['subItems'] );
+            }
+
+            $allowed[ $key ] = $node;
+        }
+
+        return $allowed;
+    }
+
+    /**
+     * Add React/Inertia-friendly fields (url, label, iconId, permission, external)
+     * to each menu row while keeping the existing keys for Blade hosts.
+     *
+     * @param  array  $menu  The structured menu.
+     *
+     * @return array The decorated menu.
+     */
+    protected function decorateMenuForConsumers( array $menu ): array
+    {
+        foreach ( $menu as $key => &$node ) {
+            if ( isset( $node['items'] ) && is_array( $node['items'] ) ) {
+                $node['items'] = $this->decorateMenuForConsumers( $node['items'] );
+                continue;
+            }
+
+            $node = $this->decorateItem( $node );
+
+            if ( ! empty( $node['subItems'] ) ) {
+                $node['subItems'] = $this->decorateMenuForConsumers( $node['subItems'] );
+            }
+        }
+
+        return $menu;
+    }
+
+    /**
+     * Resolve consumer-friendly fields for a single menu item.
+     *
+     * @param  array  $item  The menu item as stored in $this->items.
+     *
+     * @return array The item enriched with url/label/iconId/permission/external.
+     */
+    protected function decorateItem( array $item ): array
+    {
+        if ( ! isset( $item['route'] ) ) {
+            return $item;
+        }
+
+        if ( ! isset( $item['url'] ) ) {
+            $item['url'] = $this->resolveRouteUrl( $item['route'], $item['external'] ?? null );
+        } elseif ( is_string( $item['url'] ) ) {
+            // A filter subscriber (e.g. registerNavEntry) may pre-set `url`.
+            // Sanitize regardless so `javascript:` URIs never reach the nav
+            // renderer.
+            $item['url'] = $this->sanitizeExternalUrl( $item['url'] );
+        }
+
+        if ( ! isset( $item['label'] ) ) {
+            $item['label'] = $item['menuTitle'] ?? $item['title'] ?? '';
+        }
+
+        if ( ! isset( $item['iconId'] ) && isset( $item['icon'] ) ) {
+            $item['iconId'] = $item['icon'];
+        }
+
+        if ( ! isset( $item['permission'] ) && ! empty( $item['capability'] ) ) {
+            $item['permission'] = $item['capability'];
+        }
+
+        if ( ! array_key_exists( 'external', $item ) ) {
+            $item['external'] = false;
+        }
+
+        return $item;
+    }
+
+    /**
+     * Resolve a route name to a URL. Falls back to '#' when the route is not
+     * registered (common in test contexts or before admin routes are booted).
+     *
+     * External URLs are only trusted when their scheme is safe — any plugin
+     * or filter subscriber setting a `javascript:` / `data:` / `vbscript:`
+     * URL would otherwise reach the admin nav's `<a href>` and execute in
+     * the authenticated admin session.
+     */
+    protected function resolveRouteUrl( string $routeName, ?bool $external = null ): string
+    {
+        if ( true === $external ) {
+            return $this->sanitizeExternalUrl( $routeName );
+        }
+
+        try {
+            if ( Route::has( $routeName ) ) {
+                return route( $routeName );
+            }
+        } catch ( Throwable $e ) {
+            // Fall through to the safe default below.
+        }
+
+        return '#';
+    }
+
+    /**
+     * Allow only navigation-safe URL forms:
+     *   - Absolute http(s) URLs
+     *   - Same-origin relative URLs (starting with '/')
+     *   - Hash fragments (starting with '#')
+     *
+     * Anything else (javascript:, data:, vbscript:, file:, etc.) collapses to
+     * '#'. Prevents plugin authors from injecting XSS vectors into the admin
+     * sidebar via `registerNavEntry(['external' => true, 'url' => ...])`.
+     */
+    protected function sanitizeExternalUrl( string $url ): string
+    {
+        $trimmed = trim( $url );
+        if ( '' === $trimmed ) {
+            return '#';
+        }
+
+        if ( str_starts_with( $trimmed, '/' ) || str_starts_with( $trimmed, '#' ) ) {
+            return $trimmed;
+        }
+
+        // Match absolute URLs with an explicit scheme.
+        if ( 1 === preg_match( '#^([a-zA-Z][a-zA-Z0-9+.\-]*):#', $trimmed, $matches ) ) {
+            $scheme = strtolower( $matches[1] );
+            if ( in_array( $scheme, ['http', 'https', 'mailto', 'tel'], true ) ) {
+                return $trimmed;
+            }
+
+            logger()->warning( "AdminMenuManager: refused unsafe URL scheme '{$scheme}' in nav entry." );
+
+            return '#';
+        }
+
+        // Scheme-less values that aren't obviously a path — treat as safe
+        // relative reference (e.g., 'docs/index.html').
+        return $trimmed;
     }
 }

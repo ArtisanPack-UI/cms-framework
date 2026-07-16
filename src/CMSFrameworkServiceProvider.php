@@ -28,6 +28,7 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Providers\BlogServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers\ContentTypesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Providers\DynamicContentServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Providers\NotificationServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\OpenApi\Providers\OpenApiServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
@@ -236,6 +237,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->app->register( SettingsServiceProvider::class );
         $this->app->register( NotificationServiceProvider::class );
         $this->app->register( ContentTypesServiceProvider::class );
+        $this->app->register( DynamicContentServiceProvider::class );
         $this->app->register( BlogServiceProvider::class );
         $this->app->register( PagesServiceProvider::class );
         $this->app->register( ThemesServiceProvider::class );

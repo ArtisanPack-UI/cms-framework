@@ -3,7 +3,7 @@
   "description": "Adds in the back end support for building a CMS with any front end framework.",
   "type": "library",
   "license": "MIT",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "autoload": {
     "psr-4": {
       "ArtisanPackUI\\CMSFramework\\": "src/",
@@ -14,7 +14,8 @@
       "src/Modules/Users/helpers.php",
       "src/Modules/Admin/helpers.php",
       "src/Modules/Core/helpers.php",
-      "src/Modules/Settings/helpers.php"
+      "src/Modules/Settings/helpers.php",
+      "src/Modules/DynamicContent/helpers.php"
     ]
   },
   "autoload-dev": {

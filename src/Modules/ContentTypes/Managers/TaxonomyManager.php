@@ -89,7 +89,34 @@ class TaxonomyManager
      */
     public function getTaxonomiesForContentType( string $contentTypeSlug ): Collection
     {
-        return Taxonomy::where( 'content_type_slug', sanitizeText( $contentTypeSlug ) )->get();
+        $contentTypeSlug = sanitizeText( $contentTypeSlug );
+
+        $dbTaxonomies = Taxonomy::where( 'content_type_slug', $contentTypeSlug )->get();
+
+        $filtered = applyFilters( 'ap.taxonomies.registeredTaxonomies', [] );
+        if ( ! is_array( $filtered ) ) {
+            return $dbTaxonomies;
+        }
+
+        $existingSlugs = $dbTaxonomies->pluck( 'slug' )->all();
+
+        foreach ( $filtered as $slug => $args ) {
+            if ( ! is_array( $args ) ) {
+                continue;
+            }
+            if ( ! isset( $args['content_type_slug'] ) || $args['content_type_slug'] !== $contentTypeSlug ) {
+                continue;
+            }
+            $resolvedSlug = ( string ) ( $args['slug'] ?? $slug );
+            if ( in_array( $resolvedSlug, $existingSlugs, true ) ) {
+                continue;
+            }
+
+            $args['slug'] = $resolvedSlug;
+            $dbTaxonomies->push( $this->hydrateTaxonomyFromArgs( $args ) );
+        }
+
+        return $dbTaxonomies;
     }
 
     /**
@@ -101,17 +128,48 @@ class TaxonomyManager
      */
     public function taxonomyExists( string $slug ): bool
     {
-        return Taxonomy::where( 'slug', sanitizeText( $slug ) )->exists();
+        $slug = sanitizeText( $slug );
+
+        if ( Taxonomy::where( 'slug', $slug )->exists() ) {
+            return true;
+        }
+
+        return null !== $this->hydrateFilterTaxonomy( $slug );
     }
 
     /**
      * Get a specific taxonomy by slug.
+     *
+     * Checks the database first; falls back to filter-registered taxonomies,
+     * hydrated into an unpersisted `Taxonomy` model so callers can treat both
+     * sources uniformly.
      *
      * @since 1.0.0
      *
      * @param  string  $slug  Taxonomy slug.
      */
     public function getTaxonomy( string $slug ): ?Taxonomy
+    {
+        $slug = sanitizeText( $slug );
+
+        $taxonomy = Taxonomy::where( 'slug', $slug )->first();
+        if ( $taxonomy ) {
+            return $taxonomy;
+        }
+
+        return $this->hydrateFilterTaxonomy( $slug );
+    }
+
+    /**
+     * Get a specific taxonomy by slug, restricted to database-persisted rows.
+     * Never returns a filter-hydrated model.
+     *
+     * Use this in privileged paths (update, delete, migration generation)
+     * where the returned model must correspond to a real DB row.
+     *
+     * @since 2.4.0
+     */
+    public function getPersistedTaxonomy( string $slug ): ?Taxonomy
     {
         return Taxonomy::where( 'slug', sanitizeText( $slug ) )->first();
     }
@@ -151,7 +209,10 @@ class TaxonomyManager
      */
     public function updateTaxonomy( string $slug, array $data ): Taxonomy
     {
-        $taxonomy = $this->getTaxonomy( $slug );
+        // Persisted-only lookup — a filter-registered taxonomy would silently
+        // INSERT a phantom row on `update()` because Eloquent runs
+        // performInsert() when `exists === false`.
+        $taxonomy = $this->getPersistedTaxonomy( $slug );
 
         if ( ! $taxonomy ) {
             throw new Exception( "Taxonomy {$slug} not found." );
@@ -182,7 +243,11 @@ class TaxonomyManager
      */
     public function deleteTaxonomy( string $slug ): bool
     {
-        $taxonomy = $this->getTaxonomy( $slug );
+        // Persisted-only lookup so we never no-op `delete()` on an
+        // `exists=false` filter-hydrated model ( which would return false
+        // AND skip firing the `ap.taxonomies.deleted` hook, breaking the
+        // legacy "false == not found" contract ).
+        $taxonomy = $this->getPersistedTaxonomy( $slug );
 
         if ( ! $taxonomy ) {
             return false;
@@ -215,5 +280,54 @@ class TaxonomyManager
         }
 
         return $deleted;
+    }
+
+    /**
+     * Look up a filter-registered taxonomy by slug and hydrate it into an
+     * unpersisted `Taxonomy` model. Returns null if no filter entry matches.
+     *
+     * @since 2.4.0
+     */
+    protected function hydrateFilterTaxonomy( string $slug ): ?Taxonomy
+    {
+        $filtered = applyFilters( 'ap.taxonomies.registeredTaxonomies', [] );
+
+        if ( ! is_array( $filtered ) || ! isset( $filtered[ $slug ] ) || ! is_array( $filtered[ $slug ] ) ) {
+            return null;
+        }
+
+        $args = $filtered[ $slug ];
+        if ( ! isset( $args['slug'] ) ) {
+            $args['slug'] = $slug;
+        }
+
+        return $this->hydrateTaxonomyFromArgs( $args );
+    }
+
+    /**
+     * Hydrate an unpersisted `Taxonomy` model from a raw args array.
+     *
+     * Strips persistence-critical keys before `forceFill()` so a plugin can
+     * never seed `id`, `created_at`, `updated_at`, or `deleted_at` via the
+     * `ap.taxonomies.registeredTaxonomies` filter.
+     *
+     * @since 2.4.0
+     *
+     * @param  array<string,mixed>  $args
+     */
+    protected function hydrateTaxonomyFromArgs( array $args ): Taxonomy
+    {
+        $args = array_diff_key( $args, array_flip( [
+            'id',
+            'created_at',
+            'updated_at',
+            'deleted_at',
+        ] ) );
+
+        $model = new Taxonomy;
+        $model->forceFill( $args );
+        $model->exists = false;
+
+        return $model;
     }
 }

@@ -52,4 +52,20 @@ return [
     'updateCheckTimeout' => 10, // HTTP request timeout in seconds
     'updateCacheTtl'     => 43200, // 12 hours in seconds
     'backupPath'         => 'plugin-backups', // Relative to storage_path()
+
+    /*
+    |--------------------------------------------------------------------------
+    | Auto-clear Framework Caches on Lifecycle Events
+    |--------------------------------------------------------------------------
+    | If true, activate/deactivate/delete will run route:clear, config:clear
+    | and view:clear so newly (un)registered plugin routes/views take effect
+    | immediately. This is convenient in development but is a blunt hammer in
+    | production hosts that rely on `route:cache` / `config:cache` for
+    | performance — every toggle deletes the compiled cache files, causing a
+    | measurable latency regression until the next deploy rebuilds them.
+    |
+    | Default: false. Enable it explicitly in development, or when your
+    | deployment pipeline handles rebuilds on demand.
+    */
+    'autoClearFrameworkCaches' => env( 'PLUGINS_AUTO_CLEAR_FRAMEWORK_CACHES', false ),
 ];

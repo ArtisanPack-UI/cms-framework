@@ -117,6 +117,32 @@ trait HasRenderedBlockContent
             }
         }
 
-        return is_string( $content ) ? $content : '';
+        $rendered = is_string( $content ) ? $content : '';
+
+        return $this->resolveDynamicContentTokens( $rendered );
+    }
+
+    /**
+     * Pass rendered content through the dynamic-content resolver when the
+     * DynamicContent module is loaded. Kept as a soft integration so this
+     * trait doesn't hard-depend on the DynamicContent module.
+     *
+     * @since 2.4.0
+     */
+    protected function resolveDynamicContentTokens( string $rendered ): string
+    {
+        if ( '' === $rendered || ! function_exists( 'apRenderContent' ) ) {
+            return $rendered;
+        }
+
+        try {
+            return apRenderContent( $rendered, [
+                'model'    => static::class,
+                'model_id' => $this->getKey(),
+            ] );
+        } catch ( Throwable ) {
+            // Never let a resolver failure hide the underlying content.
+            return $rendered;
+        }
     }
 }

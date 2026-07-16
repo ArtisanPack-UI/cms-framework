@@ -19,6 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.4.0] - 2026-07-16
+
+### Added
+
+- **Dynamic content system** ([#178](https://github.com/ArtisanPack-UI/cms-framework/issues/178)) — Site-wide dynamic content module at `src/Modules/DynamicContent/`. Site owners define a piece of content once and reference it anywhere via `{{source.field|mod:arg}}` merge tokens; edits propagate everywhere the token is used. Ships four migrations (`dynamic_content_types`, `_fields`, `_records`, `_record_values`); an in-memory registry that merges admin-created (DB) and code-registered types with slug-conflict warnings; 11 built-in field types (text, rich_text, url, email, phone, image, date, datetime, number, address, select) with HTML-safe rendering (text-shaped types escape at render time, rich text stays raw by design); 7 built-in modifiers (default, upper, lower, truncate, date, time, nl2br — `nl2br` escapes input before inserting `<br>` and returns `HtmlString`); a `DynamicContentResolver` with a 65KB `/resolve` cap plus throttle; the `apRenderContent()` helper and `@dynamicContent` Blade directive; a `DynamicContentCast` Eloquent cast (documented as a public content pipeline — do NOT store secrets in dynamic content records); filter-driven authz (`manage_dynamic_content` capability with per-type policy scoping via `viewAnyForType` / `createForType`); per-request memoization on the accessor to eliminate collection-token N+1s; a resolver signature cache invalidated on record save/delete; REST endpoints under `/api/v1/dynamic-content/*` with types bound by slug; a Livewire admin surface (type list, field builder, singleton editor, collection editor); and wiring into `HasRenderedBlockContent::renderContent()` so Blog Post, Pages, and any content type using the trait auto-resolve tokens.
+
+- **Plugin system v2.4 — schema, filter, base provider, compat, lifecycle** ([#179](https://github.com/ArtisanPack-UI/cms-framework/issues/179), [#180](https://github.com/ArtisanPack-UI/cms-framework/issues/180), [#181](https://github.com/ArtisanPack-UI/cms-framework/issues/181), [#182](https://github.com/ArtisanPack-UI/cms-framework/issues/182), [#183](https://github.com/ArtisanPack-UI/cms-framework/issues/183), [#190](https://github.com/ArtisanPack-UI/cms-framework/pull/190)) — Five interrelated enhancements for the Keystone CMS plugin UI initiative:
+  - `plugin.json` schema extended with `min_host_version`, `federated_module`, `nav_entries`, `permissions` (plugin-slug-namespaced), `migrations_path` (traversal-guarded), and `rollback_migrations_on_delete`.
+  - New `ap.admin.menu` filter with a React/Inertia-friendly row shape (`url` / `label` / `iconId` / `permission` / `external`); post-filter capability re-check gates plugin-injected entries.
+  - New `PluginServiceProvider` base class with `registerAdminPage` / `registerNavEntry` / `registerFederatedModule` / `pluginPath` / `pluginConfig` helpers, backed by a container-bound `PluginRegistry` singleton (Octane-safe).
+  - Plugin `min_host_version` enforced at activation via `IncompatiblePluginException` with `composer.json` + `InstalledVersions` resolution; controller surfaces a structured 409 response.
+  - Complete plugin lifecycle: transactional activation with PSR-4 snapshot/restore rollback, opt-in migration rollback on delete, namespace-scoped permission seed/unseed, and optional framework cache clears (`cms.plugins.autoClearFrameworkCaches`, default `false`).
+
+- **Complete plugin extensibility** ([#184](https://github.com/ArtisanPack-UI/cms-framework/issues/184), [#185](https://github.com/ArtisanPack-UI/cms-framework/issues/185), [#186](https://github.com/ArtisanPack-UI/cms-framework/issues/186), [#187](https://github.com/ArtisanPack-UI/cms-framework/issues/187), [#188](https://github.com/ArtisanPack-UI/cms-framework/issues/188), [#191](https://github.com/ArtisanPack-UI/cms-framework/pull/191)) — Ships the remaining plugin-system issues so third-party plugins can extend the framework end-to-end:
+  - `ContentTypeManager` / `TaxonomyManager` singular getters (`getContentType`, `contentTypeExists`, `getTaxonomy`, `taxonomyExists`, `getTaxonomiesForContentType`) now hydrate filter-registered entries as unpersisted models (backwards compatible via Option B); added `getPersistedContentType` / `getPersistedTaxonomy` for privileged callers that must never trust plugin-supplied `table_name`.
+  - New `CustomFieldTypeRegistry` + `FieldTypeDefinition` value object under `src/Modules/ContentTypes/`. All 16 built-in `FieldType` enum cases are pre-registered. New `apRegisterFieldType(string $slug, array|FieldTypeDefinition $definition)` helper matches the sibling `apRegister*` signature convention. `CustomField.type` cast changed from `FieldType::class` to `string`; new `fieldTypeEnum()`, `fieldTypeDefinition()`, `storageMode()` accessors. `CustomFieldRequest` now validates against `Rule::in(registry->slugs())`.
+  - `CustomFieldManager::getFieldsForContentType()` merges DB + filter fields. Filter fields carry `storage = metadata`. The `HasCustomFields` trait was rewritten to route metadata-storage fields to the model's `metadata` JSON column. Schema mutations (`createField`, `updateField`, `deleteField`, `generateMigration`) are now restricted to DB-persisted content types so a plugin's filter-registered `table_name` can never steer `Schema::table` at a host table.
+  - New `ContentEditExtensions` manager exposing `panels()`, `tabs()`, `beforeEditor()`, `afterEditor()`, `saveData()` over `ap.admin.contentEdit.{panels,tabs,beforeEditor,afterEditor,saveData}`. Respects `contentTypes` restriction and `order`.
+  - Plugin authoring guide (`docs/plugin-authoring.md`) and `examples/hello-world-plugin/` skeleton with `plugin.json`, base `PluginServiceProvider` usage, migration, and Blade admin view. Federated React flavor stubbed with pointer to Keystone. `README` plugin-system section rewritten; "experimental" wording removed.
+
+### Security
+
+- **Plugin system hardening** ([#190](https://github.com/ArtisanPack-UI/cms-framework/pull/190), [#191](https://github.com/ArtisanPack-UI/cms-framework/pull/191)) — surfaced by local `/code-review` passes:
+  - Reject manifest `migrations_path` traversal (schema + runtime `realpath` check).
+  - Namespace-prefix permission slugs so seed/unseed cannot touch core or other plugin rows.
+  - Re-apply `Gate::allows` after the `ap.admin.menu` filter runs.
+  - Allow-list URL schemes in `registerNavEntry` and `resolveRouteUrl`.
+  - Constrain `PluginServiceProvider` manifest walk to direct children of the plugins root.
+  - `HasCustomFields` short-circuits via `getCasts()` + real `Schema` column listing so a plugin cannot shadow a host attribute (`password`, `is_admin`, `metadata`) by registering a filter-scoped field with a colliding key.
+  - `__set` on filter-registered fields throws `RuntimeException` when the host model has no `metadata` column instead of silently dropping writes.
+  - `update/deleteContentType` and `update/deleteTaxonomy` refuse filter-only slugs (previously silently `INSERT`ed phantom rows via Eloquent `update()` on `exists = false`).
+  - `forceFill` payloads strip `id` / `created_at` / `updated_at` / `deleted_at` so plugins cannot seed persistence-critical keys.
+  - `CustomFieldTypeRegistry` rejects malformed filter entries (non-scalar `slug` or `label`, empty `slug`) — one bad plugin no longer DoSes the registry.
+  - `getCustomFieldsForType` is memoized per instance and auto-flushed on `saved` / `deleted`.
+
 ## [2.3.0] - 2026-07-09
 
 ### Added
