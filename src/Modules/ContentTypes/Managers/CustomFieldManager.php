@@ -64,9 +64,17 @@ class CustomFieldManager
      */
     public function getFieldsForContentType( string $contentType ): Collection
     {
-        return CustomField::whereJsonContains( 'content_types', $contentType )
+        $dbFields = CustomField::whereJsonContains( 'content_types', $contentType )
             ->orderBy( 'order' )
             ->get();
+
+        $filterFields = $this->filterFieldsForContentType( $contentType, $dbFields->pluck( 'key' )->all() );
+
+        if ( $filterFields->isEmpty() ) {
+            return $dbFields;
+        }
+
+        return $dbFields->concat( $filterFields )->values();
     }
 
     /**
@@ -81,9 +89,11 @@ class CustomFieldManager
         $field = DB::transaction( function () use ( $data ) {
             $field = CustomField::create( $data );
 
-            // Add columns to content type tables
+            // Add columns to content type tables. Restricted to DB-persisted
+            // content types so a plugin's filter-registered `table_name` can
+            // never steer Schema::table at an arbitrary host table.
             foreach ( $field->content_types as $contentTypeSlug ) {
-                $contentType = app( ContentTypeManager::class )->getContentType( $contentTypeSlug );
+                $contentType = app( ContentTypeManager::class )->getPersistedContentType( $contentTypeSlug );
                 if ( $contentType ) {
                     $this->addColumnToTable( $field, $contentType->table_name );
                 }
@@ -128,17 +138,19 @@ class CustomFieldManager
                 $addedTypes      = array_diff( $newContentTypes, $oldContentTypes );
                 $removedTypes    = array_diff( $oldContentTypes, $newContentTypes );
 
-                // Add columns to new content types
+                // Add columns to new content types. Restricted to DB-persisted
+                // content types ( see createField() ) to prevent plugin-supplied
+                // `table_name` values from steering Schema::table.
                 foreach ( $addedTypes as $contentTypeSlug ) {
-                    $contentType = app( ContentTypeManager::class )->getContentType( $contentTypeSlug );
+                    $contentType = app( ContentTypeManager::class )->getPersistedContentType( $contentTypeSlug );
                     if ( $contentType ) {
                         $this->addColumnToTable( $field, $contentType->table_name );
                     }
                 }
 
-                // Remove columns from removed content types
+                // Remove columns from removed content types.
                 foreach ( $removedTypes as $contentTypeSlug ) {
-                    $contentType = app( ContentTypeManager::class )->getContentType( $contentTypeSlug );
+                    $contentType = app( ContentTypeManager::class )->getPersistedContentType( $contentTypeSlug );
                     if ( $contentType ) {
                         $this->removeColumnFromTable( $field, $contentType->table_name );
                     }
@@ -188,9 +200,11 @@ class CustomFieldManager
             $deleted = $field->delete();
 
             if ( $deleted ) {
-                // Remove columns from content type tables
+                // Remove columns from content type tables. DB-only lookup
+                // matches the createField() / updateField() paths so we
+                // never dropColumn against a plugin-supplied `table_name`.
                 foreach ( $field->content_types as $contentTypeSlug ) {
-                    $contentType = app( ContentTypeManager::class )->getContentType( $contentTypeSlug );
+                    $contentType = app( ContentTypeManager::class )->getPersistedContentType( $contentTypeSlug );
                     if ( $contentType ) {
                         $this->removeColumnFromTable( $field, $contentType->table_name );
                     }
@@ -316,6 +330,64 @@ class CustomFieldManager
     }
 
     /**
+     * Hydrate filter-registered custom fields into unpersisted `CustomField`
+     * models for the given content type. DB rows always win on key collisions.
+     *
+     * Filter-registered fields carry the `storage = 'metadata'` flag so
+     * `HasCustomFields` knows to read/write through the model's `metadata`
+     * JSON column rather than a physical column that doesn't exist.
+     *
+     * @since 2.4.0
+     *
+     * @param  array<int,string>  $excludeKeys
+     */
+    protected function filterFieldsForContentType( string $contentType, array $excludeKeys ): Collection
+    {
+        $filtered = applyFilters( 'ap.contentTypes.registeredCustomFields', [] );
+        $out      = collect();
+
+        if ( ! is_array( $filtered ) ) {
+            return $out;
+        }
+
+        foreach ( $filtered as $key => $args ) {
+            if ( ! is_array( $args ) ) {
+                continue;
+            }
+            $resolvedKey = ( string ) ( $args['key'] ?? $key );
+
+            if ( in_array( $resolvedKey, $excludeKeys, true ) ) {
+                continue;
+            }
+
+            $contentTypes = ( array ) ( $args['content_types'] ?? [] );
+            if ( ! in_array( $contentType, $contentTypes, true ) ) {
+                continue;
+            }
+
+            $args['key']     = $resolvedKey;
+            $args['storage'] = $args['storage'] ?? 'metadata';
+
+            // Strip persistence-critical keys so a plugin cannot seed `id`
+            // or timestamps onto the hydrated CustomField model.
+            $args = array_diff_key( $args, array_flip( [
+                'id',
+                'created_at',
+                'updated_at',
+                'deleted_at',
+            ] ) );
+
+            $field         = new CustomField;
+            $field->forceFill( $args );
+            $field->exists = false;
+
+            $out->push( $field );
+        }
+
+        return $out->sortBy( fn ( CustomField $field ) => $field->order ?? 0 )->values();
+    }
+
+    /**
      * Get the migration stub content.
      *
      * @since 1.0.0
@@ -326,9 +398,12 @@ class CustomFieldManager
      */
     protected function getMigrationStub( CustomField $field, string $action, string $className ): string
     {
+        // DB-only lookup: the generated migration writes literal `table_name`
+        // values into a Schema::table() call, so we must never emit a
+        // plugin-supplied table name from a filter registration.
         $tables = [];
         foreach ( $field->content_types as $contentTypeSlug ) {
-            $contentType = app( ContentTypeManager::class )->getContentType( $contentTypeSlug );
+            $contentType = app( ContentTypeManager::class )->getPersistedContentType( $contentTypeSlug );
             if ( $contentType ) {
                 $tables[] = $contentType->table_name;
             }

@@ -234,3 +234,124 @@ test( 'registered content types merges database and filtered content types', fun
     expect( $registeredTypes )->toHaveKey( 'posts' );
     expect( $registeredTypes )->toHaveKey( 'custom' );
 } );
+
+test( 'get content type returns filter-registered content type as unpersisted model', function (): void {
+    $manager = new ContentTypeManager;
+
+    $manager->register( [
+        'name'        => 'Filter Only',
+        'slug'        => 'filter-only',
+        'table_name'  => 'filter_only',
+        'model_class' => 'App\\Models\\FilterOnly',
+        'supports'    => ['title'],
+    ] );
+
+    $contentType = $manager->getContentType( 'filter-only' );
+
+    expect( $contentType )->not->toBeNull();
+    expect( $contentType )->toBeInstanceOf( ContentType::class );
+    expect( $contentType->slug )->toBe( 'filter-only' );
+    expect( $contentType->name )->toBe( 'Filter Only' );
+    expect( $contentType->exists )->toBeFalse();
+    expect( $contentType->supportsFeature( 'title' ) )->toBeTrue();
+} );
+
+test( 'get content type prefers database entry over filter entry for the same slug', function (): void {
+    $manager = new ContentTypeManager;
+
+    ContentType::create( [
+        'name'          => 'DB Version',
+        'slug'          => 'shared',
+        'table_name'    => 'shared',
+        'model_class'   => 'App\\Models\\Shared',
+        'public'        => true,
+        'show_in_admin' => true,
+    ] );
+
+    $manager->register( [
+        'name'        => 'Filter Version',
+        'slug'        => 'shared',
+        'table_name'  => 'shared',
+        'model_class' => 'App\\Models\\SharedFilter',
+    ] );
+
+    $contentType = $manager->getContentType( 'shared' );
+
+    expect( $contentType->name )->toBe( 'DB Version' );
+    expect( $contentType->exists )->toBeTrue();
+} );
+
+test( 'updateContentType refuses filter-only slugs (no phantom INSERT)', function (): void {
+    $manager = new ContentTypeManager;
+
+    $manager->register( [
+        'name'        => 'Filter Only',
+        'slug'        => 'filter-only-update',
+        'table_name'  => 'filter_only_update',
+        'model_class' => 'App\\Models\\FilterOnly',
+    ] );
+
+    expect( fn () => $manager->updateContentType( 'filter-only-update', ['name' => 'Renamed'] ) )
+        ->toThrow( Exception::class, 'not found' );
+
+    expect( ContentType::where( 'slug', 'filter-only-update' )->exists() )->toBeFalse();
+} );
+
+test( 'deleteContentType returns false for filter-only slugs and never no-op-deletes', function (): void {
+    $manager = new ContentTypeManager;
+
+    $manager->register( [
+        'name'        => 'Filter Only',
+        'slug'        => 'filter-only-delete',
+        'table_name'  => 'filter_only_delete',
+        'model_class' => 'App\\Models\\FilterOnly',
+    ] );
+
+    expect( $manager->deleteContentType( 'filter-only-delete' ) )->toBeFalse();
+} );
+
+test( 'filter-hydrated content type strips persistence-critical keys', function (): void {
+    $manager = new ContentTypeManager;
+
+    $manager->register( [
+        'id'          => 999,
+        'created_at'  => '2020-01-01 00:00:00',
+        'name'        => 'Sneaky',
+        'slug'        => 'sneaky',
+        'table_name'  => 'sneaky',
+        'model_class' => 'App\\Models\\Sneaky',
+    ] );
+
+    $contentType = $manager->getContentType( 'sneaky' );
+
+    expect( $contentType->id )->toBeNull();
+    expect( $contentType->created_at )->toBeNull();
+    expect( $contentType->slug )->toBe( 'sneaky' );
+} );
+
+test( 'getPersistedContentType never returns filter-hydrated entries', function (): void {
+    $manager = new ContentTypeManager;
+
+    $manager->register( [
+        'name'        => 'Filter Only',
+        'slug'        => 'persist-check',
+        'table_name'  => 'persist_check',
+        'model_class' => 'App\\Models\\PersistCheck',
+    ] );
+
+    expect( $manager->getPersistedContentType( 'persist-check' ) )->toBeNull();
+} );
+
+test( 'content type exists returns true for filter-registered content types', function (): void {
+    $manager = new ContentTypeManager;
+
+    $manager->register( [
+        'name'        => 'Filter Only',
+        'slug'        => 'filter-existence',
+        'table_name'  => 'filter_existence',
+        'model_class' => 'App\\Models\\FilterExistence',
+    ] );
+
+    expect( $manager->contentTypeExists( 'filter-existence' ) )->toBeTrue();
+    expect( $manager->contentTypeExists( 'nonexistent' ) )->toBeFalse();
+} );

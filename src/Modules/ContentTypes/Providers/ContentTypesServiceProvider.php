@@ -12,6 +12,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentEditExtensions;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\TaxonomyManager;
@@ -21,6 +22,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Taxonomy;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Policies\ContentTypePolicy;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Policies\CustomFieldPolicy;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Policies\TaxonomyPolicy;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Registries\CustomFieldTypeRegistry;
 use Illuminate\Routing\Router;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
@@ -48,6 +50,12 @@ class ContentTypesServiceProvider extends ServiceProvider
 
         // Register TaxonomyManager as singleton
         $this->app->singleton( TaxonomyManager::class, fn () => new TaxonomyManager );
+
+        // Register CustomFieldTypeRegistry as singleton
+        $this->app->singleton( CustomFieldTypeRegistry::class, fn () => new CustomFieldTypeRegistry );
+
+        // Register ContentEditExtensions manager as singleton
+        $this->app->singleton( ContentEditExtensions::class, fn () => new ContentEditExtensions );
 
         // Load helpers
         $this->loadHelpers();

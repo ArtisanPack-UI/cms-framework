@@ -1,0 +1,351 @@
+# Plugin Author Guide
+
+Plugins extend the CMS Framework with new content types, custom fields, admin
+pages, nav entries, hooks, and — in hosts that ship a Module Federation runtime
+— React admin components. This guide walks through every piece a plugin author
+needs and points at the reference example under
+[`examples/hello-world-plugin/`](../examples/hello-world-plugin/).
+
+- [Plugin lifecycle](#plugin-lifecycle)
+- [`plugin.json` manifest schema](#pluginjson-manifest-schema)
+- [Base `PluginServiceProvider`](#base-pluginserviceprovider)
+- [Registering an admin page](#registering-an-admin-page)
+- [Registering nav entries](#registering-nav-entries)
+- [Migrations](#migrations)
+- [Hook subscriptions](#hook-subscriptions)
+- [Registering custom field types](#registering-custom-field-types)
+- [Injecting edit-screen panels & tabs](#injecting-edit-screen-panels--tabs)
+- [Federated React modules](#federated-react-modules)
+- [Versioning & host compatibility](#versioning--host-compatibility)
+- [Testing your plugin](#testing-your-plugin)
+
+## Plugin lifecycle
+
+1. **Discovery** — The framework scans `base_path(config('cms.plugins.directory'))`
+   ( default `plugins/` ) for directories containing a `plugin.json` manifest.
+2. **Install** — When a plugin is uploaded, `PluginManager::install()` validates
+   the manifest and inserts a row in the `plugins` table.
+3. **Activate** — On activation, the plugin's `service_provider` ( from
+   `plugin.json` ) is registered with the container. This runs your
+   `register()` and `boot()` methods, and any manifest-declared migrations.
+4. **Deactivate** — The plugin row is marked inactive. The service provider is
+   unregistered on the next request boot.
+5. **Delete** — The plugin's directory and DB record are removed.
+
+## `plugin.json` manifest schema
+
+A plugin's root directory MUST contain a `plugin.json` file:
+
+```json
+{
+  "$schema": "https://artisanpack-ui.dev/schemas/plugin.json",
+  "slug": "hello-world",
+  "name": "Hello World",
+  "version": "1.0.0",
+  "description": "Reference plugin demonstrating the framework's plugin API.",
+  "author": {
+    "name": "Jacob Martella",
+    "email": "me@jacobmartella.com",
+    "url": "https://jacobmartella.com"
+  },
+  "homepage": "https://example.com/hello-world",
+  "license": "MIT",
+  "service_provider": "HelloWorld\\HelloWorldServiceProvider",
+  "requires": {
+    "cms-framework": "^2.4",
+    "php": "^8.2"
+  },
+  "autoload": {
+    "psr-4": {
+      "HelloWorld\\": "src/"
+    }
+  },
+  "migrations": "database/migrations",
+  "federated_modules": [
+    {
+      "name": "helloWorldAdmin",
+      "entry": "dist/remoteEntry.js",
+      "exposes": ["./HelloWorldPanel"]
+    }
+  ]
+}
+```
+
+### Required fields
+
+| Field              | Type   | Notes |
+| ------------------ | ------ | ----- |
+| `slug`             | string | Lowercase, dashes; matches directory name. |
+| `name`             | string | Human-readable name for the admin UI. |
+| `version`          | string | Semver. Used for host-compatibility checks and update flows. |
+| `service_provider` | string | Fully-qualified Laravel service provider class ( see below ). |
+
+### Optional fields
+
+| Field               | Type            | Notes |
+| ------------------- | --------------- | ----- |
+| `description`       | string          | Shown in the admin plugin list. |
+| `author`            | object          | `{ name, email?, url? }`. |
+| `homepage`          | string ( URL )  | Documentation or marketing URL. |
+| `license`           | string          | SPDX identifier ( `MIT`, `Apache-2.0`, etc. ). |
+| `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. Enforced on activation. |
+| `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. |
+| `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
+| `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
+| `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
+
+## Base `PluginServiceProvider`
+
+Extend
+`ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider`
+for opinionated helpers:
+
+```php
+<?php
+
+namespace HelloWorld;
+
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+
+final class HelloWorldServiceProvider extends PluginServiceProvider
+{
+    public function register(): void
+    {
+        // Bind services here.
+    }
+
+    public function boot(): void
+    {
+        $this->registerAdminPage( 'hello-world', [
+            'title'      => __( 'Hello World' ),
+            'section'    => 'tools',
+            'view'       => 'hello-world::admin.index',
+            'capability' => 'access_admin_dashboard',
+            'icon'       => 'fas.puzzle-piece',
+            'order'      => 60,
+        ] );
+
+        $this->registerNavEntry( [
+            'slug'       => 'hello-world',
+            'label'      => __( 'Hello World' ),
+            'url'        => '/admin/hello-world',
+            'icon'       => 'fas.puzzle-piece',
+            'permission' => 'access_admin_dashboard',
+            'order'      => 60,
+        ] );
+
+        $this->loadViewsFrom( $this->pluginPath( 'resources/views' ), 'hello-world' );
+    }
+}
+```
+
+Available helpers:
+
+- `registerAdminPage( string $slug, array $config )` — attach an admin page to the shared `AdminMenuManager`. `view` for Blade, `component` for federated React.
+- `registerNavEntry( array $entry )` — add an idempotent nav entry to the container-bound `PluginRegistry`.
+- `registerFederatedModule( string $name, string $entryPath, array $exposes = [] )` — declare a Module Federation entry hosts can consume.
+- `pluginPath( ?string $subpath = null )` — resolve a path within your plugin directory.
+- `pluginConfig( ?string $key = null )` — read the plugin's `plugin.json`; dot-notation supported.
+- `pluginSlug()` — resolves from your manifest.
+
+## Registering an admin page
+
+Blade version:
+
+```php
+$this->registerAdminPage( 'hello-world', [
+    'title'      => __( 'Hello World' ),
+    'section'    => 'tools',
+    'view'       => 'hello-world::admin.index',
+    'capability' => 'access_admin_dashboard',
+] );
+```
+
+The `view` value is a namespaced Blade view; register it with `loadViewsFrom(
+$this->pluginPath('resources/views'), 'hello-world' )` in `boot()`.
+
+Federated ( React ) version — same helper, use `component` instead of `view`:
+
+```php
+$this->registerAdminPage( 'hello-world', [
+    'title'     => __( 'Hello World' ),
+    'section'   => 'tools',
+    'component' => 'helloWorldAdmin/HelloWorldPanel',
+] );
+```
+
+Host apps map the `component` identifier to a real React component through
+their Module Federation loader.
+
+## Registering nav entries
+
+`registerNavEntry()` writes an entry to the framework's `PluginRegistry`; the
+host's admin shell reads it via the `ap.admin.menu` filter. Entries are
+identified by `slug` and are idempotent — repeated registrations from the same
+plugin ( e.g. under Octane workers ) overwrite instead of accumulating.
+
+You may alternatively pre-declare nav entries in `plugin.json` under `nav`.
+Programmatic registration is preferred when nav visibility depends on
+per-request state ( feature flags, tenant configuration, etc. ).
+
+## Migrations
+
+Set `"migrations": "database/migrations"` in your manifest to have the
+framework load your migrations on activation. Prefer schema-only changes;
+data seeding belongs in a separate seeder invoked via an install hook.
+
+```php
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create( 'hello_world_greetings', function ( Blueprint $table ): void {
+            $table->id();
+            $table->string( 'message' );
+            $table->timestamps();
+        } );
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists( 'hello_world_greetings' );
+    }
+};
+```
+
+## Hook subscriptions
+
+The framework's action / filter system ( `artisanpack-ui/hooks` ) is the
+primary extension seam. Register callbacks in `boot()`:
+
+```php
+addAction( 'ap.contentTypes.created', function ( $contentType ) {
+    logger()->info( 'A content type was created: ' . $contentType->slug );
+} );
+
+addFilter( 'ap.admin.contentEdit.saveData', function ( array $data, array $context ): array {
+    if ( 'post' === $context['contentType'] ) {
+        $data['metadata']['reviewed_at'] = now()->toIso8601String();
+    }
+
+    return $data;
+} );
+```
+
+Full hook reference: [`docs/Hooks-and-Events.md`](./Hooks-and-Events.md).
+
+## Registering custom field types
+
+Plugins can extend the closed `FieldType` enum through the
+`CustomFieldTypeRegistry`. Registered types become available in the admin
+custom-field-type dropdown and validate on save.
+
+```php
+apRegisterFieldType( 'map_picker', [
+    'label'              => __( 'Map Picker' ),
+    'column_type'        => 'string',
+    'validation_rules'   => ['string', 'regex:/^-?\d+\.\d+,-?\d+\.\d+$/'],
+    'editor_component'   => 'helloWorldAdmin/MapPickerEditor',
+    'renderer_component' => 'helloWorldAdmin/MapPickerRenderer',
+    'meta'               => ['icon' => 'fas.map'],
+] );
+```
+
+Filter-registered fields do not materialize a physical DB column. Their values
+live in the content record's `metadata` JSON column — the framework's
+`HasCustomFields` trait knows how to read and write them there.
+
+## Injecting edit-screen panels & tabs
+
+Host apps that build a post/page edit screen ( such as Keystone CMS ) consult
+the `ContentEditExtensions` manager to render plugin-supplied panels and tabs.
+Register from your provider's `boot()`:
+
+```php
+addFilter( 'ap.admin.contentEdit.panels', function ( array $panels ): array {
+    $panels[] = [
+        'slug'         => 'hello-world.seo',
+        'title'        => __( 'SEO' ),
+        'component'    => 'helloWorldAdmin/SeoPanel',
+        'contentTypes' => ['post', 'page'],
+        'order'        => 20,
+    ];
+
+    return $panels;
+} );
+```
+
+Filters:
+
+- `ap.admin.contentEdit.panels` — sidebar/right-column panels
+- `ap.admin.contentEdit.tabs` — tabs above the main editor
+- `ap.admin.contentEdit.beforeEditor` / `afterEditor` — blocks above/below the editor
+- `ap.admin.contentEdit.saveData` — pre-persistence transform of the save payload
+
+Entry shape: `{ slug, title, component, order?, contentTypes?, capability? }`.
+`contentTypes` accepts `['*']` for "all" or an explicit list.
+
+## Federated React modules
+
+The framework does not own the frontend, and does not ship a Module Federation
+runtime. Host apps ( e.g. Keystone CMS ) that support runtime-loaded React
+plugins consume federated modules the plugin has declared through:
+
+- **Manifest** — `federated_modules` array in `plugin.json`.
+- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )` in `boot()`.
+
+An example Module Federation config, Vite build, and remoteEntry contract live
+in the Keystone CMS docs. See
+[`examples/hello-world-plugin/`](../examples/hello-world-plugin/) for a stub
+that pairs a Blade admin page with a `federated_modules` declaration that
+Keystone can consume.
+
+## Versioning & host compatibility
+
+Semver your plugin. Declare host-compatibility in `plugin.json`:
+
+```json
+"requires": {
+    "cms-framework": "^2.4",
+    "php": "^8.2"
+}
+```
+
+`PluginManager::install()` refuses installation when the running framework
+version does not satisfy the `cms-framework` constraint.
+
+## Testing your plugin
+
+Plugins ship their own Pest / PHPUnit test suites. A minimal `TestCase`
+extending Orchestra Testbench boots the framework in a testing container:
+
+```php
+use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
+use HelloWorld\HelloWorldServiceProvider;
+use Orchestra\Testbench\TestCase as BaseTestCase;
+
+abstract class TestCase extends BaseTestCase
+{
+    protected function getPackageProviders( $app ): array
+    {
+        return [
+            CMSFrameworkServiceProvider::class,
+            HelloWorldServiceProvider::class,
+        ];
+    }
+}
+```
+
+Test what matters: your admin page renders, your migrations run, your hook
+subscriptions fire, and any custom field types round-trip through
+`HasCustomFields`.
+
+---
+
+Reference plugin: [`examples/hello-world-plugin/`](../examples/hello-world-plugin/).

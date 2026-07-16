@@ -1,0 +1,45 @@
+{
+    "$schema": "https://artisanpack-ui.dev/schemas/plugin.json",
+    "slug": "hello-world",
+    "name": "Hello World",
+    "version": "1.0.0",
+    "description": "Reference plugin that demonstrates every extension point in the CMS Framework plugin API — admin page, nav entry, migration, custom field type, hook subscriptions, and a federated-module stub.",
+    "author": {
+        "name": "ArtisanPack UI",
+        "email": "me@jacobmartella.com",
+        "url": "https://artisanpack-ui.dev"
+    },
+    "homepage": "https://artisanpack-ui.dev/docs/plugins/hello-world",
+    "license": "MIT",
+    "service_provider": "HelloWorld\\HelloWorldServiceProvider",
+    "requires": {
+        "cms-framework": "^2.4",
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "HelloWorld\\": "src/"
+        }
+    },
+    "migrations": "database/migrations",
+    "nav": [
+        {
+            "slug": "hello-world-manifest-nav",
+            "label": "Hello (from manifest)",
+            "url": "/admin/hello-world",
+            "icon": "fas.puzzle-piece",
+            "permission": "access_admin_dashboard",
+            "order": 61
+        }
+    ],
+    "federated_modules": [
+        {
+            "name": "helloWorldAdmin",
+            "entry": "dist/remoteEntry.js",
+            "exposes": [
+                "./HelloWorldPanel",
+                "./MapPickerEditor"
+            ]
+        }
+    ]
+}

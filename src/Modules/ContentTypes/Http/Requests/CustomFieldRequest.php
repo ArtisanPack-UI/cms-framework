@@ -14,7 +14,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ColumnType;
-use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\FieldType;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Registries\CustomFieldTypeRegistry;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -68,7 +68,7 @@ class CustomFieldRequest extends FormRequest
             'type' => [
                 'required',
                 'string',
-                FieldType::validationRule(),
+                Rule::in( app( CustomFieldTypeRegistry::class )->slugs() ),
             ],
             'column_type' => [
                 'required',
