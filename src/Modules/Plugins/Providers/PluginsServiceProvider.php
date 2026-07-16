@@ -6,6 +6,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
 use Exception;
 use Illuminate\Support\ServiceProvider;
 use Schema;
@@ -25,6 +26,12 @@ class PluginsServiceProvider extends ServiceProvider
                 $app->make( PluginManager::class ),
             );
         } );
+
+        // Shared registry for plugin-declared nav entries and federated
+        // modules; PluginServiceProvider writes into it, framework filters
+        // read from it. Container-keyed by slug/name so re-registration under
+        // Octane is idempotent.
+        $this->app->singleton( PluginRegistry::class );
 
         // Merge config
         $this->mergeConfigFrom(
@@ -46,6 +53,8 @@ class PluginsServiceProvider extends ServiceProvider
         // Load migrations
         $this->loadMigrationsFrom( __DIR__ . '/../../../database/migrations' );
 
+        $this->registerPluginRegistryFilters();
+
         // Load active plugins EARLY in boot cycle
         // Only attempt if the plugins table exists (to handle fresh installations)
         try {
@@ -57,5 +66,28 @@ class PluginsServiceProvider extends ServiceProvider
             // Silently fail during installation/migration
             logger()->debug( 'Plugin loading skipped: ' . $e->getMessage() );
         }
+    }
+
+    /**
+     * Wire ONE filter callback per hook that surfaces the PluginRegistry
+     * contents. Registering once at framework boot avoids the Octane
+     * accumulation pattern where per-plugin boot() calls would add a fresh
+     * closure to the filter chain on every request.
+     */
+    protected function registerPluginRegistryFilters(): void
+    {
+        $registry = $this->app->make( PluginRegistry::class );
+
+        addFilter( 'ap.admin.menu', function ( array $menu ) use ( $registry ): array {
+            foreach ( $registry->navEntries() as $slug => $entry ) {
+                $menu[ $slug ] = array_merge( $entry, $menu[ $slug ] ?? [] );
+            }
+
+            return $menu;
+        } );
+
+        addFilter( 'ap.plugins.federatedModules', function ( array $modules ) use ( $registry ): array {
+            return array_merge( $modules, $registry->federatedModules() );
+        } );
     }
 }

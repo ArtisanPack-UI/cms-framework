@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Exception;
@@ -104,8 +105,10 @@ class UpdateManager
             return false; // No update available
         }
 
-        $wasActive  = $plugin->is_active;
-        $oldVersion = $plugin->version;
+        $wasActive              = $plugin->is_active;
+        $oldVersion             = $plugin->version;
+        $oldMeta                = $plugin->meta;
+        $oldServiceProvider     = $plugin->service_provider;
 
         doAction( 'plugin.updating', $slug, $oldVersion, $updateInfo['version'] );
 
@@ -151,11 +154,42 @@ class UpdateManager
             doAction( 'plugin.updated', $slug, $updateInfo['version'] );
 
             return true;
+        } catch ( IncompatiblePluginException $e ) {
+            // The DB row was already updated with the new manifest at step 6,
+            // but the reactivate at step 7 rejected the new min_host_version.
+            // Restore files AND DB so the plugin isn't stranded pointing at a
+            // version whose files no longer exist.
+            $this->restoreFromBackup( $slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+
+            throw $e;
         } catch ( Exception $e ) {
             // Restore from backup on failure
             $this->restoreFromBackup( $slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
 
             throw PluginUpdateException::downloadFailed( $slug );
+        }
+    }
+
+    /**
+     * Reset the DB row to the pre-update version/manifest/service_provider so
+     * a failed update doesn't leave the row pointing at a version whose files
+     * were rolled back.
+     *
+     * @param  array|null  $oldMeta  Prior manifest snapshot.
+     */
+    protected function revertPluginRow( Plugin $plugin, string $oldVersion, ?array $oldMeta, ?string $oldServiceProvider ): void
+    {
+        try {
+            $plugin->version          = $oldVersion;
+            $plugin->meta             = $oldMeta;
+            $plugin->service_provider = $oldServiceProvider;
+            $plugin->save();
+        } catch ( Exception $e ) {
+            logger()->error( "Failed reverting plugin row after failed update: {$plugin->slug}", [
+                'exception' => $e->getMessage(),
+            ] );
         }
     }
 

@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use Dedoc\Scramble\Attributes\Group;
@@ -90,6 +91,14 @@ class PluginsController extends Controller
             return response()->json( [
                 'message' => 'Plugin activated successfully',
             ] );
+        } catch ( IncompatiblePluginException $e ) {
+            return response()->json( [
+                'message'          => $e->getMessage(),
+                'code'             => 'plugin_incompatible',
+                'plugin'           => $e->pluginSlug,
+                'required_version' => $e->requiredVersion,
+                'host_version'     => $e->hostVersion,
+            ], 409 );
         } catch ( Exception $e ) {
             return response()->json( [
                 'message' => 'Activation failed: ' . $e->getMessage(),

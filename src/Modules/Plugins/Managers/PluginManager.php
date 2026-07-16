@@ -5,17 +5,20 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Composer\Autoload\ClassLoader;
+use Composer\InstalledVersions;
 use Exception;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use RuntimeException;
+use Throwable;
 use ZipArchive;
 
 class PluginManager
@@ -183,28 +186,51 @@ class PluginManager
             throw PluginNotFoundException::forSlug( $slug );
         }
 
+        // Host-version compatibility gate (#183). Runs before any state mutation.
+        $this->assertHostVersionCompatible( $plugin );
+
         doAction( 'plugin.activating', $slug );
 
-        DB::transaction( function () use ( $plugin ): void {
-            // Register autoloader
-            if ( isset( $plugin->meta['autoload'] ) ) {
-                $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
-            }
+        $priorPsr4           = [];
+        $migrationsAttempted = false;
 
-            // Run migrations
-            if ( isset( $plugin->meta['migrations_path'] ) ) {
-                $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
-            }
+        try {
+            DB::transaction( function () use ( $plugin, &$priorPsr4, &$migrationsAttempted ): void {
+                if ( isset( $plugin->meta['autoload'] ) ) {
+                    // Snapshot the PSR-4 map BEFORE adding, so rollback can
+                    // restore prior paths for shared namespaces instead of
+                    // wiping them with setPsr4($ns, []).
+                    $priorPsr4 = $this->snapshotPsr4( $plugin->meta['autoload']['psr-4'] ?? [] );
+                    $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
+                }
 
-            // Register service provider
-            if ( $plugin->hasServiceProvider() ) {
-                app()->register( $plugin->service_provider );
-            }
+                if ( isset( $plugin->meta['migrations_path'] ) ) {
+                    // Flip BEFORE the Artisan call so a mid-migration failure
+                    // (DDL auto-commits in MySQL/MariaDB) still triggers a
+                    // rollback attempt in the catch block.
+                    $migrationsAttempted = true;
+                    $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+                }
 
-            // Mark as active
-            $plugin->is_active = true;
-            $plugin->save();
-        } );
+                if ( $plugin->hasServiceProvider() ) {
+                    app()->register( $plugin->service_provider );
+                }
+
+                $this->seedPermissions( $plugin );
+
+                $plugin->is_active = true;
+                $plugin->save();
+            } );
+        } catch ( Throwable $e ) {
+            // Roll back any partial activation state (#182).
+            $this->rollbackFailedActivation( $plugin, $priorPsr4, $migrationsAttempted );
+
+            throw $e;
+        }
+
+        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+            $this->clearFrameworkCaches();
+        }
 
         $this->clearCaches();
 
@@ -241,6 +267,9 @@ class PluginManager
         $plugin->is_active = false;
         $plugin->save();
 
+        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+            $this->clearFrameworkCaches();
+        }
         $this->clearCaches();
 
         doAction( 'plugin.deactivated', $slug );
@@ -280,6 +309,21 @@ class PluginManager
 
         doAction( 'plugin.deleting', $slug );
 
+        // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
+        // accidentally drop plugin-owned data.
+        if ( $plugin->rollback_migrations_on_delete && isset( $plugin->meta['migrations_path'] ) ) {
+            try {
+                $this->rollbackMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+            } catch ( Throwable $e ) {
+                logger()->error( "Failed to rollback migrations for plugin: {$slug}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+
+        // Remove seeded permissions (#182).
+        $this->removeSeededPermissions( $plugin );
+
         // Remove from database
         $plugin->delete();
 
@@ -291,6 +335,9 @@ class PluginManager
             }
         }
 
+        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+            $this->clearFrameworkCaches();
+        }
         $this->clearCaches();
 
         doAction( 'plugin.deleted', $slug );
@@ -336,17 +383,48 @@ class PluginManager
      */
     protected function runMigrations( string $slug, string $migrationsPath ): void
     {
-        $fullPath = $this->getPluginsPath() . '/' . $slug . '/' . $migrationsPath;
-
-        if ( ! File::isDirectory( $fullPath ) ) {
+        $safePath = $this->resolveSecureMigrationsPath( $slug, $migrationsPath );
+        if ( null === $safePath ) {
             return;
         }
 
         // Run migrations using Artisan
         Artisan::call( 'migrate', [
-            '--path'  => str_replace( base_path(), '', $fullPath ),
+            '--path'  => str_replace( base_path(), '', $safePath ),
             '--force' => true,
         ] );
+    }
+
+    /**
+     * Resolve a plugin-declared migrations path and confirm it lives inside the
+     * plugin's own directory. Defense-in-depth against a malicious manifest
+     * whose migrations_path escaped via ".." (the schema validator also
+     * rejects those, but that runs at install time only).
+     */
+    protected function resolveSecureMigrationsPath( string $slug, string $migrationsPath ): ?string
+    {
+        $pluginDir = $this->getPluginsPath() . '/' . $slug;
+        $fullPath  = $pluginDir . '/' . ltrim( $migrationsPath, '/' );
+
+        if ( ! File::isDirectory( $fullPath ) ) {
+            return null;
+        }
+
+        $realFull   = realpath( $fullPath );
+        $realPlugin = realpath( $pluginDir );
+
+        if ( false === $realFull || false === $realPlugin ) {
+            return null;
+        }
+
+        // The resolved path must sit inside the plugin's own directory.
+        if ( ! str_starts_with( $realFull . DIRECTORY_SEPARATOR, $realPlugin . DIRECTORY_SEPARATOR ) ) {
+            logger()->warning( "Plugin '{$slug}' migrations_path resolved outside plugin dir; refusing to touch: {$realFull}" );
+
+            return null;
+        }
+
+        return $realFull;
     }
 
     /**
@@ -401,6 +479,83 @@ class PluginManager
         // Anchored at end to prevent injection attempts like "1.0.0'; DROP TABLE"
         if ( ! preg_match( '/^\d+\.\d+\.\d+$/', $manifest['version'] ) ) {
             throw PluginValidationException::invalidManifest( 'Invalid version format. Use semantic versioning (e.g., 1.0.0).' );
+        }
+
+        $this->validateOptionalManifestFields( $manifest );
+    }
+
+    /**
+     * Validate optional manifest fields introduced in the v2.4 schema extension.
+     *
+     * @throws PluginValidationException If any optional field is malformed.
+     */
+    protected function validateOptionalManifestFields( array $manifest ): void
+    {
+        if ( isset( $manifest['min_host_version'] ) ) {
+            if ( ! is_string( $manifest['min_host_version'] )
+                || ! preg_match( '/^\d+\.\d+\.\d+$/', $manifest['min_host_version'] ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid min_host_version format. Use semantic versioning (e.g., 1.0.0).' );
+            }
+        }
+
+        if ( isset( $manifest['federated_module'] ) ) {
+            $federated = $manifest['federated_module'];
+            if ( ! is_array( $federated )
+                || empty( $federated['entry'] )
+                || ! is_string( $federated['entry'] ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid federated_module. Must be an object with a non-empty string "entry".' );
+            }
+            if ( isset( $federated['exposes'] ) && ! is_array( $federated['exposes'] ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid federated_module.exposes. Must be an array of module names.' );
+            }
+        }
+
+        if ( isset( $manifest['nav_entries'] ) ) {
+            if ( ! is_array( $manifest['nav_entries'] ) || false === array_is_list( $manifest['nav_entries'] ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid nav_entries. Must be a list of entry objects.' );
+            }
+            foreach ( $manifest['nav_entries'] as $index => $entry ) {
+                if ( ! is_array( $entry ) || empty( $entry['slug'] ) || empty( $entry['label'] ) ) {
+                    throw PluginValidationException::invalidManifest( "Invalid nav_entries[{$index}]. Each entry needs a slug and a label." );
+                }
+            }
+        }
+
+        if ( isset( $manifest['permissions'] ) ) {
+            if ( ! is_array( $manifest['permissions'] ) || false === array_is_list( $manifest['permissions'] ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid permissions. Must be a list of permission slugs.' );
+            }
+            // Enforce a plugin-slug namespace prefix so seed/remove can't touch
+            // framework-owned or other-plugin permissions. Prevents a manifest
+            // like `permissions: ["manage_users"]` from wiping core rows on
+            // uninstall.
+            $prefix = $manifest['slug'] . '.';
+            foreach ( $manifest['permissions'] as $index => $permission ) {
+                if ( ! is_string( $permission ) || '' === trim( $permission ) ) {
+                    throw PluginValidationException::invalidManifest( "Invalid permissions[{$index}]. Each permission must be a non-empty string." );
+                }
+                if ( ! str_starts_with( $permission, $prefix ) ) {
+                    throw PluginValidationException::invalidManifest(
+                        "Invalid permissions[{$index}]. Plugin permissions must be prefixed with '{$prefix}' (got '{$permission}').",
+                    );
+                }
+            }
+        }
+
+        if ( isset( $manifest['migrations_path'] ) ) {
+            $migrationsPath = $manifest['migrations_path'];
+            if ( ! is_string( $migrationsPath ) || '' === $migrationsPath ) {
+                throw PluginValidationException::invalidManifest( 'Invalid migrations_path. Must be a non-empty relative string.' );
+            }
+            // Reject any traversal or absolute-path attempts. runMigrations()
+            // resolves this against the plugin directory; a value like
+            // "../../database/migrations" would otherwise re-run/rollback
+            // framework migrations.
+            if ( str_starts_with( $migrationsPath, '/' )
+                || str_contains( $migrationsPath, '..' )
+                || 1 === preg_match( '/^[A-Za-z]:/', $migrationsPath ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid migrations_path. Must be a relative path inside the plugin directory (no "..", no absolute paths).' );
+            }
         }
     }
 
@@ -552,6 +707,276 @@ class PluginManager
     protected function clearCaches(): void
     {
         Cache::forget( config( 'cms.plugins.cacheKey' ) );
+    }
+
+    /**
+     * Clear Laravel's route/config/view caches so stale plugin registrations
+     * don't linger after activation state changes (#182).
+     */
+    protected function clearFrameworkCaches(): void
+    {
+        foreach ( ['route:clear', 'config:clear', 'view:clear'] as $command ) {
+            try {
+                Artisan::call( $command );
+            } catch ( Throwable $e ) {
+                logger()->warning( "Framework cache clear failed for {$command}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+    }
+
+    /**
+     * Assert that the framework version installed in the host satisfies the
+     * plugin's declared minimum host version (#183).
+     *
+     * @throws IncompatiblePluginException When the host is older than required.
+     */
+    protected function assertHostVersionCompatible( Plugin $plugin ): void
+    {
+        $required = $plugin->min_host_version;
+        if ( null === $required ) {
+            return;
+        }
+
+        $hostVersion = $this->resolveHostFrameworkVersion();
+        if ( null === $hostVersion ) {
+            // Unknown host version (e.g. path-repo dev checkout). Log so it's
+            // visible, then be permissive — the framework itself is running, so
+            // outright refusing every plugin here would be worse than
+            // best-effort activation.
+            logger()->warning( "Skipping min_host_version check for plugin '{$plugin->slug}': host framework version unresolved." );
+
+            return;
+        }
+
+        $normalizedHost = $this->normalizeSemver( $hostVersion );
+        if ( null === $normalizedHost ) {
+            // Same permissive policy for parseable-but-non-semver host versions
+            // (dev-main, 2.4.x-dev). Consistent with the null-host branch above.
+            logger()->warning( "Skipping min_host_version check for plugin '{$plugin->slug}': host version '{$hostVersion}' is not a comparable semver." );
+
+            return;
+        }
+
+        if ( version_compare( $normalizedHost, $required, '<' ) ) {
+            throw IncompatiblePluginException::forVersion( $plugin->slug, $required, $hostVersion );
+        }
+    }
+
+    /**
+     * Resolve the framework's installed package version.
+     *
+     * Prefers the framework's own composer.json when it declares a clean
+     * semver — that's the authoritative source and works uniformly for both
+     * real Composer installs and path-repo / symlinked dev checkouts (where
+     * InstalledVersions might report a non-comparable branch alias like
+     * `dev-release/2.4`). Falls back to Composer's InstalledVersions if
+     * composer.json is missing or lacks an explicit version field.
+     */
+    protected function resolveHostFrameworkVersion(): ?string
+    {
+        $composerVersion = $this->readFrameworkComposerVersion();
+        if ( null !== $composerVersion && 1 === preg_match( '/^\d+\.\d+\.\d+/', $composerVersion ) ) {
+            return $composerVersion;
+        }
+
+        try {
+            $version = InstalledVersions::getVersion( 'artisanpack-ui/cms-framework' );
+            if ( null !== $version && '' !== $version ) {
+                return $version;
+            }
+        } catch ( Throwable $e ) {
+            // Fall through.
+        }
+
+        return $composerVersion;
+    }
+
+    /**
+     * Read the framework's own composer.json (relative to this file) and
+     * return its declared `version` if present.
+     */
+    protected function readFrameworkComposerVersion(): ?string
+    {
+        $composerPath = __DIR__ . '/../../../../composer.json';
+        if ( ! File::exists( $composerPath ) ) {
+            return null;
+        }
+
+        $decoded = json_decode( ( string ) File::get( $composerPath ), true );
+        if ( ! is_array( $decoded ) || empty( $decoded['version'] ) || ! is_string( $decoded['version'] ) ) {
+            return null;
+        }
+
+        return $decoded['version'];
+    }
+
+    /**
+     * Strip Composer version suffixes (e.g. `v` prefix, `+metadata`) down to a
+     * comparable semver string. Returns null for anything that isn't parseable
+     * so the caller can apply a consistent unknown-version policy instead of
+     * silently coercing to 0.0.0 (which would false-fail every plugin against
+     * a dev-* checkout).
+     */
+    protected function normalizeSemver( string $version ): ?string
+    {
+        $stripped = ltrim( $version, 'v' );
+        $stripped = preg_replace( '/[-+].*$/', '', $stripped ) ?? $stripped;
+
+        if ( ! preg_match( '/^\d+\.\d+\.\d+$/', $stripped ) ) {
+            return null;
+        }
+
+        return $stripped;
+    }
+
+    /**
+     * Seed permission slugs declared by the plugin manifest.
+     *
+     * Uses artisanpack-ui/rbac's Permission model when available; falls back to
+     * a no-op so tests and hosts without RBAC installed still succeed.
+     */
+    protected function seedPermissions( Plugin $plugin ): void
+    {
+        $permissions = $plugin->declared_permissions;
+        if ( empty( $permissions ) ) {
+            return;
+        }
+
+        $model = $this->rbacPermissionModel();
+        if ( null === $model ) {
+            return;
+        }
+
+        foreach ( $permissions as $slug ) {
+            try {
+                $model::firstOrCreate( ['slug' => $slug], ['name' => $slug] );
+            } catch ( Throwable $e ) {
+                logger()->warning( "Failed seeding permission '{$slug}' for plugin {$plugin->slug}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+    }
+
+    /**
+     * Remove plugin-declared permissions on deletion.
+     */
+    protected function removeSeededPermissions( Plugin $plugin ): void
+    {
+        $permissions = $plugin->declared_permissions;
+        if ( empty( $permissions ) ) {
+            return;
+        }
+
+        $model = $this->rbacPermissionModel();
+        if ( null === $model ) {
+            return;
+        }
+
+        try {
+            $model::whereIn( 'slug', $permissions )->delete();
+        } catch ( Throwable $e ) {
+            logger()->warning( "Failed removing permissions for plugin {$plugin->slug}", [
+                'exception' => $e->getMessage(),
+            ] );
+        }
+    }
+
+    /**
+     * Best-effort locator for artisanpack-ui/rbac's Permission model.
+     *
+     * @return class-string|null
+     */
+    protected function rbacPermissionModel(): ?string
+    {
+        $candidate = 'ArtisanPackUI\\RBAC\\Models\\Permission';
+
+        return class_exists( $candidate ) ? $candidate : null;
+    }
+
+    /**
+     * Roll back a plugin's migrations. Used on deletion (#182) when the plugin
+     * has opted into `rollback_migrations_on_delete`.
+     */
+    protected function rollbackMigrations( string $slug, string $migrationsPath ): void
+    {
+        $safePath = $this->resolveSecureMigrationsPath( $slug, $migrationsPath );
+        if ( null === $safePath ) {
+            return;
+        }
+
+        Artisan::call( 'migrate:rollback', [
+            '--path'  => str_replace( base_path(), '', $safePath ),
+            '--force' => true,
+        ] );
+    }
+
+    /**
+     * Best-effort teardown when a partial activation blew up (#182).
+     *
+     * @param  array<string,array<int,string>>  $priorPsr4  Snapshot of the PSR-4
+     *                                                      map for the plugin's
+     *                                                      namespaces BEFORE
+     *                                                      registerAutoloader ran.
+     */
+    protected function rollbackFailedActivation( Plugin $plugin, array $priorPsr4, bool $migrationsAttempted ): void
+    {
+        if ( $migrationsAttempted && isset( $plugin->meta['migrations_path'] ) ) {
+            try {
+                $this->rollbackMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+            } catch ( Throwable $e ) {
+                logger()->warning( "Rollback of migrations after failed activation of {$plugin->slug}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+
+        if ( ! empty( $priorPsr4 ) ) {
+            // Restore the PSR-4 mapping snapshot rather than wiping shared
+            // namespaces to []. setPsr4 replaces (not appends) so restoring the
+            // prior path list preserves other plugins that shared the prefix.
+            foreach ( $priorPsr4 as $namespace => $paths ) {
+                try {
+                    $this->classLoader->setPsr4( $namespace, $paths );
+                } catch ( Throwable $e ) {
+                    logger()->warning( "Failed restoring prior PSR-4 mapping for '{$namespace}' after failed activation of {$plugin->slug}", [
+                        'exception' => $e->getMessage(),
+                    ] );
+                }
+            }
+        }
+
+        // Ensure the plugin isn't stuck marked active.
+        try {
+            $plugin->is_active = false;
+            $plugin->save();
+        } catch ( Throwable $e ) {
+            // Transaction was rolled back; nothing to persist.
+        }
+
+        $this->clearCaches();
+    }
+
+    /**
+     * Capture the current PSR-4 path list for each namespace the plugin
+     * declares, so a failed activation can restore prior mappings without
+     * blowing away paths owned by other plugins/packages that share a prefix.
+     *
+     * @param  array<string,string>  $psr4  namespace => relative path
+     *
+     * @return array<string,array<int,string>>
+     */
+    protected function snapshotPsr4( array $psr4 ): array
+    {
+        $prior       = [];
+        $currentMap  = $this->classLoader->getPrefixesPsr4();
+        foreach ( array_keys( $psr4 ) as $namespace ) {
+            $prior[ $namespace ] = $currentMap[ $namespace ] ?? [];
+        }
+
+        return $prior;
     }
 
     /**
