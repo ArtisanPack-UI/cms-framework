@@ -70,7 +70,7 @@ class CommentController extends Controller
         // regardless of what they pass on the query string.
         $requestedStatus = $request->input( 'status' );
         $user            = $request->user();
-        $canModerate     = null !== $user && $user->can( applyFilters( 'comments.moderate', 'comments.moderate' ) );
+        $canModerate     = null !== $user && $user->can( applyFilters( 'ap.cmsFramework.abilities.comments.moderate', 'comments.moderate' ) );
         $status          = ( $canModerate && null !== $requestedStatus && '' !== $requestedStatus )
             ? $requestedStatus
             : Comment::STATUS_APPROVED;
@@ -119,9 +119,9 @@ class CommentController extends Controller
         // a client-supplied `status` unless the caller can moderate,
         // so this branch fires for everyone else.
         if ( ! isset( $data['status'] ) ) {
-            $autoApprove     = null !== $user && $user->can( applyFilters( 'comments.moderate', 'comments.moderate' ) );
+            $autoApprove     = null !== $user && $user->can( applyFilters( 'ap.cmsFramework.abilities.comments.moderate', 'comments.moderate' ) );
             $defaultStatus   = $autoApprove ? Comment::STATUS_APPROVED : Comment::STATUS_PENDING;
-            $data['status']  = applyFilters( 'comments.store.defaultStatus', $defaultStatus, $request );
+            $data['status']  = applyFilters( 'ap.cmsFramework.comments.store.defaultStatus', $defaultStatus, $request );
         }
 
         if ( Comment::STATUS_APPROVED === $data['status'] && empty( $data['approved_at'] ) ) {

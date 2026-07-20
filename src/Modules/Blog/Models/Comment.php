@@ -267,7 +267,7 @@ class Comment extends Model
         $default = url( "/admin/comments/{$this->id}/edit" );
 
         if ( function_exists( 'applyFilters' ) ) {
-            return ( string ) applyFilters( 'comment.editLink', $default, $this );
+            return ( string ) applyFilters( 'ap.cmsFramework.comment.editLink', $default, $this );
         }
 
         return $default;

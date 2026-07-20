@@ -48,7 +48,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.viewAny', 'pageTags.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageTags.viewAny', 'pageTags.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.view', 'pageTags.manage', $tag ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageTags.view', 'pageTags.manage', $tag ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.create', 'pageTags.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageTags.create', 'pageTags.manage' ) );
     }
 
     /**
@@ -127,7 +127,7 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.update', 'pageTags.manage', $tag ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageTags.update', 'pageTags.manage', $tag ) );
     }
 
     /**
@@ -154,6 +154,6 @@ class PageTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageTags.delete', 'pageTags.manage', $tag ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageTags.delete', 'pageTags.manage', $tag ) );
     }
 }

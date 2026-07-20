@@ -34,13 +34,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.admin.enqueuedAssets
+         * @hook ap.cmsFramework.admin.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Associative array of asset definitions keyed by handle.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        addFilter( 'ap.admin.enqueuedAssets', function ( $scripts ) use ( $handle, $path, $inFooter ) {
+        addFilter( 'ap.cmsFramework.admin.enqueuedAssets', function ( $scripts ) use ( $handle, $path, $inFooter ) {
             $scripts[ $handle ] = [
                 'path'     => $path,
                 'inFooter' => $inFooter,
@@ -64,13 +64,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.admin.enqueuedAssets
+         * @hook ap.cmsFramework.admin.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Current assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        addFilter( 'ap.admin.enqueuedAssets', function ( $scripts ) use ( $handle ) {
+        addFilter( 'ap.cmsFramework.admin.enqueuedAssets', function ( $scripts ) use ( $handle ) {
             unset( $scripts[ $handle ] );
 
             return $scripts;
@@ -91,13 +91,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.admin.enqueuedAssets
+         * @hook ap.cmsFramework.admin.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Current assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        return applyFilters( 'ap.admin.enqueuedAssets', [] );
+        return applyFilters( 'ap.cmsFramework.admin.enqueuedAssets', [] );
     }
 
     /**
@@ -116,13 +116,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.public.enqueuedAssets
+         * @hook ap.cmsFramework.public.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        addFilter( 'ap.public.enqueuedAssets', function ( $scripts ) use ( $handle, $path, $inFooter ) {
+        addFilter( 'ap.cmsFramework.public.enqueuedAssets', function ( $scripts ) use ( $handle, $path, $inFooter ) {
             $scripts[ $handle ] = [
                 'path'     => $path,
                 'inFooter' => $inFooter,
@@ -146,13 +146,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.public.enqueuedAssets
+         * @hook ap.cmsFramework.public.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Current assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        addFilter( 'ap.public.enqueuedAssets', function ( $scripts ) use ( $handle ) {
+        addFilter( 'ap.cmsFramework.public.enqueuedAssets', function ( $scripts ) use ( $handle ) {
             unset( $scripts[ $handle ] );
 
             return $scripts;
@@ -173,13 +173,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.public.enqueuedAssets
+         * @hook ap.cmsFramework.public.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Current assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        return applyFilters( 'ap.public.enqueuedAssets', [] );
+        return applyFilters( 'ap.cmsFramework.public.enqueuedAssets', [] );
     }
 
     /**
@@ -198,13 +198,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.auth.enqueuedAssets
+         * @hook ap.cmsFramework.auth.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        addFilter( 'ap.auth.enqueuedAssets', function ( $scripts ) use ( $handle, $path, $inFooter ) {
+        addFilter( 'ap.cmsFramework.auth.enqueuedAssets', function ( $scripts ) use ( $handle, $path, $inFooter ) {
             $scripts[ $handle ] = [
                 'path'     => $path,
                 'inFooter' => $inFooter,
@@ -228,13 +228,13 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.auth.enqueuedAssets
+         * @hook ap.cmsFramework.auth.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Current assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        addFilter( 'ap.auth.enqueuedAssets', function ( $scripts ) use ( $handle ) {
+        addFilter( 'ap.cmsFramework.auth.enqueuedAssets', function ( $scripts ) use ( $handle ) {
             unset( $scripts[ $handle ] );
 
             return $scripts;
@@ -255,12 +255,12 @@ class AssetManager
          *
          * @since 1.0.0
          *
-         * @hook ap.auth.enqueuedAssets
+         * @hook ap.cmsFramework.auth.enqueuedAssets
          *
          * @param  array<string,array{path:string,inFooter:bool}>  $scripts  Current assets array.
          *
          * @return array<string,array{path:string,inFooter:bool}> Modified assets array.
          */
-        return applyFilters( 'ap.auth.enqueuedAssets', []);
+        return applyFilters( 'ap.cmsFramework.auth.enqueuedAssets', []);
     }
 }

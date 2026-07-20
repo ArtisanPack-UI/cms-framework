@@ -28,4 +28,4 @@ use Illuminate\Support\Facades\Route;
 
 Route::get( '/themes/{slug}/assets/{path}', [ThemeAssetsController::class, 'show'] )
     ->where( 'path', '.*' )
-    ->name( 'themes.assets');
+    ->name( 'themes.assets' );

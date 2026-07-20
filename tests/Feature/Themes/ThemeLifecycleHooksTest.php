@@ -21,7 +21,7 @@ beforeEach( function (): void {
     Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
 
     // Clear any lingering listeners from previous tests for our hook names.
-    foreach ( ['theme.installing', 'theme.installed', 'theme.activating', 'theme.activated'] as $hook ) {
+    foreach ( ['ap.cmsFramework.theme.installing', 'ap.cmsFramework.theme.installed', 'ap.cmsFramework.theme.activating', 'ap.cmsFramework.theme.activated'] as $hook ) {
         removeAllActions( $hook );
     }
 } );
@@ -38,7 +38,7 @@ afterEach( function (): void {
         File::deleteDirectory( $this->tmpPath );
     }
 
-    foreach ( ['theme.installing', 'theme.installed', 'theme.activating', 'theme.activated'] as $hook ) {
+    foreach ( ['ap.cmsFramework.theme.installing', 'ap.cmsFramework.theme.installed', 'ap.cmsFramework.theme.activating', 'ap.cmsFramework.theme.activated'] as $hook ) {
         removeAllActions( $hook );
     }
 } );
@@ -89,11 +89,11 @@ describe( 'theme install lifecycle hooks', function (): void {
 
         $events = [];
 
-        addAction( 'theme.installing', function ( string $slug, array $payload ) use ( &$events ): void {
+        addAction( 'ap.cmsFramework.theme.installing', function ( string $slug, array $payload ) use ( &$events ): void {
             $events[] = ['installing', $slug, $payload];
         } );
 
-        addAction( 'theme.installed', function ( string $slug, array $payload ) use ( &$events ): void {
+        addAction( 'ap.cmsFramework.theme.installed', function ( string $slug, array $payload ) use ( &$events ): void {
             $events[] = ['installed', $slug, $payload];
         } );
 
@@ -117,7 +117,7 @@ describe( 'theme install lifecycle hooks', function (): void {
             'version' => '1.0.0',
         ];
 
-        addAction( 'theme.installing', function (): void {
+        addAction( 'ap.cmsFramework.theme.installing', function (): void {
             // Error (parent of TypeError, etc.) is a Throwable but not an Exception.
             throw new Error( 'fatal in listener' );
         } );
@@ -139,11 +139,11 @@ describe( 'theme install lifecycle hooks', function (): void {
 
         $installedFired = false;
 
-        addAction( 'theme.installing', function (): void {
+        addAction( 'ap.cmsFramework.theme.installing', function (): void {
             throw new RuntimeException( 'vetoed by listener' );
         } );
 
-        addAction( 'theme.installed', function () use ( &$installedFired ): void {
+        addAction( 'ap.cmsFramework.theme.installed', function () use ( &$installedFired ): void {
             $installedFired = true;
         } );
 
@@ -169,11 +169,11 @@ describe( 'theme activate lifecycle hooks', function (): void {
 
         $events = [];
 
-        addAction( 'theme.activating', function ( string $slug, array $payload ) use ( &$events ): void {
+        addAction( 'ap.cmsFramework.theme.activating', function ( string $slug, array $payload ) use ( &$events ): void {
             $events[] = ['activating', $slug, $payload];
         } );
 
-        addAction( 'theme.activated', function ( string $slug, array $payload ) use ( &$events ): void {
+        addAction( 'ap.cmsFramework.theme.activated', function ( string $slug, array $payload ) use ( &$events ): void {
             $events[] = ['activated', $slug, $payload];
         } );
 
@@ -206,11 +206,11 @@ describe( 'theme activate lifecycle hooks', function (): void {
 
         $activatedFired = false;
 
-        addAction( 'theme.activating', function (): void {
+        addAction( 'ap.cmsFramework.theme.activating', function (): void {
             throw new RuntimeException( 'blocked' );
         } );
 
-        addAction( 'theme.activated', function () use ( &$activatedFired ): void {
+        addAction( 'ap.cmsFramework.theme.activated', function () use ( &$activatedFired ): void {
             $activatedFired = true;
         } );
 
@@ -224,7 +224,7 @@ describe( 'theme activate lifecycle hooks', function (): void {
     it( 'does not fire any hooks when the theme does not exist', function (): void {
         $fired = false;
 
-        addAction( 'theme.activating', function () use ( &$fired ): void {
+        addAction( 'ap.cmsFramework.theme.activating', function () use ( &$fired ): void {
             $fired = true;
         } );
 

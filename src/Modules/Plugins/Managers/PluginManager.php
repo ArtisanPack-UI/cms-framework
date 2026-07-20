@@ -141,7 +141,7 @@ class PluginManager
             throw PluginInstallationException::alreadyInstalled( $slug );
         }
 
-        doAction( 'plugin.installing', $slug );
+        doAction( 'ap.cmsFramework.plugin.installing', $slug );
 
         // Register in database
         $plugin = Plugin::create( [
@@ -156,7 +156,7 @@ class PluginManager
 
         $this->clearCaches();
 
-        doAction( 'plugin.installed', $slug, $plugin );
+        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
 
         return $plugin;
     }
@@ -189,7 +189,7 @@ class PluginManager
         // Host-version compatibility gate (#183). Runs before any state mutation.
         $this->assertHostVersionCompatible( $plugin );
 
-        doAction( 'plugin.activating', $slug );
+        doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
         $priorPsr4           = [];
         $migrationsAttempted = false;
@@ -234,7 +234,7 @@ class PluginManager
 
         $this->clearCaches();
 
-        doAction( 'plugin.activated', $slug, $plugin );
+        doAction( 'ap.cmsFramework.plugin.activated', $slug, $plugin );
 
         return true;
     }
@@ -262,7 +262,7 @@ class PluginManager
             throw PluginNotFoundException::forSlug( $slug );
         }
 
-        doAction( 'plugin.deactivating', $slug );
+        doAction( 'ap.cmsFramework.plugin.deactivating', $slug );
 
         $plugin->is_active = false;
         $plugin->save();
@@ -272,7 +272,7 @@ class PluginManager
         }
         $this->clearCaches();
 
-        doAction( 'plugin.deactivated', $slug );
+        doAction( 'ap.cmsFramework.plugin.deactivated', $slug );
 
         return true;
     }
@@ -307,7 +307,7 @@ class PluginManager
             $this->deactivate( $slug );
         }
 
-        doAction( 'plugin.deleting', $slug );
+        doAction( 'ap.cmsFramework.plugin.deleting', $slug );
 
         // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
         // accidentally drop plugin-owned data.
@@ -340,7 +340,7 @@ class PluginManager
         }
         $this->clearCaches();
 
-        doAction( 'plugin.deleted', $slug );
+        doAction( 'ap.cmsFramework.plugin.deleted', $slug );
 
         return true;
     }

@@ -29,17 +29,17 @@ class DynamicContentRecordPolicy
      */
     public function viewAnyForType( Authenticatable $user, DynamicContentType $type ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.viewAny', 'manage_dynamic_content', $type ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.viewAny', 'manage_dynamic_content', $type ) );
     }
 
     public function viewAny( Authenticatable $user ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.viewAny', 'manage_dynamic_content', null ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.viewAny', 'manage_dynamic_content', null ) );
     }
 
     public function view( Authenticatable $user, DynamicContentRecord $record ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.view', 'manage_dynamic_content', $record->type ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.view', 'manage_dynamic_content', $record->type ) );
     }
 
     /**
@@ -48,21 +48,21 @@ class DynamicContentRecordPolicy
      */
     public function createForType( Authenticatable $user, DynamicContentType $type ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.create', 'manage_dynamic_content', $type ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.create', 'manage_dynamic_content', $type ) );
     }
 
     public function create( Authenticatable $user ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.create', 'manage_dynamic_content', null ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.create', 'manage_dynamic_content', null ) );
     }
 
     public function update( Authenticatable $user, DynamicContentRecord $record ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.update', 'manage_dynamic_content', $record->type ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.update', 'manage_dynamic_content', $record->type ) );
     }
 
     public function delete( Authenticatable $user, DynamicContentRecord $record ): bool
     {
-        return $user->can( applyFilters( 'dynamicContent.record.delete', 'manage_dynamic_content', $record->type ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.dynamicContent.record.delete', 'manage_dynamic_content', $record->type ) );
     }
 }

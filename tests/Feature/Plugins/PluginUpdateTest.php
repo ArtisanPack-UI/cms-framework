@@ -268,7 +268,7 @@ describe( 'Update Hooks', function (): void {
     it( 'fires updating hook before update', function (): void {
         $hookFired = false;
 
-        addAction( 'plugin.updating', function ( $slug, $oldVersion, $newVersion ) use ( &$hookFired ): void {
+        addAction( 'ap.cmsFramework.plugin.updating', function ( $slug, $oldVersion, $newVersion ) use ( &$hookFired ): void {
             $hookFired = true;
             expect( $slug )->toBe( 'test-plugin' );
             expect( $oldVersion )->toBe( '1.0.0' );

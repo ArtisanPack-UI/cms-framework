@@ -255,11 +255,11 @@ class EnqueuedAssets
                 continue;
             }
 
-            if ( false === $value || null === $value) {
+            if ( false === $value || null === $value ) {
                 continue;
             }
 
-            $rendered .= ' ' . $name . '="' . htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"';
+            $rendered .= ' ' . $name . '="' . htmlspecialchars( (string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8' ) . '"';
         }
 
         return $rendered;

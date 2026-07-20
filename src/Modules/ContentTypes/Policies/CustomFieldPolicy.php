@@ -48,7 +48,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.viewAny', 'customFields.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.customFields.viewAny', 'customFields.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.view', 'customFields.manage', $customField ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.customFields.view', 'customFields.manage', $customField ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.create', 'customFields.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.customFields.create', 'customFields.manage' ) );
     }
 
     /**
@@ -127,7 +127,7 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.update', 'customFields.manage', $customField ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.customFields.update', 'customFields.manage', $customField ) );
     }
 
     /**
@@ -154,6 +154,6 @@ class CustomFieldPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'customFields.delete', 'customFields.manage', $customField ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.customFields.delete', 'customFields.manage', $customField ) );
     }
 }

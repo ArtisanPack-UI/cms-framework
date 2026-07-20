@@ -51,13 +51,13 @@ class PermissionManager
          *
          * @since 1.0.0
          *
-         * @hook ap.permissionRegistered
+         * @hook ap.rbac.permissionRegistered
          *
          * @param  Permission  $permission  The permission instance that was registered.
          *
          * @return void
          */
-        doAction( 'ap.permissionRegistered', $permission );
+        doAction( 'ap.rbac.permissionRegistered', $permission );
 
         return $permission;
     }

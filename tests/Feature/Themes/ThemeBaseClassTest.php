@@ -500,4 +500,4 @@ PHP );
         expect( $theme )->not->toBeNull();
         expect( $theme->assetUrl( 'main.css' ) )->toContain( '/themes/helper-theme/assets/main.css' );
     } );
-});
+} );

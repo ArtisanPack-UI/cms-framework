@@ -17,7 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Normalized hook namespaces to `ap.cmsFramework.*`** ([#193](https://github.com/ArtisanPack-UI/cms-framework/issues/193), [#194](https://github.com/ArtisanPack-UI/cms-framework/issues/194), [#195](https://github.com/ArtisanPack-UI/cms-framework/issues/195)) — Roughly 120 hook names emitted by the CMS Framework have been renamed onto a consistent namespace. Wave 4a covers infrastructure surfaces (`ap.admin.menu` → `ap.cmsFramework.admin.menu`, the three `ap.*.enqueuedAssets` families, the `ap.admin.contentEdit.*` extension surfaces, `ap.dynamic_content.register-types` → `ap.cmsFramework.dynamicContent.registerTypes`, plus `ap.roleRegistered` / `ap.permissionRegistered` moving to `ap.rbac.*`). Wave 4b covers lifecycle events (`plugin.installing`/`installed`/`activating`/`activated`/`deactivating`/`deactivated`/`deleting`/`deleted`/`updating`/`updated` → `ap.cmsFramework.plugin.<action>`; `theme.installing`/`installed`/`activating`/`activated` → `ap.cmsFramework.theme.<action>`) and the comment surfaces (`comment.editLink`, `comments.store.defaultStatus`, `comments.rate-limit.{guest,authenticated}`, `comments.form.action` all move under `ap.cmsFramework.comment{s}.*`). Wave 4c namespaces every policy-level ability filter (`{resource}.{action}` such as `posts.view`, `pages.publish`, `comments.moderate`, `role.forceDelete`) under `ap.cmsFramework.abilities.{resource}.{action}`.
+- Requires `artisanpack-ui/hooks: ^1.3` for the new `deprecateHook()` alias primitive that backs this change.
+
 ### Deprecated
+
+- Every pre-2.5.0 hook name renamed above is registered as an alias via the new `ArtisanPackUI\CMSFramework\Support\HookAliases::register()` primitive (invoked in `CMSFrameworkServiceProvider::boot()`). Existing subscribers on the old names keep firing, and callbacks registered on old vs. new names dispatch together — no host-app changes are required to upgrade, but the old names will emit a one-per-request deprecation log entry so downstreams can migrate at their own pace.
 
 ### Removed
 
