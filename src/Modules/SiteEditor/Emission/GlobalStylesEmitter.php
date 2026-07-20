@@ -60,8 +60,15 @@ class GlobalStylesEmitter
      * `styles.blocks.{namespace/name}` (#201), and translate WP-canonical
      * `var:preset|category|slug` values into real `var(...)` references
      * (#202).
+     *
+     * v4: emit per-block-element overrides under
+     * `styles.blocks.{name}.elements.{element}` as compound selectors
+     * with comma-joined element groups distributed across the block
+     * selector (`.wp-block-quote a`, `.wp-block-artisanpack-card h1,
+     * .wp-block-artisanpack-card h2, …`) so the child selector stays
+     * scoped to the block (#208).
      */
-    private const SCHEMA_VERSION = 'v3';
+    private const SCHEMA_VERSION = 'v4';
 
     /**
      * Flat theme.json → CSS property map for scalar-leaf declarations.
@@ -125,6 +132,23 @@ class GlobalStylesEmitter
         'right'  => 'right',
         'bottom' => 'bottom',
         'left'   => 'left',
+    ];
+
+    /**
+     * `styles.elements.{name}` → CSS selector map. Shared between the
+     * root-level per-element emission ({@see elementStyleBlocks()}) and
+     * the per-block-element emission ({@see blockElementStyleBlocks()})
+     * so both agree on which elements are supported and which selectors
+     * they map to. Comma-joined values are distributed across the parent
+     * block selector at the block-element call site — never concatenated
+     * — so the child selector doesn't leak out of block scope (#208).
+     *
+     * @var array<string, string>
+     */
+    private const ELEMENT_SELECTORS = [
+        'link'    => 'a',
+        'heading' => 'h1, h2, h3, h4, h5, h6',
+        'button'  => '.wp-element-button, .wp-block-button__link',
     ];
 
     /**
@@ -623,15 +647,9 @@ class GlobalStylesEmitter
             return [];
         }
 
-        $selectors = [
-            'link'    => 'a',
-            'heading' => 'h1, h2, h3, h4, h5, h6',
-            'button'  => '.wp-element-button, .wp-block-button__link',
-        ];
-
         $blocks = [];
 
-        foreach ( $selectors as $element => $selector ) {
+        foreach ( self::ELEMENT_SELECTORS as $element => $selector ) {
             if ( ! isset( $elements[ $element ] ) || ! is_array( $elements[ $element ] ) ) {
                 continue;
             }
@@ -684,14 +702,88 @@ class GlobalStylesEmitter
 
             $declarations = $this->stylesRootDeclarations( $blockStyles );
 
+            if ( [] !== $declarations ) {
+                $rules[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+            }
+
+            foreach ( $this->blockElementStyleBlocks( $selector, $blockStyles ) as $rule ) {
+                $rules[] = $rule;
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Per-block-element rule blocks:
+     * `styles.blocks.{name}.elements.{element}` composes the parent
+     * block selector with each supported element selector from
+     * {@see ELEMENT_SELECTORS}. Comma-joined element selectors are
+     * distributed across the block selector so the child selector
+     * doesn't leak out of block scope:
+     *
+     *   `.wp-block-quote h1, .wp-block-quote h2, …`
+     *
+     * — not the naive concatenation `.wp-block-quote h1, h2, …`,
+     * which would let `h2` through `h6` apply globally (#208).
+     *
+     * @since 2.5.0
+     *
+     * @param  array<string, mixed>  $blockStyles
+     *
+     * @return array<int, string>
+     */
+    protected function blockElementStyleBlocks( string $blockSelector, array $blockStyles ): array
+    {
+        $elements = $blockStyles['elements'] ?? null;
+
+        if ( ! is_array( $elements ) ) {
+            return [];
+        }
+
+        $rules = [];
+
+        foreach ( self::ELEMENT_SELECTORS as $element => $elementSelector ) {
+            if ( ! isset( $elements[ $element ] ) || ! is_array( $elements[ $element ] ) ) {
+                continue;
+            }
+
+            $declarations = $this->stylesRootDeclarations( $elements[ $element ] );
+
             if ( [] === $declarations ) {
                 continue;
             }
 
-            $rules[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+            $composed = $this->composeBlockElementSelector( $blockSelector, $elementSelector );
+
+            $rules[] = $composed . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
         }
 
         return $rules;
+    }
+
+    /**
+     * Distribute the parent block selector across each comma-separated
+     * child selector token so the emitted rule stays scoped to the block
+     * even when the element selector is a group (`h1, h2, …`) (#208).
+     *
+     * @since 2.5.0
+     */
+    protected function composeBlockElementSelector( string $blockSelector, string $elementSelector ): string
+    {
+        $parts = array_map( 'trim', explode( ',', $elementSelector ) );
+
+        $composed = [];
+
+        foreach ( $parts as $part ) {
+            if ( '' === $part ) {
+                continue;
+            }
+
+            $composed[] = $blockSelector . ' ' . $part;
+        }
+
+        return implode( ', ', $composed );
     }
 
     /**
