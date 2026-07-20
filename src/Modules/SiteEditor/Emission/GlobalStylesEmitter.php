@@ -54,8 +54,78 @@ class GlobalStylesEmitter
      * / `-font-size` / `-gradient-background` preset class bindings
      * (Keystone #53). Without these the picker swatch lights up but
      * neither the canvas nor the front-end visually applies the color.
+     *
+     * v3: widen the styles walker to cover border / spacing / extended
+     * typography / shadow (#200), add per-block emission for
+     * `styles.blocks.{namespace/name}` (#201), and translate WP-canonical
+     * `var:preset|category|slug` values into real `var(...)` references
+     * (#202).
      */
-    private const SCHEMA_VERSION = 'v2';
+    private const SCHEMA_VERSION = 'v3';
+
+    /**
+     * Flat theme.json → CSS property map for scalar-leaf declarations.
+     * Nested shapes that aren't a single scalar (spacing.padding as an
+     * array of sides, border.top.width, border.radius.topLeft, …) are
+     * handled by dedicated walkers in {@see stylesRootDeclarations()}.
+     *
+     * @var array<string, string>
+     */
+    private const SCALAR_DECLARATION_MAP = [
+        'color.background'          => 'background-color',
+        'color.text'                => 'color',
+        'typography.fontSize'       => 'font-size',
+        'typography.fontFamily'     => 'font-family',
+        'typography.lineHeight'     => 'line-height',
+        'typography.fontWeight'     => 'font-weight',
+        'typography.fontStyle'      => 'font-style',
+        'typography.letterSpacing'  => 'letter-spacing',
+        'typography.textTransform'  => 'text-transform',
+        'typography.textDecoration' => 'text-decoration',
+        'border.radius'             => 'border-radius',
+        'border.color'              => 'border-color',
+        'border.style'              => 'border-style',
+        'border.width'              => 'border-width',
+        'spacing.padding'           => 'padding',
+        'spacing.margin'            => 'margin',
+        'shadow'                    => 'box-shadow',
+    ];
+
+    /**
+     * Border corner → CSS property map for `border.radius.{corner}` walk.
+     *
+     * @var array<string, string>
+     */
+    private const BORDER_RADIUS_CORNERS = [
+        'topLeft'     => 'border-top-left-radius',
+        'topRight'    => 'border-top-right-radius',
+        'bottomLeft'  => 'border-bottom-left-radius',
+        'bottomRight' => 'border-bottom-right-radius',
+    ];
+
+    /**
+     * Border side → CSS property prefix map for `border.{side}.{color|style|width}` walk.
+     *
+     * @var array<string, string>
+     */
+    private const BORDER_SIDES = [
+        'top'    => 'border-top',
+        'right'  => 'border-right',
+        'bottom' => 'border-bottom',
+        'left'   => 'border-left',
+    ];
+
+    /**
+     * Spacing side → CSS property suffix map for `spacing.{padding|margin}.{side}` walk.
+     *
+     * @var array<string, string>
+     */
+    private const SPACING_SIDES = [
+        'top'    => 'top',
+        'right'  => 'right',
+        'bottom' => 'bottom',
+        'left'   => 'left',
+    ];
 
     /**
      * @since 2.0.0
@@ -151,6 +221,10 @@ class GlobalStylesEmitter
         $elementRules = $this->elementStyleBlocks( $resolved->styles );
 
         foreach ( $elementRules as $rule ) {
+            $blocks[] = $rule;
+        }
+
+        foreach ( $this->blockStyleBlocks( $resolved->styles ) as $rule ) {
             $blocks[] = $rule;
         }
 
@@ -413,27 +487,118 @@ class GlobalStylesEmitter
     {
         $declarations = [];
 
-        if ( isset( $styles['color']['background'] ) && is_string( $styles['color']['background'] ) ) {
-            $declarations[] = ['background-color', $styles['color']['background']];
+        foreach ( self::SCALAR_DECLARATION_MAP as $path => $property ) {
+            $value = $this->pluck( $styles, $path );
+
+            if ( ! is_scalar( $value ) ) {
+                continue;
+            }
+
+            $declarations[] = [$property, $this->translatePresetValue( (string) $value )];
         }
 
-        if ( isset( $styles['color']['text'] ) && is_string( $styles['color']['text'] ) ) {
-            $declarations[] = ['color', $styles['color']['text']];
+        // border.radius.{corner} — WP theme.json v3 allows per-corner
+        // radii alongside (or instead of) the shorthand handled above.
+        $radius = $styles['border']['radius'] ?? null;
+
+        if ( is_array( $radius ) ) {
+            foreach ( self::BORDER_RADIUS_CORNERS as $corner => $property ) {
+                $value = $radius[ $corner ] ?? null;
+
+                if ( ! is_scalar( $value ) ) {
+                    continue;
+                }
+
+                $declarations[] = [$property, $this->translatePresetValue( (string) $value )];
+            }
         }
 
-        if ( isset( $styles['typography']['fontSize'] ) && is_scalar( $styles['typography']['fontSize'] ) ) {
-            $declarations[] = ['font-size', (string) $styles['typography']['fontSize']];
+        // border.{side}.{color|style|width} — per-side overrides.
+        $border = $styles['border'] ?? null;
+
+        if ( is_array( $border ) ) {
+            foreach ( self::BORDER_SIDES as $side => $prefix ) {
+                $sideDefinition = $border[ $side ] ?? null;
+
+                if ( ! is_array( $sideDefinition ) ) {
+                    continue;
+                }
+
+                foreach ( ['color', 'style', 'width'] as $facet ) {
+                    $value = $sideDefinition[ $facet ] ?? null;
+
+                    if ( ! is_scalar( $value ) ) {
+                        continue;
+                    }
+
+                    $declarations[] = [$prefix . '-' . $facet, $this->translatePresetValue( (string) $value )];
+                }
+            }
         }
 
-        if ( isset( $styles['typography']['fontFamily'] ) && is_string( $styles['typography']['fontFamily'] ) ) {
-            $declarations[] = ['font-family', $styles['typography']['fontFamily']];
-        }
+        // spacing.{padding|margin}.{top|right|bottom|left} — long-form
+        // per-side spacing. Only kicks in when the value is an array;
+        // the scalar shorthand is handled by the flat map above.
+        foreach ( ['padding', 'margin'] as $spacingKey ) {
+            $definition = $styles['spacing'][ $spacingKey ] ?? null;
 
-        if ( isset( $styles['typography']['lineHeight'] ) && is_scalar( $styles['typography']['lineHeight'] ) ) {
-            $declarations[] = ['line-height', (string) $styles['typography']['lineHeight']];
+            if ( ! is_array( $definition ) ) {
+                continue;
+            }
+
+            foreach ( self::SPACING_SIDES as $side => $suffix ) {
+                $value = $definition[ $side ] ?? null;
+
+                if ( ! is_scalar( $value ) ) {
+                    continue;
+                }
+
+                $declarations[] = [$spacingKey . '-' . $suffix, $this->translatePresetValue( (string) $value )];
+            }
         }
 
         return $declarations;
+    }
+
+    /**
+     * Read a dot-notated path out of a nested styles tree, returning
+     * `null` when any segment is missing or the leaf isn't scalar-shaped.
+     *
+     * @since 2.5.0
+     *
+     * @param  array<string, mixed>  $styles
+     */
+    protected function pluck( array $styles, string $path ): mixed
+    {
+        $node = $styles;
+
+        foreach ( explode( '.', $path ) as $segment ) {
+            if ( ! is_array( $node ) || ! array_key_exists( $segment, $node ) ) {
+                return null;
+            }
+
+            $node = $node[ $segment ];
+        }
+
+        return $node;
+    }
+
+    /**
+     * Translate the WP-canonical `var:preset|{category}|{slug}` shorthand
+     * into a real CSS `var(--wp--preset--{category}--{slug})` reference
+     * (#202). Values that don't match the pattern pass through unchanged,
+     * so themes that write either the shorthand or the raw `var(...)`
+     * form both work.
+     *
+     * @since 2.5.0
+     */
+    protected function translatePresetValue( string $value ): string
+    {
+        return (string) preg_replace_callback(
+            '/var:preset\|([A-Za-z0-9_-]+)\|([A-Za-z0-9_-]+)/',
+            fn ( array $matches ): string => 'var(--wp--preset--' . $matches[1] . '--' . $matches[2] . ')',
+            $value,
+        );
     }
 
     /**
@@ -477,6 +642,80 @@ class GlobalStylesEmitter
         }
 
         return $blocks;
+    }
+
+    /**
+     * Per-block rule blocks: `styles.blocks.{namespace/name}`. Each
+     * entry renders into a `.wp-block-{namespace-}{name}` selector,
+     * dropping `core/` to match Gutenberg's own class naming
+     * (`core/quote` → `.wp-block-quote`, `artisanpack/card`
+     * → `.wp-block-artisanpack-card`) (#201).
+     *
+     * @since 2.5.0
+     *
+     * @param  array<string, mixed>  $styles
+     *
+     * @return array<int, string>
+     */
+    protected function blockStyleBlocks( array $styles ): array
+    {
+        $blocks = $styles['blocks'] ?? [];
+
+        if ( ! is_array( $blocks ) ) {
+            return [];
+        }
+
+        $rules = [];
+
+        foreach ( $blocks as $blockName => $blockStyles ) {
+            if ( ! is_string( $blockName ) || '' === $blockName || ! is_array( $blockStyles ) ) {
+                continue;
+            }
+
+            $selector = $this->blockSelector( $blockName );
+
+            if ( null === $selector ) {
+                continue;
+            }
+
+            $declarations = $this->stylesRootDeclarations( $blockStyles );
+
+            if ( [] === $declarations ) {
+                continue;
+            }
+
+            $rules[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Map a `{namespace}/{name}` block identifier to its CSS selector.
+     * Returns `null` for malformed identifiers so the caller can skip.
+     *
+     * @since 2.5.0
+     */
+    protected function blockSelector( string $blockName ): ?string
+    {
+        if ( ! str_contains( $blockName, '/' ) ) {
+            return null;
+        }
+
+        [$namespace, $name] = explode( '/', $blockName, 2 );
+
+        $namespace = trim( $namespace );
+        $name      = trim( $name );
+
+        if ( '' === $namespace || '' === $name ) {
+            return null;
+        }
+
+        if ( 'core' === $namespace ) {
+            return '.wp-block-' . $name;
+        }
+
+        return '.wp-block-' . $namespace . '-' . $name;
     }
 
     /**
