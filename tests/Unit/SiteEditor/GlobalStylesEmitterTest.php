@@ -577,6 +577,212 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
 
         expect( $css )->toContain( 'background-color: var(--wp--preset--color--base);' );
     } );
+
+    it( 'emits per-block-element overrides under styles.blocks.{name}.elements.link (#208)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/quote' => [
+                        'elements' => [
+                            'link' => [
+                                'color' => ['text' => '#accent'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-quote a {' )
+            ->and( $css )->toContain( 'color: #accent;' );
+    } );
+
+    it( 'distributes comma-joined element selectors across the block selector for headings (#208)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'artisanpack/card' => [
+                        'elements' => [
+                            'heading' => [
+                                'typography' => [
+                                    'fontWeight'    => '700',
+                                    'letterSpacing' => '-0.01em',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        // Each child selector must be prefixed by the block selector so
+        // `h2` through `h6` don't leak out of block scope.
+        expect( $css )
+            ->toContain( '.wp-block-artisanpack-card h1, .wp-block-artisanpack-card h2, .wp-block-artisanpack-card h3, .wp-block-artisanpack-card h4, .wp-block-artisanpack-card h5, .wp-block-artisanpack-card h6 {' )
+            ->and( $css )->toContain( 'font-weight: 700;' )
+            ->and( $css )->toContain( 'letter-spacing: -0.01em;' )
+            // No naive concatenation that would leak `h2…h6` out of scope.
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-card h1, h2' );
+    } );
+
+    it( 'distributes the button element selector too (#208)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'artisanpack/card' => [
+                        'elements' => [
+                            'button' => [
+                                'color' => ['background' => '#primary'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-artisanpack-card .wp-element-button, .wp-block-artisanpack-card .wp-block-button__link {' )
+            ->and( $css )->toContain( 'background-color: #primary;' );
+    } );
+
+    it( 'translates preset-var values inside per-block-element overrides (#208)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/quote' => [
+                        'elements' => [
+                            'link' => [
+                                'color' => ['text' => 'var:preset|color|accent'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-quote a {' )
+            ->and( $css )->toContain( 'color: var(--wp--preset--color--accent);' )
+            ->and( $css )->not->toContain( 'var:preset|' );
+    } );
+
+    it( 'skips malformed or empty per-block elements maps cleanly (#208)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'artisanpack/a' => [
+                        'elements' => 'not-an-array',
+                        'color'    => ['text' => '#111'],
+                    ],
+                    'artisanpack/b' => [
+                        'elements' => [
+                            'link'    => 'not-an-array',
+                            'heading' => [],
+                            'unknown' => ['color' => ['text' => '#f00']],
+                        ],
+                    ],
+                    'artisanpack/c' => [
+                        'elements' => [
+                            'link' => ['color' => ['text' => '#legit']],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            // Base block rule still emits alongside the invalid elements map.
+            ->toContain( '.wp-block-artisanpack-a {' )
+            // No block-element rule for the scalar `elements` map on block a.
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-a a' )
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-a h1' )
+            // Malformed / unknown element entries on block b drop cleanly.
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-b a' )
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-b h1' )
+            // Legit entry on block c still emits.
+            ->and( $css )->toContain( '.wp-block-artisanpack-c a {' )
+            ->and( $css )->toContain( 'color: #legit;' );
+    } );
+
+    it( 'emits element rules for a block that declares only `elements.*` with no base-level styles (#208)', function (): void {
+        // Regression guard — a block whose only styles live under
+        // `elements.*` (no base color/typography/border/…) must still
+        // emit its per-element rules. The base rule is skipped when
+        // there are no base declarations, but the element loop keeps
+        // running.
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/quote' => [
+                        'elements' => [
+                            'link' => [
+                                'color' => ['text' => '#accent'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-quote a {' )
+            ->and( $css )->toContain( 'color: #accent;' )
+            // No stray empty `.wp-block-quote { }` base rule when the
+            // block has no base-level declarations.
+            ->and( $css )->not->toContain( ".wp-block-quote {\n}" );
+    } );
+
+    it( 'emits both the base block rule and its per-element overrides together (#208)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/quote' => [
+                        'typography' => ['fontStyle' => 'italic'],
+                        'elements'   => [
+                            'link' => [
+                                'color' => ['text' => '#accent'],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-quote {' )
+            ->and( $css )->toContain( 'font-style: italic;' )
+            ->and( $css )->toContain( '.wp-block-quote a {' )
+            ->and( $css )->toContain( 'color: #accent;' );
+    } );
 } );
 
 describe( 'GlobalStylesEmitter cache', function (): void {
@@ -604,7 +810,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v3.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v4.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
