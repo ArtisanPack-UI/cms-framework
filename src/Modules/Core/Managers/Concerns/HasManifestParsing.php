@@ -28,6 +28,23 @@ use Illuminate\Support\Facades\File;
 trait HasManifestParsing
 {
     /**
+     * Validate a slug format.
+     *
+     * Ensures the slug only contains alphanumeric characters, hyphens,
+     * and underscores to prevent path traversal and injection attacks.
+     *
+     * @since 1.1.0
+     *
+     * @param  string  $slug  The slug to validate.
+     *
+     * @return bool True if the slug is valid, false otherwise.
+     */
+    public function validateSlug( string $slug ): bool
+    {
+        return (bool) preg_match( '/^[a-zA-Z0-9_-]+$/', $slug );
+    }
+
+    /**
      * Parse a JSON manifest file.
      *
      * Reads and decodes a JSON manifest file (plugin.json, theme.json, etc.),
@@ -53,23 +70,6 @@ trait HasManifestParsing
         }
 
         return $manifest;
-    }
-
-    /**
-     * Validate a slug format.
-     *
-     * Ensures the slug only contains alphanumeric characters, hyphens,
-     * and underscores to prevent path traversal and injection attacks.
-     *
-     * @since 1.1.0
-     *
-     * @param  string  $slug  The slug to validate.
-     *
-     * @return bool True if the slug is valid, false otherwise.
-     */
-    protected function validateSlug( string $slug ): bool
-    {
-        return (bool) preg_match( '/^[a-zA-Z0-9_-]+$/', $slug );
     }
 
     /**
