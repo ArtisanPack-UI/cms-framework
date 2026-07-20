@@ -418,6 +418,45 @@ class ThemeManager
     }
 
     /**
+     * Gets the themes base directory path.
+     *
+     * Returns the absolute path to the themes directory based on the
+     * cms.themes.directory configuration value. Any downstream helper that
+     * needs to resolve a theme-relative path (asset controllers, stylesheet
+     * readers, template resolvers) should call this method so the whole
+     * subsystem stays anchored to the same root — see
+     * {@see \ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeStylesheetReader}
+     * for one such consumer.
+     *
+     * @since 1.0.0
+     *
+     * @return string Absolute path to themes directory.
+     */
+    public function getThemesPath(): string
+    {
+        $directory = config( 'cms.themes.directory', 'themes' );
+
+        // Guard against a misconfigured null/empty value collapsing the
+        // themes root to the app base — `base_path('')` returns the app
+        // root itself, and any valid slug (e.g. `app`, `vendor`) would
+        // then bypass the intended themes-directory containment guard.
+        if ( ! is_string( $directory ) || '' === $directory ) {
+            $directory = 'themes';
+        }
+
+        // Honor absolute paths verbatim so a host that mounts themes at
+        // an external location (`/opt/themes`, `D:\shared\themes`) points
+        // the whole subsystem — templates, patterns, assets, stylesheet
+        // reads — at the same directory. `base_path()` would otherwise
+        // prepend the app base and produce a non-existent path.
+        if ( '/' === $directory[0] || preg_match( '#^[A-Za-z]:[\\\\/]#', $directory ) ) {
+            return $directory;
+        }
+
+        return base_path( $directory );
+    }
+
+    /**
      * Validate a theme ZIP file before extraction.
      *
      * Mirrors the Plugins module's pre-extraction validation: confirms the file
@@ -810,23 +849,6 @@ class ThemeManager
                 );
             }
         }
-    }
-
-    /**
-     * Gets the themes base directory path.
-     *
-     * Returns the absolute path to the themes directory based on the
-     * cms.themes.directory configuration value.
-     *
-     * @since 1.0.0
-     *
-     * @return string Absolute path to themes directory.
-     */
-    protected function getThemesPath(): string
-    {
-        $directory = config( 'cms.themes.directory', 'themes' );
-
-        return base_path( $directory );
     }
 
     /**

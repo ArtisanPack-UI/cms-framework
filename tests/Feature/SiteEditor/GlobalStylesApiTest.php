@@ -3,8 +3,10 @@
 declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeStylesheetReader;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
@@ -36,6 +38,10 @@ beforeEach( function (): void {
                 'color' => ['background' => '#ffffff'],
             ],
         ] );
+        $mock->shouldReceive( 'validateSlug' )->andReturnUsing(
+            static fn ( string $slug ): bool => (bool) preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ),
+        );
+        $mock->shouldReceive( 'getThemesPath' )->andReturn( base_path( 'themes' ) );
     } );
 } );
 
@@ -200,6 +206,127 @@ describe( 'GET /api/v1/global-styles/css', function (): void {
         $response->assertOk();
         expect( $response->headers->get( 'content-type' ) )->toContain( 'text/css' );
         expect( $response->getContent() )->toContain( 'background-color: #abcdef;' );
+    } );
+
+    it( 'appends themes/{slug}/style.css when the file is present', function (): void {
+        File::put( $this->themeRoot . '/style.css', 'body { background: papayawhip; }' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->get( '/api/v1/global-styles/css' );
+
+        $response->assertOk();
+        $body = $response->getContent();
+
+        expect( $body )
+            ->toContain( '/* === style.css === */' )
+            ->toContain( 'body { background: papayawhip; }' );
+    } );
+
+    it( 'appends themes/{slug}/editor.css when the file is present', function (): void {
+        File::put( $this->themeRoot . '/editor.css', '.editor-only { outline: 2px solid magenta; }' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->get( '/api/v1/global-styles/css' );
+
+        $response->assertOk();
+        $body = $response->getContent();
+
+        expect( $body )
+            ->toContain( '/* === editor.css === */' )
+            ->toContain( '.editor-only { outline: 2px solid magenta; }' );
+    } );
+
+    it( 'orders the emitter, style.css, and editor.css sections deterministically', function (): void {
+        File::put( $this->themeRoot . '/style.css', 'body { background: papayawhip; }' );
+        File::put( $this->themeRoot . '/editor.css', '.editor-only { outline: 2px solid magenta; }' );
+
+        $this->actingAs( $this->user );
+
+        $body = $this->get( '/api/v1/global-styles/css' )->getContent();
+
+        $emitterMarker = strpos( $body, '--wp--preset--color--primary' );
+        $styleMarker   = strpos( $body, '/* === style.css === */' );
+        $editorMarker  = strpos( $body, '/* === editor.css === */' );
+
+        expect( $emitterMarker )->not->toBeFalse()
+            ->and( $styleMarker )->not->toBeFalse()
+            ->and( $editorMarker )->not->toBeFalse()
+            ->and( $emitterMarker )->toBeLessThan( $styleMarker )
+            ->and( $styleMarker )->toBeLessThan( $editorMarker );
+    } );
+
+    it( 'returns only the emitter output when no theme stylesheets exist', function (): void {
+        $this->actingAs( $this->user );
+
+        $body = $this->get( '/api/v1/global-styles/css' )->getContent();
+
+        expect( $body )
+            ->not->toContain( '/* === style.css === */' )
+            ->not->toContain( '/* === editor.css === */' );
+    } );
+} );
+
+describe( '@cmsGlobalStyles Blade directive', function (): void {
+    it( 'does not leak editor.css into the front-end style block', function (): void {
+        File::put( $this->themeRoot . '/editor.css', '.editor-only { outline: 2px solid magenta; }' );
+
+        $rendered = Blade::render( '@cmsGlobalStyles' );
+
+        expect( $rendered )
+            ->not->toContain( '.editor-only' )
+            ->not->toContain( 'editor.css' );
+    } );
+} );
+
+describe( 'ThemeStylesheetReader container binding', function (): void {
+    it( 'is resolvable from the container as a singleton', function (): void {
+        $first  = app( ThemeStylesheetReader::class );
+        $second = app( ThemeStylesheetReader::class );
+
+        expect( $first )->toBeInstanceOf( ThemeStylesheetReader::class )
+            ->and( $second )->toBe( $first );
+    } );
+} );
+
+describe( 'GET /api/v1/global-styles/css cache headers', function (): void {
+    it( 'sets an ETag and Cache-Control on the response', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->get( '/api/v1/global-styles/css' );
+
+        $response->assertOk();
+        expect( $response->headers->get( 'ETag' ) )->toMatch( '/^".{40}"$/' )
+            ->and( $response->headers->get( 'Cache-Control' ) )->toContain( 'private' )
+            ->and( $response->headers->get( 'Cache-Control' ) )->toContain( 'must-revalidate' );
+    } );
+
+    it( 'returns 304 Not Modified when If-None-Match matches the current ETag', function (): void {
+        $this->actingAs( $this->user );
+
+        $first = $this->get( '/api/v1/global-styles/css' );
+        $etag  = $first->headers->get( 'ETag' );
+
+        $second = $this->get( '/api/v1/global-styles/css', ['If-None-Match' => $etag] );
+
+        $second->assertStatus( 304 );
+        expect( $second->getContent() )->toBe( '' )
+            ->and( $second->headers->get( 'ETag' ) )->toBe( $etag );
+    } );
+
+    it( 'produces a different ETag after editor.css changes', function (): void {
+        File::put( $this->themeRoot . '/editor.css', '.a { color: red; }' );
+
+        $this->actingAs( $this->user );
+
+        $first = $this->get( '/api/v1/global-styles/css' )->headers->get( 'ETag' );
+
+        File::put( $this->themeRoot . '/editor.css', '.b { color: blue; }' );
+
+        $second = $this->get( '/api/v1/global-styles/css' )->headers->get( 'ETag' );
+
+        expect( $second )->not->toBe( $first );
     } );
 } );
 
