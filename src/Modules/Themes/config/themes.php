@@ -84,4 +84,17 @@ return [
         'application/zip',
         'application/x-zip-compressed',
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Theme Asset Cache
+    |--------------------------------------------------------------------------
+    |
+    | Cache-Control max-age (in seconds) applied to responses served by the
+    | ThemeAssetsController. Themes ship static bytes, so a warm CDN edge
+    | can safely hold them for the full TTL — bumped up in production if
+    | your bundler emits fingerprinted filenames.
+    |
+    */
+    'assetsMaxAge' => 3600,
 ];
