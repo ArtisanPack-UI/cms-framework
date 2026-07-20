@@ -282,6 +282,301 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         expect( $css )->not->toMatch( '/\.has--font-size\b/' );
         expect( $css )->not->toMatch( '/\.has--gradient-background\b/' );
     } );
+
+    it( 'emits extended border / spacing / typography / shadow declarations on :root (#200)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'border' => [
+                    'radius' => '5px',
+                    'color'  => '#123456',
+                    'style'  => 'solid',
+                    'width'  => '2px',
+                ],
+                'spacing' => [
+                    'padding' => '1rem',
+                    'margin'  => '2rem',
+                ],
+                'typography' => [
+                    'fontWeight'     => '600',
+                    'letterSpacing'  => '0.02em',
+                    'textTransform'  => 'uppercase',
+                    'fontStyle'      => 'italic',
+                    'textDecoration' => 'underline',
+                ],
+                'shadow' => '0 2px 4px rgba(0,0,0,0.1)',
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( 'border-radius: 5px;' )
+            ->and( $css )->toContain( 'border-color: #123456;' )
+            ->and( $css )->toContain( 'border-style: solid;' )
+            ->and( $css )->toContain( 'border-width: 2px;' )
+            ->and( $css )->toContain( 'padding: 1rem;' )
+            ->and( $css )->toContain( 'margin: 2rem;' )
+            ->and( $css )->toContain( 'font-weight: 600;' )
+            ->and( $css )->toContain( 'letter-spacing: 0.02em;' )
+            ->and( $css )->toContain( 'text-transform: uppercase;' )
+            ->and( $css )->toContain( 'font-style: italic;' )
+            ->and( $css )->toContain( 'text-decoration: underline;' )
+            ->and( $css )->toContain( 'box-shadow: 0 2px 4px rgba(0,0,0,0.1);' );
+    } );
+
+    it( 'emits per-side spacing when padding / margin are objects (#200)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'spacing' => [
+                    'padding' => [
+                        'top'    => '1rem',
+                        'right'  => '2rem',
+                        'bottom' => '3rem',
+                        'left'   => '4rem',
+                    ],
+                    'margin' => [
+                        'top'    => '0.5rem',
+                        'bottom' => '1.5rem',
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( 'padding-top: 1rem;' )
+            ->and( $css )->toContain( 'padding-right: 2rem;' )
+            ->and( $css )->toContain( 'padding-bottom: 3rem;' )
+            ->and( $css )->toContain( 'padding-left: 4rem;' )
+            ->and( $css )->toContain( 'margin-top: 0.5rem;' )
+            ->and( $css )->toContain( 'margin-bottom: 1.5rem;' );
+    } );
+
+    it( 'emits per-corner border radii and per-side border facets (#200)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'border' => [
+                    'radius' => [
+                        'topLeft'     => '5px',
+                        'topRight'    => '10px',
+                        'bottomLeft'  => '15px',
+                        'bottomRight' => '20px',
+                    ],
+                    'left' => [
+                        'color' => '#accent',
+                        'style' => 'solid',
+                        'width' => '4px',
+                    ],
+                    'top' => [
+                        'width' => '1px',
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( 'border-top-left-radius: 5px;' )
+            ->and( $css )->toContain( 'border-top-right-radius: 10px;' )
+            ->and( $css )->toContain( 'border-bottom-left-radius: 15px;' )
+            ->and( $css )->toContain( 'border-bottom-right-radius: 20px;' )
+            ->and( $css )->toContain( 'border-left-color: #accent;' )
+            ->and( $css )->toContain( 'border-left-style: solid;' )
+            ->and( $css )->toContain( 'border-left-width: 4px;' )
+            ->and( $css )->toContain( 'border-top-width: 1px;' );
+    } );
+
+    it( 'applies extended coverage to per-element rules too (#200)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'button' => [
+                        'border' => [
+                            'radius' => '5px',
+                            'color'  => '#f00',
+                            'style'  => 'solid',
+                            'width'  => '2px',
+                        ],
+                        'typography' => [
+                            'fontWeight'    => '600',
+                            'letterSpacing' => '0.02em',
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-element-button, .wp-block-button__link {' )
+            ->and( $css )->toContain( 'border-radius: 5px;' )
+            ->and( $css )->toContain( 'border-color: #f00;' )
+            ->and( $css )->toContain( 'border-style: solid;' )
+            ->and( $css )->toContain( 'border-width: 2px;' )
+            ->and( $css )->toContain( 'font-weight: 600;' )
+            ->and( $css )->toContain( 'letter-spacing: 0.02em;' );
+    } );
+
+    it( 'emits per-block rules under styles.blocks.{namespace/name} (#201)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'artisanpack/quote' => [
+                        'border' => [
+                            'color' => '#accent',
+                            'style' => 'solid',
+                            'width' => '0 0 0 4px',
+                        ],
+                        'spacing' => [
+                            'padding' => ['left' => '1.5rem'],
+                        ],
+                        'typography' => ['fontStyle' => 'italic'],
+                    ],
+                    'artisanpack/card' => [
+                        'color'  => ['background' => '#surface2'],
+                        'border' => [
+                            'color'  => '#surface2',
+                            'style'  => 'solid',
+                            'width'  => '3px',
+                            'radius' => '12px',
+                        ],
+                    ],
+                    'core/quote' => [
+                        'typography' => ['fontStyle' => 'italic'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-artisanpack-quote {' )
+            ->and( $css )->toContain( 'border-color: #accent;' )
+            ->and( $css )->toContain( 'padding-left: 1.5rem;' )
+            ->and( $css )->toContain( 'font-style: italic;' )
+            ->and( $css )->toContain( '.wp-block-artisanpack-card {' )
+            ->and( $css )->toContain( 'border-radius: 12px;' )
+            // core/* namespace drops to bare `.wp-block-{name}` selector.
+            ->and( $css )->toContain( '.wp-block-quote {' )
+            ->and( $css )->not->toContain( '.wp-block-core-quote' );
+    } );
+
+    it( 'skips malformed styles.blocks entries (#201)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'no-namespace'          => ['color' => ['text' => '#000']],
+                    '/missing-namespace'    => ['color' => ['text' => '#000']],
+                    'missing-name/'         => ['color' => ['text' => '#000']],
+                    'too/many/slashes'      => ['color' => ['text' => '#000']],
+                    'artisanpack/empty'     => [],
+                    'artisanpack/scalar'    => 'not-an-array',
+                    'artisanpack/legit'     => ['color' => ['text' => '#111']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.wp-block-artisanpack-legit {' )
+            ->and( $css )->not->toContain( '.wp-block-no-namespace' )
+            ->and( $css )->not->toContain( '.wp-block-missing-name' )
+            ->and( $css )->not->toContain( '.wp-block--missing-namespace' )
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-empty' )
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-scalar' )
+            // Extra slashes in the block name would explode into a
+            // `.wp-block-too-many/slashes` selector that breaks the whole
+            // stylesheet block. Reject anything that isn't exactly one
+            // `namespace/name` slash.
+            ->and( $css )->not->toContain( '.wp-block-too-many' )
+            ->and( $css )->not->toContain( 'many/slashes' );
+    } );
+
+    it( 'leaves malformed `var:preset|a|b|garbage` values unchanged rather than half-translating (#202 hardening)', function (): void {
+        // Without the trailing anchor the regex greedily consumed
+        // `var:preset|color|primary` out of `var:preset|color|primary|garbage`
+        // and emitted `var(--wp--preset--color--primary)|garbage` — a
+        // subtly-broken value that still looks translated.
+        $resolved = makeResolved(
+            styles: [
+                'color' => [
+                    'background' => 'var:preset|color|primary|garbage',
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( 'background-color: var:preset|color|primary|garbage;' )
+            ->and( $css )->not->toContain( 'var(--wp--preset--color--primary)|garbage' );
+    } );
+
+    it( 'translates `var:preset|category|slug` values into real `var(...)` refs (#202)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'color' => [
+                    'background' => 'var:preset|color|base',
+                    'text'       => 'var:preset|color|text',
+                ],
+                'typography' => [
+                    'fontFamily' => 'var:preset|font-family|sans',
+                    'fontSize'   => 'var:preset|font-size|medium',
+                ],
+                'elements' => [
+                    'button' => [
+                        'color' => ['background' => 'var:preset|color|primary'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( 'background-color: var(--wp--preset--color--base);' )
+            ->and( $css )->toContain( 'color: var(--wp--preset--color--text);' )
+            ->and( $css )->toContain( 'font-family: var(--wp--preset--font-family--sans);' )
+            ->and( $css )->toContain( 'font-size: var(--wp--preset--font-size--medium);' )
+            ->and( $css )->toContain( 'background-color: var(--wp--preset--color--primary);' )
+            // No untranslated pipe form leaks through.
+            ->and( $css )->not->toContain( 'var:preset|' );
+    } );
+
+    it( 'passes raw CSS `var(...)` values through unchanged (#202 idempotency)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'color' => ['background' => 'var(--wp--preset--color--base)'],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( 'background-color: var(--wp--preset--color--base);' );
+    } );
 } );
 
 describe( 'GlobalStylesEmitter cache', function (): void {
@@ -309,7 +604,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v2.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v3.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
