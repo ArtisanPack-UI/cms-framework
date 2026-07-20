@@ -21,36 +21,36 @@ class PermissionPolicy
 {
     public function viewAny( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.viewAny', 'permissions.viewAny' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.viewAny', 'permissions.viewAny' ) );
     }
 
     public function view( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.view', 'permissions.view' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.view', 'permissions.view' ) );
     }
 
     public function create( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.create', 'permissions.create' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.create', 'permissions.create' ) );
     }
 
     public function update( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.update', 'permissions.update' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.update', 'permissions.update' ) );
     }
 
     public function delete( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.delete', 'permissions.delete' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.delete', 'permissions.delete' ) );
     }
 
     public function restore( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.restore', 'permissions.restore' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.restore', 'permissions.restore' ) );
     }
 
     public function forceDelete( Authorizable $user ): bool
     {
-        return $user->can( applyFilters( 'permissions.forceDelete', 'permissions.forceDelete' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.permissions.forceDelete', 'permissions.forceDelete' ) );
     }
 }

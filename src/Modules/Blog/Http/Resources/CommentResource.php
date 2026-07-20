@@ -32,7 +32,7 @@ class CommentResource extends JsonResource
     public function toArray( Request $request ): array
     {
         $user        = $request->user();
-        $canModerate = null !== $user && $user->can( applyFilters( 'comments.moderate', 'comments.moderate' ) );
+        $canModerate = null !== $user && $user->can( applyFilters( 'ap.cmsFramework.abilities.comments.moderate', 'comments.moderate' ) );
 
         return [
             'id'             => $this->id,

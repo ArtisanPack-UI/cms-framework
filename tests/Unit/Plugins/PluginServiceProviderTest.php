@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Gate;
 beforeEach( function (): void {
     Gate::before( fn ( ?Illuminate\Contracts\Auth\Authenticatable $user, string $ability ) => true );
 
-    removeAllFilters( 'ap.admin.menu' );
+    removeAllFilters( 'ap.cmsFramework.admin.menu' );
     removeAllFilters( 'ap.plugins.federatedModules' );
 
     $this->app->singleton( AdminMenuManager::class, fn () => new AdminMenuManager );
@@ -19,7 +19,7 @@ beforeEach( function (): void {
     // Wire the same single-callback filter the framework's PluginsServiceProvider
     // sets up, so registry contents surface in the admin menu.
     $registry = app( PluginRegistry::class );
-    addFilter( 'ap.admin.menu', function ( array $menu ) use ( $registry ): array {
+    addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $registry ): array {
         foreach ( $registry->navEntries() as $slug => $entry ) {
             $menu[ $slug ] = array_merge( $entry, $menu[ $slug ] ?? [] );
         }
@@ -32,7 +32,7 @@ beforeEach( function (): void {
 } );
 
 afterEach( function (): void {
-    removeAllFilters( 'ap.admin.menu' );
+    removeAllFilters( 'ap.cmsFramework.admin.menu' );
     removeAllFilters( 'ap.plugins.federatedModules' );
 } );
 
@@ -61,7 +61,7 @@ it( 'registers an admin page through the AdminMenuManager', function (): void {
         ->and( $menu['my-plugin']['label'] )->toBe( 'My Plugin' );
 } );
 
-it( 'injects a nav entry via the ap.admin.menu filter', function (): void {
+it( 'injects a nav entry via the ap.cmsFramework.admin.menu filter', function (): void {
     $provider = new class( app() ) extends PluginServiceProvider {
         public function boot(): void
         {

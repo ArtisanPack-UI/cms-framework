@@ -48,7 +48,7 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.viewAny', 'pages.view' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.viewAny', 'pages.view' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.view', 'pages.view', $page ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.view', 'pages.view', $page ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.create', 'pages.create' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.create', 'pages.create' ) );
     }
 
     /**
@@ -116,14 +116,14 @@ class PagePolicy
     public function update( Authenticatable $user, Page $page ): bool
     {
         // Check if user can edit any page
-        $canEditAny = $user->can( applyFilters( 'pages.update', 'pages.edit', $page ) );
+        $canEditAny = $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.update', 'pages.edit', $page ) );
 
         if ( $canEditAny ) {
             return true;
         }
 
         // Check if user can edit their own pages
-        $canEditOwn = $user->can( applyFilters( 'pages.updateOwn', 'pages.editOwn', $page ) );
+        $canEditOwn = $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.updateOwn', 'pages.editOwn', $page ) );
 
         if ( $canEditOwn && $page->author_id === $user->id ) {
             return true;
@@ -145,14 +145,14 @@ class PagePolicy
     public function delete( Authenticatable $user, Page $page ): bool
     {
         // Check if user can delete any page
-        $canDeleteAny = $user->can( applyFilters( 'pages.delete', 'pages.delete', $page ) );
+        $canDeleteAny = $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.delete', 'pages.delete', $page ) );
 
         if ( $canDeleteAny ) {
             return true;
         }
 
         // Check if user can delete their own pages
-        $canDeleteOwn = $user->can( applyFilters( 'pages.deleteOwn', 'pages.deleteOwn', $page ) );
+        $canDeleteOwn = $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.deleteOwn', 'pages.deleteOwn', $page ) );
 
         if ( $canDeleteOwn && $page->author_id === $user->id ) {
             return true;
@@ -185,6 +185,6 @@ class PagePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pages.publish', 'pages.publish', $page ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pages.publish', 'pages.publish', $page ) );
     }
 }

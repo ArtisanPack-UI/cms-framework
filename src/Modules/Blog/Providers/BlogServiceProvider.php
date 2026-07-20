@@ -143,7 +143,7 @@ class BlogServiceProvider extends ServiceProvider
 
             if ( null !== $user ) {
                 $authenticatedLimit = ( int ) applyFilters(
-                    'comments.rate-limit.authenticated',
+                    'ap.cmsFramework.comments.rateLimit.authenticated',
                     60,
                 );
 
@@ -152,7 +152,7 @@ class BlogServiceProvider extends ServiceProvider
             }
 
             $guestLimit = ( int ) applyFilters(
-                'comments.rate-limit.guest',
+                'ap.cmsFramework.comments.rateLimit.guest',
                 10,
             );
 

@@ -48,7 +48,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.viewAny', 'taxonomies.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.taxonomies.viewAny', 'taxonomies.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.view', 'taxonomies.manage', $taxonomy ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.taxonomies.view', 'taxonomies.manage', $taxonomy ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.create', 'taxonomies.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.taxonomies.create', 'taxonomies.manage' ) );
     }
 
     /**
@@ -127,7 +127,7 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.update', 'taxonomies.manage', $taxonomy ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.taxonomies.update', 'taxonomies.manage', $taxonomy ) );
     }
 
     /**
@@ -154,6 +154,6 @@ class TaxonomyPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'taxonomies.delete', 'taxonomies.manage', $taxonomy ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.taxonomies.delete', 'taxonomies.manage', $taxonomy ) );
     }
 }

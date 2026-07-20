@@ -81,7 +81,7 @@ class DynamicContentTypeRegistry
 
         if ( function_exists( 'applyFilters' ) ) {
             try {
-                $filtered = applyFilters( 'ap.dynamic_content.register-types', $codeTypes );
+                $filtered = applyFilters( 'ap.cmsFramework.dynamicContent.registerTypes', $codeTypes );
 
                 if ( is_array( $filtered ) ) {
                     $codeTypes = $filtered;

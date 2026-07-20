@@ -48,7 +48,7 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.viewAny', 'roles.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.viewAny', 'roles.manage' ) );
     }
 
     /**
@@ -73,7 +73,7 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.view', 'roles.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.view', 'roles.manage' ) );
     }
 
     /**
@@ -98,7 +98,7 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.create', 'roles.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.create', 'roles.manage' ) );
     }
 
     /**
@@ -123,7 +123,7 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.update', 'roles.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.update', 'roles.manage' ) );
     }
 
     /**
@@ -148,7 +148,7 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.delete', 'roles.delete' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.delete', 'roles.delete' ) );
     }
 
     /**
@@ -173,7 +173,7 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.restore', 'roles.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.restore', 'roles.manage' ) );
     }
 
     /**
@@ -198,6 +198,6 @@ class RolePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'role.forceDelete', 'roles.delete' ));
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.role.forceDelete', 'roles.delete' ));
     }
 }

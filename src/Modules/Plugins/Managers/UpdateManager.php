@@ -110,7 +110,7 @@ class UpdateManager
         $oldMeta                = $plugin->meta;
         $oldServiceProvider     = $plugin->service_provider;
 
-        doAction( 'plugin.updating', $slug, $oldVersion, $updateInfo['version'] );
+        doAction( 'ap.cmsFramework.plugin.updating', $slug, $oldVersion, $updateInfo['version'] );
 
         try {
             // 1. Backup current version
@@ -151,7 +151,7 @@ class UpdateManager
             // 8. Cleanup
             File::delete( $zipPath );
 
-            doAction( 'plugin.updated', $slug, $updateInfo['version'] );
+            doAction( 'ap.cmsFramework.plugin.updated', $slug, $updateInfo['version'] );
 
             return true;
         } catch ( IncompatiblePluginException $e ) {

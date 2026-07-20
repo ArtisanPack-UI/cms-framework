@@ -48,7 +48,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'contentTypes.viewAny', 'contentTypes.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.contentTypes.viewAny', 'contentTypes.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'contentTypes.view', 'contentTypes.manage', $contentType ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.contentTypes.view', 'contentTypes.manage', $contentType ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'contentTypes.create', 'contentTypes.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.contentTypes.create', 'contentTypes.manage' ) );
     }
 
     /**
@@ -127,7 +127,7 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'contentTypes.update', 'contentTypes.manage', $contentType ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.contentTypes.update', 'contentTypes.manage', $contentType ) );
     }
 
     /**
@@ -154,6 +154,6 @@ class ContentTypePolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'contentTypes.delete', 'contentTypes.manage', $contentType ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.contentTypes.delete', 'contentTypes.manage', $contentType ) );
     }
 }

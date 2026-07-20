@@ -52,13 +52,13 @@ class RoleManager
          *
          * @since 1.0.0
          *
-         * @hook ap.roleRegistered
+         * @hook ap.rbac.roleRegistered
          *
          * @param  Role  $role  The role instance that was registered.
          *
          * @return void
          */
-        doAction( 'ap.roleRegistered', $role );
+        doAction( 'ap.rbac.roleRegistered', $role );
 
         return $role;
     }

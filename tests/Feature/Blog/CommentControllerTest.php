@@ -246,7 +246,7 @@ test( 'per_page values outside the 1..100 window are clamped', function (): void
 test( 'public POST /comments is throttled after the guest bucket is exhausted', function (): void {
     // Tighten the guest limit for the duration of this test so we
     // don't have to fire ten requests to prove the limiter is wired.
-    addFilter( 'comments.rate-limit.guest', fn () => 2 );
+    addFilter( 'ap.cmsFramework.comments.rateLimit.guest', fn () => 2 );
 
     $post = createCommentTestPost();
 
@@ -266,7 +266,7 @@ test( 'public POST /comments is throttled after the guest bucket is exhausted', 
 
     // Clean up the filter so neighbouring tests get the default
     // guest bucket.
-    removeAllFilters( 'comments.rate-limit.guest' );
+    removeAllFilters( 'ap.cmsFramework.comments.rateLimit.guest' );
 } );
 
 test( 'unauthenticated guest can post a comment with author fields, defaulting to pending', function (): void {

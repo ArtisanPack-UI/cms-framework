@@ -39,6 +39,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Providers\SiteEditorServicePro
 use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
+use ArtisanPackUI\CMSFramework\Support\HookAliases;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
 use Illuminate\Support\Facades\Log;
@@ -154,6 +155,8 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        HookAliases::register();
+
         $this->mergeConfiguration();
         $this->validateConfiguration();
 

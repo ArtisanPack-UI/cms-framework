@@ -125,12 +125,12 @@ describe( 'EnqueuedAssets::assetUrl', function (): void {
     it( 'points at the themes.assets route with the given slug + path', function (): void {
         $url = EnqueuedAssets::assetUrl( 'my-theme', 'main.css' );
 
-        expect( $url)->toContain( '/themes/my-theme/assets/main.css');
-    });
+        expect( $url )->toContain( '/themes/my-theme/assets/main.css' );
+    } );
 
     it( 'strips a leading slash from the path', function (): void {
-        $url = EnqueuedAssets::assetUrl( 'my-theme', '/main.css');
+        $url = EnqueuedAssets::assetUrl( 'my-theme', '/main.css' );
 
-        expect( $url)->toContain( '/themes/my-theme/assets/main.css');
-    });
+        expect( $url )->toContain( '/themes/my-theme/assets/main.css' );
+    } );
 });

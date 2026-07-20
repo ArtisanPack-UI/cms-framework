@@ -48,7 +48,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postTags.viewAny', 'postTags.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.postTags.viewAny', 'postTags.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postTags.view', 'postTags.manage', $tag ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.postTags.view', 'postTags.manage', $tag ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postTags.create', 'postTags.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.postTags.create', 'postTags.manage' ) );
     }
 
     /**
@@ -127,7 +127,7 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postTags.update', 'postTags.manage', $tag ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.postTags.update', 'postTags.manage', $tag ) );
     }
 
     /**
@@ -154,6 +154,6 @@ class PostTagPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'postTags.delete', 'postTags.manage', $tag ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.postTags.delete', 'postTags.manage', $tag ) );
     }
 }

@@ -156,7 +156,7 @@ class ThemeManager
 
         // Pre-activation hook: listeners may throw to short-circuit activation
         // before any persistent state changes.
-        doAction( 'theme.activating', $slug, $theme );
+        doAction( 'ap.cmsFramework.theme.activating', $slug, $theme );
 
         $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
 
@@ -176,7 +176,7 @@ class ThemeManager
             }
         }
 
-        doAction( 'theme.activated', $slug, $theme );
+        doAction( 'ap.cmsFramework.theme.activated', $slug, $theme );
 
         return true;
     }
@@ -256,7 +256,7 @@ class ThemeManager
         // Exception) so that Error/TypeError thrown from listener callbacks
         // also trigger rollback before propagating.
         try {
-            doAction( 'theme.installing', $slug, $manifest );
+            doAction( 'ap.cmsFramework.theme.installing', $slug, $manifest );
         } catch ( Throwable $e ) {
             File::deleteDirectory( $themePath );
 
@@ -265,7 +265,7 @@ class ThemeManager
 
         Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
 
-        doAction( 'theme.installed', $slug, $manifest );
+        doAction( 'ap.cmsFramework.theme.installed', $slug, $manifest );
 
         return $manifest;
     }

@@ -48,7 +48,7 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.viewAny', 'posts.view' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.viewAny', 'posts.view' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.view', 'posts.view', $post ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.view', 'posts.view', $post ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.create', 'posts.create' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.create', 'posts.create' ) );
     }
 
     /**
@@ -116,14 +116,14 @@ class PostPolicy
     public function update( Authenticatable $user, Post $post ): bool
     {
         // Check if user can edit any post
-        $canEditAny = $user->can( applyFilters( 'posts.update', 'posts.edit', $post ) );
+        $canEditAny = $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.update', 'posts.edit', $post ) );
 
         if ( $canEditAny ) {
             return true;
         }
 
         // Check if user can edit their own posts
-        $canEditOwn = $user->can( applyFilters( 'posts.updateOwn', 'posts.editOwn', $post ) );
+        $canEditOwn = $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.updateOwn', 'posts.editOwn', $post ) );
 
         if ( $canEditOwn && $post->author_id === $user->id ) {
             return true;
@@ -145,14 +145,14 @@ class PostPolicy
     public function delete( Authenticatable $user, Post $post ): bool
     {
         // Check if user can delete any post
-        $canDeleteAny = $user->can( applyFilters( 'posts.delete', 'posts.delete', $post ) );
+        $canDeleteAny = $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.delete', 'posts.delete', $post ) );
 
         if ( $canDeleteAny ) {
             return true;
         }
 
         // Check if user can delete their own posts
-        $canDeleteOwn = $user->can( applyFilters( 'posts.deleteOwn', 'posts.deleteOwn', $post ) );
+        $canDeleteOwn = $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.deleteOwn', 'posts.deleteOwn', $post ) );
 
         if ( $canDeleteOwn && $post->author_id === $user->id ) {
             return true;
@@ -185,6 +185,6 @@ class PostPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'posts.publish', 'posts.publish', $post ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.posts.publish', 'posts.publish', $post ) );
     }
 }

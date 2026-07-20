@@ -200,7 +200,7 @@ class AdminMenuManager
 
         $menu = $this->decorateMenuForConsumers( array_merge( $topLevelItems, $menu ) );
 
-        $menu = applyFilters( 'ap.admin.menu', $menu );
+        $menu = applyFilters( 'ap.cmsFramework.admin.menu', $menu );
 
         // Defense-in-depth: re-apply capability filtering AFTER the filter
         // runs so plugin-injected entries can't bypass the Gate check that
@@ -227,7 +227,7 @@ class AdminMenuManager
     /**
      * Recursively drop any menu node whose `permission` (or legacy
      * `capability`) the current user does not hold. Applied after the
-     * `ap.admin.menu` filter so filter-injected entries are gated too.
+     * `ap.cmsFramework.admin.menu` filter so filter-injected entries are gated too.
      *
      * @param  array  $menu  The (already-decorated) menu.
      *

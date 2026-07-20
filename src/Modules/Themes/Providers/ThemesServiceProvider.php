@@ -240,7 +240,7 @@ class ThemesServiceProvider extends ServiceProvider
 
         $entries = $theme->{$method}();
 
-        if ( ! is_array( $entries)) {
+        if ( ! is_array( $entries ) ) {
             $entries = [];
         }
 

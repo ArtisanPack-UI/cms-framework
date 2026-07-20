@@ -28,7 +28,7 @@ class ContentEditExtensions
     /**
      * Return sidebar/right-column panel definitions applicable to the given
      * content type. Plugins add panels by returning an array of shapes from the
-     * `ap.admin.contentEdit.panels` filter.
+     * `ap.cmsFramework.admin.contentEdit.panels` filter.
      *
      * Each panel: `slug`, `title`, `component`, optional `position`
      * ( `top`/`bottom`/`default` ), optional `order`, optional
@@ -43,7 +43,7 @@ class ContentEditExtensions
      */
     public function panels( array $context ): array
     {
-        return $this->collect( 'ap.admin.contentEdit.panels', $context );
+        return $this->collect( 'ap.cmsFramework.admin.contentEdit.panels', $context );
     }
 
     /**
@@ -60,7 +60,7 @@ class ContentEditExtensions
      */
     public function tabs( array $context ): array
     {
-        return $this->collect( 'ap.admin.contentEdit.tabs', $context );
+        return $this->collect( 'ap.cmsFramework.admin.contentEdit.tabs', $context );
     }
 
     /**
@@ -74,7 +74,7 @@ class ContentEditExtensions
      */
     public function beforeEditor( array $context ): array
     {
-        return $this->collect( 'ap.admin.contentEdit.beforeEditor', $context );
+        return $this->collect( 'ap.cmsFramework.admin.contentEdit.beforeEditor', $context );
     }
 
     /**
@@ -88,7 +88,7 @@ class ContentEditExtensions
      */
     public function afterEditor( array $context ): array
     {
-        return $this->collect( 'ap.admin.contentEdit.afterEditor', $context );
+        return $this->collect( 'ap.cmsFramework.admin.contentEdit.afterEditor', $context );
     }
 
     /**
@@ -104,7 +104,7 @@ class ContentEditExtensions
      */
     public function saveData( array $data, array $context ): array
     {
-        $filtered = applyFilters( 'ap.admin.contentEdit.saveData', $data, $context );
+        $filtered = applyFilters( 'ap.cmsFramework.admin.contentEdit.saveData', $data, $context );
 
         return is_array( $filtered ) ? $filtered : $data;
     }
