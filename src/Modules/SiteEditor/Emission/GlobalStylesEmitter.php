@@ -594,8 +594,12 @@ class GlobalStylesEmitter
      */
     protected function translatePresetValue( string $value ): string
     {
+        // Trailing `(?!\|)` guard so `var:preset|color|primary|garbage`
+        // doesn't half-translate into `var(--wp--preset--color--primary)|garbage`
+        // — malformed refs pass through unchanged instead of emitting a
+        // subtly-broken value.
         return (string) preg_replace_callback(
-            '/var:preset\|([A-Za-z0-9_-]+)\|([A-Za-z0-9_-]+)/',
+            '/var:preset\|([A-Za-z0-9_-]+)\|([A-Za-z0-9_-]+)(?![A-Za-z0-9_|-])/',
             fn ( array $matches ): string => 'var(--wp--preset--' . $matches[1] . '--' . $matches[2] . ')',
             $value,
         );
@@ -698,7 +702,11 @@ class GlobalStylesEmitter
      */
     protected function blockSelector( string $blockName ): ?string
     {
-        if ( ! str_contains( $blockName, '/' ) ) {
+        // A valid WP block name is exactly `{namespace}/{name}` — one
+        // slash. Extra slashes (e.g. `ns/foo/bar`) would explode into a
+        // `.wp-block-ns-foo/bar` selector that silently breaks the whole
+        // stylesheet block, so reject them here.
+        if ( 1 !== substr_count( $blockName, '/' ) ) {
             return null;
         }
 

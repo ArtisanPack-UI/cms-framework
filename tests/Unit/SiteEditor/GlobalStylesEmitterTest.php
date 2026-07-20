@@ -482,6 +482,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
                     'no-namespace'          => ['color' => ['text' => '#000']],
                     '/missing-namespace'    => ['color' => ['text' => '#000']],
                     'missing-name/'         => ['color' => ['text' => '#000']],
+                    'too/many/slashes'      => ['color' => ['text' => '#000']],
                     'artisanpack/empty'     => [],
                     'artisanpack/scalar'    => 'not-an-array',
                     'artisanpack/legit'     => ['color' => ['text' => '#111']],
@@ -499,7 +500,35 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
             ->and( $css )->not->toContain( '.wp-block-missing-name' )
             ->and( $css )->not->toContain( '.wp-block--missing-namespace' )
             ->and( $css )->not->toContain( '.wp-block-artisanpack-empty' )
-            ->and( $css )->not->toContain( '.wp-block-artisanpack-scalar' );
+            ->and( $css )->not->toContain( '.wp-block-artisanpack-scalar' )
+            // Extra slashes in the block name would explode into a
+            // `.wp-block-too-many/slashes` selector that breaks the whole
+            // stylesheet block. Reject anything that isn't exactly one
+            // `namespace/name` slash.
+            ->and( $css )->not->toContain( '.wp-block-too-many' )
+            ->and( $css )->not->toContain( 'many/slashes' );
+    } );
+
+    it( 'leaves malformed `var:preset|a|b|garbage` values unchanged rather than half-translating (#202 hardening)', function (): void {
+        // Without the trailing anchor the regex greedily consumed
+        // `var:preset|color|primary` out of `var:preset|color|primary|garbage`
+        // and emitted `var(--wp--preset--color--primary)|garbage` — a
+        // subtly-broken value that still looks translated.
+        $resolved = makeResolved(
+            styles: [
+                'color' => [
+                    'background' => 'var:preset|color|primary|garbage',
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( 'background-color: var:preset|color|primary|garbage;' )
+            ->and( $css )->not->toContain( 'var(--wp--preset--color--primary)|garbage' );
     } );
 
     it( 'translates `var:preset|category|slug` values into real `var(...)` refs (#202)', function (): void {
