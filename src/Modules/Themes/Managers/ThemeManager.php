@@ -793,6 +793,23 @@ class ThemeManager
                 }
             }
         }
+
+        // Manifest override for the Theme base-class discovery
+        // (issue #198). ThemeLoader also runs a runtime
+        // reflection-based provenance check to prove the resolved
+        // class actually lives in the theme's own Theme.php; the
+        // pattern check here rejects obviously malformed values at
+        // install time so a bad upload never reaches disk.
+        if ( array_key_exists( 'themeClass', $manifest ) ) {
+            $themeClass = $manifest['themeClass'];
+
+            if ( ! is_string( $themeClass )
+                || 1 !== preg_match( '/^[A-Za-z_][A-Za-z0-9_]*(\\\\[A-Za-z_][A-Za-z0-9_]*)*$/', ltrim( $themeClass, '\\' ) ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'themeClass' must be a fully-qualified PHP class name.",
+                );
+            }
+        }
     }
 
     /**

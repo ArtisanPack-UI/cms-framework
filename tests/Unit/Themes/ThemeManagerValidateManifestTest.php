@@ -345,4 +345,31 @@ describe( 'ThemeManager::validateManifest() via installFromZip()', function (): 
 
         expect( File::exists( $this->themesPath . '/rollback-theme' ) )->toBeFalse();
     } );
+
+    it( 'rejects an install when themeClass is not a well-formed class name', function (): void {
+        $zipPath = buildValidateZip( $this->tmpPath, 'bad-classname-install', [
+            'slug'       => 'bad-classname-install',
+            'name'       => 'Bad Class Name',
+            'version'    => '1.0.0',
+            'themeClass' => 'Not A Class; Name',
+        ], $this->testSlugs );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( ThemeValidationException::class, "Field 'themeClass' must be a fully-qualified PHP class name." );
+
+        expect( File::exists( $this->themesPath . '/bad-classname-install' ) )->toBeFalse();
+    } );
+
+    it( 'accepts an install with a well-formed themeClass override', function (): void {
+        $zipPath = buildValidateZip( $this->tmpPath, 'good-classname-install', [
+            'slug'       => 'good-classname-install',
+            'name'       => 'Good Class Name',
+            'version'    => '1.0.0',
+            'themeClass' => 'Vendor\\Custom\\CustomTheme',
+        ], $this->testSlugs );
+
+        $manifest = $this->manager->installFromZip( $zipPath );
+
+        expect( $manifest['themeClass'] )->toBe( 'Vendor\\Custom\\CustomTheme' );
+    } );
 } );
