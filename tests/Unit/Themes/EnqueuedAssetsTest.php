@@ -133,4 +133,4 @@ describe( 'EnqueuedAssets::assetUrl', function (): void {
 
         expect( $url )->toContain( '/themes/my-theme/assets/main.css' );
     } );
-});
+} );
