@@ -214,6 +214,24 @@ class PluginManager
 
                 if ( $plugin->hasServiceProvider() ) {
                     app()->register( $plugin->service_provider );
+
+                    // Announce the plugin's hooks are online. The service
+                    // provider's `register()` / `boot()` is where a plugin
+                    // typically calls addAction/addFilter; firing here lets
+                    // observers key work off the exact moment a plugin's hook
+                    // surface becomes reachable. The `hooks` field is optional
+                    // — passing an empty array still gives subscribers a
+                    // per-plugin signal even when the manifest doesn't
+                    // enumerate them.
+                    $declaredHooks = is_array( $plugin->meta['hooks'] ?? null )
+                        ? $plugin->meta['hooks']
+                        : [];
+
+                    doAction(
+                        'ap.cmsFramework.plugin.hookRegistered',
+                        $plugin->slug,
+                        $declaredHooks,
+                    );
                 }
 
                 $this->seedPermissions( $plugin );

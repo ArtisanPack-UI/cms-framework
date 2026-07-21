@@ -13,6 +13,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Models;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecycleHooks;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
@@ -54,6 +55,7 @@ use Illuminate\Support\Collection;
  */
 class Page extends Model
 {
+    use FiresLifecycleHooks;
     use HasBlockContent;
     use HasContentStatus;
     use HasCustomFields;
@@ -90,6 +92,18 @@ class Page extends Model
         'published_at',
         'metadata',
     ];
+
+    /**
+     * Dotted hook prefix under which Page lifecycle actions fire — read by
+     * {@see FiresLifecycleHooks::bootFiresLifecycleHooks()} on saving / saved /
+     * published / trashed / restored events.
+     *
+     * @since 2.5.0
+     */
+    public static function lifecycleHookPrefix(): string
+    {
+        return 'ap.cmsFramework.page';
+    }
 
     /**
      * Get the author of the page.

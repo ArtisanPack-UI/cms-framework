@@ -128,6 +128,51 @@ addAction('ap.cms.after_content_save', function($content) {
 });
 ```
 
+#### Content-type lifecycle hooks *(new in 2.5.0)*
+
+Every `Post` and `Page` save, publish, soft delete, and restore emits a namespaced action so host apps and plugins can react without observing Eloquent events directly.
+
+| Hook | Fires | Payload |
+|------|-------|---------|
+| `ap.cmsFramework.post.saving` | Before a `Post` is written (any create or update). | `(Post $post)` |
+| `ap.cmsFramework.post.saved` | After a `Post` is written. | `(Post $post)` |
+| `ap.cmsFramework.post.published` | After a save that transitions `status` to `ContentStatus::Published` from a non-published value (first-save-as-published, draft→published, scheduled→published all count). Does **not** fire on subsequent saves of an already-published post. | `(Post $post)` |
+| `ap.cmsFramework.post.trashed` | After a soft delete. Skipped on `forceDelete()`. | `(Post $post)` |
+| `ap.cmsFramework.post.restored` | After a soft-deleted `Post` is restored. | `(Post $post)` |
+| `ap.cmsFramework.page.saving` / `.saved` / `.published` / `.trashed` / `.restored` | Same fire semantics as their post-side counterparts, applied to `Page`. | `(Page $page)` |
+
+```php
+addAction('ap.cmsFramework.post.published', function ($post): void {
+    // Warm caches, send a broadcast, publish to a search index, etc.
+});
+```
+
+Adopting models pull the fire sites in through the `FiresLifecycleHooks` concern under `ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecycleHooks`; declaring `public static function lifecycleHookPrefix(): string` on any custom content-type model wires the same five actions under whatever dotted namespace you return.
+
+#### Dashboard, plugin, and search hooks *(new in 2.5.0)*
+
+| Hook | Type | Fires | Payload |
+|------|------|-------|---------|
+| `ap.cmsFramework.admin.dashboardWidgets` | filter | `AdminWidgetManager::getAvailableWidgetsForUser()` — after capability filtering, before the widget array is returned. | `(array $widgets, ?User $user)` |
+| `ap.cmsFramework.plugin.hookRegistered` | action | Immediately after a plugin's service provider registers during `PluginManager::activate()`. The `$hooks` argument is the plugin's optional `hooks` field from `plugin.json` (empty array when absent). | `(string $pluginSlug, array $hooks)` |
+| `ap.cmsFramework.search.query` | filter | `HasContentFilters::applySearchFilter()` — used by `BlogManager::getArchiveQuery()` and `PageManager::getPageQuery()` after the default title/content/excerpt LIKE clauses attach. Subscribers can narrow the query, add joined-column matches, or short-circuit to an external search backend. | `(Builder $q, string $term, array $context)` where `$context = ['manager' => ..., 'model' => ..., 'filters' => ...]` |
+
+```php
+addFilter('ap.cmsFramework.admin.dashboardWidgets', function (array $widgets, ?User $user): array {
+    if ($user?->hasRole('editor')) {
+        $widgets['content-queue'] = ['title' => 'Content queue'];
+    }
+    return $widgets;
+});
+
+addFilter('ap.cmsFramework.search.query', function ($query, string $term, array $context) {
+    if (Post::class === $context['model']) {
+        $query->orWhereHas('tags', fn ($q) => $q->where('name', 'like', "%{$term}%"));
+    }
+    return $query;
+});
+```
+
 ## Using with the visual editor
 
 cms-framework is fully usable standalone, but pairs with [`artisanpack-ui/visual-editor`](https://github.com/ArtisanPack-UI/visual-editor) to expose its `Post` and `Page` content to a Gutenberg-style block editor, back `core/site-*` blocks with real site settings, and seed `visual_editor.*` permissions into the RBAC tables. The full integration contract lives in visual-editor's [`docs/plans/12-cms-framework-integration.md`](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/docs/plans/12-cms-framework-integration.md); the reciprocal narrative is visual-editor's [Using with cms-framework](https://github.com/ArtisanPack-UI/visual-editor/blob/release/1.0/README.md#using-with-cms-framework) section.

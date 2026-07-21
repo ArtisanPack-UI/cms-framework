@@ -100,6 +100,11 @@ class AdminWidgetManager
     /**
      * Get available widgets filtered by user capabilities.
      *
+     * Fires the `ap.cmsFramework.admin.dashboardWidgets` filter as the last
+     * step so host apps and plugins can add, remove, or reorder widgets after
+     * capability filtering. The user is passed alongside so subscribers can
+     * make per-user decisions without re-resolving auth.
+     *
      * @since 1.0.0
      *
      * @param  \Modules\Users\Models\User|null  $user  The user to check capabilities for.
@@ -111,13 +116,13 @@ class AdminWidgetManager
         $available = $this->getAvailableWidgets();
 
         if ( ! $user ) {
-            return $available;
+            return applyFilters( 'ap.cmsFramework.admin.dashboardWidgets', $available, null );
         }
 
         // Get admin-configured capability overrides
         $widgetCapabilities = apGetSetting( 'admin.dashboardWidgets', [] );
 
-        return array_filter( $available, function ( $widgetInfo, $type ) use ( $user, $widgetCapabilities ) {
+        $filtered = array_filter( $available, function ( $widgetInfo, $type ) use ( $user, $widgetCapabilities ) {
             // Check if admin has overridden the capability
             $capability = $widgetCapabilities[ $type ] ?? $widgetInfo['capability'] ?? null;
 
@@ -127,6 +132,8 @@ class AdminWidgetManager
 
             return $user->hasPermissionTo( $capability );
         }, ARRAY_FILTER_USE_BOTH );
+
+        return applyFilters( 'ap.cmsFramework.admin.dashboardWidgets', $filtered, $user );
     }
 
     /**

@@ -13,6 +13,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Models;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecycleHooks;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
@@ -52,6 +53,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Post extends Model
 {
+    use FiresLifecycleHooks;
     use HasBlockContent;
     use HasContentStatus;
     use HasCustomFields;
@@ -97,6 +99,18 @@ class Post extends Model
         'published_at',
         'metadata',
     ];
+
+    /**
+     * Dotted hook prefix under which Post lifecycle actions fire — read by
+     * {@see FiresLifecycleHooks::bootFiresLifecycleHooks()} on saving / saved /
+     * published / trashed / restored events.
+     *
+     * @since 2.5.0
+     */
+    public static function lifecycleHookPrefix(): string
+    {
+        return 'ap.cmsFramework.post';
+    }
 
     /**
      * Get the author of the post.
