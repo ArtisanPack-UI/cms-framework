@@ -83,3 +83,15 @@ class PatternResolver
 ```
 
 The merged map keys use the storage form: theme patterns under their natural slug (`hero`), user patterns under `user/{slug}`. visual-editor's `ap.visual-editor.patterns` consumer expects this shape.
+
+## Theme-pattern block hydration
+
+> **Added in 2.5.0** ([#204](https://github.com/ArtisanPack-UI/cms-framework/issues/204)).
+
+`PatternResolver::buildThemePattern()` populates a parsed `blocks` array for every theme-shipped pattern. Previously this was hardcoded to `[]`, causing patterns to render as "Empty pattern" placeholders in the visual-editor pattern browser and open as empty canvases until the client's `hydrateBlocks()` re-parsed `content.raw`.
+
+The new `BlockMarkupParser` support class ports a subset of WordPress's `parse_blocks()` and produces the WP shape `{blockName, attrs, innerBlocks, innerHTML, innerContent}`. It covers flat blocks, nested containers, void (self-closing) blocks, freeform HTML between blocks, and forgiving JSON-attr decoding.
+
+**Scope and limits.** Client-side Gutenberg `parse(rawContent)` remains authoritative for editor correctness — the PHP parser is a best-effort optimization for lightweight surfaces like the pattern thumbnail summary. Known limitations (unpaired braces inside JSON attribute string values, mis-nested closers) are documented on the class. Recursion is capped at depth 64 so adversarially-nested `block_content` can't blow the PHP call stack; PCRE errors and JSON-decode failures are logged via `Log::warning`; a leading UTF-8 BOM is stripped so BOM-prefixed theme files don't emit a phantom freeform sibling.
+
+The parser is deliberately generic — sibling `TemplateResolver` and `TemplatePartResolver` theme-file branches ship the same `blocks: []` gap and can drop this in as-is.

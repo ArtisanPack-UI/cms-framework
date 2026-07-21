@@ -141,7 +141,7 @@ class PluginManager
             throw PluginInstallationException::alreadyInstalled( $slug );
         }
 
-        doAction( 'plugin.installing', $slug );
+        doAction( 'ap.cmsFramework.plugin.installing', $slug );
 
         // Register in database
         $plugin = Plugin::create( [
@@ -156,7 +156,7 @@ class PluginManager
 
         $this->clearCaches();
 
-        doAction( 'plugin.installed', $slug, $plugin );
+        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
 
         return $plugin;
     }
@@ -189,13 +189,19 @@ class PluginManager
         // Host-version compatibility gate (#183). Runs before any state mutation.
         $this->assertHostVersionCompatible( $plugin );
 
-        doAction( 'plugin.activating', $slug );
+        doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
-        $priorPsr4           = [];
-        $migrationsAttempted = false;
+        $priorPsr4              = [];
+        $migrationsAttempted    = false;
+        $serviceProviderStarted = false;
 
         try {
-            DB::transaction( function () use ( $plugin, &$priorPsr4, &$migrationsAttempted ): void {
+            DB::transaction( function () use (
+                $plugin,
+                &$priorPsr4,
+                &$migrationsAttempted,
+                &$serviceProviderStarted,
+            ): void {
                 if ( isset( $plugin->meta['autoload'] ) ) {
                     // Snapshot the PSR-4 map BEFORE adding, so rollback can
                     // restore prior paths for shared namespaces instead of
@@ -214,6 +220,7 @@ class PluginManager
 
                 if ( $plugin->hasServiceProvider() ) {
                     app()->register( $plugin->service_provider );
+                    $serviceProviderStarted = true;
                 }
 
                 $this->seedPermissions( $plugin );
@@ -234,7 +241,27 @@ class PluginManager
 
         $this->clearCaches();
 
-        doAction( 'plugin.activated', $slug, $plugin );
+        // Announce the plugin's hooks are online. Fires AFTER the transaction
+        // commits so a rolled-back activation does not leak a `.hookRegistered`
+        // event to subscribers — mirrors the placement of `.activated` below.
+        // The service provider's `register()` / `boot()` is where a plugin
+        // typically calls addAction/addFilter; the manifest's optional `hooks`
+        // field lets plugin authors enumerate what came online for observers,
+        // and an empty array still fires so every activation emits a per-plugin
+        // signal.
+        if ( $serviceProviderStarted ) {
+            $declaredHooks = is_array( $plugin->meta['hooks'] ?? null )
+                ? $plugin->meta['hooks']
+                : [];
+
+            doAction(
+                'ap.cmsFramework.plugin.hookRegistered',
+                $plugin->slug,
+                $declaredHooks,
+            );
+        }
+
+        doAction( 'ap.cmsFramework.plugin.activated', $slug, $plugin );
 
         return true;
     }
@@ -262,7 +289,7 @@ class PluginManager
             throw PluginNotFoundException::forSlug( $slug );
         }
 
-        doAction( 'plugin.deactivating', $slug );
+        doAction( 'ap.cmsFramework.plugin.deactivating', $slug );
 
         $plugin->is_active = false;
         $plugin->save();
@@ -272,7 +299,7 @@ class PluginManager
         }
         $this->clearCaches();
 
-        doAction( 'plugin.deactivated', $slug );
+        doAction( 'ap.cmsFramework.plugin.deactivated', $slug );
 
         return true;
     }
@@ -307,7 +334,7 @@ class PluginManager
             $this->deactivate( $slug );
         }
 
-        doAction( 'plugin.deleting', $slug );
+        doAction( 'ap.cmsFramework.plugin.deleting', $slug );
 
         // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
         // accidentally drop plugin-owned data.
@@ -340,7 +367,7 @@ class PluginManager
         }
         $this->clearCaches();
 
-        doAction( 'plugin.deleted', $slug );
+        doAction( 'ap.cmsFramework.plugin.deleted', $slug );
 
         return true;
     }

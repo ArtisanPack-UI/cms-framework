@@ -156,7 +156,7 @@ class ThemeManager
 
         // Pre-activation hook: listeners may throw to short-circuit activation
         // before any persistent state changes.
-        doAction( 'theme.activating', $slug, $theme );
+        doAction( 'ap.cmsFramework.theme.activating', $slug, $theme );
 
         $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
 
@@ -176,7 +176,7 @@ class ThemeManager
             }
         }
 
-        doAction( 'theme.activated', $slug, $theme );
+        doAction( 'ap.cmsFramework.theme.activated', $slug, $theme );
 
         return true;
     }
@@ -256,7 +256,7 @@ class ThemeManager
         // Exception) so that Error/TypeError thrown from listener callbacks
         // also trigger rollback before propagating.
         try {
-            doAction( 'theme.installing', $slug, $manifest );
+            doAction( 'ap.cmsFramework.theme.installing', $slug, $manifest );
         } catch ( Throwable $e ) {
             File::deleteDirectory( $themePath );
 
@@ -265,7 +265,7 @@ class ThemeManager
 
         Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
 
-        doAction( 'theme.installed', $slug, $manifest );
+        doAction( 'ap.cmsFramework.theme.installed', $slug, $manifest );
 
         return $manifest;
     }
@@ -415,6 +415,45 @@ class ThemeManager
         $templatePath = $themePath . '/' . $template . '.blade.php';
 
         return File::exists( $templatePath );
+    }
+
+    /**
+     * Gets the themes base directory path.
+     *
+     * Returns the absolute path to the themes directory based on the
+     * cms.themes.directory configuration value. Any downstream helper that
+     * needs to resolve a theme-relative path (asset controllers, stylesheet
+     * readers, template resolvers) should call this method so the whole
+     * subsystem stays anchored to the same root — see
+     * {@see \ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeStylesheetReader}
+     * for one such consumer.
+     *
+     * @since 1.0.0
+     *
+     * @return string Absolute path to themes directory.
+     */
+    public function getThemesPath(): string
+    {
+        $directory = config( 'cms.themes.directory', 'themes' );
+
+        // Guard against a misconfigured null/empty value collapsing the
+        // themes root to the app base — `base_path('')` returns the app
+        // root itself, and any valid slug (e.g. `app`, `vendor`) would
+        // then bypass the intended themes-directory containment guard.
+        if ( ! is_string( $directory ) || '' === $directory ) {
+            $directory = 'themes';
+        }
+
+        // Honor absolute paths verbatim so a host that mounts themes at
+        // an external location (`/opt/themes`, `D:\shared\themes`) points
+        // the whole subsystem — templates, patterns, assets, stylesheet
+        // reads — at the same directory. `base_path()` would otherwise
+        // prepend the app base and produce a non-existent path.
+        if ( '/' === $directory[0] || preg_match( '#^[A-Za-z]:[\\\\/]#', $directory ) ) {
+            return $directory;
+        }
+
+        return base_path( $directory );
     }
 
     /**
@@ -793,23 +832,23 @@ class ThemeManager
                 }
             }
         }
-    }
 
-    /**
-     * Gets the themes base directory path.
-     *
-     * Returns the absolute path to the themes directory based on the
-     * cms.themes.directory configuration value.
-     *
-     * @since 1.0.0
-     *
-     * @return string Absolute path to themes directory.
-     */
-    protected function getThemesPath(): string
-    {
-        $directory = config( 'cms.themes.directory', 'themes' );
+        // Manifest override for the Theme base-class discovery
+        // (issue #198). ThemeLoader also runs a runtime
+        // reflection-based provenance check to prove the resolved
+        // class actually lives in the theme's own Theme.php; the
+        // pattern check here rejects obviously malformed values at
+        // install time so a bad upload never reaches disk.
+        if ( array_key_exists( 'themeClass', $manifest ) ) {
+            $themeClass = $manifest['themeClass'];
 
-        return base_path( $directory );
+            if ( ! is_string( $themeClass )
+                || 1 !== preg_match( '/^[A-Za-z_][A-Za-z0-9_]*(\\\\[A-Za-z_][A-Za-z0-9_]*)*$/', ltrim( $themeClass, '\\' ) ) ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Field 'themeClass' must be a fully-qualified PHP class name.",
+                );
+            }
+        }
     }
 
     /**

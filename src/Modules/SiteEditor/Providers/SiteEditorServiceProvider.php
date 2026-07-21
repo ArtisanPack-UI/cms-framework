@@ -26,6 +26,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\MenuResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\PatternResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeStylesheetReader;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\VisualEditor\VisualEditor;
 use Illuminate\Support\Facades\Blade;
@@ -60,6 +61,15 @@ class SiteEditorServiceProvider extends ServiceProvider
 
         $this->app->singleton( GlobalStylesEmitter::class, function ( $app ) {
             return new GlobalStylesEmitter( $app->make( GlobalStylesResolver::class ) );
+        } );
+
+        // Reader is exposed as a public binding so downstream packages
+        // (e.g. `packages/visual-editor`'s own `/global-styles/css`
+        // endpoint) can delegate to a single canonical source for the
+        // theme's top-level stylesheets instead of duplicating slug
+        // validation + path-containment logic.
+        $this->app->singleton( ThemeStylesheetReader::class, function ( $app ) {
+            return new ThemeStylesheetReader( $app->make( ThemeManager::class ) );
         } );
 
         $this->app->singleton( MenuResolver::class, function ( $app ) {

@@ -20,6 +20,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\BlockMarkupParser;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\PatternFileParser;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
@@ -249,7 +250,12 @@ class PatternResolver
             source         : BlockPattern::SOURCE_THEME,
             synced         : false,
             rawContent     : $parsed['content'],
-            blocks         : [],
+            // Parse the raw markup into WP-shape blocks up-front so pattern
+            // consumers (visual-editor's `PatternThumbnail`, Edit view) get
+            // the block tree in the initial payload rather than having to
+            // re-parse `rawContent` on the client. Previously hardcoded to
+            // `[]`, which forced the empty-state placeholder path (#204).
+            blocks         : BlockMarkupParser::parse( $parsed['content'] ),
             categories     : $parsed['categories'],
             blockTypes     : $parsed['block_types'],
             model          : null,
@@ -294,6 +300,6 @@ class PatternResolver
      */
     protected function humanizeSlug( string $slug ): string
     {
-        return ucwords( str_replace( ['-', '_'], ' ', $slug));
+        return ucwords( str_replace( ['-', '_'], ' ', $slug ) );
     }
 }

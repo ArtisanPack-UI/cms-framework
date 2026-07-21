@@ -78,7 +78,7 @@ class PluginsServiceProvider extends ServiceProvider
     {
         $registry = $this->app->make( PluginRegistry::class );
 
-        addFilter( 'ap.admin.menu', function ( array $menu ) use ( $registry ): array {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $registry ): array {
             foreach ( $registry->navEntries() as $slug => $entry ) {
                 $menu[ $slug ] = array_merge( $entry, $menu[ $slug ] ?? [] );
             }

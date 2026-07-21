@@ -21,6 +21,8 @@ The Themes module provides a flexible, WordPress‑inspired theme system with:
 - [API Reference](Themes-Api-Reference) — REST endpoints and helper functions
 - [[themes/Installing From Zip]] — Upload a theme as a ZIP archive *(2.0.0)*
 - [[themes/Lifecycle Hooks]] — Listen to `theme.activating`, `theme.activated`, `theme.installing`, `theme.installed` *(2.0.0)*
+- [[themes/Theme Base Class]] — Optional `themes/{slug}/Theme.php` for per-request enqueues, image sizes, and REST/block registration *(2.5.0)*
+- [[themes/Editor Stylesheet]] — Ship a `themes/{slug}/editor.css` for canvas-only overrides *(2.5.0)*
 
 ## Overview
 

@@ -7,7 +7,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentEditExtensio
 test( 'panels() returns filter-registered panels ordered by order', function (): void {
     $manager = new ContentEditExtensions;
 
-    addFilter( 'ap.admin.contentEdit.panels', function ( array $panels ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.panels', function ( array $panels ): array {
         $panels[] = ['slug' => 'seo', 'title' => 'SEO', 'component' => 'SeoPanel', 'order' => 20];
         $panels[] = ['slug' => 'schedule', 'title' => 'Schedule', 'component' => 'SchedulePanel', 'order' => 5];
 
@@ -24,7 +24,7 @@ test( 'panels() returns filter-registered panels ordered by order', function ():
 test( 'panels() filters by contentTypes restriction', function (): void {
     $manager = new ContentEditExtensions;
 
-    addFilter( 'ap.admin.contentEdit.panels', function ( array $panels ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.panels', function ( array $panels ): array {
         $panels[] = ['slug' => 'gallery', 'title' => 'Gallery', 'component' => 'GalleryPanel', 'contentTypes' => ['portfolio']];
         $panels[] = ['slug' => 'universal', 'title' => 'Universal', 'component' => 'AllPanel', 'contentTypes' => ['*']];
         $panels[] = ['slug' => 'no-restriction', 'title' => 'Any', 'component' => 'AnyPanel'];
@@ -42,7 +42,7 @@ test( 'panels() filters by contentTypes restriction', function (): void {
 test( 'panels() rejects entries missing slug or component', function (): void {
     $manager = new ContentEditExtensions;
 
-    addFilter( 'ap.admin.contentEdit.panels', function ( array $panels ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.panels', function ( array $panels ): array {
         $panels[] = ['title' => 'No slug', 'component' => 'X'];
         $panels[] = ['slug' => 'no-component', 'title' => 'Bad'];
         $panels[] = ['slug' => 'ok', 'title' => 'Good', 'component' => 'OkPanel'];
@@ -58,17 +58,17 @@ test( 'panels() rejects entries missing slug or component', function (): void {
 test( 'tabs() and beforeEditor()/afterEditor() honor the same filter contract', function (): void {
     $manager = new ContentEditExtensions;
 
-    addFilter( 'ap.admin.contentEdit.tabs', function ( array $items ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.tabs', function ( array $items ): array {
         $items[] = ['slug' => 'reviews', 'title' => 'Reviews', 'component' => 'ReviewsTab'];
 
         return $items;
     } );
-    addFilter( 'ap.admin.contentEdit.beforeEditor', function ( array $items ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.beforeEditor', function ( array $items ): array {
         $items[] = ['slug' => 'banner', 'title' => 'Banner', 'component' => 'BannerBlock'];
 
         return $items;
     } );
-    addFilter( 'ap.admin.contentEdit.afterEditor', function ( array $items ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.afterEditor', function ( array $items ): array {
         $items[] = ['slug' => 'footer', 'title' => 'Footer', 'component' => 'FooterBlock'];
 
         return $items;
@@ -82,7 +82,7 @@ test( 'tabs() and beforeEditor()/afterEditor() honor the same filter contract', 
 test( 'saveData() runs the payload through the filter and preserves fallback', function (): void {
     $manager = new ContentEditExtensions;
 
-    addFilter( 'ap.admin.contentEdit.saveData', function ( array $data ): array {
+    addFilter( 'ap.cmsFramework.admin.contentEdit.saveData', function ( array $data ): array {
         $data['title'] = strtoupper( $data['title'] );
 
         return $data;

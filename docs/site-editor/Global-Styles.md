@@ -42,7 +42,9 @@ Variations are theme-only for 2.0.0. Each variation lives at `themes/{active}/st
 
 ## CSS emission
 
-`GlobalStylesEmitter` translates the resolved styles tree into CSS:
+`GlobalStylesEmitter` translates the resolved styles tree into CSS.
+
+### Preset custom properties
 
 - `settings.color.palette` → `--wp--preset--color--{slug}` custom properties.
 - `settings.typography.fontSizes` → `--wp--preset--font-size--{slug}`.
@@ -50,13 +52,48 @@ Variations are theme-only for 2.0.0. Each variation lives at `themes/{active}/st
 - `settings.spacing.spacingSizes` → `--wp--preset--spacing--{slug}`.
 - `settings.color.gradients` → `--wp--preset--gradient--{slug}`.
 - `settings.custom` → `--wp--custom--{nested}--{kebab-key}` (recursive flattening).
-- `styles.color` / `styles.typography` → applied to `:root`.
+
+### Styles walker
+
+The `styles` walker is registry-based against WP `theme.json` v3. The same registry feeds root, element, and block rules — so per-element and per-block styles get the same coverage the root does. Covered keys:
+
+- `color` — `background`, `text`, `gradient`.
+- `typography` — `fontSize`, `fontFamily`, `lineHeight`, `fontWeight`, `fontStyle`, `letterSpacing`, `textTransform`, `textDecoration`.
+- `spacing.padding` / `spacing.margin` — scalar shorthand and per-side objects (`{top,right,bottom,left}`).
+- `border` — `radius`, `color`, `style`, `width`, including per-corner (`topLeft`, `topRight`, `bottomLeft`, `bottomRight`) and per-side (`top`, `right`, `bottom`, `left`) shapes.
+- `shadow` → `box-shadow`.
+
+> **Extended in 2.5.0** ([#200](https://github.com/ArtisanPack-UI/cms-framework/issues/200), [#201](https://github.com/ArtisanPack-UI/cms-framework/issues/201), [#202](https://github.com/ArtisanPack-UI/cms-framework/issues/202)).
+
+### Elements
+
 - `styles.elements.{link,heading,button}` → element-scoped rules (`a`, `h1, h2, …`, `.wp-element-button, .wp-block-button__link`).
 
-Output is cached on a content-hash key derived from the resolved styles tree. Invalidation is event-driven, not time-driven — the cache busts when:
+### Blocks
+
+- `styles.blocks.{ns/name}` → block-scoped rules. `core/*` blocks strip the namespace to match Gutenberg's own emission (`core/quote` → `.wp-block-quote`); other namespaces are kebab-joined (`artisanpack/card` → `.wp-block-artisanpack-card`). Block names with more than one slash (`ns/foo/bar`) are rejected so an invalid identifier can't drop the rule silently.
+
+> **Added in 2.5.0** ([#201](https://github.com/ArtisanPack-UI/cms-framework/issues/201)).
+
+### Per-block-element overrides
+
+- `styles.blocks.{ns/name}.elements.{link,heading,button}` → block-scoped element rules. The block selector composes with each element selector; comma-joined element selectors (`h1, h2, …`) are **distributed** across the block selector — `.wp-block-quote h1, .wp-block-quote h2, …` — never naively concatenated as `.wp-block-quote h1, h2, …`, which would leak the child selector out of block scope.
+
+> **Added in 2.5.0** ([#208](https://github.com/ArtisanPack-UI/cms-framework/issues/208)).
+
+### Preset-var shorthand translation
+
+WP-canonical `var:preset|category|slug` shorthand is translated into real `var(--wp--preset--category--slug)` refs before emission. Idempotent — raw `var(...)` passes through unchanged. The trailing anchor `(?![A-Za-z0-9_|-])` prevents half-translating values like `var:preset|color|primary|garbage`.
+
+> **Added in 2.5.0** ([#202](https://github.com/ArtisanPack-UI/cms-framework/issues/202)).
+
+### Caching
+
+Output is cached on a content-hash key derived from the resolved styles tree, keyed with a `SCHEMA_VERSION` constant that bumps whenever the emitter's output shape changes (v4 as of 2.5.0). Invalidation is event-driven:
 
 - The `GlobalStyles` model is saved or deleted (model observer in `SiteEditorServiceProvider`).
 - The theme switches (the next resolve produces a new content hash; the prior entry ages out passively under the cache TTL).
+- Emitter shape changes on framework upgrade (schema-version bump).
 
 ## Front-end Blade directive
 
@@ -78,7 +115,7 @@ Singleton-per-theme — no `{slug}` segment.
 | PUT    | `/global-styles` | Create or update the user-customization row. |
 | DELETE | `/global-styles` | Revert to file-only authority. |
 | GET    | `/global-styles/variations` | List variations from `themes/{active}/styles/*.json`. |
-| GET    | `/global-styles/css` | Emit the resolved CSS as `text/css`. |
+| GET    | `/global-styles/css` | Emit the resolved CSS as `text/css`. Concatenates emitter output + `themes/{active}/style.css` + `themes/{active}/editor.css` (in that order). Carries an `ETag` derived from the body, honors `If-None-Match` with a 304, and sends `Cache-Control: private, must-revalidate`. See [[themes/Editor Stylesheet]]. |
 
 Response shape (`GET /global-styles`):
 

@@ -9,7 +9,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Support;
  * service providers (nav entries and federated module descriptors).
  *
  * Plugin providers push into this registry from boot(); the framework wires a
- * single `ap.admin.menu` filter callback in PluginsServiceProvider that reads
+ * single `ap.cmsFramework.admin.menu` filter callback in PluginsServiceProvider that reads
  * from it. This avoids adding a fresh closure to the filter chain on every
  * request under Octane / RoadRunner (where the container persists across
  * requests but boot() re-runs).

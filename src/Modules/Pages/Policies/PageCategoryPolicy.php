@@ -48,7 +48,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageCategories.viewAny', 'pageCategories.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageCategories.viewAny', 'pageCategories.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageCategories.view', 'pageCategories.manage', $category ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageCategories.view', 'pageCategories.manage', $category ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageCategories.create', 'pageCategories.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageCategories.create', 'pageCategories.manage' ) );
     }
 
     /**
@@ -127,7 +127,7 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageCategories.update', 'pageCategories.manage', $category ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageCategories.update', 'pageCategories.manage', $category ) );
     }
 
     /**
@@ -154,6 +154,6 @@ class PageCategoryPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'pageCategories.delete', 'pageCategories.manage', $category ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.pageCategories.delete', 'pageCategories.manage', $category ) );
     }
 }

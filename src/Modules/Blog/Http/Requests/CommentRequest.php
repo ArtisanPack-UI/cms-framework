@@ -125,6 +125,6 @@ class CommentRequest extends FormRequest
             return false;
         }
 
-        return $user->can( applyFilters( 'comments.moderate', 'comments.moderate' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.comments.moderate', 'comments.moderate' ) );
     }
 }

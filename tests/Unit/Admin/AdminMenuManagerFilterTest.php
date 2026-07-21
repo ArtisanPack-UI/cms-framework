@@ -14,17 +14,17 @@ beforeEach( function (): void {
     Gate::before( fn ( ?Illuminate\Contracts\Auth\Authenticatable $user, string $ability ) => 'never_granted' === $ability ? null : true );
 
     // Reset the hooks registry between tests so filter callbacks don't leak.
-    removeAllFilters( 'ap.admin.menu' );
+    removeAllFilters( 'ap.cmsFramework.admin.menu' );
 } );
 
 afterEach( function (): void {
-    removeAllFilters( 'ap.admin.menu' );
+    removeAllFilters( 'ap.cmsFramework.admin.menu' );
 } );
 
-describe( 'ap.admin.menu filter', function (): void {
+describe( 'ap.cmsFramework.admin.menu filter', function (): void {
     it( 'fires when getAdminMenu is called', function (): void {
         $called = false;
-        addFilter( 'ap.admin.menu', function ( array $menu ) use ( &$called ): array {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( &$called ): array {
             $called = true;
 
             return $menu;
@@ -36,7 +36,7 @@ describe( 'ap.admin.menu filter', function (): void {
     } );
 
     it( 'lets a subscriber inject a new top-level entry', function (): void {
-        addFilter( 'ap.admin.menu', function ( array $menu ): array {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
             $menu['plugin-entry'] = [
                 'title' => 'Plugin Entry',
                 'slug'  => 'plugin-entry',
@@ -57,7 +57,7 @@ describe( 'ap.admin.menu filter', function (): void {
     it( 'lets a subscriber remove an entry', function (): void {
         $this->manager->addPage( 'Dashboard', 'dashboard', null, ['icon' => 'x', 'capability' => ''] );
 
-        addFilter( 'ap.admin.menu', function ( array $menu ): array {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
             unset( $menu['dashboard'] );
 
             return $menu;
@@ -74,7 +74,7 @@ describe( 'filter Gate re-check', function (): void {
         // The beforeEach's allow-all returns null (falls through to defines)
         // for the 'never_granted' sentinel, so Gate::allows resolves it to
         // false — exactly the state an unauthorized user would hit.
-        addFilter( 'ap.admin.menu', function ( array $menu ): array {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
             $menu['gated'] = [
                 'title'      => 'Gated',
                 'slug'       => 'gated',

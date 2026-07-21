@@ -48,7 +48,7 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.viewAny', 'settings.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.viewAny', 'settings.manage' ) );
     }
 
     /**
@@ -75,7 +75,7 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.view', 'settings.manage', $setting ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.view', 'settings.manage', $setting ) );
     }
 
     /**
@@ -100,7 +100,7 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.create', 'settings.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.create', 'settings.manage' ) );
     }
 
     /**
@@ -125,7 +125,7 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.update', 'settings.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.update', 'settings.manage' ) );
     }
 
     /**
@@ -150,7 +150,7 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.delete', 'settings.delete' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.delete', 'settings.delete' ) );
     }
 
     /**
@@ -175,7 +175,7 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.restore', 'settings.manage' ) );
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.restore', 'settings.manage' ) );
     }
 
     /**
@@ -200,6 +200,6 @@ class SettingPolicy
          *
          * @return string Filtered capability slug.
          */
-        return $user->can( applyFilters( 'settings.forceDelete', 'settings.delete' ));
+        return $user->can( applyFilters( 'ap.cmsFramework.abilities.settings.forceDelete', 'settings.delete' ));
     }
 }
