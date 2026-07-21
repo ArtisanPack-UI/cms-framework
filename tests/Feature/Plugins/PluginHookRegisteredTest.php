@@ -68,6 +68,35 @@ it( 'fires ap.cmsFramework.plugin.hookRegistered after the plugin service provid
     expect( $received[ 0 ][ 'hooks' ] )->toBe( [] );
 } );
 
+it( 'does not fire ap.cmsFramework.plugin.hookRegistered when activation rolls back', function (): void {
+    // A nonexistent service-provider class raises inside the transaction —
+    // same shape as PluginLifecycleRollbackTest's broken-plugin scenario.
+    // The action must NOT reach subscribers because activation never
+    // completes and any side effects they trigger would leak past the
+    // rollback.
+    Plugin::create( [
+        'slug'             => 'broken-hook-plugin',
+        'name'             => 'Broken Hook Plugin',
+        'version'          => '1.0.0',
+        'is_active'        => false,
+        'service_provider' => 'NonExistent\\ServiceProvider\\ThatDoesNotExist',
+        'meta'             => ['slug' => 'broken-hook-plugin'],
+    ] );
+
+    $callCount = 0;
+    addAction( 'ap.cmsFramework.plugin.hookRegistered', function () use ( & $callCount ): void {
+        $callCount++;
+    } );
+
+    try {
+        $this->manager->activate( 'broken-hook-plugin' );
+    } catch ( Throwable $e ) {
+        // Expected — nonexistent provider blows up during registration.
+    }
+
+    expect( $callCount )->toBe( 0 );
+} );
+
 it( 'forwards the manifest hooks array to subscribers when the plugin declares one', function (): void {
     File::copyDirectory(
         $this->testPluginsPath . '/valid-plugin',

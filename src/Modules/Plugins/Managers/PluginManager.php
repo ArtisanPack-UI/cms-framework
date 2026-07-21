@@ -191,11 +191,17 @@ class PluginManager
 
         doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
-        $priorPsr4           = [];
-        $migrationsAttempted = false;
+        $priorPsr4              = [];
+        $migrationsAttempted    = false;
+        $serviceProviderStarted = false;
 
         try {
-            DB::transaction( function () use ( $plugin, &$priorPsr4, &$migrationsAttempted ): void {
+            DB::transaction( function () use (
+                $plugin,
+                &$priorPsr4,
+                &$migrationsAttempted,
+                &$serviceProviderStarted,
+            ): void {
                 if ( isset( $plugin->meta['autoload'] ) ) {
                     // Snapshot the PSR-4 map BEFORE adding, so rollback can
                     // restore prior paths for shared namespaces instead of
@@ -214,24 +220,7 @@ class PluginManager
 
                 if ( $plugin->hasServiceProvider() ) {
                     app()->register( $plugin->service_provider );
-
-                    // Announce the plugin's hooks are online. The service
-                    // provider's `register()` / `boot()` is where a plugin
-                    // typically calls addAction/addFilter; firing here lets
-                    // observers key work off the exact moment a plugin's hook
-                    // surface becomes reachable. The `hooks` field is optional
-                    // — passing an empty array still gives subscribers a
-                    // per-plugin signal even when the manifest doesn't
-                    // enumerate them.
-                    $declaredHooks = is_array( $plugin->meta['hooks'] ?? null )
-                        ? $plugin->meta['hooks']
-                        : [];
-
-                    doAction(
-                        'ap.cmsFramework.plugin.hookRegistered',
-                        $plugin->slug,
-                        $declaredHooks,
-                    );
+                    $serviceProviderStarted = true;
                 }
 
                 $this->seedPermissions( $plugin );
@@ -251,6 +240,26 @@ class PluginManager
         }
 
         $this->clearCaches();
+
+        // Announce the plugin's hooks are online. Fires AFTER the transaction
+        // commits so a rolled-back activation does not leak a `.hookRegistered`
+        // event to subscribers — mirrors the placement of `.activated` below.
+        // The service provider's `register()` / `boot()` is where a plugin
+        // typically calls addAction/addFilter; the manifest's optional `hooks`
+        // field lets plugin authors enumerate what came online for observers,
+        // and an empty array still fires so every activation emits a per-plugin
+        // signal.
+        if ( $serviceProviderStarted ) {
+            $declaredHooks = is_array( $plugin->meta['hooks'] ?? null )
+                ? $plugin->meta['hooks']
+                : [];
+
+            doAction(
+                'ap.cmsFramework.plugin.hookRegistered',
+                $plugin->slug,
+                $declaredHooks,
+            );
+        }
 
         doAction( 'ap.cmsFramework.plugin.activated', $slug, $plugin );
 
