@@ -58,7 +58,14 @@ trait HasContentFilters
     /**
      * Apply search filter to a query.
      *
-     * Searches across title, content, and excerpt fields.
+     * Searches across title, content, and excerpt fields. Runs the assembled
+     * query through the `ap.cmsFramework.search.query` filter so host apps and
+     * plugins can extend or narrow the default LIKE-based match — e.g. add
+     * joined-column matches or restrict to a subset of records. The default
+     * handler is a no-op: subscribers receive the query with the default LIKE
+     * clauses already attached and mutate it in place (the builder is passed by
+     * reference; the caller ignores the filter's return value, so returning a
+     * fresh builder from a subscriber has no effect).
      *
      * @since 1.1.0
      *
@@ -67,15 +74,26 @@ trait HasContentFilters
      */
     protected function applySearchFilter( Builder $query, array $filters ): void
     {
-        if ( isset( $filters['search'] ) ) {
-            $escaped = str_replace( ['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $filters['search'] );
-            $pattern = "%{$escaped}%";
-            $query->where( function ( $q ) use ( $pattern ): void {
-                $q->whereRaw( 'title LIKE ? ESCAPE ?', [$pattern, '\\'] )
-                    ->orWhereRaw( 'content LIKE ? ESCAPE ?', [$pattern, '\\'] )
-                    ->orWhereRaw( 'excerpt LIKE ? ESCAPE ?', [$pattern, '\\'] );
-            } );
+        if ( ! isset( $filters['search'] ) ) {
+            return;
         }
+
+        $term    = ( string ) $filters['search'];
+        $escaped = str_replace( ['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $term );
+        $pattern = "%{$escaped}%";
+        $query->where( function ( $q ) use ( $pattern ): void {
+            $q->whereRaw( 'title LIKE ? ESCAPE ?', [$pattern, '\\'] )
+                ->orWhereRaw( 'content LIKE ? ESCAPE ?', [$pattern, '\\'] )
+                ->orWhereRaw( 'excerpt LIKE ? ESCAPE ?', [$pattern, '\\'] );
+        } );
+
+        $context = [
+            'manager' => static::class,
+            'model'   => $query->getModel()::class,
+            'filters' => $filters,
+        ];
+
+        applyFilters( 'ap.cmsFramework.search.query', $query, $term, $context );
     }
 
     /**
