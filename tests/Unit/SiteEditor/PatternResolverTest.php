@@ -65,7 +65,39 @@ PHP );
             ->and( $result->blockTypes )->toEqual( ['core/post-content'] )
             ->and( $result->rawContent )->toContain( 'Hero copy' )
             ->and( $result->synced )->toBeFalse()
-            ->and( $result->wpId() )->toBe( 0 );
+            ->and( $result->wpId() )->toBe( 0 )
+            // Theme patterns must carry a parsed block tree in `blocks` so
+            // visual-editor's pattern browser and Edit view don't fall
+            // through to the "Empty pattern" placeholder (#204).
+            ->and( $result->blocks )->toHaveCount( 1 )
+            ->and( $result->blocks[0]['blockName'] )->toBe( 'core/paragraph' )
+            ->and( $result->blocks[0]['innerHTML'] )->toContain( 'Hero copy' );
+    } );
+
+    it( 'parses a nested container theme pattern into a full innerBlocks tree', function (): void {
+        File::put( $this->themeFiles . '/cta.php', <<<'PHP'
+<?php
+/**
+ * Title: CTA
+ * Categories: featured
+ */
+?>
+<!-- wp:group {"backgroundColor":"primary"} -->
+<div class="wp-block-group">
+    <!-- wp:heading {"level":2} --><h2>Try it</h2><!-- /wp:heading -->
+    <!-- wp:paragraph --><p>Body</p><!-- /wp:paragraph -->
+</div>
+<!-- /wp:group -->
+PHP );
+
+        $result = $this->resolver->resolve( 'cta' );
+
+        expect( $result->blocks )->toHaveCount( 1 )
+            ->and( $result->blocks[0]['blockName'] )->toBe( 'core/group' )
+            ->and( $result->blocks[0]['attrs'] )->toBe( ['backgroundColor' => 'primary'] )
+            ->and( $result->blocks[0]['innerBlocks'] )->toHaveCount( 2 )
+            ->and( $result->blocks[0]['innerBlocks'][0]['blockName'] )->toBe( 'core/heading' )
+            ->and( $result->blocks[0]['innerBlocks'][1]['blockName'] )->toBe( 'core/paragraph' );
     } );
 
     it( 'falls back to a humanized slug when the theme file omits the Title header', function (): void {
@@ -226,7 +258,7 @@ describe( 'PatternResolver::toFilterMap()', function (): void {
  * Block Types: core/post-content
  */
 ?>
-<!-- hero -->
+<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->
 PHP );
 
         $map = $this->resolver->toFilterMap();
@@ -245,7 +277,12 @@ PHP );
             ] )
             ->and( $map['hero']['slug'] )->toBe( 'hero' )
             ->and( $map['hero']['source'] )->toBe( BlockPattern::SOURCE_THEME )
-            ->and( $map['hero']['synced'] )->toBeFalse();
+            ->and( $map['hero']['synced'] )->toBeFalse()
+            // The filter payload must ship a parsed block tree so the
+            // visual-editor consumer doesn't fall through to the empty-
+            // state placeholder for theme-shipped patterns (#204).
+            ->and( $map['hero']['blocks'] )->toHaveCount( 1 )
+            ->and( $map['hero']['blocks'][0]['blockName'] )->toBe( 'core/paragraph' );
     } );
 } );
 
