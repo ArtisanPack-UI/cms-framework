@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.5.2] - 2026-07-22
+
+### Fixed
+
+- **Application updater still OOM'd post-download on 128M hosts** ([#219](https://github.com/ArtisanPack-UI/cms-framework/issues/219)) — 2.5.1's streaming-download fix was only half the fight. The release archive still OOM'd at `guzzlehttp/psr7/Utils.php:124` (`Utils::copyToString`) because a downstream `ResponseReceived` listener (Telescope-style) called `$response->body()` on the sink stream and pulled the whole ZIP back into a PHP string, and `ApplicationUpdateManager::extractUpdate()` then loaded each ZIP entry into memory via `getFromIndex()`. A new `StreamsDownloadsToDisk` trait shared by all three update sources wraps `Http::sink()` with a `withResponseMiddleware` that closes the sink body as soon as Guzzle hands the response back — before Laravel dispatches `ResponseReceived`, so any listener calling `body()` gets an empty string instead of copying the archive. `extractUpdate()` now streams each ZIP entry with `$zip->getStream()` + chunked `fread`/`fwrite` instead of `getFromIndex()`, so a single large file inside the release archive can't OOM mid-extraction either. Regression fences: one test per update source asserts the recorded PSR-7 response body is unreadable after `downloadUpdate()` returns, and `ApplicationUpdateManagerTest` runs `extractUpdate()` against a real ZIP under a scoped base path and confirms streamed extraction produces byte-for-byte copies.
+- **`NotificationController::index` `TypeError` on every admin poll** ([#220](https://github.com/ArtisanPack-UI/cms-framework/issues/220)) — `NotificationController::index` passed the raw string from `?limit=…` straight to `NotificationManager::getUserNotifications( int $limit, … )`, tripping a `TypeError` under `strict_types` on every admin poll (roughly every 30s) and drowning `storage/logs/laravel.log` in dozens of exceptions per minute. Swapped `$request->input()` for `$request->integer()` so the value is coerced at the controller boundary, and dropped the now-unneeded `phpcs:ignore`. Existing validation (`sometimes|integer|min:1|max:100`) still rejects non-numeric input with a 422. A new `NotificationControllerTest` covers the string→int coercion path, the default limit, and the validation-rejection regression fence.
+
 ## [2.5.1] - 2026-07-22
 
 ### Fixed
