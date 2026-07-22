@@ -36,9 +36,36 @@ return [
     | Settings for the update download and installation process.
     |
     */
-    'download_timeout'         => 300, // 5 minutes for large ZIPs
+    'download_timeout' => 300, // 5 minutes for large ZIPs
+
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Install Command
+    |--------------------------------------------------------------------------
+    |
+    | The command the self-updater invokes to rebuild vendor dependencies
+    | after extracting a release. The default assumes bare `composer` on the
+    | PHP-FPM pool's PATH, which is fine on most production hosts.
+    |
+    | When it's *not* fine (Laravel Herd, PHP-FPM pools with a stripped-down
+    | PATH, containers without composer in a well-known location), the
+    | framework resolves the composer command in this order:
+    |
+    | 1. `COMPOSER_BINARY` environment variable — set this to an absolute path
+    |    if you know where composer lives (e.g. `/opt/homebrew/bin/composer`)
+    |    and want the framework to build the command as `{PHP_BINARY} {binary}
+    |    install --no-dev --no-interaction --optimize-autoloader`.
+    | 2. A non-default value for this config key — set this to a bespoke shell
+    |    string if you need full control (custom flags, prepended PATH, etc.).
+    | 3. Auto-discovery across common install paths (`/usr/local/bin/composer`,
+    |    `/opt/homebrew/bin/composer`, `~/.composer/vendor/bin/composer`,
+    |    `~/.config/composer/vendor/bin/composer`, `/usr/bin/composer`).
+    | 4. This default command (bare `composer`).
+    |
+    */
     'composer_install_command' => 'composer install --no-dev --no-interaction --optimize-autoloader',
-    'composer_timeout'         => 600, // 10 minutes
+
+    'composer_timeout' => 600, // 10 minutes
 
     /*
     |--------------------------------------------------------------------------

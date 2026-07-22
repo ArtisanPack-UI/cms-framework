@@ -106,6 +106,38 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * Composer binary could not be located on the host.
+     *
+     * @since 2.5.3
+     *
+     * @param  array<int, string>  $searchedPaths  Absolute paths inspected during discovery.
+     */
+    public static function composerBinaryNotFound( array $searchedPaths ): self
+    {
+        $paths   = empty( $searchedPaths ) ? '(none)' : implode( ', ', $searchedPaths );
+        $message = 'Composer binary could not be located on the host. '
+            . "Searched: {$paths}. "
+            . 'Set the COMPOSER_BINARY environment variable or override '
+            . '`cms.updates.composer_install_command` with an absolute path to composer.';
+
+        return new self( $message );
+    }
+
+    /**
+     * Rollback failed after an initial update failure. Preserves the original
+     * error message so the operator can see *why* the update failed alongside
+     * the rollback failure.
+     *
+     * @since 2.5.3
+     */
+    public static function rollbackAfterFailure( string $originalError, string $rollbackError ): self
+    {
+        return new self(
+            "Rollback failed: {$rollbackError}. Original update error: {$originalError}. Manual intervention required.",
+        );
+    }
+
+    /**
      * Database migration failed.
      *
      * @since 1.0.0
