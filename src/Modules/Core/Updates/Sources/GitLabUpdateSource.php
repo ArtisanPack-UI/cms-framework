@@ -6,8 +6,8 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -22,6 +22,8 @@ use Throwable;
  */
 class GitLabUpdateSource implements UpdateSourceInterface
 {
+    use StreamsDownloadsToDisk;
+
     /**
      * GitLab access token.
      *
@@ -140,33 +142,12 @@ class GitLabUpdateSource implements UpdateSourceInterface
             $downloadUrl = $this->extractDownloadUrl( $release );
         }
 
-        $tempPath = storage_path( 'app/temp/update-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
-
-        if ( ! File::exists( dirname( $tempPath ) ) ) {
-            File::makeDirectory( dirname( $tempPath ), 0755, true );
-        }
-
         $headers = [];
         if ( $this->accessToken ) {
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        try {
-            $response = Http::withHeaders( $headers )
-                ->timeout( config( 'cms.updates.download_timeout', 300 ) )
-                ->sink( $tempPath )
-                ->get( $downloadUrl );
-
-            if ( ! $response->successful() ) {
-                throw UpdateException::downloadFailed( $downloadUrl );
-            }
-
-            return $tempPath;
-        } catch ( Throwable $e ) {
-            File::delete( $tempPath );
-
-            throw $e;
-        }
+        return $this->streamDownloadToTempFile( $downloadUrl, $headers );
     }
 
     /**

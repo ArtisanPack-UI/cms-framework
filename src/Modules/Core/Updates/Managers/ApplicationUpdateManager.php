@@ -462,13 +462,35 @@ class ApplicationUpdateManager
                 File::makeDirectory( $targetDir, 0755, true );
             }
 
-            // Extract file
-            $fileContent = $zip->getFromIndex( $i );
-            if ( false === $fileContent ) {
+            // Stream the entry to disk rather than materializing it as a PHP
+            // string via `getFromIndex()`. On a 128M host, a single large file
+            // inside the release (bundled JS/CSS, images) can otherwise OOM in
+            // the middle of extraction.
+            $entryStream = $zip->getStream( $filename );
+            if ( false === $entryStream ) {
                 continue;
             }
 
-            File::put( $fullTargetPath, $fileContent );
+            $out = @fopen( $fullTargetPath, 'wb' );
+            if ( false === $out ) {
+                fclose( $entryStream );
+
+                continue;
+            }
+
+            try {
+                while ( ! feof( $entryStream ) ) {
+                    $chunk = fread( $entryStream, 1024 * 1024 );
+                    if ( false === $chunk || '' === $chunk ) {
+                        break;
+                    }
+
+                    fwrite( $out, $chunk );
+                }
+            } finally {
+                fclose( $entryStream );
+                fclose( $out );
+            }
 
             // Preserve file permissions if available
             if ( isset( $stat['external_attributes'] ) ) {
