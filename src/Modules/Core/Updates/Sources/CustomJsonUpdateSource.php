@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Throwable;
 
 /**
  * Custom JSON Update Source
@@ -120,16 +121,21 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
             File::makeDirectory( dirname( $tempPath ), 0755, true );
         }
 
-        $response = Http::timeout( config( 'cms.updates.download_timeout', 300 ) )
-            ->get( $downloadUrl );
+        try {
+            $response = Http::timeout( config( 'cms.updates.download_timeout', 300 ) )
+                ->sink( $tempPath )
+                ->get( $downloadUrl );
 
-        if ( ! $response->successful() ) {
-            throw UpdateException::downloadFailed( $downloadUrl );
+            if ( ! $response->successful() ) {
+                throw UpdateException::downloadFailed( $downloadUrl );
+            }
+
+            return $tempPath;
+        } catch ( Throwable $e ) {
+            File::delete( $tempPath );
+
+            throw $e;
         }
-
-        File::put( $tempPath, $response->body() );
-
-        return $tempPath;
     }
 
     /**

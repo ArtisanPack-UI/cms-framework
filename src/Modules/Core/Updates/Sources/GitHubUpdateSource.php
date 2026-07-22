@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * GitHub Update Source
@@ -159,17 +160,22 @@ class GitHubUpdateSource implements UpdateSourceInterface
             $headers['Authorization'] = "token {$this->accessToken}";
         }
 
-        $response = Http::withHeaders( $headers )
-            ->timeout( config( 'cms.updates.download_timeout', 300 ) )
-            ->get( $downloadUrl );
+        try {
+            $response = Http::withHeaders( $headers )
+                ->timeout( config( 'cms.updates.download_timeout', 300 ) )
+                ->sink( $tempPath )
+                ->get( $downloadUrl );
 
-        if ( ! $response->successful() ) {
-            throw UpdateException::downloadFailed( $downloadUrl );
+            if ( ! $response->successful() ) {
+                throw UpdateException::downloadFailed( $downloadUrl );
+            }
+
+            return $tempPath;
+        } catch ( Throwable $e ) {
+            File::delete( $tempPath );
+
+            throw $e;
         }
-
-        File::put( $tempPath, $response->body() );
-
-        return $tempPath;
     }
 
     /**

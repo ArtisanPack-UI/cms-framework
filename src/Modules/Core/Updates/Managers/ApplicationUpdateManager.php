@@ -9,12 +9,12 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Exception;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use Throwable;
 use ZipArchive;
 
 /**
@@ -112,7 +112,7 @@ class ApplicationUpdateManager
             $this->disableMaintenanceMode();
 
             return true;
-        } catch ( Exception $e ) {
+        } catch ( Throwable $e ) {
             // Rollback on failure
             $this->handleUpdateFailure( $e );
 
@@ -557,7 +557,7 @@ class ApplicationUpdateManager
     {
         try {
             Artisan::call( 'migrate', ['--force' => true] );
-        } catch ( Exception $e ) {
+        } catch ( Throwable $e ) {
             throw UpdateException::migrationFailed( $e->getMessage() );
         }
     }
@@ -600,7 +600,7 @@ class ApplicationUpdateManager
     {
         try {
             Artisan::call( 'down', ['--render' => 'errors::503'] );
-        } catch ( Exception $e ) {
+        } catch ( Throwable $e ) {
             throw UpdateException::maintenanceModeFailure( 'enable' );
         }
     }
@@ -616,7 +616,7 @@ class ApplicationUpdateManager
     {
         try {
             Artisan::call( 'up' );
-        } catch ( Exception $e ) {
+        } catch ( Throwable $e ) {
             throw UpdateException::maintenanceModeFailure( 'disable' );
         }
     }
@@ -626,9 +626,9 @@ class ApplicationUpdateManager
      *
      * @since 1.0.0
      *
-     * @param  Exception  $exception  The exception that caused failure
+     * @param  Throwable  $exception  The throwable that caused failure
      */
-    protected function handleUpdateFailure( Exception $exception ): void
+    protected function handleUpdateFailure( Throwable $exception ): void
     {
         // Log the original exception for debugging
         \Illuminate\Support\Facades\Log::error( 'Update failed, beginning rollback', [
@@ -641,15 +641,18 @@ class ApplicationUpdateManager
         // Attempt to disable maintenance mode
         try {
             $this->disableMaintenanceMode();
-        } catch ( Exception $e ) {
-            // Maintenance mode failure is not critical during rollback
+        } catch ( Throwable $e ) {
+            \Illuminate\Support\Facades\Log::error(
+                'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
+                ['exception' => $e->getMessage()],
+            );
         }
 
         // If we have a backup, attempt rollback
         if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {
                 $this->rollback( $this->backupPath );
-            } catch ( Exception $e ) {
+            } catch ( Throwable $e ) {
                 // Rollback failed - this is critical
                 throw UpdateException::rollbackFailed( $e->getMessage());
             }
