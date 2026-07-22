@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects;
 
+use Illuminate\Container\Container;
 use InvalidArgumentException;
 
 /**
@@ -48,14 +49,43 @@ class UpdateInfo
     /**
      * Whether an update is available.
      *
-     * Computed from version comparison rather than stored state
-     * to prevent inconsistency.
+     * Reads the currently installed version fresh from `config('app.version')`
+     * at call time rather than comparing against the cached
+     * `$this->currentVersion` snapshot. Without this, a cached `UpdateInfo`
+     * survives an out-of-band version bump (manual `composer install`,
+     * unzip-over-site, deploy script) and keeps reporting a stale
+     * "update available" for up to `cms.updates.cache_ttl` seconds.
+     *
+     * Falls back to `$this->currentVersion` when `app.version` is unavailable
+     * — the pre-2.5.3 behavior — so callers that construct `UpdateInfo`
+     * directly for tests continue to work.
      *
      * @since 1.1.0
      */
     public function hasUpdate(): bool
     {
-        return version_compare( $this->latestVersion, $this->currentVersion, '>' );
+        return version_compare( $this->latestVersion, $this->resolveCurrentVersion(), '>' );
+    }
+
+    /**
+     * The currently installed version, read fresh from `config('app.version')`
+     * when the container is bootstrapped and the value is a non-empty string.
+     * Falls back to `$this->currentVersion` for non-Laravel callers, tests,
+     * or hosts that never set `app.version`.
+     *
+     * @since 2.5.3
+     */
+    public function resolveCurrentVersion(): string
+    {
+        if ( Container::getInstance()->bound( 'config' ) ) {
+            $configured = config( 'app.version' );
+
+            if ( is_string( $configured ) && '' !== $configured ) {
+                return $configured;
+            }
+        }
+
+        return $this->currentVersion;
     }
 
     /**
@@ -94,7 +124,7 @@ class UpdateInfo
     public function toArray(): array
     {
         return [
-            'current'               => $this->currentVersion,
+            'current'               => $this->resolveCurrentVersion(),
             'latest'                => $this->latestVersion,
             'hasUpdate'             => $this->hasUpdate(),
             'download_url'          => $this->downloadUrl,

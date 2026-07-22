@@ -40,6 +40,15 @@ When an update fails, the framework rolls back to the pre-update backup. Two beh
 
 - **When rollback itself fails, the resulting exception preserves the original update-failure message.** You'll see both `Rollback failed: {rollback error}. Original update error: {original error}. Manual intervention required.` — no more losing the actual first-error text.
 
+## Cached update info and out-of-band version bumps
+
+`UpdateChecker::checkForUpdate()` caches the resolved `UpdateInfo` value object under `cms.{type}.{slug}.update_check` for `cms.updates.cache_ttl` seconds (default 43,200s / 12h). The cached object contains both the feed's `latestVersion` and a snapshot of `config('app.version')` taken when the cache was populated.
+
+When the host's installed version changes *out-of-band* (a manual `composer install` on a release zip, an unzip-over-site, a deploy script) the framework keeps the cached feed data honest in two ways:
+
+- **`UpdateChecker::checkForUpdate()` discards the cached `UpdateInfo` when the cached `currentVersion` snapshot no longer matches `config('app.version')`** and re-fetches from the source. No stale positive for up to 12h.
+- **`UpdateInfo::hasUpdate()` reads `config('app.version')` at call time** rather than comparing against its own frozen `currentVersion`, so any cached instance still returns the correct answer even if the invalidation branch above hasn't fired yet. Falls back to the constructor value when the container has no bound `config`.
+
 ## Related config
 
 | Key | Purpose |

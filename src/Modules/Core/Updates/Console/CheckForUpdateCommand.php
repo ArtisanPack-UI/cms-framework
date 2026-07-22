@@ -56,7 +56,7 @@ class CheckForUpdateCommand extends Command
             if ( $updateInfo->hasUpdate() ) {
                 $this->newLine();
                 $this->info( '✓ Update available!' );
-                $this->line( "Current version: {$updateInfo->currentVersion}" );
+                $this->line( "Current version: {$updateInfo->resolveCurrentVersion()}" );
                 $this->line( "Latest version:  {$updateInfo->latestVersion}" );
 
                 if ( $updateInfo->releaseDate ) {
