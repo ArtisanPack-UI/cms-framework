@@ -53,7 +53,7 @@ class CheckForUpdateScheduled extends Command
 
                 // Log the available update
                 Log::info( 'Update available', [
-                    'current_version' => $updateInfo->currentVersion,
+                    'current_version' => $updateInfo->resolveCurrentVersion(),
                     'latest_version'  => $updateInfo->latestVersion,
                     'release_date'    => $updateInfo->releaseDate,
                 ] );

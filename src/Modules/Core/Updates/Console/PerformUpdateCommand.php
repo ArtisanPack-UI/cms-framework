@@ -58,7 +58,7 @@ class PerformUpdateCommand extends Command
 
             // Show update information
             $this->newLine();
-            $this->line( "Current version: {$updateInfo->currentVersion}" );
+            $this->line( "Current version: {$updateInfo->resolveCurrentVersion()}" );
             $this->line( "Update to:       {$version}" );
             $this->newLine();
 
