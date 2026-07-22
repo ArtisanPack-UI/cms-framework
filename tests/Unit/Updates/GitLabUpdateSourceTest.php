@@ -920,6 +920,46 @@ class GitLabUpdateSourceTest extends TestCase
     }
 
     /**
+     * Regression for #219: after the download returns, the response body stream
+     * must be closed so that downstream `ResponseReceived` listeners cannot
+     * copy the release archive back into a PHP string.
+     *
+     * @since 2.5.2
+     */
+    public function test_download_closes_response_body_to_prevent_oom(): void
+    {
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases/v2.0.0' => Http::response( [
+                'tag_name'    => 'v2.0.0',
+                'description' => 'Release',
+                'created_at'  => '2024-12-15T10:00:00.000Z',
+            ], 200 ),
+            'gitlab.com/api/v4/projects/user%2Frepo/repository/archive.zip*' => Http::response( 'zip-bytes', 200 ),
+        ] );
+
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+
+        $tempPath = $source->downloadUpdate( 'v2.0.0' );
+
+        try {
+            $downloadResponse = null;
+            foreach ( Http::recorded() as [$request, $response] ) {
+                if ( str_contains( $request->url(), 'repository/archive.zip' ) ) {
+                    $downloadResponse = $response;
+                }
+            }
+
+            $this->assertNotNull( $downloadResponse, 'Expected the download response to be recorded.' );
+            $this->assertFalse(
+                $downloadResponse->toPsrResponse()->getBody()->isReadable(),
+                'Expected the release-archive response body to be closed after download.',
+            );
+        } finally {
+            @unlink( $tempPath );
+        }
+    }
+
+    /**
      * Define environment setup.
      *
      * @since 1.0.0

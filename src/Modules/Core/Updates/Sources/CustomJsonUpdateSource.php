@@ -6,10 +6,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
-use Throwable;
 
 /**
  * Custom JSON Update Source
@@ -20,6 +19,8 @@ use Throwable;
  */
 class CustomJsonUpdateSource implements UpdateSourceInterface
 {
+    use StreamsDownloadsToDisk;
+
     /**
      * Query parameters for authentication or other purposes.
      *
@@ -113,29 +114,7 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
             throw UpdateException::missingRequiredField( 'download_url' );
         }
 
-        $downloadUrl = $data['download_url'];
-
-        $tempPath = storage_path( 'app/temp/update-' . time() . '.zip' );
-
-        if ( ! File::exists( dirname( $tempPath ) ) ) {
-            File::makeDirectory( dirname( $tempPath ), 0755, true );
-        }
-
-        try {
-            $response = Http::timeout( config( 'cms.updates.download_timeout', 300 ) )
-                ->sink( $tempPath )
-                ->get( $downloadUrl );
-
-            if ( ! $response->successful() ) {
-                throw UpdateException::downloadFailed( $downloadUrl );
-            }
-
-            return $tempPath;
-        } catch ( Throwable $e ) {
-            File::delete( $tempPath );
-
-            throw $e;
-        }
+        return $this->streamDownloadToTempFile( $data['download_url'] );
     }
 
     /**
