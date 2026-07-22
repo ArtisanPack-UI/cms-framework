@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Error;
 use Illuminate\Support\Facades\Log;
 use Orchestra\Testbench\TestCase;
 use ReflectionClass;
@@ -283,6 +284,52 @@ class ApplicationUpdateManagerTest extends TestCase
         $method->setAccessible( true );
 
         $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
+    }
+
+    /**
+     * Test that a fatal `\Error` during the update disables maintenance mode
+     * and rethrows the error, rather than leaving the host stranded.
+     *
+     * @since 2.5.1
+     */
+    public function test_perform_update_disables_maintenance_mode_on_fatal_error(): void
+    {
+        config( ['cms.updates.backup_enabled' => false] );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public array $modeCalls = [];
+
+            protected function enableMaintenanceMode(): void
+            {
+                $this->modeCalls[] = 'enable';
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                $this->modeCalls[] = 'disable';
+            }
+        };
+
+        $updateInfo = new UpdateInfo(
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+            downloadUrl: 'https://example.com/update.zip',
+        );
+
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
+        $checker->method( 'downloadUpdate' )->willThrowException( new Error( 'Simulated fatal error' ) );
+
+        $manager->setUpdateChecker( $checker );
+
+        try {
+            $manager->performUpdate();
+            $this->fail( 'Expected Error to be thrown.' );
+        } catch ( Error $e ) {
+            $this->assertSame( 'Simulated fatal error', $e->getMessage() );
+        }
+
+        $this->assertSame( ['enable', 'disable'], $manager->modeCalls );
     }
 
     /**

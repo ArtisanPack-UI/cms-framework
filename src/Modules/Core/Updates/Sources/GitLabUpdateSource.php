@@ -151,17 +151,22 @@ class GitLabUpdateSource implements UpdateSourceInterface
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders( $headers )
-            ->timeout( config( 'cms.updates.download_timeout', 300 ) )
-            ->get( $downloadUrl );
+        try {
+            $response = Http::withHeaders( $headers )
+                ->timeout( config( 'cms.updates.download_timeout', 300 ) )
+                ->sink( $tempPath )
+                ->get( $downloadUrl );
 
-        if ( ! $response->successful() ) {
-            throw UpdateException::downloadFailed( $downloadUrl );
+            if ( ! $response->successful() ) {
+                throw UpdateException::downloadFailed( $downloadUrl );
+            }
+
+            return $tempPath;
+        } catch ( Throwable $e ) {
+            File::delete( $tempPath );
+
+            throw $e;
         }
-
-        File::put( $tempPath, $response->body() );
-
-        return $tempPath;
     }
 
     /**
