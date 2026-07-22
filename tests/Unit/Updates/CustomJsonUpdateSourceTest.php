@@ -274,6 +274,67 @@ class CustomJsonUpdateSourceTest extends TestCase
     }
 
     /**
+     * Test custom JSON source streams the download to disk via `sink` rather than
+     * buffering the response body in memory.
+     *
+     * @since 2.5.1
+     */
+    public function test_download_streams_response_to_sink(): void
+    {
+        Http::fake( [
+            'example.com/updates.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/releases/cms-2.0.0.zip',
+            ], 200 ),
+            'example.com/releases/cms-2.0.0.zip' => Http::response( 'zip-bytes', 200 ),
+        ] );
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+
+        $tempPath = $source->downloadUpdate( 'latest' );
+
+        $this->assertFileExists( $tempPath );
+        $this->assertSame( 'zip-bytes', file_get_contents( $tempPath ) );
+
+        @unlink( $tempPath );
+    }
+
+    /**
+     * Test custom JSON source removes the partial download file when the HTTP
+     * response is not successful.
+     *
+     * @since 2.5.1
+     */
+    public function test_download_cleans_up_partial_file_on_http_failure(): void
+    {
+        Http::fake( [
+            'example.com/updates.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/releases/cms-2.0.0.zip',
+            ], 200 ),
+            'example.com/releases/cms-2.0.0.zip' => Http::response( 'partial', 500 ),
+        ] );
+
+        $tempDir = storage_path( 'app/temp' );
+
+        if ( is_dir( $tempDir ) ) {
+            foreach ( glob( $tempDir . '/update-*.zip' ) ?: [] as $file ) {
+                @unlink( $file );
+            }
+        }
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+
+        try {
+            $source->downloadUpdate( 'latest' );
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $leftover = is_dir( $tempDir ) ? glob( $tempDir . '/update-*.zip' ) : [];
+            $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
+        }
+    }
+
+    /**
      * Define environment setup.
      *
      * @since 1.0.0
