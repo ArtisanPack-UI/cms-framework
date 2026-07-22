@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use GuzzleHttp\Psr7\Utils;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Psr\Http\Message\ResponseInterface;
@@ -23,9 +24,11 @@ use Throwable;
  * any release near ~half of it.
  *
  * This trait wraps `Http::sink()` with a response middleware that closes the
- * sink body as soon as Guzzle hands the response back — before the `Response`
- * wrapper is constructed and before `ResponseReceived` fires — so any later
- * `body()` call returns an empty string rather than reloading the archive.
+ * sink body as soon as Guzzle hands the response back and swaps in a fresh
+ * in-memory empty stream — before the `Response` wrapper is constructed and
+ * before `ResponseReceived` fires — so any later `body()` call returns an
+ * empty string rather than reloading the archive or throwing on a detached
+ * stream (see #224 for the Herd Pro / Telescope / Debugbar interaction).
  *
  * @since 2.5.2
  */
@@ -60,7 +63,7 @@ trait StreamsDownloadsToDisk
                 ->withResponseMiddleware( function ( ResponseInterface $response ): ResponseInterface {
                     $response->getBody()->close();
 
-                    return $response;
+                    return $response->withBody( Utils::streamFor( '' ) );
                 } )
                 ->sink( $tempPath )
                 ->get( $downloadUrl );
