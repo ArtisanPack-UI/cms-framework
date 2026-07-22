@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.5.1] - 2026-07-22
+
+### Fixed
+
+- **`CustomJsonUpdateSource` OOM on large release tarballs** ([#216](https://github.com/ArtisanPack-UI/cms-framework/issues/216)) — `CustomJsonUpdateSource::downloadUpdate()` previously buffered the entire release archive into a string via `$response->body()` before writing it to disk with `File::put()`, which OOM'd inside Guzzle's `Utils::copyToString()` on any tarball larger than roughly half of PHP's `memory_limit`. The download now streams straight to disk via `Http::sink($tempPath)->get()`, mirroring the fix applied to `GitLabUpdateSource` and `GitHubUpdateSource` in 2.5.0 (#214). Both a transport-level throw and a non-2xx response now clean up the partial file via a shared `catch (Throwable)` block before rethrowing.
+
 ## [2.5.0] - 2026-07-21
 
 ### Added
