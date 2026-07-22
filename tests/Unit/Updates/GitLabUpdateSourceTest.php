@@ -856,6 +856,70 @@ class GitLabUpdateSourceTest extends TestCase
     }
 
     /**
+     * Test GitLab source streams the download to disk via `sink` rather than
+     * buffering the response body in memory.
+     *
+     * @since 2.5.1
+     */
+    public function test_download_streams_response_to_sink(): void
+    {
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases/v2.0.0' => Http::response( [
+                'tag_name'    => 'v2.0.0',
+                'description' => 'Release',
+                'created_at'  => '2024-12-15T10:00:00.000Z',
+            ], 200 ),
+            'gitlab.com/api/v4/projects/user%2Frepo/repository/archive.zip*' => Http::response( 'zip-bytes', 200 ),
+        ] );
+
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+
+        $tempPath = $source->downloadUpdate( 'v2.0.0' );
+
+        $this->assertFileExists( $tempPath );
+        $this->assertSame( 'zip-bytes', file_get_contents( $tempPath ) );
+
+        @unlink( $tempPath );
+    }
+
+    /**
+     * Test GitLab source removes the partial download file when the HTTP
+     * response is not successful.
+     *
+     * @since 2.5.1
+     */
+    public function test_download_cleans_up_partial_file_on_http_failure(): void
+    {
+        Http::fake( [
+            'gitlab.com/api/v4/projects/user%2Frepo/releases/v2.0.0' => Http::response( [
+                'tag_name'    => 'v2.0.0',
+                'description' => 'Release',
+                'created_at'  => '2024-12-15T10:00:00.000Z',
+            ], 200 ),
+            'gitlab.com/api/v4/projects/user%2Frepo/repository/archive.zip*' => Http::response( 'partial', 500 ),
+        ] );
+
+        $tempDir = storage_path( 'app/temp' );
+
+        // Ensure no stale update-*.zip files from prior tests.
+        if ( is_dir( $tempDir ) ) {
+            foreach ( glob( $tempDir . '/update-*.zip' ) ?: [] as $file ) {
+                @unlink( $file );
+            }
+        }
+
+        $source = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+
+        try {
+            $source->downloadUpdate( 'v2.0.0' );
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $leftover = is_dir( $tempDir ) ? glob( $tempDir . '/update-*.zip' ) : [];
+            $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
+        }
+    }
+
+    /**
      * Define environment setup.
      *
      * @since 1.0.0
