@@ -58,8 +58,7 @@ class NotificationController extends Controller
             'unread_only' => 'sometimes|boolean',
         ] );
 
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.InputNotValidated -- Validated above
-        $limit      = $request->input( 'limit', 10 );
+        $limit      = $request->integer( 'limit', 10 );
         $unreadOnly = $request->boolean( 'unread_only', false );
 
         $notifications = $this->notificationManager->getUserNotifications(
