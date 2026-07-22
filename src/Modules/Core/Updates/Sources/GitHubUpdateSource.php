@@ -6,12 +6,11 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Throwable;
 
 /**
  * GitHub Update Source
@@ -22,6 +21,8 @@ use Throwable;
  */
 class GitHubUpdateSource implements UpdateSourceInterface
 {
+    use StreamsDownloadsToDisk;
+
     /**
      * GitHub access token for authentication.
      *
@@ -148,34 +149,12 @@ class GitHubUpdateSource implements UpdateSourceInterface
             $downloadUrl = $this->extractDownloadUrl( $release );
         }
 
-        $tempPath = storage_path( 'app/temp/update-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
-
-        // Ensure temp directory exists
-        if ( ! File::exists( dirname( $tempPath ) ) ) {
-            File::makeDirectory( dirname( $tempPath ), 0755, true );
-        }
-
         $headers = [];
         if ( $this->accessToken ) {
             $headers['Authorization'] = "token {$this->accessToken}";
         }
 
-        try {
-            $response = Http::withHeaders( $headers )
-                ->timeout( config( 'cms.updates.download_timeout', 300 ) )
-                ->sink( $tempPath )
-                ->get( $downloadUrl );
-
-            if ( ! $response->successful() ) {
-                throw UpdateException::downloadFailed( $downloadUrl );
-            }
-
-            return $tempPath;
-        } catch ( Throwable $e ) {
-            File::delete( $tempPath );
-
-            throw $e;
-        }
+        return $this->streamDownloadToTempFile( $downloadUrl, $headers );
     }
 
     /**

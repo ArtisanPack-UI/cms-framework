@@ -364,6 +364,53 @@ class GitHubUpdateSourceTest extends TestCase
     }
 
     /**
+     * Regression for #219: after the download returns, the response body stream
+     * must be closed so that downstream `ResponseReceived` listeners (e.g.
+     * Telescope, Sentry) that call `$response->body()` cannot copy the release
+     * archive back into a PHP string via `GuzzleHttp\Psr7\Utils::copyToString`.
+     *
+     * @since 2.5.2
+     */
+    public function test_download_closes_response_body_to_prevent_oom(): void
+    {
+        Http::fake( [
+            'api.github.com/repos/user/repo/releases/tags/v2.0.0' => Http::response( [
+                'tag_name'    => 'v2.0.0',
+                'prerelease'  => false,
+                'zipball_url' => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
+                'assets'      => [
+                    [
+                        'name'                 => 'app-2.0.0.zip',
+                        'browser_download_url' => 'https://example.com/app-2.0.0.zip',
+                    ],
+                ],
+            ], 200 ),
+            'example.com/app-2.0.0.zip' => Http::response( 'zip-bytes', 200 ),
+        ] );
+
+        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+
+        $tempPath = $source->downloadUpdate( 'v2.0.0' );
+
+        try {
+            $downloadResponse = null;
+            foreach ( Http::recorded() as [$request, $response] ) {
+                if ( 'https://example.com/app-2.0.0.zip' === $request->url() ) {
+                    $downloadResponse = $response;
+                }
+            }
+
+            $this->assertNotNull( $downloadResponse, 'Expected the download response to be recorded.' );
+            $this->assertFalse(
+                $downloadResponse->toPsrResponse()->getBody()->isReadable(),
+                'Expected the release-archive response body to be closed after download.',
+            );
+        } finally {
+            @unlink( $tempPath );
+        }
+    }
+
+    /**
      * Define environment setup.
      *
      * @since 1.0.0

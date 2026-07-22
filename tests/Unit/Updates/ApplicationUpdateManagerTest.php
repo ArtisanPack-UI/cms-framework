@@ -12,6 +12,7 @@ use Error;
 use Illuminate\Support\Facades\Log;
 use Orchestra\Testbench\TestCase;
 use ReflectionClass;
+use ZipArchive;
 
 /**
  * Application Update Manager Tests
@@ -330,6 +331,98 @@ class ApplicationUpdateManagerTest extends TestCase
         }
 
         $this->assertSame( ['enable', 'disable'], $manager->modeCalls );
+    }
+
+    /**
+     * Regression for #219: `extractUpdate` must stream each ZIP entry to disk
+     * via `getStream()` rather than loading it into memory with
+     * `getFromIndex()`, otherwise a single large file inside the release
+     * archive OOMs on 128M hosts mid-extraction.
+     *
+     * @since 2.5.2
+     */
+    public function test_extract_update_streams_entries_to_disk(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-extract-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath  = $tempRoot . '/update.zip';
+        $largeBig = str_repeat( 'x', 65536 );
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/app/Model.php', "<?php\n" . $largeBig );
+        $zip->addFromString( 'release-root/routes/web.php', "<?php\nRoute::get('/', fn () => 'ok');\n" );
+        $zip->close();
+
+        $manager = new class( $target ) extends ApplicationUpdateManager {
+            public function __construct( protected string $extractRoot )
+            {
+            }
+
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        // Point the application base path to our temp target so `base_path()`
+        // inside extractUpdate resolves to a scratch directory instead of the
+        // testbench root.
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Model.php' );
+            $this->assertFileExists( $target . '/routes/web.php' );
+            $this->assertSame(
+                strlen( "<?php\n" . $largeBig ),
+                filesize( $target . '/app/Model.php' ),
+                'Streamed extraction should produce a byte-for-byte copy of the ZIP entry.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Recursively remove a directory used by extraction tests.
+     *
+     * @since 2.5.2
+     */
+    protected function removeDirectory( string $path ): void
+    {
+        if ( ! is_dir( $path ) ) {
+            return;
+        }
+
+        $items = scandir( $path );
+
+        if ( false === $items ) {
+            return;
+        }
+
+        foreach ( $items as $item ) {
+            if ( '.' === $item || '..' === $item ) {
+                continue;
+            }
+
+            $full = $path . DIRECTORY_SEPARATOR . $item;
+
+            if ( is_dir( $full ) ) {
+                $this->removeDirectory( $full );
+            } else {
+                @unlink( $full );
+            }
+        }
+
+        @rmdir( $path );
     }
 
     /**
