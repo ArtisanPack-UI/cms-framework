@@ -7,6 +7,8 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitHubUpdateSource;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Illuminate\Http\Client\Events\ResponseReceived;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
@@ -364,14 +366,16 @@ class GitHubUpdateSourceTest extends TestCase
     }
 
     /**
-     * Regression for #219: after the download returns, the response body stream
-     * must be closed so that downstream `ResponseReceived` listeners (e.g.
-     * Telescope, Sentry) that call `$response->body()` cannot copy the release
-     * archive back into a PHP string via `GuzzleHttp\Psr7\Utils::copyToString`.
+     * Regression for #219 / #224: after the download returns, the response body
+     * must be safely inspectable by downstream `ResponseReceived` listeners
+     * (Herd Pro's HTTP watcher, Telescope, Debugbar, custom monitoring). The
+     * body is swapped for a fresh empty stream so `->body()` returns `''`
+     * instead of copying the release archive back into a PHP string (#219) or
+     * throwing "Stream is detached" on the closed sink stream (#224).
      *
      * @since 2.5.2
      */
-    public function test_download_closes_response_body_to_prevent_oom(): void
+    public function test_download_response_body_is_observer_safe(): void
     {
         Http::fake( [
             'api.github.com/repos/user/repo/releases/tags/v2.0.0' => Http::response( [
@@ -388,23 +392,23 @@ class GitHubUpdateSourceTest extends TestCase
             'example.com/app-2.0.0.zip' => Http::response( 'zip-bytes', 200 ),
         ] );
 
+        $seen = [];
+        Event::listen(
+            ResponseReceived::class,
+            function ( ResponseReceived $event ) use ( &$seen ): void {
+                $seen[ $event->request->url() ] = $event->response->body();
+            },
+        );
+
         $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
 
         $tempPath = $source->downloadUpdate( 'v2.0.0' );
 
         try {
-            $downloadResponse = null;
-            foreach ( Http::recorded() as [$request, $response] ) {
-                if ( 'https://example.com/app-2.0.0.zip' === $request->url() ) {
-                    $downloadResponse = $response;
-                }
-            }
-
-            $this->assertNotNull( $downloadResponse, 'Expected the download response to be recorded.' );
-            $this->assertFalse(
-                $downloadResponse->toPsrResponse()->getBody()->isReadable(),
-                'Expected the release-archive response body to be closed after download.',
-            );
+            $this->assertFileExists( $tempPath );
+            $this->assertSame( 'zip-bytes', file_get_contents( $tempPath ) );
+            $this->assertArrayHasKey( 'https://example.com/app-2.0.0.zip', $seen );
+            $this->assertSame( '', $seen['https://example.com/app-2.0.0.zip'] );
         } finally {
             @unlink( $tempPath );
         }

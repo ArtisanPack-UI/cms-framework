@@ -48,7 +48,18 @@ class UpdateChecker
 
         if ( config( 'cms.updates.cache_enabled', true ) ) {
             $cached = Cache::get( $cacheKey );
-            if ( $cached instanceof UpdateInfo ) {
+
+            // Discard cached UpdateInfo whose `currentVersion` snapshot
+            // disagrees with the currently installed version. Without this, an
+            // out-of-band version bump (manual `composer install`,
+            // unzip-over-site, deploy script) leaves the cache serving a stale
+            // "update available to X" for a site already on X, up to
+            // `cms.updates.cache_ttl` seconds. Belt-and-suspenders with
+            // `UpdateInfo::hasUpdate()`, which also re-reads the current
+            // version at call time. Hosts that never set `app.version` — in
+            // which case we have nothing fresher to compare against — keep
+            // the pre-2.5.3 "serve cache until TTL" behavior.
+            if ( $cached instanceof UpdateInfo && ! $this->cacheIsStale( $cached ) ) {
                 return $cached;
             }
         }
@@ -137,5 +148,23 @@ class UpdateChecker
     public function getSlug(): string
     {
         return $this->slug;
+    }
+
+    /**
+     * Decide whether a cached `UpdateInfo` should be evicted because the host's
+     * installed version has moved on out-of-band. When `app.version` is unset
+     * we have nothing fresher to compare against, so treat the cache as fresh.
+     *
+     * @since 2.5.3
+     */
+    protected function cacheIsStale( UpdateInfo $cached ): bool
+    {
+        $configured = config( 'app.version' );
+
+        if ( ! is_string( $configured ) || '' === $configured ) {
+            return false;
+        }
+
+        return $cached->currentVersion !== $configured;
     }
 }

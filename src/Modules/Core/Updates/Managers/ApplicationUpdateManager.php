@@ -27,6 +27,23 @@ use ZipArchive;
 class ApplicationUpdateManager
 {
     /**
+     * Default composer install command shipped with the framework. Used as the
+     * "unchanged" sentinel when deciding whether the operator has explicitly
+     * overridden `cms.updates.composer_install_command`.
+     *
+     * @since 2.5.3
+     */
+    public const DEFAULT_COMPOSER_INSTALL_COMMAND = 'composer install --no-dev --no-interaction --optimize-autoloader';
+
+    /**
+     * Default composer install arguments used when the framework builds the
+     * command from a discovered or env-supplied binary path.
+     *
+     * @since 2.5.3
+     */
+    public const DEFAULT_COMPOSER_INSTALL_ARGS = 'install --no-dev --no-interaction --optimize-autoloader';
+
+    /**
      * Update checker instance.
      *
      * @since 1.0.0
@@ -155,6 +172,13 @@ class ApplicationUpdateManager
 
         $zip->extractTo( base_path() );
         $zip->close();
+
+        // Before invoking composer install, verify the resolved binary is
+        // reachable. If it's not (e.g. PHP-FPM's PATH doesn't include composer
+        // on a Herd host) surface a specific error rather than "Manual
+        // intervention required" — no filesystem state has actually been
+        // damaged at this point since vendor/ was untouched by the update.
+        $this->verifyComposerBinaryAvailable();
 
         // Restore composer dependencies
         $this->runComposerInstall();
@@ -548,7 +572,7 @@ class ApplicationUpdateManager
     }
 
     /**
-     * Run composer install.
+     * Run composer install using the resolved composer command.
      *
      * @since 1.0.0
      *
@@ -556,7 +580,7 @@ class ApplicationUpdateManager
      */
     protected function runComposerInstall(): void
     {
-        $command = config( 'cms.updates.composer_install_command' );
+        $command = $this->resolveComposerCommand();
         $timeout = config( 'cms.updates.composer_timeout', 600 );
 
         $result = Process::timeout( $timeout )
@@ -566,6 +590,168 @@ class ApplicationUpdateManager
         if ( ! $result->successful() ) {
             throw UpdateException::composerInstallFailed( $result->errorOutput() );
         }
+    }
+
+    /**
+     * Resolve the command used to run composer install.
+     *
+     * Discovery is deliberately explicit-first so operators keep full control
+     * over the invocation:
+     *
+     * 1. `COMPOSER_BINARY` environment variable (absolute path).
+     * 2. `cms.updates.composer_install_command` config value, when it differs
+     *    from the shipped default. Backwards-compatible escape hatch for hosts
+     *    already carrying a bespoke command.
+     * 3. Auto-discovery across common install paths; when a hit is found the
+     *    command is built as `{PHP_BINARY} {binary} install ...` so PHP-FPM
+     *    hosts with a stripped `PATH` don't have to resolve composer's
+     *    `#!/usr/bin/env php` shebang.
+     * 4. Bare `composer install ...` — the pre-2.5.3 behavior.
+     *
+     * @since 2.5.3
+     */
+    protected function resolveComposerCommand(): string
+    {
+        $envBinary = $this->envComposerBinary();
+        if ( null !== $envBinary ) {
+            return $this->buildComposerCommand( $envBinary );
+        }
+
+        $configured = config( 'cms.updates.composer_install_command' );
+        if ( is_string( $configured ) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured ) {
+            return $configured;
+        }
+
+        $discovered = $this->discoverComposerBinary();
+        if ( null !== $discovered ) {
+            return $this->buildComposerCommand( $discovered );
+        }
+
+        return is_string( $configured ) ? $configured : self::DEFAULT_COMPOSER_INSTALL_COMMAND;
+    }
+
+    /**
+     * Verify that the resolved composer binary is executable before invoking
+     * it during rollback. When we cannot introspect the resolved binary
+     * (because the operator overrode the full command string), we skip the
+     * check and trust the override.
+     *
+     * @since 2.5.3
+     *
+     * @throws UpdateException When the binary is resolvable but `--version`
+     *                         cannot be executed.
+     */
+    protected function verifyComposerBinaryAvailable(): void
+    {
+        $binary = $this->resolveComposerBinaryForVerification();
+        if ( null === $binary ) {
+            return;
+        }
+
+        $command = escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $binary ) . ' --version';
+
+        $result = Process::timeout( 10 )
+            ->path( base_path() )
+            ->run( $command );
+
+        if ( ! $result->successful() ) {
+            throw UpdateException::composerBinaryNotFound( $this->composerCandidatePaths() );
+        }
+    }
+
+    /**
+     * Resolve the composer binary path used for the rollback `--version`
+     * precheck. Returns `null` when the operator has overridden the full
+     * command (nothing sensible to introspect) or discovery could not find a
+     * binary (the actual failure will surface from `runComposerInstall()`).
+     *
+     * @since 2.5.3
+     */
+    protected function resolveComposerBinaryForVerification(): ?string
+    {
+        $envBinary = $this->envComposerBinary();
+        if ( null !== $envBinary ) {
+            return $envBinary;
+        }
+
+        $configured = config( 'cms.updates.composer_install_command' );
+        if ( is_string( $configured ) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured ) {
+            return null;
+        }
+
+        return $this->discoverComposerBinary();
+    }
+
+    /**
+     * Absolute path from the `COMPOSER_BINARY` environment variable, or `null`
+     * when not set.
+     *
+     * @since 2.5.3
+     */
+    protected function envComposerBinary(): ?string
+    {
+        $envBinary = getenv( 'COMPOSER_BINARY' );
+
+        if ( false === $envBinary || '' === $envBinary ) {
+            return null;
+        }
+
+        return $envBinary;
+    }
+
+    /**
+     * Locate a composer binary on disk by walking a curated list of common
+     * install paths. Returns the first executable hit or `null`.
+     *
+     * @since 2.5.3
+     */
+    protected function discoverComposerBinary(): ?string
+    {
+        foreach ( $this->composerCandidatePaths() as $path ) {
+            if ( is_file( $path ) && is_executable( $path ) ) {
+                return $path;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Common composer install paths, in preference order. Extracted so tests
+     * and the `composerBinaryNotFound` diagnostic can share the same list.
+     *
+     * @since 2.5.3
+     *
+     * @return array<int, string>
+     */
+    protected function composerCandidatePaths(): array
+    {
+        $home = getenv( 'HOME' );
+
+        $candidates = [
+            '/usr/local/bin/composer',
+            '/opt/homebrew/bin/composer',
+        ];
+
+        if ( is_string( $home ) && '' !== $home ) {
+            $candidates[] = $home . '/.composer/vendor/bin/composer';
+            $candidates[] = $home . '/.config/composer/vendor/bin/composer';
+        }
+
+        $candidates[] = '/usr/bin/composer';
+
+        return $candidates;
+    }
+
+    /**
+     * Build the composer command line from a binary path. Uses `PHP_BINARY`
+     * so PHP-FPM's `PATH` never needs to resolve `php` for composer's shebang.
+     *
+     * @since 2.5.3
+     */
+    protected function buildComposerCommand( string $binary ): string
+    {
+        return escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $binary ) . ' ' . self::DEFAULT_COMPOSER_INSTALL_ARGS;
     }
 
     /**
@@ -675,8 +861,11 @@ class ApplicationUpdateManager
             try {
                 $this->rollback( $this->backupPath );
             } catch ( Throwable $e ) {
-                // Rollback failed - this is critical
-                throw UpdateException::rollbackFailed( $e->getMessage());
+                // Rollback failed - this is critical. Preserve the original
+                // update-failure message alongside the rollback message so the
+                // operator can see both failures rather than only the trailing
+                // one.
+                throw UpdateException::rollbackAfterFailure( $exception->getMessage(), $e->getMessage() );
             }
         }
     }

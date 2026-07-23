@@ -10,8 +10,11 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Error;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
 use Orchestra\Testbench\TestCase;
 use ReflectionClass;
+use RuntimeException;
+use Throwable;
 use ZipArchive;
 
 /**
@@ -388,6 +391,317 @@ class ApplicationUpdateManagerTest extends TestCase
             @unlink( $zipPath );
             $this->removeDirectory( $target );
             @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #225: `COMPOSER_BINARY` env var wins over both config and
+     * discovery and is invoked via `PHP_BINARY` so the PHP-FPM pool's `PATH`
+     * never has to resolve composer's shebang.
+     *
+     * @since 2.5.3
+     */
+    public function test_resolve_composer_command_prefers_env_binary(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY=/opt/homebrew/bin/composer' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
+            $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
+            $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #225: when the config value differs from the shipped
+     * default, treat it as an explicit operator override and leave it alone —
+     * no PHP_BINARY wrapping, no shell escaping.
+     *
+     * @since 2.5.3
+     */
+    public function test_resolve_composer_command_respects_non_default_config_override(): void
+    {
+        $override = 'PATH=/opt/homebrew/bin:/usr/bin /opt/homebrew/bin/composer install --no-dev --no-interaction --optimize-autoloader';
+        config( ['cms.updates.composer_install_command' => $override] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $this->assertSame( $override, $method->invoke( $manager ) );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #225: with no env override and default config, use the
+     * discovered binary and invoke it via `PHP_BINARY`.
+     *
+     * @since 2.5.3
+     */
+    public function test_resolve_composer_command_uses_discovered_binary(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                protected function discoverComposerBinary(): ?string
+                {
+                    return '/discovered/path/composer';
+                }
+            };
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
+            $this->assertStringContainsString( escapeshellarg( '/discovered/path/composer' ), $command );
+            $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #225: when nothing is set and discovery finds nothing,
+     * fall back to the default (bare `composer`) — the pre-2.5.3 behavior.
+     *
+     * @since 2.5.3
+     */
+    public function test_resolve_composer_command_falls_back_to_default(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                protected function discoverComposerBinary(): ?string
+                {
+                    return null;
+                }
+            };
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $this->assertSame(
+                ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+                $method->invoke( $manager ),
+            );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #225: the discovery candidate list must include the
+     * documented common install paths in preference order so the diagnostic
+     * message stays honest and hosts see the same list the framework tried.
+     *
+     * @since 2.5.3
+     */
+    public function test_composer_candidate_paths_covers_documented_locations(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'composerCandidatePaths' );
+            $method->setAccessible( true );
+
+            $candidates = $method->invoke( $manager );
+
+            $this->assertSame(
+                [
+                    '/usr/local/bin/composer',
+                    '/opt/homebrew/bin/composer',
+                    '/home/tester/.composer/vendor/bin/composer',
+                    '/home/tester/.config/composer/vendor/bin/composer',
+                    '/usr/bin/composer',
+                ],
+                $candidates,
+            );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #225: `discoverComposerBinary()` returns the first
+     * candidate that is both a file and executable. Prevents a silent
+     * regression where the `is_executable()` gate is dropped or the list gets
+     * reordered.
+     *
+     * @since 2.5.3
+     */
+    public function test_discover_composer_binary_returns_first_executable_hit(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/cmsfw-composer-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
+
+        $missing        = $tempDir . '/missing-composer';
+        $nonExecutable  = $tempDir . '/non-executable-composer';
+        $executableHit  = $tempDir . '/executable-composer';
+        $laterCandidate = $tempDir . '/never-reached-composer';
+
+        file_put_contents( $nonExecutable, "#!/bin/sh\n" );
+        chmod( $nonExecutable, 0644 );
+
+        file_put_contents( $executableHit, "#!/bin/sh\n" );
+        chmod( $executableHit, 0755 );
+
+        file_put_contents( $laterCandidate, "#!/bin/sh\n" );
+        chmod( $laterCandidate, 0755 );
+
+        try {
+            $manager = new class( [
+                $missing,
+                $nonExecutable,
+                $executableHit,
+                $laterCandidate,
+            ] ) extends ApplicationUpdateManager {
+                public function __construct( protected array $paths )
+                {
+                }
+
+                protected function composerCandidatePaths(): array
+                {
+                    return $this->paths;
+                }
+
+                public function callDiscover(): ?string
+                {
+                    return $this->discoverComposerBinary();
+                }
+            };
+
+            $this->assertSame( $executableHit, $manager->callDiscover() );
+        } finally {
+            @unlink( $missing );
+            @unlink( $nonExecutable );
+            @unlink( $executableHit );
+            @unlink( $laterCandidate );
+            @rmdir( $tempDir );
+        }
+    }
+
+    /**
+     * Regression for #225: rollback pre-checks the resolved composer binary
+     * with `--version` before invoking install, and surfaces a specific
+     * `composerBinaryNotFound` error rather than the generic "Manual
+     * intervention required" when the binary can't be reached.
+     *
+     * @since 2.5.3
+     */
+    public function test_rollback_throws_composer_binary_not_found_when_version_check_fails(): void
+    {
+        Process::fake( [
+            '*--version*' => Process::result( '', 'command not found', 127 ),
+        ] );
+
+        $manager = new class extends ApplicationUpdateManager {
+            protected function resolveComposerBinaryForVerification(): ?string
+            {
+                return '/opt/homebrew/bin/composer';
+            }
+        };
+
+        $backupPath = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' ) . '.zip';
+        $zip        = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'placeholder.txt', 'ok' );
+        $zip->close();
+
+        try {
+            $this->expectException( UpdateException::class );
+            $this->expectExceptionMessage( 'Composer binary could not be located' );
+
+            $manager->rollback( $backupPath );
+        } finally {
+            @unlink( $backupPath );
+        }
+    }
+
+    /**
+     * Regression for #225: when rollback fails, the resulting exception must
+     * preserve the original update-failure message so operators see *why* the
+     * update failed alongside the rollback failure.
+     *
+     * @since 2.5.3
+     */
+    public function test_rollback_failure_preserves_original_error(): void
+    {
+        $manager = new class extends ApplicationUpdateManager {
+            public function __construct()
+            {
+                $stub = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' );
+                @unlink( $stub );
+                $this->backupPath = $stub . '.zip';
+                file_put_contents( $this->backupPath, 'not-a-zip' );
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                // No-op; nothing to disable in this unit context.
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+        };
+
+        try {
+            $original = new RuntimeException( 'composer install failed because it ran out of memory' );
+
+            try {
+                $manager->callHandleFailure( $original );
+                $this->fail( 'Expected UpdateException from rollback.' );
+            } catch ( UpdateException $e ) {
+                $this->assertStringContainsString( 'Rollback failed', $e->getMessage() );
+                $this->assertStringContainsString( 'ran out of memory', $e->getMessage() );
+                $this->assertStringContainsString( 'Manual intervention required', $e->getMessage() );
+            }
+        } finally {
+            $reflection = new ReflectionClass( $manager );
+            $property   = $reflection->getProperty( 'backupPath' );
+            $property->setAccessible( true );
+            $path = $property->getValue( $manager );
+            if ( is_string( $path ) ) {
+                @unlink( $path );
+            }
         }
     }
 
