@@ -6,9 +6,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -219,15 +219,15 @@ class GitLabUpdateSource implements UpdateSourceInterface
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders( $headers )
-            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-            ->get( $apiUrl );
+        $response = MetadataClient::get( $apiUrl, $headers );
 
-        if ( ! $response->successful() ) {
-            throw UpdateException::versionCheckFailed( "GitLab API error: {$response->status()}" );
+        if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
+            throw UpdateException::versionCheckFailed( "GitLab API error: {$response['status']}" );
         }
 
-        return $response->json();
+        $decoded = json_decode( $response['body'], true );
+
+        return is_array( $decoded ) ? $decoded : [];
     }
 
     /**
@@ -253,25 +253,33 @@ class GitLabUpdateSource implements UpdateSourceInterface
             $headers['PRIVATE-TOKEN'] = $this->accessToken;
         }
 
-        $response = Http::withHeaders( $headers )
-            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-            ->get( $apiUrl );
+        $response = MetadataClient::get( $apiUrl, $headers );
 
-        if ( ! $response->successful() ) {
+        if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
             // Try without 'v' prefix
             $tag    = ltrim( $version, 'v' );
             $apiUrl = "https://gitlab.com/api/v4/projects/{$this->projectId}/releases/{$tag}";
 
-            $response = Http::withHeaders( $headers )
-                ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-                ->get( $apiUrl );
+            $response = MetadataClient::get( $apiUrl, $headers );
 
-            if ( ! $response->successful() ) {
+            if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
                 throw UpdateException::downloadFailed( "Release not found for version: {$version}" );
             }
         }
 
-        return $response->json();
+        $decoded = json_decode( $response['body'], true );
+
+        return is_array( $decoded ) ? $decoded : [];
+    }
+
+    /**
+     * Check if a raw HTTP status code represents a 2xx success.
+     *
+     * @since 2.5.4
+     */
+    protected function responseIsSuccessful( int $status ): bool
+    {
+        return $status >= 200 && $status < 300;
     }
 
     /**
@@ -508,9 +516,7 @@ class GitLabUpdateSource implements UpdateSourceInterface
         }
 
         try {
-            $response = Http::withHeaders( $headers )
-                ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-                ->get( $url );
+            $response = MetadataClient::get( $url, $headers );
         } catch ( Throwable $e ) {
             Log::warning( 'Failed to fetch GitLab SHA-256 sidecar.', [
                 'url'   => $url,
@@ -520,16 +526,16 @@ class GitLabUpdateSource implements UpdateSourceInterface
             return null;
         }
 
-        if ( ! $response->successful() ) {
+        if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
             Log::warning( 'GitLab SHA-256 sidecar request returned a non-success status.', [
                 'url'    => $url,
-                'status' => $response->status(),
+                'status' => $response['status'],
             ] );
 
             return null;
         }
 
-        if ( preg_match( '/\b([a-f0-9]{64})\b/i', $response->body(), $matches ) ) {
+        if ( preg_match( '/\b([a-f0-9]{64})\b/i', $response['body'], $matches ) ) {
             return strtolower( $matches[1] );
         }
 
