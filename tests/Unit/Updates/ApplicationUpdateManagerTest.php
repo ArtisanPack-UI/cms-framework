@@ -395,6 +395,61 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Regression for #234: `extractUpdate` must reject ZIP entries that resolve
+     * outside the extraction root (Zip Slip). Because extraction bypasses
+     * `ZipArchive::extractTo()` and streams entries manually, PHP's own
+     * traversal mitigations don't apply — the guard has to live in the manager.
+     *
+     * @since 2.5.4
+     */
+    public function test_extract_update_rejects_zip_slip_entries(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-zipslip-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $outside  = $tempRoot . '/outside';
+        mkdir( $target, 0755, true );
+        mkdir( $outside, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // Benign entry under the common prefix — should extract normally.
+        $zip->addFromString( 'release-root/app/Model.php', "<?php\n" );
+        // Malicious entry: after the common prefix is stripped, the remaining
+        // path traverses out of the extract root.
+        $zip->addFromString( 'release-root/../../../outside/pwn.php', "<?php // pwned\n" );
+        // Malicious entry with absolute path.
+        $zip->addFromString( '/absolute/etc/cron.d/x', "pwn\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Model.php' );
+            $this->assertFileDoesNotExist( $outside . '/pwn.php' );
+            $this->assertFileDoesNotExist( $tempRoot . '/outside/pwn.php' );
+            $this->assertFileDoesNotExist( '/absolute/etc/cron.d/x' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $outside );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
      * Regression for #225: `COMPOSER_BINARY` env var wins over both config and
      * discovery and is invoked via `PHP_BINARY` so the PHP-FPM pool's `PATH`
      * never has to resolve composer's shebang.
