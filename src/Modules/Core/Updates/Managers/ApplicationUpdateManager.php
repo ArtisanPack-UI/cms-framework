@@ -469,12 +469,39 @@ class ApplicationUpdateManager
                 continue;
             }
 
+            // Reject archive entries whose path would escape the extraction root
+            // (Zip Slip). Because extraction here bypasses ZipArchive::extractTo(),
+            // PHP's own traversal mitigations do not apply, so every entry must be
+            // validated against the base directory before any write.
+            $normalizedTarget = str_replace( '\\', '/', $targetPath );
+            if (
+                str_starts_with( $normalizedTarget, '/' )
+                || '..' === $normalizedTarget
+                || str_starts_with( $normalizedTarget, '../' )
+                || str_contains( $normalizedTarget, '/../' )
+                || str_ends_with( $normalizedTarget, '/..' )
+            ) {
+                \Illuminate\Support\Facades\Log::warning( 'Skipping update ZIP entry with unsafe path', [
+                    'entry' => $filename,
+                ] );
+
+                continue;
+            }
+
             $fullTargetPath = $extractPath . DIRECTORY_SEPARATOR . $targetPath;
 
             // Handle directories
             if ( str_ends_with( $filename, '/' ) ) {
                 if ( ! File::exists( $fullTargetPath ) ) {
                     File::makeDirectory( $fullTargetPath, 0755, true );
+                }
+
+                if ( ! $this->isPathWithinExtractRoot( $fullTargetPath, $extractPath ) ) {
+                    \Illuminate\Support\Facades\Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
+                        'entry' => $filename,
+                    ] );
+
+                    continue;
                 }
 
                 continue;
@@ -484,6 +511,16 @@ class ApplicationUpdateManager
             $targetDir = dirname( $fullTargetPath );
             if ( ! File::exists( $targetDir ) ) {
                 File::makeDirectory( $targetDir, 0755, true );
+            }
+
+            // Defense-in-depth: after the parent exists, resolve it and confirm
+            // it still sits under the extract root before opening the write stream.
+            if ( ! $this->isPathWithinExtractRoot( $targetDir, $extractPath ) ) {
+                \Illuminate\Support\Facades\Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
+                    'entry' => $filename,
+                ] );
+
+                continue;
             }
 
             // Stream the entry to disk rather than materializing it as a PHP
@@ -526,6 +563,31 @@ class ApplicationUpdateManager
         }
 
         $zip->close();
+    }
+
+    /**
+     * Determine whether a resolved path sits within the extraction root.
+     *
+     * Uses `realpath()` on both sides so that any `..` traversal or symlink is
+     * resolved before the comparison. Callers must ensure the target directory
+     * has been created first — `realpath()` returns false for missing paths.
+     *
+     * @since 2.5.4
+     *
+     * @param  string  $path  Absolute path to validate.
+     * @param  string  $extractPath  Extraction root the path must sit within.
+     */
+    protected function isPathWithinExtractRoot( string $path, string $extractPath ): bool
+    {
+        $realExtractPath = realpath( $extractPath );
+        $realPath        = realpath( $path );
+
+        if ( false === $realExtractPath || false === $realPath ) {
+            return false;
+        }
+
+        return $realPath === $realExtractPath
+            || str_starts_with( $realPath, $realExtractPath . DIRECTORY_SEPARATOR );
     }
 
     /**
