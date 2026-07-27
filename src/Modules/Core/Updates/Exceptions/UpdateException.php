@@ -1,6 +1,6 @@
 <?php
 
-declare( strict_types=1 );
+declare(strict_types=1);
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions;
 
@@ -20,9 +20,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function versionCheckFailed( string $reason ): self
+    public static function versionCheckFailed(string $reason): self
     {
-        return new self( "Failed to check for updates: {$reason}" );
+        return new self("Failed to check for updates: {$reason}");
     }
 
     /**
@@ -32,7 +32,7 @@ class UpdateException extends CMSFrameworkException
      */
     public static function noUpdateUrlConfigured(): self
     {
-        return new self( 'Update URL not configured. Please set UPDATE_SOURCE_URL in .env' );
+        return new self('Update URL not configured. Please set UPDATE_SOURCE_URL in .env');
     }
 
     /**
@@ -40,9 +40,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function invalidJsonResponse( string $url ): self
+    public static function invalidJsonResponse(string $url): self
     {
-        return new self( "Invalid JSON response from update URL: {$url}" );
+        return new self("Invalid JSON response from update URL: {$url}");
     }
 
     /**
@@ -50,9 +50,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function missingRequiredField( string $field ): self
+    public static function missingRequiredField(string $field): self
     {
-        return new self( "Update JSON missing required field: {$field}" );
+        return new self("Update JSON missing required field: {$field}");
     }
 
     /**
@@ -60,9 +60,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function backupFailed( string $path ): self
+    public static function backupFailed(string $path): self
     {
-        return new self( "Failed to create backup at: {$path}" );
+        return new self("Failed to create backup at: {$path}");
     }
 
     /**
@@ -70,9 +70,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function downloadFailed( string $url ): self
+    public static function downloadFailed(string $url): self
     {
-        return new self( "Failed to download update from: {$url}" );
+        return new self("Failed to download update from: {$url}");
     }
 
     /**
@@ -80,9 +80,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function checksumMismatch( string $expected, string $actual ): self
+    public static function checksumMismatch(string $expected, string $actual): self
     {
-        return new self( "Checksum mismatch. Expected: {$expected}, Got: {$actual}" );
+        return new self("Checksum mismatch. Expected: {$expected}, Got: {$actual}");
     }
 
     /**
@@ -90,9 +90,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function extractionFailed( string $zipPath ): self
+    public static function extractionFailed(string $zipPath): self
     {
-        return new self( "Failed to extract ZIP archive: {$zipPath}" );
+        return new self("Failed to extract ZIP archive: {$zipPath}");
     }
 
     /**
@@ -100,9 +100,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function composerInstallFailed( string $output ): self
+    public static function composerInstallFailed(string $output): self
     {
-        return new self( "Composer install failed. Output:\n{$output}" );
+        return new self("Composer install failed. Output:\n{$output}");
     }
 
     /**
@@ -112,15 +112,41 @@ class UpdateException extends CMSFrameworkException
      *
      * @param  array<int, string>  $searchedPaths  Absolute paths inspected during discovery.
      */
-    public static function composerBinaryNotFound( array $searchedPaths ): self
+    public static function composerBinaryNotFound(array $searchedPaths): self
     {
-        $paths   = empty( $searchedPaths ) ? '(none)' : implode( ', ', $searchedPaths );
+        $paths   = empty($searchedPaths) ? '(none)' : implode(', ', $searchedPaths);
         $message = 'Composer binary could not be located on the host. '
-            . "Searched: {$paths}. "
-            . 'Set the COMPOSER_BINARY environment variable or override '
-            . '`cms.updates.composer_install_command` with an absolute path to composer.';
+            ."Searched: {$paths}. "
+            .'Set the COMPOSER_BINARY environment variable or override '
+            .'`cms.updates.composer_install_command` with an absolute path to composer.';
 
-        return new self( $message );
+        return new self($message);
+    }
+
+    /**
+     * Composer binary was located but `--version` execution failed. Surfaces
+     * the resolved binary, the PHP interpreter used to invoke it, the exit
+     * code, and any captured output so operators can distinguish an
+     * unreachable-binary failure from an unusable-interpreter one (e.g. the
+     * FPM daemon binary being handed a PHAR).
+     *
+     * @since 2.5.4
+     */
+    public static function composerVerificationFailed(
+        string $composerBinary,
+        string $phpBinary,
+        int $exitCode,
+        string $detail,
+    ): self {
+        $detail  = '' === $detail ? '(no output captured)' : $detail;
+        $message = 'Composer binary was located but could not be executed. '
+            ."Ran: {$phpBinary} {$composerBinary} --version. "
+            ."Exit code: {$exitCode}. Output: {$detail}. "
+            .'If the PHP path points at an FPM/CGI SAPI binary, set the '
+            .'`CMS_PHP_BINARY` environment variable to an absolute path to a '
+            .'CLI PHP binary.';
+
+        return new self($message);
     }
 
     /**
@@ -130,7 +156,7 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 2.5.3
      */
-    public static function rollbackAfterFailure( string $originalError, string $rollbackError ): self
+    public static function rollbackAfterFailure(string $originalError, string $rollbackError): self
     {
         return new self(
             "Rollback failed: {$rollbackError}. Original update error: {$originalError}. Manual intervention required.",
@@ -142,9 +168,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function migrationFailed( string $output ): self
+    public static function migrationFailed(string $output): self
     {
-        return new self( "Migration failed. Output:\n{$output}" );
+        return new self("Migration failed. Output:\n{$output}");
     }
 
     /**
@@ -152,9 +178,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function rollbackFailed( string $reason ): self
+    public static function rollbackFailed(string $reason): self
     {
-        return new self( "Rollback failed: {$reason}. Manual intervention required." );
+        return new self("Rollback failed: {$reason}. Manual intervention required.");
     }
 
     /**
@@ -164,7 +190,7 @@ class UpdateException extends CMSFrameworkException
      */
     public static function noUpdateAvailable(): self
     {
-        return new self( 'No update available. Already running the latest version.' );
+        return new self('No update available. Already running the latest version.');
     }
 
     /**
@@ -174,7 +200,7 @@ class UpdateException extends CMSFrameworkException
      */
     public static function permissionDenied(): self
     {
-        return new self( 'You do not have permission to perform core updates.' );
+        return new self('You do not have permission to perform core updates.');
     }
 
     /**
@@ -182,9 +208,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function maintenanceModeFailure( string $action ): self
+    public static function maintenanceModeFailure(string $action): self
     {
-        return new self( "Failed to {$action} maintenance mode." );
+        return new self("Failed to {$action} maintenance mode.");
     }
 
     /**
@@ -192,9 +218,9 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function incompatiblePhpVersion( string $required, string $current ): self
+    public static function incompatiblePhpVersion(string $required, string $current): self
     {
-        return new self( "Update requires PHP {$required}, but you have {$current}" );
+        return new self("Update requires PHP {$required}, but you have {$current}");
     }
 
     /**
@@ -202,8 +228,8 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function incompatibleFrameworkVersion( string $required, string $current ): self
+    public static function incompatibleFrameworkVersion(string $required, string $current): self
     {
-        return new self( "Update requires cms-framework {$required}, but you have {$current}");
+        return new self("Update requires cms-framework {$required}, but you have {$current}");
     }
 }

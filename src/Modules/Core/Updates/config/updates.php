@@ -53,7 +53,7 @@ return [
     |
     | 1. `COMPOSER_BINARY` environment variable — set this to an absolute path
     |    if you know where composer lives (e.g. `/opt/homebrew/bin/composer`)
-    |    and want the framework to build the command as `{PHP_BINARY} {binary}
+    |    and want the framework to build the command as `{CLI PHP} {binary}
     |    install --no-dev --no-interaction --optimize-autoloader`.
     | 2. A non-default value for this config key — set this to a bespoke shell
     |    string if you need full control (custom flags, prepended PATH, etc.).
@@ -61,6 +61,12 @@ return [
     |    `/opt/homebrew/bin/composer`, `~/.composer/vendor/bin/composer`,
     |    `~/.config/composer/vendor/bin/composer`, `/usr/bin/composer`).
     | 4. This default command (bare `composer`).
+    |
+    | The PHP interpreter used to invoke composer is resolved from a CLI SAPI
+    | binary — never from `PHP_BINARY` when the caller is PHP-FPM, because
+    | `PHP_BINARY` under FPM points at the daemon and cannot execute PHARs.
+    | Set `CMS_PHP_BINARY` if the framework picks the wrong CLI PHP on your
+    | host.
     |
     */
     'composer_install_command' => 'composer install --no-dev --no-interaction --optimize-autoloader',
