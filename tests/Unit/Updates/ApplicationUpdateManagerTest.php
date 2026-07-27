@@ -426,6 +426,107 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Regression for #232: the shipped `cms.updates.composer_binary` config
+     * key (populated from `env('COMPOSER_BINARY')`) is honored as priority-1
+     * so operators who set `COMPOSER_BINARY` in Laravel `.env` — the natural
+     * first move — actually get picked up under HTTP-request context, where
+     * `getenv()` would otherwise return `false` under Laravel 11+.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_composer_command_prefers_config_composer_binary(): void
+    {
+        config( [
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+            'cms.updates.composer_binary'          => '/opt/homebrew/bin/composer',
+        ] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
+            $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
+            $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #232: `cms.updates.composer_binary` wins over
+     * `getenv('COMPOSER_BINARY')` when both are set — the `.env`-populated
+     * config value is the documented priority-1 source.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_composer_command_config_binary_wins_over_getenv(): void
+    {
+        config( [
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+            'cms.updates.composer_binary'          => '/from/config/composer',
+        ] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY=/from/getenv/composer' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringContainsString( escapeshellarg( '/from/config/composer' ), $command );
+            $this->assertStringNotContainsString( '/from/getenv/composer', $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #232: when the config key is unset (empty string, null),
+     * fall back to `getenv('COMPOSER_BINARY')` so OS-level exports (PHP-FPM
+     * pool env, container ENV) keep working exactly as before.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_composer_command_falls_back_to_getenv_when_config_empty(): void
+    {
+        config( [
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+            'cms.updates.composer_binary'          => null,
+        ] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY=/opt/homebrew/bin/composer' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
      * Regression for #225: when the config value differs from the shipped
      * default, treat it as an explicit operator override and leave it alone —
      * no PHP_BINARY wrapping, no shell escaping.
@@ -868,21 +969,21 @@ class ApplicationUpdateManagerTest extends TestCase
             return;
         }
 
-        foreach ( $items as $item) {
-            if ( '.' === $item || '..' === $item) {
+        foreach ( $items as $item ) {
+            if ( '.' === $item || '..' === $item ) {
                 continue;
             }
 
             $full = $path . DIRECTORY_SEPARATOR . $item;
 
-            if ( is_dir( $full)) {
-                $this->removeDirectory( $full);
+            if ( is_dir( $full ) ) {
+                $this->removeDirectory( $full );
             } else {
-                @unlink( $full);
+                @unlink( $full );
             }
         }
 
-        @rmdir( $path);
+        @rmdir( $path );
     }
 
     /**
@@ -892,15 +993,15 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app): void
+    protected function defineEnvironment( $app ): void
     {
-        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo');
-        $app['config']->set( 'cms.updates.backup_enabled', true);
-        $app['config']->set( 'cms.updates.backup_path', 'backups/application');
-        $app['config']->set( 'cms.updates.backup_retention_days', 30);
-        $app['config']->set( 'cms.updates.verify_checksum', false); // Disable for tests
-        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev');
-        $app['config']->set( 'cms.updates.composer_timeout', 600);
+        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
+        $app['config']->set( 'cms.updates.backup_enabled', true );
+        $app['config']->set( 'cms.updates.backup_path', 'backups/application' );
+        $app['config']->set( 'cms.updates.backup_retention_days', 30 );
+        $app['config']->set( 'cms.updates.verify_checksum', false ); // Disable for tests
+        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev' );
+        $app['config']->set( 'cms.updates.composer_timeout', 600 );
         $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
     }
 }

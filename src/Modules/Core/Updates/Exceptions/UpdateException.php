@@ -117,7 +117,9 @@ class UpdateException extends CMSFrameworkException
         $paths   = empty( $searchedPaths ) ? '(none)' : implode( ', ', $searchedPaths );
         $message = 'Composer binary could not be located on the host. '
             . "Searched: {$paths}. "
-            . 'Set the COMPOSER_BINARY environment variable or override '
+            . 'Set `COMPOSER_BINARY` in your Laravel `.env` file (populates '
+            . '`cms.updates.composer_binary`) or export it at the OS level '
+            . '(PHP-FPM pool env, shell before starting FPM), or override '
             . '`cms.updates.composer_install_command` with an absolute path to composer.';
 
         return new self( $message );
@@ -228,7 +230,7 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function incompatibleFrameworkVersion( string $required, string $current): self
+    public static function incompatibleFrameworkVersion( string $required, string $current ): self
     {
         return new self( "Update requires cms-framework {$required}, but you have {$current}");
     }
