@@ -722,15 +722,42 @@ class ApplicationUpdateManager
      * Locate a composer binary on disk by walking a curated list of common
      * install paths. Returns the first executable hit or `null`.
      *
+     * When discovery finds nothing, emits a structured `Log::warning` with
+     * per-candidate `is_file()` / `is_executable()` results so operators can
+     * distinguish "the path was wrong" from "PHP-FPM sandboxing hid a path
+     * that exists at the OS level" (common on macOS Herd Pro, chrooted FPM
+     * pools, and containers with restrictive `open_basedir`) without having
+     * to reflect into the framework or diff their environment.
+     *
      * @since 2.5.3
      */
     protected function discoverComposerBinary(): ?string
     {
+        $results = [];
+
         foreach ( $this->composerCandidatePaths() as $path ) {
-            if ( is_file( $path ) && is_executable( $path ) ) {
+            $isFile       = is_file( $path );
+            $isExecutable = $isFile ? is_executable( $path ) : false;
+
+            $results[] = [
+                'path'          => $path,
+                'is_file'       => $isFile,
+                'is_executable' => $isExecutable,
+            ];
+
+            if ( $isFile && $isExecutable ) {
                 return $path;
             }
         }
+
+        \Illuminate\Support\Facades\Log::warning(
+            'cms-framework: composer binary discovery failed; no candidate path was both a file and executable in the current PHP process context.',
+            [
+                'candidates' => $results,
+                'php_sapi'   => PHP_SAPI,
+                'hint'       => 'If a candidate exists at the OS level but reports is_file=false here, the PHP process likely cannot stat it (macOS Herd Pro sandbox, chrooted FPM pool, restrictive open_basedir). Set COMPOSER_BINARY in .env or override cms.updates.composer_install_command with an absolute path.',
+            ],
+        );
 
         return null;
     }

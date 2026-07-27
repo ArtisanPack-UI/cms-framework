@@ -703,12 +703,83 @@ class ApplicationUpdateManagerTest extends TestCase
                 }
             };
 
+            Log::shouldReceive( 'warning' )->never();
+
             $this->assertSame( $executableHit, $manager->callDiscover() );
         } finally {
             @unlink( $missing );
             @unlink( $nonExecutable );
             @unlink( $executableHit );
             @unlink( $laterCandidate );
+            @rmdir( $tempDir );
+        }
+    }
+
+    /**
+     * Regression for #233: when discovery finds nothing, emit a structured
+     * `Log::warning` that reports per-candidate `is_file()` / `is_executable()`
+     * results so operators can distinguish a wrong-path failure from a
+     * PHP-FPM sandboxed-stat failure (macOS Herd Pro, chrooted FPM pools,
+     * restrictive `open_basedir`) without having to reflect into the
+     * framework.
+     *
+     * @since 2.5.4
+     */
+    public function test_discover_composer_binary_logs_per_candidate_diagnostics_on_failure(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/cmsfw-composer-diag-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
+
+        $missing       = $tempDir . '/missing-composer';
+        $nonExecutable = $tempDir . '/non-executable-composer';
+
+        file_put_contents( $nonExecutable, "#!/bin/sh\n" );
+        chmod( $nonExecutable, 0644 );
+
+        $manager = new class( [$missing, $nonExecutable] ) extends ApplicationUpdateManager {
+            public function __construct( protected array $paths )
+            {
+            }
+
+            protected function composerCandidatePaths(): array
+            {
+                return $this->paths;
+            }
+
+            public function callDiscover(): ?string
+            {
+                return $this->discoverComposerBinary();
+            }
+        };
+
+        $captured = [];
+        Log::shouldReceive( 'warning' )
+            ->once()
+            ->andReturnUsing( function ( string $message, array $context ) use ( &$captured ): void {
+                $captured = [
+                    'message' => $message,
+                    'context' => $context,
+                ];
+            } );
+
+        try {
+            $this->assertNull( $manager->callDiscover() );
+
+            $this->assertStringContainsString( 'composer binary discovery failed', $captured['message'] );
+            $this->assertArrayHasKey( 'candidates', $captured['context'] );
+            $this->assertArrayHasKey( 'php_sapi', $captured['context'] );
+            $this->assertArrayHasKey( 'hint', $captured['context'] );
+
+            $this->assertSame(
+                [
+                    ['path' => $missing, 'is_file' => false, 'is_executable' => false],
+                    ['path' => $nonExecutable, 'is_file' => true, 'is_executable' => false],
+                ],
+                $captured['context']['candidates'],
+            );
+        } finally {
+            @unlink( $missing );
+            @unlink( $nonExecutable );
             @rmdir( $tempDir );
         }
     }
