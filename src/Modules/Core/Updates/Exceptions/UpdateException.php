@@ -124,6 +124,32 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * Composer binary was located but `--version` execution failed. Surfaces
+     * the resolved binary, the PHP interpreter used to invoke it, the exit
+     * code, and any captured output so operators can distinguish an
+     * unreachable-binary failure from an unusable-interpreter one (e.g. the
+     * FPM daemon binary being handed a PHAR).
+     *
+     * @since 2.5.4
+     */
+    public static function composerVerificationFailed(
+        string $composerBinary,
+        string $phpBinary,
+        int $exitCode,
+        string $detail,
+    ): self {
+        $detail  = '' === $detail ? '(no output captured)' : $detail;
+        $message = 'Composer binary was located but could not be executed. '
+            . "Ran: {$phpBinary} {$composerBinary} --version. "
+            . "Exit code: {$exitCode}. Output: {$detail}. "
+            . 'If the PHP path points at an FPM/CGI SAPI binary, set the '
+            . '`CMS_PHP_BINARY` environment variable to an absolute path to a '
+            . 'CLI PHP binary.';
+
+        return new self( $message );
+    }
+
+    /**
      * Rollback failed after an initial update failure. Preserves the original
      * error message so the operator can see *why* the update failed alongside
      * the rollback failure.
@@ -202,7 +228,7 @@ class UpdateException extends CMSFrameworkException
      *
      * @since 1.0.0
      */
-    public static function incompatibleFrameworkVersion( string $required, string $current ): self
+    public static function incompatibleFrameworkVersion( string $required, string $current): self
     {
         return new self( "Update requires cms-framework {$required}, but you have {$current}");
     }

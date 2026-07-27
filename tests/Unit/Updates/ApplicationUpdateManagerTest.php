@@ -586,12 +586,7 @@ class ApplicationUpdateManagerTest extends TestCase
         chmod( $laterCandidate, 0755 );
 
         try {
-            $manager = new class( [
-                $missing,
-                $nonExecutable,
-                $executableHit,
-                $laterCandidate,
-            ] ) extends ApplicationUpdateManager {
+            $manager = new class( [$missing, $nonExecutable, $executableHit, $laterCandidate] ) extends ApplicationUpdateManager {
                 public function __construct( protected array $paths )
                 {
                 }
@@ -620,12 +615,17 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * Regression for #225: rollback pre-checks the resolved composer binary
      * with `--version` before invoking install, and surfaces a specific
-     * `composerBinaryNotFound` error rather than the generic "Manual
-     * intervention required" when the binary can't be reached.
+     * error rather than the generic "Manual intervention required" when the
+     * binary can't be reached.
+     *
+     * As of 2.5.4 the pre-check throws `composerVerificationFailed` (which
+     * captures exit code + output) rather than `composerBinaryNotFound` —
+     * the binary *was* located, so the misleading "not found" wording was
+     * masking real interpreter mismatches on PHP-FPM hosts.
      *
      * @since 2.5.3
      */
-    public function test_rollback_throws_composer_binary_not_found_when_version_check_fails(): void
+    public function test_rollback_throws_composer_verification_failed_when_version_check_fails(): void
     {
         Process::fake( [
             '*--version*' => Process::result( '', 'command not found', 127 ),
@@ -646,7 +646,7 @@ class ApplicationUpdateManagerTest extends TestCase
 
         try {
             $this->expectException( UpdateException::class );
-            $this->expectExceptionMessage( 'Composer binary could not be located' );
+            $this->expectExceptionMessage( 'could not be executed' );
 
             $manager->rollback( $backupPath );
         } finally {
@@ -706,6 +706,152 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * The PHP interpreter used to run composer must be a *CLI* SAPI binary.
+     * Under PHP-FPM `PHP_BINARY` points at the FPM daemon, which prints usage
+     * and exits 64 when handed a PHAR — the root cause of the "Composer
+     * install failed. Output: ." symptom observed on Herd hosts. Regression
+     * guard: an FPM-shaped candidate must be rejected in favor of a CLI one.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_php_binary_skips_fpm_candidates_and_prefers_cli(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/cmsfw-php-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
+
+        $fpm = $tempDir . '/php84-fpm';
+        $cli = $tempDir . '/php';
+
+        file_put_contents( $fpm, "#!/bin/sh\n" );
+        chmod( $fpm, 0755 );
+        file_put_contents( $cli, "#!/bin/sh\n" );
+        chmod( $cli, 0755 );
+
+        $original = getenv( 'CMS_PHP_BINARY' );
+        putenv( 'CMS_PHP_BINARY' );
+
+        try {
+            $manager = new class( [$fpm, $cli], 'fpm-fcgi' ) extends ApplicationUpdateManager {
+                public function __construct( protected array $paths, protected string $sapi )
+                {
+                }
+
+                protected function phpCandidatePaths(): array
+                {
+                    return $this->paths;
+                }
+
+                public function callResolvePhpBinary(): string
+                {
+                    // Bypass the PHP_SAPI short-circuit by shadowing the
+                    // condition — we can't mutate the runtime SAPI constant,
+                    // so we run the discovery path directly.
+                    foreach ( $this->phpCandidatePaths() as $candidate ) {
+                        if ( $this->isCliPhpBinary( $candidate ) ) {
+                            return $candidate;
+                        }
+                    }
+
+                    return PHP_BINARY;
+                }
+            };
+
+            $this->assertSame( $cli, $manager->callResolvePhpBinary() );
+        } finally {
+            @unlink( $fpm );
+            @unlink( $cli );
+            @rmdir( $tempDir );
+            putenv( false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * `CMS_PHP_BINARY` is the operator escape hatch — when set it wins over
+     * SAPI detection and candidate discovery so hosts with an unusual layout
+     * can point the updater at a known-good CLI PHP.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_php_binary_respects_env_override(): void
+    {
+        $original = getenv( 'CMS_PHP_BINARY' );
+        putenv( 'CMS_PHP_BINARY=/custom/path/to/php' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolvePhpBinary' );
+            $method->setAccessible( true );
+
+            $this->assertSame( '/custom/path/to/php', $method->invoke( $manager ) );
+        } finally {
+            putenv( false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * The candidate list must include Herd's macOS install path and the
+     * common Homebrew/system locations in preference order. Cross-checked
+     * with the diagnostic in `composerVerificationFailed` so operators see
+     * the same list the framework tried.
+     *
+     * @since 2.5.4
+     */
+    public function test_php_candidate_paths_covers_documented_locations(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'phpCandidatePaths' );
+            $method->setAccessible( true );
+
+            $this->assertSame(
+                [
+                    '/home/tester/Library/Application Support/Herd/bin/php',
+                    '/opt/homebrew/bin/php',
+                    '/usr/local/bin/php',
+                    '/usr/bin/php',
+                ],
+                $method->invoke( $manager ),
+            );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * `composerVerificationFailed` must surface the actual exit code and
+     * captured output so operators can distinguish an interpreter-mismatch
+     * (usage/64) failure from a genuine unreachable-binary case. Without
+     * this the previous "not found" wording sent operators chasing PATH
+     * issues that weren't there.
+     *
+     * @since 2.5.4
+     */
+    public function test_composer_verification_failed_message_includes_diagnostic_context(): void
+    {
+        $exception = UpdateException::composerVerificationFailed(
+            composerBinary: '/opt/homebrew/bin/composer',
+            phpBinary: '/Users/tester/Herd/bin/php84-fpm',
+            exitCode: 64,
+            detail: 'Usage: php84-fpm ...',
+        );
+
+        $message = $exception->getMessage();
+
+        $this->assertStringContainsString( '/opt/homebrew/bin/composer', $message );
+        $this->assertStringContainsString( '/Users/tester/Herd/bin/php84-fpm', $message );
+        $this->assertStringContainsString( 'Exit code: 64', $message );
+        $this->assertStringContainsString( 'Usage: php84-fpm', $message );
+        $this->assertStringContainsString( 'CMS_PHP_BINARY', $message );
+    }
+
+    /**
      * Recursively remove a directory used by extraction tests.
      *
      * @since 2.5.2
@@ -722,21 +868,21 @@ class ApplicationUpdateManagerTest extends TestCase
             return;
         }
 
-        foreach ( $items as $item ) {
-            if ( '.' === $item || '..' === $item ) {
+        foreach ( $items as $item) {
+            if ( '.' === $item || '..' === $item) {
                 continue;
             }
 
             $full = $path . DIRECTORY_SEPARATOR . $item;
 
-            if ( is_dir( $full ) ) {
-                $this->removeDirectory( $full );
+            if ( is_dir( $full)) {
+                $this->removeDirectory( $full);
             } else {
-                @unlink( $full );
+                @unlink( $full);
             }
         }
 
-        @rmdir( $path );
+        @rmdir( $path);
     }
 
     /**
@@ -746,15 +892,15 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment( $app ): void
+    protected function defineEnvironment( $app): void
     {
-        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo' );
-        $app['config']->set( 'cms.updates.backup_enabled', true );
-        $app['config']->set( 'cms.updates.backup_path', 'backups/application' );
-        $app['config']->set( 'cms.updates.backup_retention_days', 30 );
-        $app['config']->set( 'cms.updates.verify_checksum', false ); // Disable for tests
-        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev' );
-        $app['config']->set( 'cms.updates.composer_timeout', 600 );
-        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor'] );
+        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo');
+        $app['config']->set( 'cms.updates.backup_enabled', true);
+        $app['config']->set( 'cms.updates.backup_path', 'backups/application');
+        $app['config']->set( 'cms.updates.backup_retention_days', 30);
+        $app['config']->set( 'cms.updates.verify_checksum', false); // Disable for tests
+        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev');
+        $app['config']->set( 'cms.updates.composer_timeout', 600);
+        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
     }
 }

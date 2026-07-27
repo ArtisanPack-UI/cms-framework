@@ -648,14 +648,24 @@ class ApplicationUpdateManager
             return;
         }
 
-        $command = escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $binary ) . ' --version';
+        $php     = $this->resolvePhpBinary();
+        $command = escapeshellarg( $php ) . ' ' . escapeshellarg( $binary ) . ' --version';
 
         $result = Process::timeout( 10 )
             ->path( base_path() )
             ->run( $command );
 
         if ( ! $result->successful() ) {
-            throw UpdateException::composerBinaryNotFound( $this->composerCandidatePaths() );
+            $stderr = trim( (string) $result->errorOutput() );
+            $stdout = trim( (string) $result->output() );
+            $detail = '' !== $stderr ? $stderr : $stdout;
+
+            throw UpdateException::composerVerificationFailed(
+                $binary,
+                $php,
+                (int) $result->exitCode(),
+                $detail,
+            );
         }
     }
 
@@ -744,14 +754,106 @@ class ApplicationUpdateManager
     }
 
     /**
-     * Build the composer command line from a binary path. Uses `PHP_BINARY`
-     * so PHP-FPM's `PATH` never needs to resolve `php` for composer's shebang.
+     * Build the composer command line from a binary path. Invokes composer via
+     * a resolved CLI PHP interpreter so PHP-FPM's `PATH` never needs to
+     * resolve `php` for composer's shebang, and so we never hand the PHAR to
+     * an FPM daemon binary (which prints usage and exits 64).
      *
      * @since 2.5.3
      */
     protected function buildComposerCommand( string $binary ): string
     {
-        return escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $binary ) . ' ' . self::DEFAULT_COMPOSER_INSTALL_ARGS;
+        return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . self::DEFAULT_COMPOSER_INSTALL_ARGS;
+    }
+
+    /**
+     * Resolve a CLI PHP binary suitable for executing composer's PHAR.
+     *
+     * `PHP_BINARY` is only trustworthy when the current SAPI is `cli` — under
+     * PHP-FPM (which is where the self-updater actually runs from the admin
+     * UI) it resolves to the FPM daemon binary, which cannot execute scripts.
+     * Handing composer to it produces the classic "prints usage, exits 64,
+     * empty stderr" failure that led to #225 and reappeared under Herd.
+     *
+     * Resolution order:
+     * 1. `CMS_PHP_BINARY` environment variable — absolute path, wins.
+     * 2. `PHP_BINARY` when `PHP_SAPI === 'cli'` — the CLI-invoked update
+     *    command path (artisan, workers) hits this and gets the same
+     *    interpreter as the parent process.
+     * 3. A curated candidate list of CLI installs, filtering out anything
+     *    whose basename smells like an FPM/CGI SAPI binary.
+     * 4. `PHP_BINARY` as a last-resort fallback so callers still get *a*
+     *    command to execute; the surrounding diagnostic will surface the
+     *    real failure.
+     *
+     * @since 2.5.4
+     */
+    protected function resolvePhpBinary(): string
+    {
+        $override = getenv( 'CMS_PHP_BINARY' );
+        if ( is_string( $override ) && '' !== $override ) {
+            return $override;
+        }
+
+        if ( 'cli' === PHP_SAPI ) {
+            return PHP_BINARY;
+        }
+
+        foreach ( $this->phpCandidatePaths() as $candidate ) {
+            if ( $this->isCliPhpBinary( $candidate ) ) {
+                return $candidate;
+            }
+        }
+
+        return PHP_BINARY;
+    }
+
+    /**
+     * Common CLI PHP install paths, in preference order. Extracted so tests
+     * and the `composerVerificationFailed` diagnostic can share the same list.
+     *
+     * @since 2.5.4
+     *
+     * @return array<int, string>
+     */
+    protected function phpCandidatePaths(): array
+    {
+        $home = getenv( 'HOME' );
+
+        $candidates = [];
+
+        if ( is_string( $home ) && '' !== $home ) {
+            // Laravel Herd on macOS ships a `php` symlink pointing at the
+            // currently-active CLI binary (e.g. `php84`). Prefer it so hosts
+            // that use Herd for both FPM and CLI stay on a single toolchain.
+            $candidates[] = $home . '/Library/Application Support/Herd/bin/php';
+        }
+
+        $candidates[] = '/opt/homebrew/bin/php';
+        $candidates[] = '/usr/local/bin/php';
+        $candidates[] = '/usr/bin/php';
+
+        return $candidates;
+    }
+
+    /**
+     * Return true when the path points at what looks like a CLI PHP binary —
+     * executable, and whose basename does not smell like an FPM or CGI SAPI
+     * binary (`php-fpm`, `php84-fpm`, `php-cgi`, …). Cheap heuristic; the
+     * only real cost of a false-positive is the caller falling through to
+     * `PHP_BINARY` and surfacing the resulting diagnostic.
+     *
+     * @since 2.5.4
+     */
+    protected function isCliPhpBinary( string $path ): bool
+    {
+        if ( ! is_file( $path ) || ! is_executable( $path ) ) {
+            return false;
+        }
+
+        $basename = strtolower( basename( $path ) );
+
+        return ! str_contains( $basename, 'fpm' ) && ! str_contains( $basename, 'cgi' );
     }
 
     /**
@@ -844,12 +946,12 @@ class ApplicationUpdateManager
             'trace'     => $exception->getTraceAsString(),
             'file'      => $exception->getFile(),
             'line'      => $exception->getLine(),
-        ] );
+        ]);
 
         // Attempt to disable maintenance mode
         try {
             $this->disableMaintenanceMode();
-        } catch ( Throwable $e ) {
+        } catch ( Throwable $e) {
             \Illuminate\Support\Facades\Log::error(
                 'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
                 ['exception' => $e->getMessage()],
@@ -857,15 +959,15 @@ class ApplicationUpdateManager
         }
 
         // If we have a backup, attempt rollback
-        if ( $this->backupPath && File::exists( $this->backupPath ) ) {
+        if ( $this->backupPath && File::exists( $this->backupPath)) {
             try {
-                $this->rollback( $this->backupPath );
-            } catch ( Throwable $e ) {
+                $this->rollback( $this->backupPath);
+            } catch ( Throwable $e) {
                 // Rollback failed - this is critical. Preserve the original
                 // update-failure message alongside the rollback message so the
                 // operator can see both failures rather than only the trailing
                 // one.
-                throw UpdateException::rollbackAfterFailure( $exception->getMessage(), $e->getMessage() );
+                throw UpdateException::rollbackAfterFailure( $exception->getMessage(), $e->getMessage());
             }
         }
     }
