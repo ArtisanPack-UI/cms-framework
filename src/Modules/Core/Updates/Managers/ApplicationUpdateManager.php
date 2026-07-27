@@ -533,20 +533,44 @@ class ApplicationUpdateManager
             // the middle of extraction.
             $entryStream = $zip->getStream( $filename );
             if ( false === $entryStream ) {
-                continue;
+                \Illuminate\Support\Facades\Log::error( 'Failed to open ZIP entry stream during update extraction', [
+                    'entry' => $filename,
+                ] );
+
+                throw UpdateException::extractionEntryFailed( $filename, 'could not open entry stream from archive' );
             }
 
             $out = @fopen( $fullTargetPath, 'wb' );
             if ( false === $out ) {
                 fclose( $entryStream );
 
-                continue;
+                $error = error_get_last();
+                \Illuminate\Support\Facades\Log::error( 'Failed to open update target for writing', [
+                    'entry'  => $filename,
+                    'target' => $fullTargetPath,
+                    'errno'  => $error['type'] ?? null,
+                    'reason' => $error['message'] ?? null,
+                ] );
+
+                throw UpdateException::extractionEntryFailed(
+                    $filename,
+                    "could not open target for writing: {$fullTargetPath}",
+                );
             }
 
             try {
                 while ( ! feof( $entryStream ) ) {
                     $chunk = fread( $entryStream, 1024 * 1024 );
-                    if ( false === $chunk || '' === $chunk ) {
+                    if ( false === $chunk ) {
+                        \Illuminate\Support\Facades\Log::error( 'Read failure while streaming update entry', [
+                            'entry'  => $filename,
+                            'target' => $fullTargetPath,
+                        ] );
+
+                        throw UpdateException::extractionEntryFailed( $filename, 'read failure while streaming entry from archive' );
+                    }
+
+                    if ( '' === $chunk ) {
                         break;
                     }
 

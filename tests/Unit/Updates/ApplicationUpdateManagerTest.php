@@ -488,6 +488,69 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Regression for #236: `extractUpdate` must surface a per-entry write
+     * failure (fopen/fread on the target file) as an `UpdateException` so
+     * `performUpdate()`'s catch block can roll back to the pre-update snapshot
+     * instead of leaving a partial install on disk.
+     *
+     * @since 2.5.4
+     */
+    public function test_extract_update_throws_when_entry_target_cannot_be_opened(): void
+    {
+        if ( 0 === posix_geteuid() ) {
+            $this->markTestSkipped( 'Cannot exercise fopen failure as root — the read-only parent guard is bypassed.' );
+        }
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-fopen-fail-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        // Pre-create the entry's parent directory as read-only so the manager
+        // reuses it (skipping the makeDirectory branch) and the subsequent
+        // fopen('wb') on a new file inside it fails.
+        $lockedDir = $target . '/locked';
+        mkdir( $lockedDir, 0555, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/locked/file.php', "<?php\n// payload\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $threw = false;
+
+            try {
+                $manager->extractInto( $zipPath );
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'release-root/locked/file.php', $e->getMessage() );
+                $this->assertStringContainsString( 'could not open target for writing', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'extractUpdate must throw UpdateException when a target file cannot be opened for writing.' );
+            $this->assertFileDoesNotExist( $lockedDir . '/file.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @chmod( $lockedDir, 0755 );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
      * Regression for #225: `COMPOSER_BINARY` env var wins over both config and
      * discovery and is invoked via `PHP_BINARY` so the PHP-FPM pool's `PATH`
      * never has to resolve composer's shebang.
