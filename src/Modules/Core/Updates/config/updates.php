@@ -54,7 +54,9 @@ return [
     | 1. `COMPOSER_BINARY` environment variable — set this to an absolute path
     |    if you know where composer lives (e.g. `/opt/homebrew/bin/composer`)
     |    and want the framework to build the command as `{CLI PHP} {binary}
-    |    install --no-dev --no-interaction --optimize-autoloader`.
+    |    install --no-dev --no-interaction --optimize-autoloader`. Set it in
+    |    your Laravel `.env` (populated via `composer_binary` below) or as an
+    |    OS-level env var visible to `getenv()` in the PHP-FPM pool.
     | 2. A non-default value for this config key — set this to a bespoke shell
     |    string if you need full control (custom flags, prepended PATH, etc.).
     | 3. Auto-discovery across common install paths (`/usr/local/bin/composer`,
@@ -70,6 +72,25 @@ return [
     |
     */
     'composer_install_command' => 'composer install --no-dev --no-interaction --optimize-autoloader',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Binary Path (priority-1 override)
+    |--------------------------------------------------------------------------
+    |
+    | Absolute path to the composer binary the self-updater should invoke,
+    | resolved via Laravel's `env()` so setting `COMPOSER_BINARY` in your
+    | `.env` file works — which is the natural first move for a Laravel
+    | operator and what the `composerBinaryNotFound` error message advertises.
+    |
+    | Laravel 11+'s default dotenv adapter populates `env()` and `$_ENV` but
+    | does not `putenv()`, so `getenv('COMPOSER_BINARY')` returns `false` from
+    | HTTP-request context under PHP-FPM even when `.env` has the value. This
+    | config key bridges the gap: the framework reads this key first, then
+    | falls back to `getenv()` for hosts that set the value at the OS level.
+    |
+    */
+    'composer_binary' => env( 'COMPOSER_BINARY' ),
 
     'composer_timeout' => 600, // 10 minutes
 

@@ -694,14 +694,23 @@ class ApplicationUpdateManager
 
     /**
      * Absolute path from the `COMPOSER_BINARY` environment variable, or `null`
-     * when not set.
+     * when not set. Reads `cms.updates.composer_binary` first — which is
+     * populated from `env('COMPOSER_BINARY')` in the shipped config and
+     * therefore sees values placed in the Laravel `.env` file under both CLI
+     * and HTTP-request contexts — then falls back to `getenv()` for hosts that
+     * export `COMPOSER_BINARY` at the OS level (PHP-FPM pool env, shell before
+     * starting FPM, container ENV, etc.).
      *
      * @since 2.5.3
      */
     protected function envComposerBinary(): ?string
     {
-        $envBinary = getenv( 'COMPOSER_BINARY' );
+        $configured = config( 'cms.updates.composer_binary' );
+        if ( is_string( $configured ) && '' !== $configured ) {
+            return $configured;
+        }
 
+        $envBinary = getenv( 'COMPOSER_BINARY' );
         if ( false === $envBinary || '' === $envBinary ) {
             return null;
         }
@@ -946,12 +955,12 @@ class ApplicationUpdateManager
             'trace'     => $exception->getTraceAsString(),
             'file'      => $exception->getFile(),
             'line'      => $exception->getLine(),
-        ]);
+        ] );
 
         // Attempt to disable maintenance mode
         try {
             $this->disableMaintenanceMode();
-        } catch ( Throwable $e) {
+        } catch ( Throwable $e ) {
             \Illuminate\Support\Facades\Log::error(
                 'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
                 ['exception' => $e->getMessage()],
@@ -959,10 +968,10 @@ class ApplicationUpdateManager
         }
 
         // If we have a backup, attempt rollback
-        if ( $this->backupPath && File::exists( $this->backupPath)) {
+        if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {
-                $this->rollback( $this->backupPath);
-            } catch ( Throwable $e) {
+                $this->rollback( $this->backupPath );
+            } catch ( Throwable $e ) {
                 // Rollback failed - this is critical. Preserve the original
                 // update-failure message alongside the rollback message so the
                 // operator can see both failures rather than only the trailing

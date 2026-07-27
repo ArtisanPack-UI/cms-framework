@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`cms.updates.composer_binary` config key** ([#232](https://github.com/ArtisanPack-UI/cms-framework/issues/232)) — priority-1 override for the self-updater's composer binary path, populated by default from `env('COMPOSER_BINARY')`. Setting `COMPOSER_BINARY=/opt/homebrew/bin/composer` in a Laravel `.env` file now works from HTTP-request context, matching the advice the `composerBinaryNotFound` error message gives.
+
 ### Changed
 
 ### Deprecated
@@ -16,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
+
+- **`COMPOSER_BINARY` in `.env` didn't take effect under PHP-FPM** ([#232](https://github.com/ArtisanPack-UI/cms-framework/issues/232)) — `ApplicationUpdateManager::envComposerBinary()` read via `getenv('COMPOSER_BINARY')`, but Laravel 11+'s default dotenv adapter populates `env()`/`$_ENV` without calling `putenv()`, so `getenv()` returned `false` from HTTP-request context and the priority-1 override was silently skipped. `envComposerBinary()` now reads `cms.updates.composer_binary` (populated from `env('COMPOSER_BINARY')` in the shipped config) first, then falls back to `getenv()` for hosts that export `COMPOSER_BINARY` at the OS level. The `composerBinaryNotFound` error message now names both the `.env`/config path and the OS-level path so operators aren't sent down a broken workaround.
 
 ### Security
 
