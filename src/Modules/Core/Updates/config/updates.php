@@ -184,6 +184,27 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Allow Unverified Updates
+    |--------------------------------------------------------------------------
+    |
+    | When `verify_checksum` is enabled and the update source does not
+    | advertise a SHA-256 checksum, the updater fails closed by default and
+    | aborts the update rather than installing arbitrary remote code without
+    | an integrity check.
+    |
+    | Set to `true` only when consuming a trusted update source (e.g. an
+    | air-gapped mirror or an internal feed) that intentionally does not
+    | publish checksums. The updater will log a warning and proceed.
+    |
+    | CAUTION: This weakens the reachability story for extraction-time
+    | vulnerabilities such as zip-slip. Do not enable in production unless
+    | you fully control the source and transport.
+    |
+    */
+    'allow_unverified_updates' => env( 'CMS_UPDATES_ALLOW_UNVERIFIED', false ),
+
+    /*
+    |--------------------------------------------------------------------------
     | GitLab Update Strategy
     |--------------------------------------------------------------------------
     |

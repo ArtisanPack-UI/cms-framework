@@ -230,13 +230,17 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
-     * Test maybeVerifyChecksum logs a warning when the source omits a checksum.
+     * Test maybeVerifyChecksum logs a warning when the source omits a checksum
+     * and the host has explicitly opted in to accepting unverified updates.
      *
      * @since 2.0.0
      */
     public function test_maybe_verify_checksum_logs_warning_when_sha256_missing(): void
     {
-        config( ['cms.updates.verify_checksum' => true] );
+        config( [
+            'cms.updates.verify_checksum'          => true,
+            'cms.updates.allow_unverified_updates' => true,
+        ] );
 
         $manager = new ApplicationUpdateManager;
 
@@ -259,6 +263,40 @@ class ApplicationUpdateManagerTest extends TestCase
         $reflection = new ReflectionClass( $manager );
         $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
         $method->setAccessible( true );
+
+        $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
+    }
+
+    /**
+     * Test maybeVerifyChecksum fails closed by default when the source omits a
+     * checksum. The updater must refuse to proceed rather than installing
+     * arbitrary remote code without integrity verification.
+     *
+     * @since 2.5.4
+     */
+    public function test_maybe_verify_checksum_throws_when_sha256_missing_and_not_opted_in(): void
+    {
+        config( [
+            'cms.updates.verify_checksum'          => true,
+            'cms.updates.allow_unverified_updates' => false,
+        ] );
+
+        $manager = new ApplicationUpdateManager;
+
+        $updateInfo = new UpdateInfo(
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+            downloadUrl: 'https://example.com/update.zip',
+            sha256: null,
+            metadata: ['source' => 'gitlab'],
+        );
+
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
+        $method->setAccessible( true );
+
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'did not advertise a SHA-256 checksum' );
 
         $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
     }

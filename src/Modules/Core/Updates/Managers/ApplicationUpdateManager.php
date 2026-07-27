@@ -417,6 +417,10 @@ class ApplicationUpdateManager
             return;
         }
 
+        if ( ! config( 'cms.updates.allow_unverified_updates', false ) ) {
+            throw UpdateException::checksumRequired( $targetVersion );
+        }
+
         \Illuminate\Support\Facades\Log::warning( 'Skipping update integrity verification: update source did not advertise a SHA-256 checksum.', [
             'target_version' => $targetVersion,
             'source'         => $updateInfo->metadata['source'] ?? null,
