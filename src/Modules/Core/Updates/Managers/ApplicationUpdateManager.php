@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
@@ -84,11 +84,11 @@ class ApplicationUpdateManager
      *
      * @return bool True if update successful
      */
-    public function performUpdate(?string $version = null): bool
+    public function performUpdate( ?string $version = null ): bool
     {
         $updateInfo = $this->checkForUpdate();
 
-        if (! $updateInfo->hasUpdate()) {
+        if ( ! $updateInfo->hasUpdate() ) {
             throw UpdateException::noUpdateAvailable();
         }
 
@@ -100,18 +100,18 @@ class ApplicationUpdateManager
             $this->enableMaintenanceMode();
 
             // Step 2: Create backup
-            if (config('cms.updates.backup_enabled', true)) {
+            if ( config( 'cms.updates.backup_enabled', true ) ) {
                 $this->createBackup();
             }
 
             // Step 3: Download update
-            $zipPath = $this->getUpdateChecker()->downloadUpdate($targetVersion);
+            $zipPath = $this->getUpdateChecker()->downloadUpdate( $targetVersion );
 
             // Step 4: Verify checksum (or surface the silent skip)
-            $this->maybeVerifyChecksum($zipPath, $updateInfo, $targetVersion);
+            $this->maybeVerifyChecksum( $zipPath, $updateInfo, $targetVersion );
 
             // Step 5: Extract update
-            $this->extractUpdate($zipPath);
+            $this->extractUpdate( $zipPath );
 
             // Step 6: Run composer install
             $this->runComposerInstall();
@@ -123,15 +123,15 @@ class ApplicationUpdateManager
             $this->clearCaches();
 
             // Step 9: Clean up
-            $this->cleanup($zipPath);
+            $this->cleanup( $zipPath );
 
             // Step 10: Disable maintenance mode
             $this->disableMaintenanceMode();
 
             return true;
-        } catch (Throwable $e) {
+        } catch ( Throwable $e ) {
             // Rollback on failure
-            $this->handleUpdateFailure($e);
+            $this->handleUpdateFailure( $e );
 
             throw $e;
         }
@@ -144,7 +144,7 @@ class ApplicationUpdateManager
      *
      * @param  UpdateChecker  $checker  Update checker instance
      */
-    public function setUpdateChecker(UpdateChecker $checker): void
+    public function setUpdateChecker( UpdateChecker $checker ): void
     {
         $this->checker = $checker;
     }
@@ -158,19 +158,19 @@ class ApplicationUpdateManager
      *
      * @throws UpdateException
      */
-    public function rollback(string $backupPath): void
+    public function rollback( string $backupPath ): void
     {
-        if (! File::exists($backupPath)) {
-            throw UpdateException::rollbackFailed("Backup not found: {$backupPath}");
+        if ( ! File::exists( $backupPath ) ) {
+            throw UpdateException::rollbackFailed( "Backup not found: {$backupPath}" );
         }
 
         $zip = new ZipArchive;
 
-        if (true !== $zip->open($backupPath)) {
-            throw UpdateException::rollbackFailed('Could not open backup ZIP');
+        if ( true !== $zip->open( $backupPath ) ) {
+            throw UpdateException::rollbackFailed( 'Could not open backup ZIP' );
         }
 
-        $zip->extractTo(base_path());
+        $zip->extractTo( base_path() );
         $zip->close();
 
         // Before invoking composer install, verify the resolved binary is
@@ -208,13 +208,13 @@ class ApplicationUpdateManager
      */
     protected function getUpdateChecker(): UpdateChecker
     {
-        if ($this->checker) {
+        if ( $this->checker ) {
             return $this->checker;
         }
 
-        $updateUrl = config('cms.updates.update_source_url');
+        $updateUrl = config( 'cms.updates.update_source_url' );
 
-        if (! $updateUrl) {
+        if ( ! $updateUrl ) {
             throw UpdateException::noUpdateUrlConfigured();
         }
 
@@ -236,32 +236,32 @@ class ApplicationUpdateManager
      */
     protected function createBackup(): void
     {
-        $backupDir  = storage_path(config('cms.updates.backup_path', 'backups/application'));
-        $backupName = 'backup-'.date('Y-m-d-His').'.zip';
+        $backupDir  = storage_path( config( 'cms.updates.backup_path', 'backups/application' ) );
+        $backupName = 'backup-' . date( 'Y-m-d-His' ) . '.zip';
         $backupPath = "{$backupDir}/{$backupName}";
 
         // Create backup directory
-        if (! File::exists($backupDir)) {
-            File::makeDirectory($backupDir, 0755, true);
+        if ( ! File::exists( $backupDir ) ) {
+            File::makeDirectory( $backupDir, 0755, true );
         }
 
         // Create backup ZIP
         $zip = new ZipArchive;
 
-        if (true !== $zip->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE)) {
-            throw UpdateException::backupFailed($backupPath);
+        if ( true !== $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
+            throw UpdateException::backupFailed( $backupPath );
         }
 
         // Add all files except excluded paths
-        $excludePaths = config('cms.updates.exclude_from_update', []);
-        $this->addDirectoryToZip($zip, base_path(), '', $excludePaths);
+        $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+        $this->addDirectoryToZip( $zip, base_path(), '', $excludePaths );
 
         $zip->close();
 
         $this->backupPath = $backupPath;
 
         // Clean old backups
-        $this->cleanOldBackups($backupDir);
+        $this->cleanOldBackups( $backupDir );
     }
 
     /**
@@ -274,53 +274,53 @@ class ApplicationUpdateManager
      * @param  string  $localPath  Local path in ZIP
      * @param  array<string>  $excludePaths  Paths to exclude
      */
-    protected function addDirectoryToZip(ZipArchive $zip, string $sourcePath, string $localPath, array $excludePaths): void
+    protected function addDirectoryToZip( ZipArchive $zip, string $sourcePath, string $localPath, array $excludePaths ): void
     {
         $files = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($sourcePath),
+            new RecursiveDirectoryIterator( $sourcePath ),
             RecursiveIteratorIterator::LEAVES_ONLY,
         );
 
         $basePath = base_path();
 
-        foreach ($files as $file) {
-            if ($file->isDir()) {
+        foreach ( $files as $file ) {
+            if ( $file->isDir() ) {
                 continue;
             }
 
             // Get real path and validate it
             $filePath = $file->getRealPath();
 
-            if (false === $filePath) {
+            if ( false === $filePath ) {
                 // getRealPath() failed - log and skip
-                \Illuminate\Support\Facades\Log::warning('Failed to get real path for file during backup', [
+                \Illuminate\Support\Facades\Log::warning( 'Failed to get real path for file during backup', [
                     'file' => $file->getPathname(),
-                ]);
+                ] );
 
                 continue;
             }
 
             // Verify the resolved path starts with base_path() to prevent traversal issues
-            if (! str_starts_with($filePath, $basePath)) {
+            if ( ! str_starts_with( $filePath, $basePath ) ) {
                 // File is outside base path (symlink or external) - log and skip
-                \Illuminate\Support\Facades\Log::warning('Skipping file outside base path during backup', [
+                \Illuminate\Support\Facades\Log::warning( 'Skipping file outside base path during backup', [
                     'file'      => $filePath,
                     'base_path' => $basePath,
-                ]);
+                ] );
 
                 continue;
             }
 
             // Safe to compute relative path
-            $relativePath = substr($filePath, strlen($basePath) + 1);
+            $relativePath = substr( $filePath, strlen( $basePath ) + 1 );
 
             // Skip excluded paths
-            if ($this->isPathExcluded($relativePath, $excludePaths)) {
+            if ( $this->isPathExcluded( $relativePath, $excludePaths ) ) {
                 continue;
             }
 
-            $zipPath = $localPath.DIRECTORY_SEPARATOR.$relativePath;
-            $zip->addFile($filePath, $zipPath);
+            $zipPath = $localPath . DIRECTORY_SEPARATOR . $relativePath;
+            $zip->addFile( $filePath, $zipPath );
         }
     }
 
@@ -334,14 +334,14 @@ class ApplicationUpdateManager
      *
      * @return bool True if excluded
      */
-    protected function isPathExcluded(string $path, array $excludePaths): bool
+    protected function isPathExcluded( string $path, array $excludePaths ): bool
     {
-        foreach ($excludePaths as $exclude) {
-            if (str_starts_with($path, $exclude)) {
+        foreach ( $excludePaths as $exclude ) {
+            if ( str_starts_with( $path, $exclude ) ) {
                 return true;
             }
 
-            if (str_contains($exclude, '*') && fnmatch($exclude, $path)) {
+            if ( str_contains( $exclude, '*' ) && fnmatch( $exclude, $path ) ) {
                 return true;
             }
         }
@@ -356,20 +356,20 @@ class ApplicationUpdateManager
      *
      * @param  string  $backupDir  Backup directory
      */
-    protected function cleanOldBackups(string $backupDir): void
+    protected function cleanOldBackups( string $backupDir ): void
     {
-        $retentionDays = config('cms.updates.backup_retention_days', 30);
-        $cutoffTime    = time() - ($retentionDays * 86400);
+        $retentionDays = config( 'cms.updates.backup_retention_days', 30 );
+        $cutoffTime    = time() - ( $retentionDays * 86400 );
 
-        $backups = glob("{$backupDir}/backup-*.zip");
+        $backups = glob( "{$backupDir}/backup-*.zip" );
 
-        if (false === $backups) {
+        if ( false === $backups ) {
             return;
         }
 
-        foreach ($backups as $backup) {
-            if (filemtime($backup) < $cutoffTime) {
-                File::delete($backup);
+        foreach ( $backups as $backup ) {
+            if ( filemtime( $backup ) < $cutoffTime ) {
+                File::delete( $backup );
             }
         }
     }
@@ -384,12 +384,12 @@ class ApplicationUpdateManager
      *
      * @throws UpdateException
      */
-    protected function verifyChecksum(string $zipPath, string $expectedHash): void
+    protected function verifyChecksum( string $zipPath, string $expectedHash ): void
     {
-        $actualHash = hash_file('sha256', $zipPath);
+        $actualHash = hash_file( 'sha256', $zipPath );
 
-        if ($actualHash !== $expectedHash) {
-            throw UpdateException::checksumMismatch($expectedHash, $actualHash);
+        if ( $actualHash !== $expectedHash ) {
+            throw UpdateException::checksumMismatch( $expectedHash, $actualHash );
         }
     }
 
@@ -405,22 +405,22 @@ class ApplicationUpdateManager
      *
      * @throws UpdateException When the checksum is present but does not match.
      */
-    protected function maybeVerifyChecksum(string $zipPath, UpdateInfo $updateInfo, string $targetVersion): void
+    protected function maybeVerifyChecksum( string $zipPath, UpdateInfo $updateInfo, string $targetVersion ): void
     {
-        if (! config('cms.updates.verify_checksum', true)) {
+        if ( ! config( 'cms.updates.verify_checksum', true ) ) {
             return;
         }
 
-        if ($updateInfo->sha256) {
-            $this->verifyChecksum($zipPath, $updateInfo->sha256);
+        if ( $updateInfo->sha256 ) {
+            $this->verifyChecksum( $zipPath, $updateInfo->sha256 );
 
             return;
         }
 
-        \Illuminate\Support\Facades\Log::warning('Skipping update integrity verification: update source did not advertise a SHA-256 checksum.', [
+        \Illuminate\Support\Facades\Log::warning( 'Skipping update integrity verification: update source did not advertise a SHA-256 checksum.', [
             'target_version' => $targetVersion,
             'source'         => $updateInfo->metadata['source'] ?? null,
-        ]);
+        ] );
     }
 
     /**
@@ -432,95 +432,95 @@ class ApplicationUpdateManager
      *
      * @throws UpdateException
      */
-    protected function extractUpdate(string $zipPath): void
+    protected function extractUpdate( string $zipPath ): void
     {
         $zip = new ZipArchive;
 
-        if (true !== $zip->open($zipPath)) {
-            throw UpdateException::extractionFailed($zipPath);
+        if ( true !== $zip->open( $zipPath ) ) {
+            throw UpdateException::extractionFailed( $zipPath );
         }
 
         $extractPath  = base_path();
-        $excludePaths = config('cms.updates.exclude_from_update', []);
+        $excludePaths = config( 'cms.updates.exclude_from_update', [] );
 
         // Detect common root prefix by scanning all entry names
-        $commonPrefix = $this->detectCommonRootPrefix($zip, $excludePaths);
+        $commonPrefix = $this->detectCommonRootPrefix( $zip, $excludePaths );
 
         // Extract files (except excluded paths), stripping common prefix
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $filename = $zip->getNameIndex($i);
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $filename = $zip->getNameIndex( $i );
 
             // Strip common prefix if detected
-            $targetPath = $commonPrefix ? substr($filename, strlen($commonPrefix)) : $filename;
+            $targetPath = $commonPrefix ? substr( $filename, strlen( $commonPrefix ) ) : $filename;
 
             // Skip excluded paths (check both original and stripped paths)
-            if ($this->isPathExcluded($filename, $excludePaths) || $this->isPathExcluded($targetPath, $excludePaths)) {
+            if ( $this->isPathExcluded( $filename, $excludePaths ) || $this->isPathExcluded( $targetPath, $excludePaths ) ) {
                 continue;
             }
 
             // Skip empty paths (directories become empty after prefix stripping)
-            if (empty($targetPath)) {
+            if ( empty( $targetPath ) ) {
                 continue;
             }
 
             // Get file info
-            $stat = $zip->statIndex($i);
-            if (false === $stat) {
+            $stat = $zip->statIndex( $i );
+            if ( false === $stat ) {
                 continue;
             }
 
-            $fullTargetPath = $extractPath.DIRECTORY_SEPARATOR.$targetPath;
+            $fullTargetPath = $extractPath . DIRECTORY_SEPARATOR . $targetPath;
 
             // Handle directories
-            if (str_ends_with($filename, '/')) {
-                if (! File::exists($fullTargetPath)) {
-                    File::makeDirectory($fullTargetPath, 0755, true);
+            if ( str_ends_with( $filename, '/' ) ) {
+                if ( ! File::exists( $fullTargetPath ) ) {
+                    File::makeDirectory( $fullTargetPath, 0755, true );
                 }
 
                 continue;
             }
 
             // Handle files - ensure parent directory exists
-            $targetDir = dirname($fullTargetPath);
-            if (! File::exists($targetDir)) {
-                File::makeDirectory($targetDir, 0755, true);
+            $targetDir = dirname( $fullTargetPath );
+            if ( ! File::exists( $targetDir ) ) {
+                File::makeDirectory( $targetDir, 0755, true );
             }
 
             // Stream the entry to disk rather than materializing it as a PHP
             // string via `getFromIndex()`. On a 128M host, a single large file
             // inside the release (bundled JS/CSS, images) can otherwise OOM in
             // the middle of extraction.
-            $entryStream = $zip->getStream($filename);
-            if (false === $entryStream) {
+            $entryStream = $zip->getStream( $filename );
+            if ( false === $entryStream ) {
                 continue;
             }
 
-            $out = @fopen($fullTargetPath, 'wb');
-            if (false === $out) {
-                fclose($entryStream);
+            $out = @fopen( $fullTargetPath, 'wb' );
+            if ( false === $out ) {
+                fclose( $entryStream );
 
                 continue;
             }
 
             try {
-                while (! feof($entryStream)) {
-                    $chunk = fread($entryStream, 1024 * 1024);
-                    if (false === $chunk || '' === $chunk) {
+                while ( ! feof( $entryStream ) ) {
+                    $chunk = fread( $entryStream, 1024 * 1024 );
+                    if ( false === $chunk || '' === $chunk ) {
                         break;
                     }
 
-                    fwrite($out, $chunk);
+                    fwrite( $out, $chunk );
                 }
             } finally {
-                fclose($entryStream);
-                fclose($out);
+                fclose( $entryStream );
+                fclose( $out );
             }
 
             // Preserve file permissions if available
-            if (isset($stat['external_attributes'])) {
-                $permissions = ($stat['external_attributes'] >> 16) & 0777;
-                if ($permissions > 0) {
-                    @chmod($fullTargetPath, $permissions);
+            if ( isset( $stat['external_attributes'] ) ) {
+                $permissions = ( $stat['external_attributes'] >> 16 ) & 0777;
+                if ( $permissions > 0 ) {
+                    @chmod( $fullTargetPath, $permissions );
                 }
             }
         }
@@ -538,34 +538,34 @@ class ApplicationUpdateManager
      *
      * @return string|null Common root prefix, or null if none detected
      */
-    protected function detectCommonRootPrefix(ZipArchive $zip, array $excludePaths): ?string
+    protected function detectCommonRootPrefix( ZipArchive $zip, array $excludePaths ): ?string
     {
         $firstSegments = [];
 
         // Scan all non-excluded entries to find first path segment
-        for ($i = 0; $i < $zip->numFiles; $i++) {
-            $filename = $zip->getNameIndex($i);
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $filename = $zip->getNameIndex( $i );
 
             // Skip excluded paths
-            if ($this->isPathExcluded($filename, $excludePaths)) {
+            if ( $this->isPathExcluded( $filename, $excludePaths ) ) {
                 continue;
             }
 
             // Get first path segment
-            $parts = explode('/', $filename);
-            if (! empty($parts[0])) {
+            $parts = explode( '/', $filename );
+            if ( ! empty( $parts[0] ) ) {
                 $firstSegments[] = $parts[0];
             }
         }
 
         // If all entries share the same first segment, that's our common prefix
-        if (empty($firstSegments)) {
+        if ( empty( $firstSegments ) ) {
             return null;
         }
 
-        $uniqueSegments = array_unique($firstSegments);
-        if (1 === count($uniqueSegments)) {
-            return reset($uniqueSegments).'/';
+        $uniqueSegments = array_unique( $firstSegments );
+        if ( 1 === count( $uniqueSegments ) ) {
+            return reset( $uniqueSegments ) . '/';
         }
 
         return null;
@@ -581,14 +581,14 @@ class ApplicationUpdateManager
     protected function runComposerInstall(): void
     {
         $command = $this->resolveComposerCommand();
-        $timeout = config('cms.updates.composer_timeout', 600);
+        $timeout = config( 'cms.updates.composer_timeout', 600 );
 
-        $result = Process::timeout($timeout)
-            ->path(base_path())
-            ->run($command);
+        $result = Process::timeout( $timeout )
+            ->path( base_path() )
+            ->run( $command );
 
-        if (! $result->successful()) {
-            throw UpdateException::composerInstallFailed($result->errorOutput());
+        if ( ! $result->successful() ) {
+            throw UpdateException::composerInstallFailed( $result->errorOutput() );
         }
     }
 
@@ -613,21 +613,21 @@ class ApplicationUpdateManager
     protected function resolveComposerCommand(): string
     {
         $envBinary = $this->envComposerBinary();
-        if (null !== $envBinary) {
-            return $this->buildComposerCommand($envBinary);
+        if ( null !== $envBinary ) {
+            return $this->buildComposerCommand( $envBinary );
         }
 
-        $configured = config('cms.updates.composer_install_command');
-        if (is_string($configured) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured) {
+        $configured = config( 'cms.updates.composer_install_command' );
+        if ( is_string( $configured ) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured ) {
             return $configured;
         }
 
         $discovered = $this->discoverComposerBinary();
-        if (null !== $discovered) {
-            return $this->buildComposerCommand($discovered);
+        if ( null !== $discovered ) {
+            return $this->buildComposerCommand( $discovered );
         }
 
-        return is_string($configured) ? $configured : self::DEFAULT_COMPOSER_INSTALL_COMMAND;
+        return is_string( $configured ) ? $configured : self::DEFAULT_COMPOSER_INSTALL_COMMAND;
     }
 
     /**
@@ -644,20 +644,20 @@ class ApplicationUpdateManager
     protected function verifyComposerBinaryAvailable(): void
     {
         $binary = $this->resolveComposerBinaryForVerification();
-        if (null === $binary) {
+        if ( null === $binary ) {
             return;
         }
 
         $php     = $this->resolvePhpBinary();
-        $command = escapeshellarg($php).' '.escapeshellarg($binary).' --version';
+        $command = escapeshellarg( $php ) . ' ' . escapeshellarg( $binary ) . ' --version';
 
-        $result = Process::timeout(10)
-            ->path(base_path())
-            ->run($command);
+        $result = Process::timeout( 10 )
+            ->path( base_path() )
+            ->run( $command );
 
-        if (! $result->successful()) {
-            $stderr = trim((string) $result->errorOutput());
-            $stdout = trim((string) $result->output());
+        if ( ! $result->successful() ) {
+            $stderr = trim( (string) $result->errorOutput() );
+            $stdout = trim( (string) $result->output() );
             $detail = '' !== $stderr ? $stderr : $stdout;
 
             throw UpdateException::composerVerificationFailed(
@@ -680,12 +680,12 @@ class ApplicationUpdateManager
     protected function resolveComposerBinaryForVerification(): ?string
     {
         $envBinary = $this->envComposerBinary();
-        if (null !== $envBinary) {
+        if ( null !== $envBinary ) {
             return $envBinary;
         }
 
-        $configured = config('cms.updates.composer_install_command');
-        if (is_string($configured) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured) {
+        $configured = config( 'cms.updates.composer_install_command' );
+        if ( is_string( $configured ) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured ) {
             return null;
         }
 
@@ -700,9 +700,9 @@ class ApplicationUpdateManager
      */
     protected function envComposerBinary(): ?string
     {
-        $envBinary = getenv('COMPOSER_BINARY');
+        $envBinary = getenv( 'COMPOSER_BINARY' );
 
-        if (false === $envBinary || '' === $envBinary) {
+        if ( false === $envBinary || '' === $envBinary ) {
             return null;
         }
 
@@ -717,8 +717,8 @@ class ApplicationUpdateManager
      */
     protected function discoverComposerBinary(): ?string
     {
-        foreach ($this->composerCandidatePaths() as $path) {
-            if (is_file($path) && is_executable($path)) {
+        foreach ( $this->composerCandidatePaths() as $path ) {
+            if ( is_file( $path ) && is_executable( $path ) ) {
                 return $path;
             }
         }
@@ -736,16 +736,16 @@ class ApplicationUpdateManager
      */
     protected function composerCandidatePaths(): array
     {
-        $home = getenv('HOME');
+        $home = getenv( 'HOME' );
 
         $candidates = [
             '/usr/local/bin/composer',
             '/opt/homebrew/bin/composer',
         ];
 
-        if (is_string($home) && '' !== $home) {
-            $candidates[] = $home.'/.composer/vendor/bin/composer';
-            $candidates[] = $home.'/.config/composer/vendor/bin/composer';
+        if ( is_string( $home ) && '' !== $home ) {
+            $candidates[] = $home . '/.composer/vendor/bin/composer';
+            $candidates[] = $home . '/.config/composer/vendor/bin/composer';
         }
 
         $candidates[] = '/usr/bin/composer';
@@ -761,9 +761,9 @@ class ApplicationUpdateManager
      *
      * @since 2.5.3
      */
-    protected function buildComposerCommand(string $binary): string
+    protected function buildComposerCommand( string $binary ): string
     {
-        return escapeshellarg($this->resolvePhpBinary()).' '.escapeshellarg($binary).' '.self::DEFAULT_COMPOSER_INSTALL_ARGS;
+        return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . self::DEFAULT_COMPOSER_INSTALL_ARGS;
     }
 
     /**
@@ -790,17 +790,17 @@ class ApplicationUpdateManager
      */
     protected function resolvePhpBinary(): string
     {
-        $override = getenv('CMS_PHP_BINARY');
-        if (is_string($override) && '' !== $override) {
+        $override = getenv( 'CMS_PHP_BINARY' );
+        if ( is_string( $override ) && '' !== $override ) {
             return $override;
         }
 
-        if ('cli' === PHP_SAPI) {
+        if ( 'cli' === PHP_SAPI ) {
             return PHP_BINARY;
         }
 
-        foreach ($this->phpCandidatePaths() as $candidate) {
-            if ($this->isCliPhpBinary($candidate)) {
+        foreach ( $this->phpCandidatePaths() as $candidate ) {
+            if ( $this->isCliPhpBinary( $candidate ) ) {
                 return $candidate;
             }
         }
@@ -818,15 +818,15 @@ class ApplicationUpdateManager
      */
     protected function phpCandidatePaths(): array
     {
-        $home = getenv('HOME');
+        $home = getenv( 'HOME' );
 
         $candidates = [];
 
-        if (is_string($home) && '' !== $home) {
+        if ( is_string( $home ) && '' !== $home ) {
             // Laravel Herd on macOS ships a `php` symlink pointing at the
             // currently-active CLI binary (e.g. `php84`). Prefer it so hosts
             // that use Herd for both FPM and CLI stay on a single toolchain.
-            $candidates[] = $home.'/Library/Application Support/Herd/bin/php';
+            $candidates[] = $home . '/Library/Application Support/Herd/bin/php';
         }
 
         $candidates[] = '/opt/homebrew/bin/php';
@@ -845,15 +845,15 @@ class ApplicationUpdateManager
      *
      * @since 2.5.4
      */
-    protected function isCliPhpBinary(string $path): bool
+    protected function isCliPhpBinary( string $path ): bool
     {
-        if (! is_file($path) || ! is_executable($path)) {
+        if ( ! is_file( $path ) || ! is_executable( $path ) ) {
             return false;
         }
 
-        $basename = strtolower(basename($path));
+        $basename = strtolower( basename( $path ) );
 
-        return ! str_contains($basename, 'fpm') && ! str_contains($basename, 'cgi');
+        return ! str_contains( $basename, 'fpm' ) && ! str_contains( $basename, 'cgi' );
     }
 
     /**
@@ -866,9 +866,9 @@ class ApplicationUpdateManager
     protected function runMigrations(): void
     {
         try {
-            Artisan::call('migrate', ['--force' => true]);
-        } catch (Throwable $e) {
-            throw UpdateException::migrationFailed($e->getMessage());
+            Artisan::call( 'migrate', ['--force' => true] );
+        } catch ( Throwable $e ) {
+            throw UpdateException::migrationFailed( $e->getMessage() );
         }
     }
 
@@ -879,10 +879,10 @@ class ApplicationUpdateManager
      */
     protected function clearCaches(): void
     {
-        Artisan::call('config:clear');
-        Artisan::call('cache:clear');
-        Artisan::call('route:clear');
-        Artisan::call('view:clear');
+        Artisan::call( 'config:clear' );
+        Artisan::call( 'cache:clear' );
+        Artisan::call( 'route:clear' );
+        Artisan::call( 'view:clear' );
     }
 
     /**
@@ -892,10 +892,10 @@ class ApplicationUpdateManager
      *
      * @param  string  $zipPath  Path to ZIP file
      */
-    protected function cleanup(string $zipPath): void
+    protected function cleanup( string $zipPath ): void
     {
-        if (File::exists($zipPath)) {
-            File::delete($zipPath);
+        if ( File::exists( $zipPath ) ) {
+            File::delete( $zipPath );
         }
     }
 
@@ -909,9 +909,9 @@ class ApplicationUpdateManager
     protected function enableMaintenanceMode(): void
     {
         try {
-            Artisan::call('down', ['--render' => 'errors::503']);
-        } catch (Throwable $e) {
-            throw UpdateException::maintenanceModeFailure('enable');
+            Artisan::call( 'down', ['--render' => 'errors::503'] );
+        } catch ( Throwable $e ) {
+            throw UpdateException::maintenanceModeFailure( 'enable' );
         }
     }
 
@@ -925,9 +925,9 @@ class ApplicationUpdateManager
     protected function disableMaintenanceMode(): void
     {
         try {
-            Artisan::call('up');
-        } catch (Throwable $e) {
-            throw UpdateException::maintenanceModeFailure('disable');
+            Artisan::call( 'up' );
+        } catch ( Throwable $e ) {
+            throw UpdateException::maintenanceModeFailure( 'disable' );
         }
     }
 
@@ -938,10 +938,10 @@ class ApplicationUpdateManager
      *
      * @param  Throwable  $exception  The throwable that caused failure
      */
-    protected function handleUpdateFailure(Throwable $exception): void
+    protected function handleUpdateFailure( Throwable $exception ): void
     {
         // Log the original exception for debugging
-        \Illuminate\Support\Facades\Log::error('Update failed, beginning rollback', [
+        \Illuminate\Support\Facades\Log::error( 'Update failed, beginning rollback', [
             'exception' => $exception->getMessage(),
             'trace'     => $exception->getTraceAsString(),
             'file'      => $exception->getFile(),
@@ -951,7 +951,7 @@ class ApplicationUpdateManager
         // Attempt to disable maintenance mode
         try {
             $this->disableMaintenanceMode();
-        } catch (Throwable $e) {
+        } catch ( Throwable $e) {
             \Illuminate\Support\Facades\Log::error(
                 'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
                 ['exception' => $e->getMessage()],
@@ -959,15 +959,15 @@ class ApplicationUpdateManager
         }
 
         // If we have a backup, attempt rollback
-        if ($this->backupPath && File::exists($this->backupPath)) {
+        if ( $this->backupPath && File::exists( $this->backupPath)) {
             try {
-                $this->rollback($this->backupPath);
-            } catch (Throwable $e) {
+                $this->rollback( $this->backupPath);
+            } catch ( Throwable $e) {
                 // Rollback failed - this is critical. Preserve the original
                 // update-failure message alongside the rollback message so the
                 // operator can see both failures rather than only the trailing
                 // one.
-                throw UpdateException::rollbackAfterFailure($exception->getMessage(), $e->getMessage());
+                throw UpdateException::rollbackAfterFailure( $exception->getMessage(), $e->getMessage());
             }
         }
     }

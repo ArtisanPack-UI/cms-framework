@@ -1,6 +1,6 @@
 <?php
 
-declare(strict_types=1);
+declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
@@ -39,16 +39,16 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
         $result = $manager->checkForUpdate();
 
-        $this->assertInstanceOf(UpdateInfo::class, $result);
-        $this->assertTrue($result->hasUpdate());
-        $this->assertEquals('2.0.0', $result->latestVersion);
+        $this->assertInstanceOf( UpdateInfo::class, $result );
+        $this->assertTrue( $result->hasUpdate() );
+        $this->assertEquals( '2.0.0', $result->latestVersion );
     }
 
     /**
@@ -58,12 +58,12 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_throws_exception_when_no_update_url(): void
     {
-        config(['cms.updates.update_source_url' => null]);
+        config( ['cms.updates.update_source_url' => null] );
 
         $manager = new ApplicationUpdateManager;
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('Update URL not configured');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'Update URL not configured' );
 
         $manager->checkForUpdate();
     }
@@ -83,13 +83,13 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('No update available');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'No update available' );
 
         $manager->performUpdate();
     }
@@ -103,13 +103,13 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->expects($this->once())->method('clearCache');
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->expects( $this->once() )->method( 'clearCache' );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
         $manager->clearCache();
 
-        $this->assertTrue(true); // If we get here, the test passed
+        $this->assertTrue( true ); // If we get here, the test passed
     }
 
     /**
@@ -121,21 +121,21 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $reflection = new ReflectionClass($manager);
-        $method     = $reflection->getMethod('isPathExcluded');
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'isPathExcluded' );
+        $method->setAccessible( true );
 
         // Test exact match
-        $this->assertTrue($method->invoke($manager, 'storage/logs/test.log', ['storage']));
+        $this->assertTrue( $method->invoke( $manager, 'storage/logs/test.log', ['storage'] ) );
 
         // Test non-match
-        $this->assertFalse($method->invoke($manager, 'app/Models/User.php', ['storage']));
+        $this->assertFalse( $method->invoke( $manager, 'app/Models/User.php', ['storage'] ) );
 
         // Test wildcard match
-        $this->assertTrue($method->invoke($manager, 'bootstrap/cache/config.php', ['bootstrap/cache/*.php']));
+        $this->assertTrue( $method->invoke( $manager, 'bootstrap/cache/config.php', ['bootstrap/cache/*.php'] ) );
 
         // Test no match with wildcard
-        $this->assertFalse($method->invoke($manager, 'bootstrap/app.php', ['bootstrap/cache/*.php']));
+        $this->assertFalse( $method->invoke( $manager, 'bootstrap/app.php', ['bootstrap/cache/*.php'] ) );
     }
 
     /**
@@ -147,10 +147,10 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $this->expectException(UpdateException::class);
-        $this->expectExceptionMessage('Backup not found');
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'Backup not found' );
 
-        $manager->rollback('/nonexistent/backup.zip');
+        $manager->rollback( '/nonexistent/backup.zip' );
     }
 
     /**
@@ -168,14 +168,14 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
         $result = $manager->checkForUpdate();
 
-        $this->assertEquals('2.0.0', $result->latestVersion);
+        $this->assertEquals( '2.0.0', $result->latestVersion );
     }
 
     /**
@@ -187,20 +187,20 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'cmsfw-update-');
-        file_put_contents($zipPath, 'fake zip contents');
+        $zipPath = tempnam( sys_get_temp_dir(), 'cmsfw-update-' );
+        file_put_contents( $zipPath, 'fake zip contents' );
 
         try {
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('verifyChecksum');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyChecksum' );
+            $method->setAccessible( true );
 
-            $this->expectException(UpdateException::class);
-            $this->expectExceptionMessage('Checksum mismatch');
+            $this->expectException( UpdateException::class );
+            $this->expectExceptionMessage( 'Checksum mismatch' );
 
-            $method->invoke($manager, $zipPath, str_repeat('0', 64));
+            $method->invoke( $manager, $zipPath, str_repeat( '0', 64 ) );
         } finally {
-            @unlink($zipPath);
+            @unlink( $zipPath );
         }
     }
 
@@ -213,19 +213,19 @@ class ApplicationUpdateManagerTest extends TestCase
     {
         $manager = new ApplicationUpdateManager;
 
-        $zipPath = tempnam(sys_get_temp_dir(), 'cmsfw-update-');
-        file_put_contents($zipPath, 'matching zip contents');
+        $zipPath = tempnam( sys_get_temp_dir(), 'cmsfw-update-' );
+        file_put_contents( $zipPath, 'matching zip contents' );
 
         try {
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('verifyChecksum');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyChecksum' );
+            $method->setAccessible( true );
 
-            $method->invoke($manager, $zipPath, hash_file('sha256', $zipPath));
+            $method->invoke( $manager, $zipPath, hash_file( 'sha256', $zipPath ) );
 
-            $this->assertTrue(true); // No exception means success.
+            $this->assertTrue( true ); // No exception means success.
         } finally {
-            @unlink($zipPath);
+            @unlink( $zipPath );
         }
     }
 
@@ -236,7 +236,7 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_maybe_verify_checksum_logs_warning_when_sha256_missing(): void
     {
-        config(['cms.updates.verify_checksum' => true]);
+        config( ['cms.updates.verify_checksum' => true] );
 
         $manager = new ApplicationUpdateManager;
 
@@ -248,19 +248,19 @@ class ApplicationUpdateManagerTest extends TestCase
             metadata: ['source' => 'gitlab'],
         );
 
-        Log::shouldReceive('warning')
+        Log::shouldReceive( 'warning' )
             ->once()
-            ->withArgs(function (string $message, array $context): bool {
-                return str_contains($message, 'Skipping update integrity verification')
-                    && '2.0.0' === ($context['target_version'] ?? null)
-                    && 'gitlab' === ($context['source'] ?? null);
-            });
+            ->withArgs( function ( string $message, array $context ): bool {
+                return str_contains( $message, 'Skipping update integrity verification' )
+                    && '2.0.0' === ( $context['target_version'] ?? null )
+                    && 'gitlab' === ( $context['source'] ?? null );
+            } );
 
-        $reflection = new ReflectionClass($manager);
-        $method     = $reflection->getMethod('maybeVerifyChecksum');
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
+        $method->setAccessible( true );
 
-        $method->invoke($manager, '/does/not/matter.zip', $updateInfo, '2.0.0');
+        $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
     }
 
     /**
@@ -270,7 +270,7 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_maybe_verify_checksum_is_silent_when_disabled(): void
     {
-        config(['cms.updates.verify_checksum' => false]);
+        config( ['cms.updates.verify_checksum' => false] );
 
         $manager = new ApplicationUpdateManager;
 
@@ -281,13 +281,13 @@ class ApplicationUpdateManagerTest extends TestCase
             sha256: null,
         );
 
-        Log::shouldReceive('warning')->never();
+        Log::shouldReceive( 'warning' )->never();
 
-        $reflection = new ReflectionClass($manager);
-        $method     = $reflection->getMethod('maybeVerifyChecksum');
-        $method->setAccessible(true);
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
+        $method->setAccessible( true );
 
-        $method->invoke($manager, '/does/not/matter.zip', $updateInfo, '2.0.0');
+        $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
     }
 
     /**
@@ -298,7 +298,7 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_perform_update_disables_maintenance_mode_on_fatal_error(): void
     {
-        config(['cms.updates.backup_enabled' => false]);
+        config( ['cms.updates.backup_enabled' => false] );
 
         $manager = new class extends ApplicationUpdateManager {
             public array $modeCalls = [];
@@ -320,20 +320,20 @@ class ApplicationUpdateManagerTest extends TestCase
             downloadUrl: 'https://example.com/update.zip',
         );
 
-        $checker = $this->createMock(UpdateChecker::class);
-        $checker->method('checkForUpdate')->willReturn($updateInfo);
-        $checker->method('downloadUpdate')->willThrowException(new Error('Simulated fatal error'));
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( $updateInfo );
+        $checker->method( 'downloadUpdate' )->willThrowException( new Error( 'Simulated fatal error' ) );
 
-        $manager->setUpdateChecker($checker);
+        $manager->setUpdateChecker( $checker );
 
         try {
             $manager->performUpdate();
-            $this->fail('Expected Error to be thrown.');
-        } catch (Error $e) {
-            $this->assertSame('Simulated fatal error', $e->getMessage());
+            $this->fail( 'Expected Error to be thrown.' );
+        } catch ( Error $e ) {
+            $this->assertSame( 'Simulated fatal error', $e->getMessage() );
         }
 
-        $this->assertSame(['enable', 'disable'], $manager->modeCalls);
+        $this->assertSame( ['enable', 'disable'], $manager->modeCalls );
     }
 
     /**
@@ -346,25 +346,27 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_extract_update_streams_entries_to_disk(): void
     {
-        $tempRoot = sys_get_temp_dir().'/cmsfw-extract-'.bin2hex(random_bytes(6));
-        $target   = $tempRoot.'/target';
-        mkdir($target, 0755, true);
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-extract-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
 
-        $zipPath  = $tempRoot.'/update.zip';
-        $largeBig = str_repeat('x', 65536);
+        $zipPath  = $tempRoot . '/update.zip';
+        $largeBig = str_repeat( 'x', 65536 );
 
         $zip = new ZipArchive;
-        $this->assertTrue(true === $zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE));
-        $zip->addFromString('release-root/app/Model.php', "<?php\n".$largeBig);
-        $zip->addFromString('release-root/routes/web.php', "<?php\nRoute::get('/', fn () => 'ok');\n");
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/app/Model.php', "<?php\n" . $largeBig );
+        $zip->addFromString( 'release-root/routes/web.php', "<?php\nRoute::get('/', fn () => 'ok');\n" );
         $zip->close();
 
-        $manager = new class($target) extends ApplicationUpdateManager {
-            public function __construct(protected string $extractRoot) {}
-
-            public function extractInto(string $zipPath): void
+        $manager = new class( $target ) extends ApplicationUpdateManager {
+            public function __construct( protected string $extractRoot )
             {
-                $this->extractUpdate($zipPath);
+            }
+
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
             }
         };
 
@@ -372,23 +374,23 @@ class ApplicationUpdateManagerTest extends TestCase
         // inside extractUpdate resolves to a scratch directory instead of the
         // testbench root.
         $originalBase = base_path();
-        app()->setBasePath($target);
+        app()->setBasePath( $target );
 
         try {
-            $manager->extractInto($zipPath);
+            $manager->extractInto( $zipPath );
 
-            $this->assertFileExists($target.'/app/Model.php');
-            $this->assertFileExists($target.'/routes/web.php');
+            $this->assertFileExists( $target . '/app/Model.php' );
+            $this->assertFileExists( $target . '/routes/web.php' );
             $this->assertSame(
-                strlen("<?php\n".$largeBig),
-                filesize($target.'/app/Model.php'),
+                strlen( "<?php\n" . $largeBig ),
+                filesize( $target . '/app/Model.php' ),
                 'Streamed extraction should produce a byte-for-byte copy of the ZIP entry.',
             );
         } finally {
-            app()->setBasePath($originalBase);
-            @unlink($zipPath);
-            $this->removeDirectory($target);
-            @rmdir($tempRoot);
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
         }
     }
 
@@ -401,25 +403,25 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_resolve_composer_command_prefers_env_binary(): void
     {
-        config(['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND]);
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
 
-        $original = getenv('COMPOSER_BINARY');
-        putenv('COMPOSER_BINARY=/opt/homebrew/bin/composer');
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY=/opt/homebrew/bin/composer' );
 
         try {
             $manager = new ApplicationUpdateManager;
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('resolveComposerCommand');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
 
-            $command = $method->invoke($manager);
+            $command = $method->invoke( $manager );
 
-            $this->assertStringStartsWith(escapeshellarg(PHP_BINARY).' ', $command);
-            $this->assertStringContainsString(escapeshellarg('/opt/homebrew/bin/composer'), $command);
-            $this->assertStringEndsWith(' '.ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command);
+            $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
+            $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
+            $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
         } finally {
-            putenv(false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY='.$original);
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
         }
     }
 
@@ -433,21 +435,21 @@ class ApplicationUpdateManagerTest extends TestCase
     public function test_resolve_composer_command_respects_non_default_config_override(): void
     {
         $override = 'PATH=/opt/homebrew/bin:/usr/bin /opt/homebrew/bin/composer install --no-dev --no-interaction --optimize-autoloader';
-        config(['cms.updates.composer_install_command' => $override]);
+        config( ['cms.updates.composer_install_command' => $override] );
 
-        $original = getenv('COMPOSER_BINARY');
-        putenv('COMPOSER_BINARY');
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
 
         try {
             $manager = new ApplicationUpdateManager;
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('resolveComposerCommand');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
 
-            $this->assertSame($override, $method->invoke($manager));
+            $this->assertSame( $override, $method->invoke( $manager ) );
         } finally {
-            putenv(false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY='.$original);
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
         }
     }
 
@@ -459,10 +461,10 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_resolve_composer_command_uses_discovered_binary(): void
     {
-        config(['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND]);
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
 
-        $original = getenv('COMPOSER_BINARY');
-        putenv('COMPOSER_BINARY');
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
 
         try {
             $manager = new class extends ApplicationUpdateManager {
@@ -472,17 +474,17 @@ class ApplicationUpdateManagerTest extends TestCase
                 }
             };
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('resolveComposerCommand');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
 
-            $command = $method->invoke($manager);
+            $command = $method->invoke( $manager );
 
-            $this->assertStringStartsWith(escapeshellarg(PHP_BINARY).' ', $command);
-            $this->assertStringContainsString(escapeshellarg('/discovered/path/composer'), $command);
-            $this->assertStringEndsWith(' '.ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command);
+            $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
+            $this->assertStringContainsString( escapeshellarg( '/discovered/path/composer' ), $command );
+            $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
         } finally {
-            putenv(false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY='.$original);
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
         }
     }
 
@@ -494,10 +496,10 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_resolve_composer_command_falls_back_to_default(): void
     {
-        config(['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND]);
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
 
-        $original = getenv('COMPOSER_BINARY');
-        putenv('COMPOSER_BINARY');
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
 
         try {
             $manager = new class extends ApplicationUpdateManager {
@@ -507,16 +509,16 @@ class ApplicationUpdateManagerTest extends TestCase
                 }
             };
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('resolveComposerCommand');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
 
             $this->assertSame(
                 ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
-                $method->invoke($manager),
+                $method->invoke( $manager ),
             );
         } finally {
-            putenv(false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY='.$original);
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
         }
     }
 
@@ -529,17 +531,17 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_composer_candidate_paths_covers_documented_locations(): void
     {
-        $original = getenv('HOME');
-        putenv('HOME=/home/tester');
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
 
         try {
             $manager = new ApplicationUpdateManager;
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('composerCandidatePaths');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'composerCandidatePaths' );
+            $method->setAccessible( true );
 
-            $candidates = $method->invoke($manager);
+            $candidates = $method->invoke( $manager );
 
             $this->assertSame(
                 [
@@ -552,7 +554,7 @@ class ApplicationUpdateManagerTest extends TestCase
                 $candidates,
             );
         } finally {
-            putenv(false === $original ? 'HOME' : 'HOME='.$original);
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
         }
     }
 
@@ -566,26 +568,28 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_discover_composer_binary_returns_first_executable_hit(): void
     {
-        $tempDir = sys_get_temp_dir().'/cmsfw-composer-'.bin2hex(random_bytes(6));
-        mkdir($tempDir, 0755, true);
+        $tempDir = sys_get_temp_dir() . '/cmsfw-composer-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
 
-        $missing        = $tempDir.'/missing-composer';
-        $nonExecutable  = $tempDir.'/non-executable-composer';
-        $executableHit  = $tempDir.'/executable-composer';
-        $laterCandidate = $tempDir.'/never-reached-composer';
+        $missing        = $tempDir . '/missing-composer';
+        $nonExecutable  = $tempDir . '/non-executable-composer';
+        $executableHit  = $tempDir . '/executable-composer';
+        $laterCandidate = $tempDir . '/never-reached-composer';
 
-        file_put_contents($nonExecutable, "#!/bin/sh\n");
-        chmod($nonExecutable, 0644);
+        file_put_contents( $nonExecutable, "#!/bin/sh\n" );
+        chmod( $nonExecutable, 0644 );
 
-        file_put_contents($executableHit, "#!/bin/sh\n");
-        chmod($executableHit, 0755);
+        file_put_contents( $executableHit, "#!/bin/sh\n" );
+        chmod( $executableHit, 0755 );
 
-        file_put_contents($laterCandidate, "#!/bin/sh\n");
-        chmod($laterCandidate, 0755);
+        file_put_contents( $laterCandidate, "#!/bin/sh\n" );
+        chmod( $laterCandidate, 0755 );
 
         try {
-            $manager = new class([$missing, $nonExecutable, $executableHit, $laterCandidate]) extends ApplicationUpdateManager {
-                public function __construct(protected array $paths) {}
+            $manager = new class( [$missing, $nonExecutable, $executableHit, $laterCandidate] ) extends ApplicationUpdateManager {
+                public function __construct( protected array $paths )
+                {
+                }
 
                 protected function composerCandidatePaths(): array
                 {
@@ -598,13 +602,13 @@ class ApplicationUpdateManagerTest extends TestCase
                 }
             };
 
-            $this->assertSame($executableHit, $manager->callDiscover());
+            $this->assertSame( $executableHit, $manager->callDiscover() );
         } finally {
-            @unlink($missing);
-            @unlink($nonExecutable);
-            @unlink($executableHit);
-            @unlink($laterCandidate);
-            @rmdir($tempDir);
+            @unlink( $missing );
+            @unlink( $nonExecutable );
+            @unlink( $executableHit );
+            @unlink( $laterCandidate );
+            @rmdir( $tempDir );
         }
     }
 
@@ -623,9 +627,9 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_rollback_throws_composer_verification_failed_when_version_check_fails(): void
     {
-        Process::fake([
-            '*--version*' => Process::result('', 'command not found', 127),
-        ]);
+        Process::fake( [
+            '*--version*' => Process::result( '', 'command not found', 127 ),
+        ] );
 
         $manager = new class extends ApplicationUpdateManager {
             protected function resolveComposerBinaryForVerification(): ?string
@@ -634,19 +638,19 @@ class ApplicationUpdateManagerTest extends TestCase
             }
         };
 
-        $backupPath = tempnam(sys_get_temp_dir(), 'cmsfw-backup-').'.zip';
+        $backupPath = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' ) . '.zip';
         $zip        = new ZipArchive;
-        $this->assertTrue(true === $zip->open($backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE));
-        $zip->addFromString('placeholder.txt', 'ok');
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'placeholder.txt', 'ok' );
         $zip->close();
 
         try {
-            $this->expectException(UpdateException::class);
-            $this->expectExceptionMessage('could not be executed');
+            $this->expectException( UpdateException::class );
+            $this->expectExceptionMessage( 'could not be executed' );
 
-            $manager->rollback($backupPath);
+            $manager->rollback( $backupPath );
         } finally {
-            @unlink($backupPath);
+            @unlink( $backupPath );
         }
     }
 
@@ -662,10 +666,10 @@ class ApplicationUpdateManagerTest extends TestCase
         $manager = new class extends ApplicationUpdateManager {
             public function __construct()
             {
-                $stub = tempnam(sys_get_temp_dir(), 'cmsfw-backup-');
-                @unlink($stub);
-                $this->backupPath = $stub.'.zip';
-                file_put_contents($this->backupPath, 'not-a-zip');
+                $stub = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' );
+                @unlink( $stub );
+                $this->backupPath = $stub . '.zip';
+                file_put_contents( $this->backupPath, 'not-a-zip' );
             }
 
             protected function disableMaintenanceMode(): void
@@ -673,30 +677,30 @@ class ApplicationUpdateManagerTest extends TestCase
                 // No-op; nothing to disable in this unit context.
             }
 
-            public function callHandleFailure(Throwable $e): void
+            public function callHandleFailure( Throwable $e ): void
             {
-                $this->handleUpdateFailure($e);
+                $this->handleUpdateFailure( $e );
             }
         };
 
         try {
-            $original = new RuntimeException('composer install failed because it ran out of memory');
+            $original = new RuntimeException( 'composer install failed because it ran out of memory' );
 
             try {
-                $manager->callHandleFailure($original);
-                $this->fail('Expected UpdateException from rollback.');
-            } catch (UpdateException $e) {
-                $this->assertStringContainsString('Rollback failed', $e->getMessage());
-                $this->assertStringContainsString('ran out of memory', $e->getMessage());
-                $this->assertStringContainsString('Manual intervention required', $e->getMessage());
+                $manager->callHandleFailure( $original );
+                $this->fail( 'Expected UpdateException from rollback.' );
+            } catch ( UpdateException $e ) {
+                $this->assertStringContainsString( 'Rollback failed', $e->getMessage() );
+                $this->assertStringContainsString( 'ran out of memory', $e->getMessage() );
+                $this->assertStringContainsString( 'Manual intervention required', $e->getMessage() );
             }
         } finally {
-            $reflection = new ReflectionClass($manager);
-            $property   = $reflection->getProperty('backupPath');
-            $property->setAccessible(true);
-            $path = $property->getValue($manager);
-            if (is_string($path)) {
-                @unlink($path);
+            $reflection = new ReflectionClass( $manager );
+            $property   = $reflection->getProperty( 'backupPath' );
+            $property->setAccessible( true );
+            $path = $property->getValue( $manager );
+            if ( is_string( $path ) ) {
+                @unlink( $path );
             }
         }
     }
@@ -712,23 +716,25 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_resolve_php_binary_skips_fpm_candidates_and_prefers_cli(): void
     {
-        $tempDir = sys_get_temp_dir().'/cmsfw-php-'.bin2hex(random_bytes(6));
-        mkdir($tempDir, 0755, true);
+        $tempDir = sys_get_temp_dir() . '/cmsfw-php-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
 
-        $fpm = $tempDir.'/php84-fpm';
-        $cli = $tempDir.'/php';
+        $fpm = $tempDir . '/php84-fpm';
+        $cli = $tempDir . '/php';
 
-        file_put_contents($fpm, "#!/bin/sh\n");
-        chmod($fpm, 0755);
-        file_put_contents($cli, "#!/bin/sh\n");
-        chmod($cli, 0755);
+        file_put_contents( $fpm, "#!/bin/sh\n" );
+        chmod( $fpm, 0755 );
+        file_put_contents( $cli, "#!/bin/sh\n" );
+        chmod( $cli, 0755 );
 
-        $original = getenv('CMS_PHP_BINARY');
-        putenv('CMS_PHP_BINARY');
+        $original = getenv( 'CMS_PHP_BINARY' );
+        putenv( 'CMS_PHP_BINARY' );
 
         try {
-            $manager = new class([$fpm, $cli], 'fpm-fcgi') extends ApplicationUpdateManager {
-                public function __construct(protected array $paths, protected string $sapi) {}
+            $manager = new class( [$fpm, $cli], 'fpm-fcgi' ) extends ApplicationUpdateManager {
+                public function __construct( protected array $paths, protected string $sapi )
+                {
+                }
 
                 protected function phpCandidatePaths(): array
                 {
@@ -740,8 +746,8 @@ class ApplicationUpdateManagerTest extends TestCase
                     // Bypass the PHP_SAPI short-circuit by shadowing the
                     // condition — we can't mutate the runtime SAPI constant,
                     // so we run the discovery path directly.
-                    foreach ($this->phpCandidatePaths() as $candidate) {
-                        if ($this->isCliPhpBinary($candidate)) {
+                    foreach ( $this->phpCandidatePaths() as $candidate ) {
+                        if ( $this->isCliPhpBinary( $candidate ) ) {
                             return $candidate;
                         }
                     }
@@ -750,12 +756,12 @@ class ApplicationUpdateManagerTest extends TestCase
                 }
             };
 
-            $this->assertSame($cli, $manager->callResolvePhpBinary());
+            $this->assertSame( $cli, $manager->callResolvePhpBinary() );
         } finally {
-            @unlink($fpm);
-            @unlink($cli);
-            @rmdir($tempDir);
-            putenv(false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY='.$original);
+            @unlink( $fpm );
+            @unlink( $cli );
+            @rmdir( $tempDir );
+            putenv( false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY=' . $original );
         }
     }
 
@@ -768,19 +774,19 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_resolve_php_binary_respects_env_override(): void
     {
-        $original = getenv('CMS_PHP_BINARY');
-        putenv('CMS_PHP_BINARY=/custom/path/to/php');
+        $original = getenv( 'CMS_PHP_BINARY' );
+        putenv( 'CMS_PHP_BINARY=/custom/path/to/php' );
 
         try {
             $manager = new ApplicationUpdateManager;
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('resolvePhpBinary');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolvePhpBinary' );
+            $method->setAccessible( true );
 
-            $this->assertSame('/custom/path/to/php', $method->invoke($manager));
+            $this->assertSame( '/custom/path/to/php', $method->invoke( $manager ) );
         } finally {
-            putenv(false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY='.$original);
+            putenv( false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY=' . $original );
         }
     }
 
@@ -794,15 +800,15 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_php_candidate_paths_covers_documented_locations(): void
     {
-        $original = getenv('HOME');
-        putenv('HOME=/home/tester');
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
 
         try {
             $manager = new ApplicationUpdateManager;
 
-            $reflection = new ReflectionClass($manager);
-            $method     = $reflection->getMethod('phpCandidatePaths');
-            $method->setAccessible(true);
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'phpCandidatePaths' );
+            $method->setAccessible( true );
 
             $this->assertSame(
                 [
@@ -811,10 +817,10 @@ class ApplicationUpdateManagerTest extends TestCase
                     '/usr/local/bin/php',
                     '/usr/bin/php',
                 ],
-                $method->invoke($manager),
+                $method->invoke( $manager ),
             );
         } finally {
-            putenv(false === $original ? 'HOME' : 'HOME='.$original);
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
         }
     }
 
@@ -838,11 +844,11 @@ class ApplicationUpdateManagerTest extends TestCase
 
         $message = $exception->getMessage();
 
-        $this->assertStringContainsString('/opt/homebrew/bin/composer', $message);
-        $this->assertStringContainsString('/Users/tester/Herd/bin/php84-fpm', $message);
-        $this->assertStringContainsString('Exit code: 64', $message);
-        $this->assertStringContainsString('Usage: php84-fpm', $message);
-        $this->assertStringContainsString('CMS_PHP_BINARY', $message);
+        $this->assertStringContainsString( '/opt/homebrew/bin/composer', $message );
+        $this->assertStringContainsString( '/Users/tester/Herd/bin/php84-fpm', $message );
+        $this->assertStringContainsString( 'Exit code: 64', $message );
+        $this->assertStringContainsString( 'Usage: php84-fpm', $message );
+        $this->assertStringContainsString( 'CMS_PHP_BINARY', $message );
     }
 
     /**
@@ -850,33 +856,33 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * @since 2.5.2
      */
-    protected function removeDirectory(string $path): void
+    protected function removeDirectory( string $path ): void
     {
-        if (! is_dir($path)) {
+        if ( ! is_dir( $path ) ) {
             return;
         }
 
-        $items = scandir($path);
+        $items = scandir( $path );
 
-        if (false === $items) {
+        if ( false === $items ) {
             return;
         }
 
-        foreach ($items as $item) {
-            if ('.' === $item || '..' === $item) {
+        foreach ( $items as $item) {
+            if ( '.' === $item || '..' === $item) {
                 continue;
             }
 
-            $full = $path.DIRECTORY_SEPARATOR.$item;
+            $full = $path . DIRECTORY_SEPARATOR . $item;
 
-            if (is_dir($full)) {
-                $this->removeDirectory($full);
+            if ( is_dir( $full)) {
+                $this->removeDirectory( $full);
             } else {
-                @unlink($full);
+                @unlink( $full);
             }
         }
 
-        @rmdir($path);
+        @rmdir( $path);
     }
 
     /**
@@ -886,15 +892,15 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * @param  \Illuminate\Foundation\Application  $app
      */
-    protected function defineEnvironment($app): void
+    protected function defineEnvironment( $app): void
     {
-        $app['config']->set('cms.updates.update_source_url', 'https://github.com/test/repo');
-        $app['config']->set('cms.updates.backup_enabled', true);
-        $app['config']->set('cms.updates.backup_path', 'backups/application');
-        $app['config']->set('cms.updates.backup_retention_days', 30);
-        $app['config']->set('cms.updates.verify_checksum', false); // Disable for tests
-        $app['config']->set('cms.updates.composer_install_command', 'composer install --no-dev');
-        $app['config']->set('cms.updates.composer_timeout', 600);
-        $app['config']->set('cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
+        $app['config']->set( 'cms.updates.update_source_url', 'https://github.com/test/repo');
+        $app['config']->set( 'cms.updates.backup_enabled', true);
+        $app['config']->set( 'cms.updates.backup_path', 'backups/application');
+        $app['config']->set( 'cms.updates.backup_retention_days', 30);
+        $app['config']->set( 'cms.updates.verify_checksum', false); // Disable for tests
+        $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev');
+        $app['config']->set( 'cms.updates.composer_timeout', 600);
+        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
     }
 }
