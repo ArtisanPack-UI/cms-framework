@@ -6,9 +6,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Illuminate\Support\Facades\Http;
 
 /**
  * Custom JSON Update Source
@@ -165,15 +165,14 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
             $url .= ( str_contains( $url, '?' ) ? '&' : '?' ) . http_build_query( $this->queryParams );
         }
 
-        $response = Http::timeout( config( 'cms.updates.http_timeout', 15 ) )
-            ->retry( config( 'cms.updates.http_retries', 3 ), 100, throw: false )
-            ->get( $url );
+        $retries  = max( 0, (int) config( 'cms.updates.http_retries', 3 ) - 1 );
+        $response = MetadataClient::get( $url, retries: $retries );
 
-        if ( ! $response->successful() ) {
-            throw UpdateException::versionCheckFailed( "HTTP {$response->status()}: {$response->body()}" );
+        if ( $response['status'] < 200 || $response['status'] >= 300 ) {
+            throw UpdateException::versionCheckFailed( "HTTP {$response['status']}: {$response['body']}" );
         }
 
-        $data = $response->json();
+        $data = json_decode( $response['body'], true );
 
         if ( ! is_array( $data ) ) {
             throw UpdateException::invalidJsonResponse( $url );

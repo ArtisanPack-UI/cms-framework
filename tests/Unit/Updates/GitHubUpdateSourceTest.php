@@ -6,7 +6,13 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitHubUpdateSource;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response as GuzzleResponse;
+use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -20,6 +26,26 @@ use Orchestra\Testbench\TestCase;
  */
 class GitHubUpdateSourceTest extends TestCase
 {
+    /**
+     * @since 2.5.4
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        MetadataClient::useHttpFacadeBridge();
+    }
+
+    /**
+     * @since 2.5.4
+     */
+    protected function tearDown(): void
+    {
+        MetadataClient::reset();
+
+        parent::tearDown();
+    }
+
     /**
      * Test GitHub source supports GitHub URLs.
      *
@@ -412,6 +438,58 @@ class GitHubUpdateSourceTest extends TestCase
         } finally {
             @unlink( $tempPath );
         }
+    }
+
+    /**
+     * Regression for #231: the feed-check GET must bypass Laravel's HTTP
+     * client factory so no `RequestSending` / `ResponseReceived` listener
+     * (Herd Pro's `HttpClientWatcher`, Telescope, Debugbar, custom monitoring)
+     * can block or corrupt the request lifecycle.
+     *
+     * @since 2.5.4
+     */
+    public function test_feed_check_bypasses_laravel_http_client_events(): void
+    {
+        MetadataClient::reset();
+
+        $mock = new MockHandler( [
+            new GuzzleResponse( 200, [], json_encode( [
+                [
+                    'tag_name'     => 'v2.0.0',
+                    'name'         => 'v2.0.0',
+                    'body'         => 'Release',
+                    'html_url'     => 'https://github.com/user/repo/releases/tag/v2.0.0',
+                    'id'           => 1,
+                    'prerelease'   => false,
+                    'published_at' => '2024-12-15T10:00:00Z',
+                    'assets'       => [],
+                    'zipball_url'  => 'https://api.github.com/repos/user/repo/zipball/v2.0.0',
+                ],
+            ] ) ),
+        ] );
+        MetadataClient::setClient( new GuzzleClient( [ 'handler' => HandlerStack::create( $mock ) ] ) );
+
+        $requestSendingFired   = false;
+        $responseReceivedFired = false;
+        Event::listen( RequestSending::class, function () use ( &$requestSendingFired ): void {
+            $requestSendingFired = true;
+        } );
+        Event::listen( ResponseReceived::class, function () use ( &$responseReceivedFired ): void {
+            $responseReceivedFired = true;
+        } );
+
+        $source     = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame( '2.0.0', $updateInfo->latestVersion );
+        $this->assertFalse(
+            $requestSendingFired,
+            'RequestSending must not fire for the feed check — any userland listener would block the request lifecycle (see #231).',
+        );
+        $this->assertFalse(
+            $responseReceivedFired,
+            'ResponseReceived must not fire for the feed check — any userland listener would block the request lifecycle (see #231).',
+        );
     }
 
     /**

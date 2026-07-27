@@ -6,9 +6,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Contracts\UpdateSourceInterface;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
 
@@ -221,15 +221,15 @@ class GitHubUpdateSource implements UpdateSourceInterface
             $headers['Authorization'] = "token {$this->accessToken}";
         }
 
-        $response = Http::withHeaders( $headers )
-            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-            ->get( $apiUrl );
+        $response = MetadataClient::get( $apiUrl, $headers );
 
-        if ( ! $response->successful() ) {
-            throw UpdateException::versionCheckFailed( "GitHub API error: {$response->status()}" );
+        if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
+            throw UpdateException::versionCheckFailed( "GitHub API error: {$response['status']}" );
         }
 
-        return $response->json();
+        $decoded = json_decode( $response['body'], true );
+
+        return is_array( $decoded ) ? $decoded : [];
     }
 
     /**
@@ -255,25 +255,33 @@ class GitHubUpdateSource implements UpdateSourceInterface
             $headers['Authorization'] = "token {$this->accessToken}";
         }
 
-        $response = Http::withHeaders( $headers )
-            ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-            ->get( $apiUrl );
+        $response = MetadataClient::get( $apiUrl, $headers );
 
-        if ( ! $response->successful() ) {
+        if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
             // Try without 'v' prefix
             $tag    = ltrim( $version, 'v' );
             $apiUrl = "https://api.github.com/repos/{$this->owner}/{$this->repo}/releases/tags/{$tag}";
 
-            $response = Http::withHeaders( $headers )
-                ->timeout( config( 'cms.updates.http_timeout', 15 ) )
-                ->get( $apiUrl );
+            $response = MetadataClient::get( $apiUrl, $headers );
 
-            if ( ! $response->successful() ) {
+            if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
                 throw UpdateException::downloadFailed( "Release not found for version: {$version}" );
             }
         }
 
-        return $response->json();
+        $decoded = json_decode( $response['body'], true );
+
+        return is_array( $decoded ) ? $decoded : [];
+    }
+
+    /**
+     * Check if a raw HTTP status code represents a 2xx success.
+     *
+     * @since 2.5.4
+     */
+    protected function responseIsSuccessful( int $status ): bool
+    {
+        return $status >= 200 && $status < 300;
     }
 
     /**

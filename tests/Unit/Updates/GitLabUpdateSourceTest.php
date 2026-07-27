@@ -6,7 +6,13 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\GitLabUpdateSource;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response as GuzzleResponse;
+use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Http;
@@ -21,6 +27,30 @@ use Orchestra\Testbench\TestCase;
  */
 class GitLabUpdateSourceTest extends TestCase
 {
+    /**
+     * @since 2.5.4
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Route MetadataClient calls through `Http::` so existing `Http::fake()`
+        // stubs continue to intercept feed / sidecar / version requests. The
+        // dedicated regression tests above reset this bridge to exercise the
+        // raw-Guzzle path directly.
+        MetadataClient::useHttpFacadeBridge();
+    }
+
+    /**
+     * @since 2.5.4
+     */
+    protected function tearDown(): void
+    {
+        MetadataClient::reset();
+
+        parent::tearDown();
+    }
+
     /**
      * Test GitLab source supports GitLab URLs.
      *
@@ -964,6 +994,115 @@ class GitLabUpdateSourceTest extends TestCase
         } finally {
             @unlink( $tempPath );
         }
+    }
+
+    /**
+     * Regression for #231: the feed-check GET must bypass Laravel's HTTP
+     * client factory so no `RequestSending` / `ResponseReceived` listener
+     * (Herd Pro's `HttpClientWatcher`, Telescope, Debugbar, custom monitoring)
+     * can block or corrupt the request lifecycle. The feed call is routed
+     * through a raw Guzzle client rather than `Http::`, so no Laravel HTTP
+     * client event fires for the metadata request.
+     *
+     * @since 2.5.4
+     */
+    public function test_feed_check_bypasses_laravel_http_client_events(): void
+    {
+        // Reset the bridge installed in setUp so this test exercises the raw
+        // Guzzle path, then inject a mock Guzzle client so no real network
+        // traffic is issued.
+        MetadataClient::reset();
+
+        $mock = new MockHandler( [
+            new GuzzleResponse( 200, [], json_encode( [
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                ],
+            ] ) ),
+        ] );
+        MetadataClient::setClient( new GuzzleClient( [ 'handler' => HandlerStack::create( $mock ) ] ) );
+
+        $requestSendingFired   = false;
+        $responseReceivedFired = false;
+        Event::listen( RequestSending::class, function () use ( &$requestSendingFired ): void {
+            $requestSendingFired = true;
+        } );
+        Event::listen( ResponseReceived::class, function () use ( &$responseReceivedFired ): void {
+            $responseReceivedFired = true;
+        } );
+
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame( '2.0.0', $updateInfo->latestVersion );
+        $this->assertFalse(
+            $requestSendingFired,
+            'RequestSending must not fire for the feed check — any userland listener would block the request lifecycle (see #231).',
+        );
+        $this->assertFalse(
+            $responseReceivedFired,
+            'ResponseReceived must not fire for the feed check — any userland listener would block the request lifecycle (see #231).',
+        );
+    }
+
+    /**
+     * Regression for #231: the SHA-256 sidecar GET must bypass Laravel's HTTP
+     * client factory for the same reason as the feed check.
+     *
+     * @since 2.5.4
+     */
+    public function test_sidecar_fetch_bypasses_laravel_http_client_events(): void
+    {
+        // Sidecars only apply to release-asset downloads.
+        config()->set( 'cms.updates.gitlab_update_strategy', 'release_asset' );
+
+        MetadataClient::reset();
+
+        $expectedHash = str_repeat( 'a', 64 );
+
+        $mock = new MockHandler( [
+            new GuzzleResponse( 200, [], json_encode( [
+                [
+                    'tag_name'    => 'v2.0.0',
+                    'description' => 'Release notes',
+                    'created_at'  => '2024-12-15T10:00:00.000Z',
+                    'assets'      => [
+                        'links' => [
+                            [
+                                'name' => 'source.zip',
+                                'url'  => 'https://example.com/releases/v2.0.0/source.zip',
+                            ],
+                            [
+                                'name' => 'source.zip.sha256',
+                                'url'  => 'https://example.com/releases/v2.0.0/source.zip.sha256',
+                            ],
+                        ],
+                    ],
+                ],
+            ] ) ),
+            new GuzzleResponse( 200, [], $expectedHash . "  source.zip\n" ),
+        ] );
+        MetadataClient::setClient( new GuzzleClient( [ 'handler' => HandlerStack::create( $mock ) ] ) );
+
+        $eventsFired = 0;
+        Event::listen( RequestSending::class, function () use ( &$eventsFired ): void {
+            $eventsFired++;
+        } );
+        Event::listen( ResponseReceived::class, function () use ( &$eventsFired ): void {
+            $eventsFired++;
+        } );
+
+        $source     = new GitLabUpdateSource( 'https://gitlab.com/user/repo', '1.0.0' );
+        $updateInfo = $source->checkForUpdate();
+
+        $this->assertSame( $expectedHash, $updateInfo->sha256 );
+        $this->assertSame(
+            0,
+            $eventsFired,
+            'Sidecar fetch must not go through Laravel HTTP client events (see #231).',
+        );
     }
 
     /**

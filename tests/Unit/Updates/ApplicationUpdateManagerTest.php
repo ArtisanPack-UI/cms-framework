@@ -230,13 +230,17 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
-     * Test maybeVerifyChecksum logs a warning when the source omits a checksum.
+     * Test maybeVerifyChecksum logs a warning when the source omits a checksum
+     * and the host has explicitly opted in to accepting unverified updates.
      *
      * @since 2.0.0
      */
     public function test_maybe_verify_checksum_logs_warning_when_sha256_missing(): void
     {
-        config( ['cms.updates.verify_checksum' => true] );
+        config( [
+            'cms.updates.verify_checksum'          => true,
+            'cms.updates.allow_unverified_updates' => true,
+        ] );
 
         $manager = new ApplicationUpdateManager;
 
@@ -259,6 +263,40 @@ class ApplicationUpdateManagerTest extends TestCase
         $reflection = new ReflectionClass( $manager );
         $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
         $method->setAccessible( true );
+
+        $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
+    }
+
+    /**
+     * Test maybeVerifyChecksum fails closed by default when the source omits a
+     * checksum. The updater must refuse to proceed rather than installing
+     * arbitrary remote code without integrity verification.
+     *
+     * @since 2.5.4
+     */
+    public function test_maybe_verify_checksum_throws_when_sha256_missing_and_not_opted_in(): void
+    {
+        config( [
+            'cms.updates.verify_checksum'          => true,
+            'cms.updates.allow_unverified_updates' => false,
+        ] );
+
+        $manager = new ApplicationUpdateManager;
+
+        $updateInfo = new UpdateInfo(
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+            downloadUrl: 'https://example.com/update.zip',
+            sha256: null,
+            metadata: ['source' => 'gitlab'],
+        );
+
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'maybeVerifyChecksum' );
+        $method->setAccessible( true );
+
+        $this->expectException( UpdateException::class );
+        $this->expectExceptionMessage( 'did not advertise a SHA-256 checksum' );
 
         $method->invoke( $manager, '/does/not/matter.zip', $updateInfo, '2.0.0' );
     }
@@ -395,6 +433,124 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Regression for #234: `extractUpdate` must reject ZIP entries that resolve
+     * outside the extraction root (Zip Slip). Because extraction bypasses
+     * `ZipArchive::extractTo()` and streams entries manually, PHP's own
+     * traversal mitigations don't apply — the guard has to live in the manager.
+     *
+     * @since 2.5.4
+     */
+    public function test_extract_update_rejects_zip_slip_entries(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-zipslip-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $outside  = $tempRoot . '/outside';
+        mkdir( $target, 0755, true );
+        mkdir( $outside, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // Benign entry under the common prefix — should extract normally.
+        $zip->addFromString( 'release-root/app/Model.php', "<?php\n" );
+        // Malicious entry: after the common prefix is stripped, the remaining
+        // path traverses out of the extract root.
+        $zip->addFromString( 'release-root/../../../outside/pwn.php', "<?php // pwned\n" );
+        // Malicious entry with absolute path.
+        $zip->addFromString( '/absolute/etc/cron.d/x', "pwn\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Model.php' );
+            $this->assertFileDoesNotExist( $outside . '/pwn.php' );
+            $this->assertFileDoesNotExist( $tempRoot . '/outside/pwn.php' );
+            $this->assertFileDoesNotExist( '/absolute/etc/cron.d/x' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $outside );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #236: `extractUpdate` must surface a per-entry write
+     * failure (fopen/fread on the target file) as an `UpdateException` so
+     * `performUpdate()`'s catch block can roll back to the pre-update snapshot
+     * instead of leaving a partial install on disk.
+     *
+     * @since 2.5.4
+     */
+    public function test_extract_update_throws_when_entry_target_cannot_be_opened(): void
+    {
+        if ( 0 === posix_geteuid() ) {
+            $this->markTestSkipped( 'Cannot exercise fopen failure as root — the read-only parent guard is bypassed.' );
+        }
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-fopen-fail-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        // Pre-create the entry's parent directory as read-only so the manager
+        // reuses it (skipping the makeDirectory branch) and the subsequent
+        // fopen('wb') on a new file inside it fails.
+        $lockedDir = $target . '/locked';
+        mkdir( $lockedDir, 0555, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/locked/file.php', "<?php\n// payload\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $threw = false;
+
+            try {
+                $manager->extractInto( $zipPath );
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'release-root/locked/file.php', $e->getMessage() );
+                $this->assertStringContainsString( 'could not open target for writing', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'extractUpdate must throw UpdateException when a target file cannot be opened for writing.' );
+            $this->assertFileDoesNotExist( $lockedDir . '/file.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @chmod( $lockedDir, 0755 );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
      * Regression for #225: `COMPOSER_BINARY` env var wins over both config and
      * discovery and is invoked via `PHP_BINARY` so the PHP-FPM pool's `PATH`
      * never has to resolve composer's shebang.
@@ -420,6 +576,107 @@ class ApplicationUpdateManagerTest extends TestCase
             $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
             $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
             $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #232: the shipped `cms.updates.composer_binary` config
+     * key (populated from `env('COMPOSER_BINARY')`) is honored as priority-1
+     * so operators who set `COMPOSER_BINARY` in Laravel `.env` — the natural
+     * first move — actually get picked up under HTTP-request context, where
+     * `getenv()` would otherwise return `false` under Laravel 11+.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_composer_command_prefers_config_composer_binary(): void
+    {
+        config( [
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+            'cms.updates.composer_binary'          => '/opt/homebrew/bin/composer',
+        ] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringStartsWith( escapeshellarg( PHP_BINARY ) . ' ', $command );
+            $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
+            $this->assertStringEndsWith( ' ' . ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_ARGS, $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #232: `cms.updates.composer_binary` wins over
+     * `getenv('COMPOSER_BINARY')` when both are set — the `.env`-populated
+     * config value is the documented priority-1 source.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_composer_command_config_binary_wins_over_getenv(): void
+    {
+        config( [
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+            'cms.updates.composer_binary'          => '/from/config/composer',
+        ] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY=/from/getenv/composer' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringContainsString( escapeshellarg( '/from/config/composer' ), $command );
+            $this->assertStringNotContainsString( '/from/getenv/composer', $command );
+        } finally {
+            putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #232: when the config key is unset (empty string, null),
+     * fall back to `getenv('COMPOSER_BINARY')` so OS-level exports (PHP-FPM
+     * pool env, container ENV) keep working exactly as before.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_composer_command_falls_back_to_getenv_when_config_empty(): void
+    {
+        config( [
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+            'cms.updates.composer_binary'          => null,
+        ] );
+
+        $original = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY=/opt/homebrew/bin/composer' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolveComposerCommand' );
+            $method->setAccessible( true );
+
+            $command = $method->invoke( $manager );
+
+            $this->assertStringContainsString( escapeshellarg( '/opt/homebrew/bin/composer' ), $command );
         } finally {
             putenv( false === $original ? 'COMPOSER_BINARY' : 'COMPOSER_BINARY=' . $original );
         }
@@ -586,12 +843,7 @@ class ApplicationUpdateManagerTest extends TestCase
         chmod( $laterCandidate, 0755 );
 
         try {
-            $manager = new class( [
-                $missing,
-                $nonExecutable,
-                $executableHit,
-                $laterCandidate,
-            ] ) extends ApplicationUpdateManager {
+            $manager = new class( [$missing, $nonExecutable, $executableHit, $laterCandidate] ) extends ApplicationUpdateManager {
                 public function __construct( protected array $paths )
                 {
                 }
@@ -607,6 +859,8 @@ class ApplicationUpdateManagerTest extends TestCase
                 }
             };
 
+            Log::shouldReceive( 'warning' )->never();
+
             $this->assertSame( $executableHit, $manager->callDiscover() );
         } finally {
             @unlink( $missing );
@@ -618,14 +872,88 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Regression for #233: when discovery finds nothing, emit a structured
+     * `Log::warning` that reports per-candidate `is_file()` / `is_executable()`
+     * results so operators can distinguish a wrong-path failure from a
+     * PHP-FPM sandboxed-stat failure (macOS Herd Pro, chrooted FPM pools,
+     * restrictive `open_basedir`) without having to reflect into the
+     * framework.
+     *
+     * @since 2.5.4
+     */
+    public function test_discover_composer_binary_logs_per_candidate_diagnostics_on_failure(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/cmsfw-composer-diag-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
+
+        $missing       = $tempDir . '/missing-composer';
+        $nonExecutable = $tempDir . '/non-executable-composer';
+
+        file_put_contents( $nonExecutable, "#!/bin/sh\n" );
+        chmod( $nonExecutable, 0644 );
+
+        $manager = new class( [$missing, $nonExecutable] ) extends ApplicationUpdateManager {
+            public function __construct( protected array $paths )
+            {
+            }
+
+            protected function composerCandidatePaths(): array
+            {
+                return $this->paths;
+            }
+
+            public function callDiscover(): ?string
+            {
+                return $this->discoverComposerBinary();
+            }
+        };
+
+        $captured = [];
+        Log::shouldReceive( 'warning' )
+            ->once()
+            ->andReturnUsing( function ( string $message, array $context ) use ( &$captured ): void {
+                $captured = [
+                    'message' => $message,
+                    'context' => $context,
+                ];
+            } );
+
+        try {
+            $this->assertNull( $manager->callDiscover() );
+
+            $this->assertStringContainsString( 'composer binary discovery failed', $captured['message'] );
+            $this->assertArrayHasKey( 'candidates', $captured['context'] );
+            $this->assertArrayHasKey( 'php_sapi', $captured['context'] );
+            $this->assertArrayHasKey( 'hint', $captured['context'] );
+
+            $this->assertSame(
+                [
+                    ['path' => $missing, 'is_file' => false, 'is_executable' => false],
+                    ['path' => $nonExecutable, 'is_file' => true, 'is_executable' => false],
+                ],
+                $captured['context']['candidates'],
+            );
+        } finally {
+            @unlink( $missing );
+            @unlink( $nonExecutable );
+            @rmdir( $tempDir );
+        }
+    }
+
+    /**
      * Regression for #225: rollback pre-checks the resolved composer binary
      * with `--version` before invoking install, and surfaces a specific
-     * `composerBinaryNotFound` error rather than the generic "Manual
-     * intervention required" when the binary can't be reached.
+     * error rather than the generic "Manual intervention required" when the
+     * binary can't be reached.
+     *
+     * As of 2.5.4 the pre-check throws `composerVerificationFailed` (which
+     * captures exit code + output) rather than `composerBinaryNotFound` —
+     * the binary *was* located, so the misleading "not found" wording was
+     * masking real interpreter mismatches on PHP-FPM hosts.
      *
      * @since 2.5.3
      */
-    public function test_rollback_throws_composer_binary_not_found_when_version_check_fails(): void
+    public function test_rollback_throws_composer_verification_failed_when_version_check_fails(): void
     {
         Process::fake( [
             '*--version*' => Process::result( '', 'command not found', 127 ),
@@ -646,7 +974,7 @@ class ApplicationUpdateManagerTest extends TestCase
 
         try {
             $this->expectException( UpdateException::class );
-            $this->expectExceptionMessage( 'Composer binary could not be located' );
+            $this->expectExceptionMessage( 'could not be executed' );
 
             $manager->rollback( $backupPath );
         } finally {
@@ -706,6 +1034,152 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * The PHP interpreter used to run composer must be a *CLI* SAPI binary.
+     * Under PHP-FPM `PHP_BINARY` points at the FPM daemon, which prints usage
+     * and exits 64 when handed a PHAR — the root cause of the "Composer
+     * install failed. Output: ." symptom observed on Herd hosts. Regression
+     * guard: an FPM-shaped candidate must be rejected in favor of a CLI one.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_php_binary_skips_fpm_candidates_and_prefers_cli(): void
+    {
+        $tempDir = sys_get_temp_dir() . '/cmsfw-php-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $tempDir, 0755, true );
+
+        $fpm = $tempDir . '/php84-fpm';
+        $cli = $tempDir . '/php';
+
+        file_put_contents( $fpm, "#!/bin/sh\n" );
+        chmod( $fpm, 0755 );
+        file_put_contents( $cli, "#!/bin/sh\n" );
+        chmod( $cli, 0755 );
+
+        $original = getenv( 'CMS_PHP_BINARY' );
+        putenv( 'CMS_PHP_BINARY' );
+
+        try {
+            $manager = new class( [$fpm, $cli], 'fpm-fcgi' ) extends ApplicationUpdateManager {
+                public function __construct( protected array $paths, protected string $sapi )
+                {
+                }
+
+                protected function phpCandidatePaths(): array
+                {
+                    return $this->paths;
+                }
+
+                public function callResolvePhpBinary(): string
+                {
+                    // Bypass the PHP_SAPI short-circuit by shadowing the
+                    // condition — we can't mutate the runtime SAPI constant,
+                    // so we run the discovery path directly.
+                    foreach ( $this->phpCandidatePaths() as $candidate ) {
+                        if ( $this->isCliPhpBinary( $candidate ) ) {
+                            return $candidate;
+                        }
+                    }
+
+                    return PHP_BINARY;
+                }
+            };
+
+            $this->assertSame( $cli, $manager->callResolvePhpBinary() );
+        } finally {
+            @unlink( $fpm );
+            @unlink( $cli );
+            @rmdir( $tempDir );
+            putenv( false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * `CMS_PHP_BINARY` is the operator escape hatch — when set it wins over
+     * SAPI detection and candidate discovery so hosts with an unusual layout
+     * can point the updater at a known-good CLI PHP.
+     *
+     * @since 2.5.4
+     */
+    public function test_resolve_php_binary_respects_env_override(): void
+    {
+        $original = getenv( 'CMS_PHP_BINARY' );
+        putenv( 'CMS_PHP_BINARY=/custom/path/to/php' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'resolvePhpBinary' );
+            $method->setAccessible( true );
+
+            $this->assertSame( '/custom/path/to/php', $method->invoke( $manager ) );
+        } finally {
+            putenv( false === $original ? 'CMS_PHP_BINARY' : 'CMS_PHP_BINARY=' . $original );
+        }
+    }
+
+    /**
+     * The candidate list must include Herd's macOS install path and the
+     * common Homebrew/system locations in preference order. Cross-checked
+     * with the diagnostic in `composerVerificationFailed` so operators see
+     * the same list the framework tried.
+     *
+     * @since 2.5.4
+     */
+    public function test_php_candidate_paths_covers_documented_locations(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'phpCandidatePaths' );
+            $method->setAccessible( true );
+
+            $this->assertSame(
+                [
+                    '/home/tester/Library/Application Support/Herd/bin/php',
+                    '/opt/homebrew/bin/php',
+                    '/usr/local/bin/php',
+                    '/usr/bin/php',
+                ],
+                $method->invoke( $manager ),
+            );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * `composerVerificationFailed` must surface the actual exit code and
+     * captured output so operators can distinguish an interpreter-mismatch
+     * (usage/64) failure from a genuine unreachable-binary case. Without
+     * this the previous "not found" wording sent operators chasing PATH
+     * issues that weren't there.
+     *
+     * @since 2.5.4
+     */
+    public function test_composer_verification_failed_message_includes_diagnostic_context(): void
+    {
+        $exception = UpdateException::composerVerificationFailed(
+            composerBinary: '/opt/homebrew/bin/composer',
+            phpBinary: '/Users/tester/Herd/bin/php84-fpm',
+            exitCode: 64,
+            detail: 'Usage: php84-fpm ...',
+        );
+
+        $message = $exception->getMessage();
+
+        $this->assertStringContainsString( '/opt/homebrew/bin/composer', $message );
+        $this->assertStringContainsString( '/Users/tester/Herd/bin/php84-fpm', $message );
+        $this->assertStringContainsString( 'Exit code: 64', $message );
+        $this->assertStringContainsString( 'Usage: php84-fpm', $message );
+        $this->assertStringContainsString( 'CMS_PHP_BINARY', $message );
+    }
+
+    /**
      * Recursively remove a directory used by extraction tests.
      *
      * @since 2.5.2
@@ -755,6 +1229,6 @@ class ApplicationUpdateManagerTest extends TestCase
         $app['config']->set( 'cms.updates.verify_checksum', false ); // Disable for tests
         $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev' );
         $app['config']->set( 'cms.updates.composer_timeout', 600 );
-        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor'] );
+        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
     }
 }

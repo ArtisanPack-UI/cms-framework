@@ -53,8 +53,10 @@ return [
     |
     | 1. `COMPOSER_BINARY` environment variable — set this to an absolute path
     |    if you know where composer lives (e.g. `/opt/homebrew/bin/composer`)
-    |    and want the framework to build the command as `{PHP_BINARY} {binary}
-    |    install --no-dev --no-interaction --optimize-autoloader`.
+    |    and want the framework to build the command as `{CLI PHP} {binary}
+    |    install --no-dev --no-interaction --optimize-autoloader`. Set it in
+    |    your Laravel `.env` (populated via `composer_binary` below) or as an
+    |    OS-level env var visible to `getenv()` in the PHP-FPM pool.
     | 2. A non-default value for this config key — set this to a bespoke shell
     |    string if you need full control (custom flags, prepended PATH, etc.).
     | 3. Auto-discovery across common install paths (`/usr/local/bin/composer`,
@@ -62,8 +64,33 @@ return [
     |    `~/.config/composer/vendor/bin/composer`, `/usr/bin/composer`).
     | 4. This default command (bare `composer`).
     |
+    | The PHP interpreter used to invoke composer is resolved from a CLI SAPI
+    | binary — never from `PHP_BINARY` when the caller is PHP-FPM, because
+    | `PHP_BINARY` under FPM points at the daemon and cannot execute PHARs.
+    | Set `CMS_PHP_BINARY` if the framework picks the wrong CLI PHP on your
+    | host.
+    |
     */
     'composer_install_command' => 'composer install --no-dev --no-interaction --optimize-autoloader',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Binary Path (priority-1 override)
+    |--------------------------------------------------------------------------
+    |
+    | Absolute path to the composer binary the self-updater should invoke,
+    | resolved via Laravel's `env()` so setting `COMPOSER_BINARY` in your
+    | `.env` file works — which is the natural first move for a Laravel
+    | operator and what the `composerBinaryNotFound` error message advertises.
+    |
+    | Laravel 11+'s default dotenv adapter populates `env()` and `$_ENV` but
+    | does not `putenv()`, so `getenv('COMPOSER_BINARY')` returns `false` from
+    | HTTP-request context under PHP-FPM even when `.env` has the value. This
+    | config key bridges the gap: the framework reads this key first, then
+    | falls back to `getenv()` for hosts that set the value at the OS level.
+    |
+    */
+    'composer_binary' => env( 'COMPOSER_BINARY' ),
 
     'composer_timeout' => 600, // 10 minutes
 
@@ -154,6 +181,27 @@ return [
     |
     */
     'verify_checksum' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Allow Unverified Updates
+    |--------------------------------------------------------------------------
+    |
+    | When `verify_checksum` is enabled and the update source does not
+    | advertise a SHA-256 checksum, the updater fails closed by default and
+    | aborts the update rather than installing arbitrary remote code without
+    | an integrity check.
+    |
+    | Set to `true` only when consuming a trusted update source (e.g. an
+    | air-gapped mirror or an internal feed) that intentionally does not
+    | publish checksums. The updater will log a warning and proceed.
+    |
+    | CAUTION: This weakens the reachability story for extraction-time
+    | vulnerabilities such as zip-slip. Do not enable in production unless
+    | you fully control the source and transport.
+    |
+    */
+    'allow_unverified_updates' => env( 'CMS_UPDATES_ALLOW_UNVERIFIED', false ),
 
     /*
     |--------------------------------------------------------------------------
