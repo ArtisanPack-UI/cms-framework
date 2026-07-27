@@ -86,6 +86,20 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * Update source did not advertise a SHA-256 checksum and the host has not
+     * opted in to accepting unverified updates.
+     *
+     * @since 2.5.4
+     */
+    public static function checksumRequired( string $targetVersion ): self
+    {
+        return new self(
+            "Refusing to install update {$targetVersion}: the update source did not advertise a SHA-256 checksum. "
+            . 'Set `cms.updates.allow_unverified_updates` to true to opt in to unverified updates on trusted networks.',
+        );
+    }
+
+    /**
      * ZIP extraction failed.
      *
      * @since 1.0.0
