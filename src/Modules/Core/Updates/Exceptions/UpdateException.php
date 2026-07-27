@@ -110,6 +110,22 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * A single entry in the update ZIP could not be written to disk.
+     *
+     * Distinct from {@see self::extractionFailed()} because the archive itself
+     * opened successfully — the failure is per-entry (fopen/fread on the target
+     * file), and the streaming loop must surface it so that `performUpdate()`
+     * can roll back to the pre-update snapshot instead of leaving a partial
+     * install on disk.
+     *
+     * @since 2.5.4
+     */
+    public static function extractionEntryFailed( string $entry, string $reason ): self
+    {
+        return new self( "Failed to extract update entry '{$entry}': {$reason}" );
+    }
+
+    /**
      * Composer install failed.
      *
      * @since 1.0.0
