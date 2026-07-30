@@ -13,11 +13,13 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Models;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\SupportsFeature;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecycleHooks;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasSupports;
 use ArtisanPackUI\MediaLibrary\Models\Media;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use Carbon\Carbon;
@@ -60,6 +62,7 @@ class Post extends Model
     use HasFactory;
     use HasFeaturedImage;
     use HasRenderedBlockContent;
+    use HasSupports;
     use SoftDeletes;
 
     /**
@@ -393,6 +396,30 @@ class Post extends Model
         $this->adjacentPostCache[ $direction ] = $post;
 
         return $post;
+    }
+
+    /**
+     * Default supports flags for blog posts. Overrides {@see HasSupports::defaultSupports()}
+     * to declare the panels a Post edit screen renders out of the box.
+     *
+     * @since 2.6.0
+     *
+     * @return list<string>
+     */
+    protected function defaultSupports(): array
+    {
+        return [
+            SupportsFeature::Title->value,
+            SupportsFeature::Editor->value,
+            SupportsFeature::Excerpt->value,
+            SupportsFeature::FeaturedImage->value,
+            SupportsFeature::Categories->value,
+            SupportsFeature::Tags->value,
+            SupportsFeature::CustomFields->value,
+            SupportsFeature::Seo->value,
+            SupportsFeature::Author->value,
+            SupportsFeature::Revisions->value,
+        ];
     }
 
     /**

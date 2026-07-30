@@ -88,7 +88,7 @@ class PagesServiceProvider extends ServiceProvider
             'hierarchical'  => true,
             'has_archive'   => false,
             'archive_slug'  => null,
-            'supports'      => ['title', 'content', 'excerpt', 'featured_image', 'author', 'custom_fields', 'page_attributes'],
+            'supports'      => ['title', 'editor', 'excerpt', 'featured_image', 'custom_fields', 'seo', 'author', 'page_attributes', 'templates', 'revisions'],
             'metadata'      => [],
             'public'        => true,
             'show_in_admin' => true,

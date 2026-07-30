@@ -18,7 +18,7 @@ test( 'register content type adds content type to filter hook', function (): voi
         'slug'        => 'products',
         'table_name'  => 'products',
         'model_class' => 'App\\Models\\Product',
-        'supports'    => ['title', 'content'],
+        'supports'    => ['title', 'editor'],
     ];
 
     $manager->register( $args );
@@ -90,7 +90,7 @@ test( 'create content type creates new content type in database', function (): v
         'hierarchical'  => false,
         'has_archive'   => true,
         'archive_slug'  => 'events',
-        'supports'      => ['title', 'content', 'excerpt', 'featured_image'],
+        'supports'      => ['title', 'editor', 'excerpt', 'featured_image'],
         'public'        => true,
         'show_in_admin' => true,
         'icon'          => 'fas-calendar',
@@ -104,7 +104,7 @@ test( 'create content type creates new content type in database', function (): v
     expect( $contentType->name )->toBe( 'Events' );
     expect( $contentType->has_archive )->toBeTrue();
     expect( $contentType->archive_slug )->toBe( 'events' );
-    expect( $contentType->supports )->toBe( ['title', 'content', 'excerpt', 'featured_image'] );
+    expect( $contentType->supports )->toBe( ['title', 'editor', 'excerpt', 'featured_image'] );
     expect( $contentType->icon )->toBe( 'fas-calendar' );
     expect( $contentType->menu_position )->toBe( 30 );
     expect( $contentType->exists )->toBeTrue();
