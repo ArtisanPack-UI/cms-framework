@@ -17,6 +17,8 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\Concerns\HasContent
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 
 /**
@@ -228,6 +230,148 @@ class PageManager
     }
 
     /**
+     * Create a blank draft page with an allocated unique slug. Powers
+     * the "New Page" auto-draft admin flow — an editor lands on the
+     * edit screen against a real record instead of a synthesized
+     * in-memory one, so autosave, custom-field wiring, and media
+     * associations all have an id to hang off.
+     *
+     * @since 2.7.0
+     *
+     * @param  int|null  $authorId  Author id to stamp on the record.
+     * @param  string  $baseSlug  Seed used for the unique-slug allocator.
+     */
+    public function autoDraft( ?int $authorId = null, string $baseSlug = 'untitled-page' ): Page
+    {
+        return Page::create( [
+            'title'     => 'Untitled page',
+            'slug'      => $this->uniqueSlug( $baseSlug ),
+            'status'    => ContentStatus::Draft,
+            'author_id' => $authorId,
+            'order'     => 0,
+        ] );
+    }
+
+    /**
+     * Create a page from a validated attribute array. Same four
+     * responsibilities as {@see \ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager::create()}
+     * — missing-slug allocation, custom-field application timing,
+     * `published_at` stamp on Published, and transactional write —
+     * plus support for the hierarchical `parent_id`, `order`, and
+     * `template` columns unique to Page.
+     *
+     * @since 2.7.0
+     *
+     * @param  array<string,mixed>  $attributes
+     * @param  array<string,mixed>|null  $customFields
+     */
+    public function create( array $attributes, ?array $customFields = null, ?int $authorId = null ): Page
+    {
+        return DB::transaction( function () use ( $attributes, $customFields, $authorId ): Page {
+            $attributes = $this->normalizeAttributes( $attributes, $authorId );
+
+            $page = new Page( $this->fillableSubset( $attributes ) );
+            $this->applyCustomFields( $page, $customFields );
+            $page->save();
+
+            return $page;
+        } );
+    }
+
+    /**
+     * Update an existing page from a validated attribute array. Same
+     * transitions as create, plus the "first draft -> published stamps
+     * `published_at`" rule.
+     *
+     * @since 2.7.0
+     *
+     * @param  array<string,mixed>  $attributes
+     * @param  array<string,mixed>|null  $customFields
+     */
+    public function update( Page $page, array $attributes, ?array $customFields = null ): Page
+    {
+        return DB::transaction( function () use ( $page, $attributes, $customFields ): Page {
+            $wasPublished = ContentStatus::Published === $page->status;
+
+            $page->fill( $this->fillableSubset( $attributes ) );
+
+            $nowPublished = ContentStatus::Published === $page->status;
+
+            if ( $nowPublished && ! $wasPublished && null === $page->published_at ) {
+                $page->published_at = now();
+            }
+
+            $this->applyCustomFields( $page, $customFields );
+            $page->save();
+
+            return $page;
+        } );
+    }
+
+    /**
+     * Soft-delete a page. Wrapper so consumers don't have to import
+     * Page to route through the domain service.
+     *
+     * @since 2.7.0
+     */
+    public function delete( Page $page ): void
+    {
+        DB::transaction( fn () => $page->delete() );
+    }
+
+    /**
+     * Duplicate an existing page. Copies fillable attributes, allocates
+     * a fresh unique slug, appends "(Copy)" to the title, resets status
+     * to {@see ContentStatus::Draft}. Does NOT copy `parent_id` blindly
+     * — the duplicate is created at the same hierarchical level as the
+     * source. `published_at` is intentionally not copied.
+     *
+     * @since 2.7.0
+     */
+    public function duplicate( Page $page, ?int $authorId = null ): Page
+    {
+        return DB::transaction( function () use ( $page, $authorId ): Page {
+            $copy            = $page->replicate( ['published_at'] );
+            $copy->title     = $page->title . ' (Copy)';
+            $copy->slug      = $this->uniqueSlug( $page->slug . '-copy' );
+            $copy->status    = ContentStatus::Draft;
+            $copy->author_id = $authorId ?? $page->author_id;
+            $copy->save();
+
+            return $copy;
+        } );
+    }
+
+    /**
+     * Allocate a slug that does not collide with any existing page's
+     * slug ( including soft-deleted rows ). Appends `-2`, `-3`, … to
+     * the source until a free slot is found.
+     *
+     * @since 2.7.0
+     *
+     * @param  string  $source  Text to slugify. Non-slug input is
+     *                          normalized via {@see Str::slug()}.
+     */
+    public function uniqueSlug( string $source ): string
+    {
+        $base = Str::slug( $source );
+
+        if ( '' === $base ) {
+            $base = 'page';
+        }
+
+        $slug = $base;
+        $n    = 2;
+
+        while ( Page::withTrashed()->where( 'slug', $slug )->exists() ) {
+            $slug = $base . '-' . $n;
+            $n++;
+        }
+
+        return $slug;
+    }
+
+    /**
      * Load children recursively for a page.
      *
      * @since 1.0.0
@@ -263,7 +407,70 @@ class PageManager
 
         // Apply template filter (page-specific)
         if ( isset( $filters['template'] ) ) {
-            $query->byTemplate( $filters['template']);
+            $query->byTemplate( $filters['template'] );
+        }
+    }
+
+    /**
+     * Apply the shared normalization every write path needs.
+     *
+     * @param  array<string,mixed>  $attributes
+     *
+     * @return array<string,mixed>
+     */
+    protected function normalizeAttributes( array $attributes, ?int $authorId ): array
+    {
+        if ( ! isset( $attributes['slug'] ) || '' === $attributes['slug'] ) {
+            $attributes['slug'] = $this->uniqueSlug( ( string ) ( $attributes['title'] ?? '' ) );
+        }
+
+        if ( ! isset( $attributes['author_id'] ) && null !== $authorId ) {
+            $attributes['author_id'] = $authorId;
+        }
+
+        if ( isset( $attributes['status'] ) && is_string( $attributes['status'] ) ) {
+            $attributes['status'] = ContentStatus::from( $attributes['status'] );
+        }
+
+        if ( isset( $attributes['status'] )
+            && ContentStatus::Published === $attributes['status']
+            && ! array_key_exists( 'published_at', $attributes ) ) {
+            $attributes['published_at'] = now();
+        }
+
+        return $attributes;
+    }
+
+    /**
+     * Intersect a caller-supplied attribute array with the model's
+     * fillable set so a manager caller can hand over a raw validated
+     * payload and not worry about mass-assignment guardrails.
+     *
+     * @param  array<string,mixed>  $attributes
+     *
+     * @return array<string,mixed>
+     */
+    protected function fillableSubset( array $attributes ): array
+    {
+        return array_intersect_key( $attributes, array_flip( ( new Page )->getFillable() ) );
+    }
+
+    /**
+     * Route filter-registered custom-field values through the
+     * {@see \ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields}
+     * magic setter before save so a single write captures both the
+     * hardcoded columns and the metadata JSON.
+     *
+     * @param  array<string,mixed>|null  $customFields
+     */
+    protected function applyCustomFields( Page $page, ?array $customFields ): void
+    {
+        if ( null === $customFields || [] === $customFields ) {
+            return;
+        }
+
+        foreach ( $customFields as $key => $value ) {
+            $page->{$key} = $value;
         }
     }
 }
