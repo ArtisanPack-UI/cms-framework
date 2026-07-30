@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.7.0] - 2026-07-30
+
+### Added
+
+- **`BlogManager` write API** ([#250](https://github.com/ArtisanPack-UI/cms-framework/issues/250), Keystone [#183](https://gitlab.com/jacob-martella-web-design/jacob-martella-web-design/jmwd-keystone-cms/jmwd-keystone-cms/-/issues/183)) — new methods `autoDraft()`, `create()`, `update()`, `delete()`, `duplicate()`, `syncCategories()`, `syncTags()`, `uniqueSlug()` on `Modules\Blog\Managers\BlogManager`. All writes wrapped in a DB transaction. Unique-slug allocation skips soft-deleted rows so a restored draft can't collide. `create()`/`update()` route filter-registered custom-field values through the `HasCustomFields` magic setter before save so a single INSERT/UPDATE captures both hardcoded columns and metadata JSON. `update()` stamps `published_at = now()` exactly once on the first draft→published transition — subsequent republishes preserve the original stamp.
+- **`PageManager` write API** ([#250](https://github.com/ArtisanPack-UI/cms-framework/issues/250)) — same seven methods on `Modules\Pages\Managers\PageManager` plus support for the hierarchical `parent_id`, `order`, and `template` attributes. `duplicate()` preserves `template` but resets status to Draft and clears `published_at`. Coexists with the existing hierarchy helpers (`getPageTree`, `movePage`, `reorderPages`) which stay unchanged.
+
+### Changed
+
 ## [2.6.0] - 2026-07-30
 
 ### Added
