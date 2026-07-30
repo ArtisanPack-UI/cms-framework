@@ -61,10 +61,18 @@ return new class extends Migration {
                         $rewritten[] = $flag;
                     }
 
-                    if ( $changed ) {
+                    // Dedup after rewrite so a row that already carried the
+                    // target flag alongside the legacy one — e.g. a plugin
+                    // that pre-registered `editor` while the DB still held
+                    // `content` — collapses to a single canonical entry
+                    // instead of persisting `['editor', 'editor']`. Order
+                    // is preserved: array_unique keeps the first occurrence.
+                    $deduped = array_values( array_unique( $rewritten ) );
+
+                    if ( $changed || $deduped !== $rewritten ) {
                         DB::table( 'content_types' )
                             ->where( 'id', $row->id )
-                            ->update( ['supports' => json_encode( $rewritten )] );
+                            ->update( ['supports' => json_encode( $deduped )] );
                     }
                 }
             } );

@@ -114,7 +114,7 @@ class BlogServiceProvider extends ServiceProvider
             'hierarchical'  => false,
             'has_archive'   => true,
             'archive_slug'  => 'blog',
-            'supports'      => ['title', 'editor', 'excerpt', 'featured_image', 'categories', 'tags', 'custom_fields', 'seo', 'author', 'revisions'],
+            'supports'      => ( new Post )->supports(),
             'metadata'      => [],
             'public'        => true,
             'show_in_admin' => true,

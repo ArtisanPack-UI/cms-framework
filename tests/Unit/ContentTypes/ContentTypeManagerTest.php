@@ -27,6 +27,7 @@ test( 'register content type adds content type to filter hook', function (): voi
 
     expect( $registeredTypes )->toHaveKey( 'products' );
     expect( $registeredTypes['products']['name'] )->toBe( 'Products' );
+    expect( $registeredTypes['products']['supports'] )->toBe( ['title', 'editor'] );
 } );
 
 test( 'get registered content types returns database content types', function (): void {
