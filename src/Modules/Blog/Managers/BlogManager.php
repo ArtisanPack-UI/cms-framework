@@ -16,6 +16,7 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\Concerns\HasContentFilters;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -202,12 +203,16 @@ class BlogManager
      */
     public function autoDraft( ?int $authorId = null, string $baseSlug = 'untitled-post' ): Post
     {
-        return Post::create( [
+        $post = new Post( [
             'title'     => 'Untitled post',
             'slug'      => $this->uniqueSlug( $baseSlug ),
             'status'    => ContentStatus::Draft,
             'author_id' => $authorId,
         ] );
+
+        $this->saveWithSlugRetry( $post );
+
+        return $post;
     }
 
     /**
@@ -248,7 +253,7 @@ class BlogManager
 
             $post = new Post( $this->fillableSubset( $attributes ) );
             $this->applyCustomFields( $post, $customFields );
-            $post->save();
+            $this->saveWithSlugRetry( $post );
 
             return $post;
         } );
@@ -270,6 +275,14 @@ class BlogManager
     public function update( Post $post, array $attributes, ?array $customFields = null ): Post
     {
         return DB::transaction( function () use ( $post, $attributes, $customFields ): Post {
+            // A caller passing `slug => ''` on update would otherwise
+            // overwrite an existing unique slug with an empty string,
+            // bypassing the allocator. Drop the key when blank so the
+            // fill() below leaves the record's current slug intact.
+            if ( array_key_exists( 'slug', $attributes ) && '' === trim( ( string ) $attributes['slug'] ) ) {
+                unset( $attributes['slug'] );
+            }
+
             $wasPublished = ContentStatus::Published === $post->status;
 
             $post->fill( $this->fillableSubset( $attributes ) );
@@ -281,7 +294,7 @@ class BlogManager
             }
 
             $this->applyCustomFields( $post, $customFields );
-            $post->save();
+            $this->saveWithSlugRetry( $post );
 
             return $post;
         } );
@@ -320,7 +333,7 @@ class BlogManager
             $copy->slug      = $this->uniqueSlug( $post->slug . '-copy' );
             $copy->status    = ContentStatus::Draft;
             $copy->author_id = $authorId ?? $post->author_id;
-            $copy->save();
+            $this->saveWithSlugRetry( $copy );
 
             $copy->categories()->sync( $post->categories->pluck( 'id' )->all() );
             $copy->tags()->sync( $post->tags->pluck( 'id' )->all() );
@@ -339,7 +352,9 @@ class BlogManager
      */
     public function syncCategories( Post $post, array $categoryIds ): void
     {
-        $post->categories()->sync( $categoryIds );
+        // Wrapped so a mid-sync constraint violation on the attach
+        // half doesn't leave the pivot with the detach half applied.
+        DB::transaction( fn () => $post->categories()->sync( $categoryIds ) );
     }
 
     /**
@@ -352,7 +367,7 @@ class BlogManager
      */
     public function syncTags( Post $post, array $tagIds ): void
     {
-        $post->tags()->sync( $tagIds );
+        DB::transaction( fn () => $post->tags()->sync( $tagIds ) );
     }
 
     /**
@@ -454,5 +469,48 @@ class BlogManager
         foreach ( $customFields as $key => $value ) {
             $post->{$key} = $value;
         }
+    }
+
+    /**
+     * Save a post, catching the tiny race where two writers each pass
+     * {@see uniqueSlug()}'s pre-check with the same candidate ( two
+     * simultaneous "New Post" clicks both probing `untitled-post` )
+     * and then collide on the DB-level unique index. Reallocates the
+     * slug once from its own value as a fresh base and retries. If the
+     * retry also collides — genuine sustained contention, not a race —
+     * the second exception surfaces to the caller.
+     *
+     * @throws QueryException on non-slug-unique errors, or on a second
+     *                        slug-unique collision after the retry.
+     */
+    protected function saveWithSlugRetry( Post $post ): void
+    {
+        try {
+            $post->save();
+        } catch ( QueryException $e ) {
+            if ( ! $this->isUniqueSlugViolation( $e ) ) {
+                throw $e;
+            }
+
+            $post->slug = $this->uniqueSlug( $post->slug );
+            $post->save();
+        }
+    }
+
+    /**
+     * Whether a QueryException reports an integrity-constraint violation
+     * on the slug column. Uses the SQLSTATE class ( `23`, integrity
+     * constraint violation ) rather than a driver-specific errno so the
+     * check works uniformly across MySQL, SQLite, and PostgreSQL.
+     */
+    protected function isUniqueSlugViolation( QueryException $e ): bool
+    {
+        $sqlState = ( string ) $e->getCode();
+
+        if ( ! str_starts_with( $sqlState, '23' ) ) {
+            return false;
+        }
+
+        return str_contains( strtolower( $e->getMessage() ), 'slug' );
     }
 }

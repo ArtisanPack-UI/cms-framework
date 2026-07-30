@@ -15,6 +15,8 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Models\PageCategory;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Models\PageTag;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 
 beforeEach( function (): void {
@@ -161,6 +163,40 @@ test( 'update can move a page into a new hierarchy position', function (): void 
     expect( $moved->order )->toBe( 3 );
 } );
 
+test( 'update leaves the existing slug intact when the caller passes an empty slug', function (): void {
+    $page = $this->manager->create( [
+        'title' => 'Keep me',
+        'slug'  => 'keep-me',
+    ], null, $this->user->id );
+
+    $updated = $this->manager->update( $page, [
+        'title' => 'Renamed',
+        'slug'  => '',
+    ] );
+
+    expect( $updated->slug )->toBe( 'keep-me' );
+} );
+
+test( 'update rejects reparenting a page to itself', function (): void {
+    $page = $this->manager->create( [
+        'title' => 'Self',
+    ], null, $this->user->id );
+
+    expect( fn () => $this->manager->update( $page, ['parent_id' => $page->id] ) )
+        ->toThrow( InvalidArgumentException::class, 'itself' );
+} );
+
+test( 'update rejects reparenting a page to one of its own descendants', function (): void {
+    $parent = $this->manager->create( ['title' => 'Parent'], null, $this->user->id );
+    $child  = $this->manager->create( [
+        'title'     => 'Child',
+        'parent_id' => $parent->id,
+    ], null, $this->user->id );
+
+    expect( fn () => $this->manager->update( $parent, ['parent_id' => $child->id] ) )
+        ->toThrow( InvalidArgumentException::class, 'descendant' );
+} );
+
 test( 'delete soft-deletes the page', function (): void {
     $page = $this->manager->create( [
         'title'  => 'Doomed',
@@ -189,4 +225,22 @@ test( 'duplicate returns a fresh draft with (Copy) title and unique slug', funct
     expect( $copy->slug )->toBe( 'original-copy' );
     // Copies preserve template but reset status to Draft.
     expect( $copy->template )->toBe( 'sidebar' );
+} );
+
+test( 'duplicate mirrors the source page category and tag associations', function (): void {
+    $category = PageCategory::create( ['name' => 'Docs', 'slug' => 'docs'] );
+    $tag      = PageTag::create( ['name' => 'V2', 'slug' => 'v2'] );
+
+    $page = $this->manager->create( [
+        'title'  => 'Original',
+        'status' => ContentStatus::Draft,
+    ], null, $this->user->id );
+
+    $page->categories()->sync( [ $category->id ] );
+    $page->tags()->sync( [ $tag->id ] );
+
+    $copy = $this->manager->duplicate( $page );
+
+    expect( $copy->categories->pluck( 'id' )->all() )->toBe( [ $category->id ] );
+    expect( $copy->tags->pluck( 'id' )->all() )->toBe( [ $tag->id ] );
 } );

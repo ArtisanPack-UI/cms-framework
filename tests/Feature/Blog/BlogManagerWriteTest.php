@@ -200,6 +200,21 @@ test( 'duplicate returns a fresh draft with (Copy) title, unique slug, and mirro
     expect( $copy->tags->pluck( 'id' )->all() )->toBe( [ $tag->id ] );
 } );
 
+test( 'update leaves the existing slug intact when the caller passes an empty slug', function (): void {
+    $post = $this->manager->create( [
+        'title' => 'Keep the slug',
+        'slug'  => 'keep-the-slug',
+    ], null, $this->user->id );
+
+    $updated = $this->manager->update( $post, [
+        'title' => 'New title',
+        'slug'  => '',
+    ] );
+
+    expect( $updated->slug )->toBe( 'keep-the-slug' );
+    expect( $updated->title )->toBe( 'New title' );
+} );
+
 test( 'syncCategories replaces the category set atomically', function (): void {
     $a = PostCategory::create( ['name' => 'A', 'slug' => 'a'] );
     $b = PostCategory::create( ['name' => 'B', 'slug' => 'b'] );

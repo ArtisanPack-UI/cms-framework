@@ -16,6 +16,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\Concerns\HasContentFilters;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -243,13 +244,17 @@ class PageManager
      */
     public function autoDraft( ?int $authorId = null, string $baseSlug = 'untitled-page' ): Page
     {
-        return Page::create( [
+        $page = new Page( [
             'title'     => 'Untitled page',
             'slug'      => $this->uniqueSlug( $baseSlug ),
             'status'    => ContentStatus::Draft,
             'author_id' => $authorId,
             'order'     => 0,
         ] );
+
+        $this->saveWithSlugRetry( $page );
+
+        return $page;
     }
 
     /**
@@ -272,7 +277,7 @@ class PageManager
 
             $page = new Page( $this->fillableSubset( $attributes ) );
             $this->applyCustomFields( $page, $customFields );
-            $page->save();
+            $this->saveWithSlugRetry( $page );
 
             return $page;
         } );
@@ -291,6 +296,31 @@ class PageManager
     public function update( Page $page, array $attributes, ?array $customFields = null ): Page
     {
         return DB::transaction( function () use ( $page, $attributes, $customFields ): Page {
+            if ( array_key_exists( 'slug', $attributes ) && '' === trim( ( string ) $attributes['slug'] ) ) {
+                unset( $attributes['slug'] );
+            }
+
+            // Guard against a caller writing `parent_id => $descendantId`
+            // through update() the same way {@see movePage()} does.
+            // Without this, Page::ancestors() and Page::descendants()
+            // (both unbounded `while ($parent)` recursion) would loop
+            // forever the next time the page tree is rendered — an
+            // availability risk in the admin UI. Only enforce when the
+            // caller actually passes parent_id ( array_key_exists ), so
+            // a plain title/slug update doesn't pay for the descendant
+            // pluck.
+            if ( array_key_exists( 'parent_id', $attributes ) && null !== $attributes['parent_id'] ) {
+                $incoming = ( int ) $attributes['parent_id'];
+
+                if ( $incoming === $page->id ) {
+                    throw new InvalidArgumentException( 'Cannot move a page to itself.' );
+                }
+
+                if ( in_array( $incoming, $page->descendants()->pluck( 'id' )->toArray(), true ) ) {
+                    throw new InvalidArgumentException( 'Cannot move a page to its own descendant.' );
+                }
+            }
+
             $wasPublished = ContentStatus::Published === $page->status;
 
             $page->fill( $this->fillableSubset( $attributes ) );
@@ -302,7 +332,7 @@ class PageManager
             }
 
             $this->applyCustomFields( $page, $customFields );
-            $page->save();
+            $this->saveWithSlugRetry( $page );
 
             return $page;
         } );
@@ -311,6 +341,15 @@ class PageManager
     /**
      * Soft-delete a page. Wrapper so consumers don't have to import
      * Page to route through the domain service.
+     *
+     * Child pages are NOT reparented or cascade-deleted — their
+     * `parent_id` still points at the soft-deleted row, so
+     * {@see getPageTree()} / {@see getTopLevelPages()} silently
+     * exclude the subtree until either the parent is restored or a
+     * host explicitly reparents the children. This preserves the
+     * pre-2.7.0 SoftDeletes behavior; a future release can layer a
+     * cascade / reparent policy on top if the host contract requires
+     * it.
      *
      * @since 2.7.0
      */
@@ -336,7 +375,13 @@ class PageManager
             $copy->slug      = $this->uniqueSlug( $page->slug . '-copy' );
             $copy->status    = ContentStatus::Draft;
             $copy->author_id = $authorId ?? $page->author_id;
-            $copy->save();
+            $this->saveWithSlugRetry( $copy );
+
+            // Mirror the source's category and tag associations for
+            // parity with {@see \ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager::duplicate()}
+            // — Page ships the same BelongsToMany relations.
+            $copy->categories()->sync( $page->categories->pluck( 'id' )->all() );
+            $copy->tags()->sync( $page->tags->pluck( 'id' )->all() );
 
             return $copy;
         } );
@@ -472,5 +517,46 @@ class PageManager
         foreach ( $customFields as $key => $value ) {
             $page->{$key} = $value;
         }
+    }
+
+    /**
+     * Save a page, catching the tiny race where two writers each pass
+     * {@see uniqueSlug()}'s pre-check with the same candidate and then
+     * collide on the DB-level unique index. Reallocates the slug once
+     * from its own value as a fresh base and retries; a second
+     * collision surfaces to the caller as {@see QueryException}.
+     *
+     * @throws QueryException on non-slug-unique errors, or on a second
+     *                        slug-unique collision after the retry.
+     */
+    protected function saveWithSlugRetry( Page $page ): void
+    {
+        try {
+            $page->save();
+        } catch ( QueryException $e ) {
+            if ( ! $this->isUniqueSlugViolation( $e ) ) {
+                throw $e;
+            }
+
+            $page->slug = $this->uniqueSlug( $page->slug );
+            $page->save();
+        }
+    }
+
+    /**
+     * Whether a QueryException reports an integrity-constraint violation
+     * on the slug column. Uses the SQLSTATE class ( `23`, integrity
+     * constraint violation ) rather than a driver-specific errno so the
+     * check works uniformly across MySQL, SQLite, and PostgreSQL.
+     */
+    protected function isUniqueSlugViolation( QueryException $e ): bool
+    {
+        $sqlState = ( string ) $e->getCode();
+
+        if ( ! str_starts_with( $sqlState, '23' ) ) {
+            return false;
+        }
+
+        return str_contains( strtolower( $e->getMessage() ), 'slug' );
     }
 }
