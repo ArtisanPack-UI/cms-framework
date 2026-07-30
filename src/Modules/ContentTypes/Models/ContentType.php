@@ -12,6 +12,8 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models;
 
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasSupports;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -42,6 +44,7 @@ use Illuminate\Support\Collection;
 class ContentType extends Model
 {
     use HasFactory;
+    use HasSupports;
 
     /**
      * The attributes that are mass assignable.
@@ -82,20 +85,6 @@ class ContentType extends Model
     }
 
     /**
-     * Check if the content type supports a specific feature.
-     *
-     * @since 1.0.0
-     */
-    public function supportsFeature( string $feature ): bool
-    {
-        if ( null === $this->supports ) {
-            return false;
-        }
-
-        return in_array( $feature, $this->supports, true );
-    }
-
-    /**
      * Get the custom fields for this content type.
      *
      * @since 1.0.0
@@ -110,9 +99,9 @@ class ContentType extends Model
      *
      * @since 1.0.0
      *
-     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @param  Builder  $query
      *
-     * @return \Illuminate\Database\Eloquent\Builder
+     * @return Builder
      */
     public function scopeWithCustomFieldsCount( Builder $query )
     {
@@ -121,6 +110,21 @@ class ContentType extends Model
                 ->whereRaw( "JSON_CONTAINS(content_types, CONCAT('\"', content_types.slug, '\"'))" ),
             'custom_fields_count',
         );
+    }
+
+    /**
+     * Hand the DB-persisted `supports` array to {@see HasSupports}. Falling
+     * back to `null` when the column is empty lets the trait's default
+     * resolution ( `[title, editor]` minimum ) kick in for legacy rows that
+     * predate the column being populated.
+     *
+     * @since 2.6.0
+     *
+     * @return list<string>|null
+     */
+    protected function explicitSupports(): ?array
+    {
+        return is_array( $this->supports ) ? $this->supports : null;
     }
 
     /**

@@ -13,11 +13,13 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Models;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\SupportsFeature;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecycleHooks;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasSupports;
 use ArtisanPackUI\MediaLibrary\Models\Media;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use Carbon\Carbon;
@@ -62,6 +64,7 @@ class Page extends Model
     use HasFactory;
     use HasFeaturedImage;
     use HasRenderedBlockContent;
+    use HasSupports;
     use SoftDeletes;
 
     /**
@@ -299,6 +302,30 @@ class Page extends Model
         $path = $ancestors->pluck( 'slug' )->implode( '/' ) . '/' . $this->slug;
 
         return url( "/{$path}" );
+    }
+
+    /**
+     * Default supports flags for pages. Overrides {@see HasSupports::defaultSupports()}
+     * to declare the panels a Page edit screen renders out of the box.
+     *
+     * @since 2.6.0
+     *
+     * @return list<string>
+     */
+    protected function defaultSupports(): array
+    {
+        return [
+            SupportsFeature::Title->value,
+            SupportsFeature::Editor->value,
+            SupportsFeature::Excerpt->value,
+            SupportsFeature::FeaturedImage->value,
+            SupportsFeature::CustomFields->value,
+            SupportsFeature::Seo->value,
+            SupportsFeature::Author->value,
+            SupportsFeature::PageAttributes->value,
+            SupportsFeature::Templates->value,
+            SupportsFeature::Revisions->value,
+        ];
     }
 
     /**

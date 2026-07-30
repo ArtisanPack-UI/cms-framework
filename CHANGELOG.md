@@ -19,6 +19,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [2.6.0] - 2026-07-30
+
+### Added
+
+- **`SupportsFeature` enum + `HasSupports` trait** ([#247](https://github.com/ArtisanPack-UI/cms-framework/issues/247), Keystone [#183](https://gitlab.com/jacob-martella-web-design/jacob-martella-web-design/jmwd-keystone-cms/jmwd-keystone-cms/-/issues/183)) — a canonical vocabulary for post-type `supports` flags (`title`, `editor`, `excerpt`, `featured_image`, `categories`, `tags`, `custom_fields`, `seo`, `author`, `page_attributes`, `revisions`, `templates`) modeled on WordPress's `post_type_supports()`. The new `HasSupports` trait exposes `supports(): array` and `supportsFeature(SupportsFeature|string): bool` on `Post`, `Page`, and `ContentType`, with per-model `defaultSupports()` overrides for the built-in types and DB-backed resolution on `ContentType` via `explicitSupports()`. Host apps consuming the framework should read the effective supports off the model instance instead of maintaining their own default arrays.
+
+### Changed
+
+- **Renamed the `content` supports flag to `editor`** ([#247](https://github.com/ArtisanPack-UI/cms-framework/issues/247), Keystone [#183](https://gitlab.com/jacob-martella-web-design/jacob-martella-web-design/jmwd-keystone-cms/jmwd-keystone-cms/-/issues/183)) — the underlying record-table column is still `content`; only the flag identifier changed to match the wider vocabulary in `SupportsFeature`. The `BlogServiceProvider` and `PagesServiceProvider` default registrations were also expanded to include the newly-canonical flags (`categories`, `tags`, `seo`, `revisions` for posts; `templates`, `revisions` for pages). A companion migration rewrites `content_types.supports` JSON rows so any admin-created content type that stored `'content'` is transparently upgraded to `'editor'` on the next `migrate` run — reversible via `migrate:rollback`.
+
+- **`ContentType::supportsFeature()` accepts the enum case as well as the string value.** The previous string-only signature is preserved for callers passing `'editor'` / `'seo'` / etc., but callers can now pass `SupportsFeature::Editor` directly. `title` is treated as always-on regardless of the stored array, matching the "required — always on" note in the editor redesign spec.
+
 ## [2.5.4] - 2026-07-27
 
 ### Added
