@@ -66,6 +66,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A custom-field value whose key named a real column overwrote that column** ([#253](https://github.com/ArtisanPack-UI/cms-framework/issues/253)) — `HasCustomFields::findCustomFieldByKey()` has always refused to resolve a key that shadows a real DB column, so the metadata write was blocked; what it never blocked was the *fall-through*. `__set()` handed the value to `parent::__set()`, which wrote it straight into the column. `BlogManager::applyCustomFields()` and `PageManager::applyCustomFields()` ([#250](https://github.com/ArtisanPack-UI/cms-framework/issues/250)) assigned each payload key that way, and the custom-field half of a request payload gets no fillable filtering — so `custom_fields[author_id]` on a post update reassigned the author, whatever the attribute allowlist said. A registration wasn't even required: any key naming a column worked.
+
+  New `HasCustomFields::applyCustomFieldValues()` is the supported way to apply an untrusted custom-field payload. It routes each value through the same magic setter as before, but silently drops keys that name a real column, cast, mutator, accessor, or relation first. Both managers now delegate to it, so `create()`/`update()` are covered on `Post` and `Page`, and any host content type using the trait gets the same guard for free — downstream apps no longer need to reimplement the check ahead of the manager call.
+
+  DB-registered fields are exempt, because they legitimately own the column they name: `createField()` adds it, and a persisted row is always column-storage (`custom_fields` has no `storage` column, so `CustomField::storageMode()` resolves an existing row to `column`). The exemption keys off `exists`, which `CustomFieldManager::filterFieldsForContentType()` forces to `false` on every filter-registered field — so a plugin cannot buy itself a real-column write by declaring `storage => 'column'`, and only a row in the `custom_fields` table, which takes the custom-field admin capability to create, qualifies.
+
+  The magic setter itself is deliberately unchanged. Guarding `__set()` would have meant that a plugin registering a field keyed to `title` could stop host code from writing `$post->title` at all — a required-column write turned into a save failure by anyone able to register a field. Trusted assignment and untrusted payload application are separate operations, and only the latter is guarded. Nothing legitimate is lost: a shadowing field can never round-trip, because the getter resolves a real column through Eloquent and never consults metadata.
+
 ## [2.7.0] - 2026-07-30
 
 ### Added

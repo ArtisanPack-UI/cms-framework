@@ -506,6 +506,10 @@ class PageManager
      * magic setter before save so a single write captures both the
      * hardcoded columns and the metadata JSON.
      *
+     * Delegates to `applyCustomFieldValues()` rather than assigning each
+     * key directly: the payload is untrusted, and that method drops keys
+     * that shadow a real column before they can reach the column ( #253 ).
+     *
      * @param  array<string,mixed>|null  $customFields
      */
     protected function applyCustomFields( Page $page, ?array $customFields ): void
@@ -514,9 +518,7 @@ class PageManager
             return;
         }
 
-        foreach ( $customFields as $key => $value ) {
-            $page->{$key} = $value;
-        }
+        $page->applyCustomFieldValues( $customFields );
     }
 
     /**

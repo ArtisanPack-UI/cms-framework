@@ -117,6 +117,75 @@ test( 'create applies custom-field values into the metadata column before insert
     expect( $post->fresh()->metadata )->toBe( ['reading_time' => '4 minutes'] );
 } );
 
+test( 'create drops a custom-field value whose key shadows a real posts column', function (): void {
+    // #253 — a plugin filter-registers a metadata field keyed to `author_id`,
+    // so a request payload carrying `custom_fields[author_id]` would reach
+    // `parent::__set()` and hijack the author. The key must be dropped.
+    addFilter( 'ap.contentTypes.registeredCustomFields', function ( array $fields ): array {
+        $fields['author_id'] = [
+            'key'           => 'author_id',
+            'name'          => 'Author Id',
+            'type'          => 'text',
+            'content_types' => ['posts'],
+            'required'      => false,
+            'default_value' => null,
+            'storage'       => 'metadata',
+        ];
+
+        return $fields;
+    } );
+
+    $post = $this->manager->create( [
+        'title'    => 'Hijack attempt',
+        'status'   => ContentStatus::Draft,
+        'metadata' => [],
+    ], [
+        'author_id' => 999_999,
+    ], $this->user->id );
+
+    expect( $post->fresh()->author_id )->toBe( $this->user->id );
+    expect( $post->fresh()->metadata )->toBe( [] );
+} );
+
+test( 'update drops a custom-field value whose key shadows a real posts column', function (): void {
+    addFilter( 'ap.contentTypes.registeredCustomFields', function ( array $fields ): array {
+        $fields['author_id'] = [
+            'key'           => 'author_id',
+            'name'          => 'Author Id',
+            'type'          => 'text',
+            'content_types' => ['posts'],
+            'required'      => false,
+            'default_value' => null,
+            'storage'       => 'metadata',
+        ];
+
+        return $fields;
+    } );
+
+    $post = $this->manager->create( [
+        'title'  => 'Owned',
+        'status' => ContentStatus::Draft,
+    ], null, $this->user->id );
+
+    $this->manager->update( $post, ['title' => 'Still owned'], ['author_id' => 999_999] );
+
+    expect( $post->fresh()->author_id )->toBe( $this->user->id );
+    expect( $post->fresh()->title )->toBe( 'Still owned' );
+} );
+
+test( 'create drops an unregistered custom-field key that names a real posts column', function (): void {
+    // No registration at all: the payload keys are request input, so a bare
+    // column name must be dropped on the same terms as a registered one.
+    $post = $this->manager->create( [
+        'title'  => 'No registration needed',
+        'status' => ContentStatus::Draft,
+    ], [
+        'author_id' => 999_999,
+    ], $this->user->id );
+
+    expect( $post->fresh()->author_id )->toBe( $this->user->id );
+} );
+
 test( 'create rejects attributes outside the fillable + write allowlist', function (): void {
     $post = $this->manager->create( [
         'title'      => 'Guarded',
