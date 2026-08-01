@@ -136,6 +136,34 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * The on-disk `composer.json` and `composer.lock` disagree, so
+     * `composer install` cannot succeed.
+     *
+     * Raised *before* composer is invoked, because composer's own diagnosis of
+     * this state — "This usually happens when composer files are incorrectly
+     * merged or the composer.json file is manually edited" — sends the operator
+     * hunting for a merge conflict or a hand-edit that never happened. In the
+     * updater's case the cause is nearly always a release that shipped no
+     * `composer.lock`, or a host whose `exclude_from_update` override still
+     * excludes it.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $reason  Which half of the pair is at fault.
+     */
+    public static function composerFilesOutOfSync( string $reason ): self
+    {
+        return new self(
+            "composer.json and composer.lock are out of sync after extraction: {$reason} "
+            . '`composer install` only ever reads a lock file — it never writes one — so it cannot '
+            . 'reconcile this. Confirm the release archive ships a committed `composer.lock` that '
+            . 'matches its `composer.json`, and that `cms.updates.exclude_from_update` does not list '
+            . '`composer.lock` (it is not in the framework default). This is not a merge conflict or '
+            . 'a hand-edited `composer.json`, whatever composer would have told you.',
+        );
+    }
+
+    /**
      * Composer binary could not be located on the host.
      *
      * Accepts either a flat list of searched paths (legacy 2.5.3 signature)

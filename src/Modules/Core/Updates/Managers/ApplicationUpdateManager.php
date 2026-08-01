@@ -48,6 +48,29 @@ class ApplicationUpdateManager
     public const DEFAULT_COMPOSER_INSTALL_ARGS = 'install --no-dev --no-interaction --optimize-autoloader';
 
     /**
+     * `composer.json` keys that participate in the lock file's `content-hash`,
+     * mirroring `Composer\Package\Locker::getContentHash()`. Kept as a constant
+     * so the list is greppable if a future composer release changes it.
+     *
+     * @since 2.7.1
+     *
+     * @var array<int, string>
+     */
+    protected const COMPOSER_CONTENT_HASH_KEYS = [
+        'name',
+        'version',
+        'require',
+        'require-dev',
+        'conflict',
+        'replace',
+        'provide',
+        'minimum-stability',
+        'prefer-stable',
+        'repositories',
+        'extra',
+    ];
+
+    /**
      * Update checker instance.
      *
      * @since 1.0.0
@@ -838,6 +861,9 @@ class ApplicationUpdateManager
     protected function runComposerInstall(): void
     {
         $command = $this->resolveComposerCommand();
+
+        $this->verifyComposerFilesInSync( $command );
+
         $timeout = config( 'cms.updates.composer_timeout', 600 );
 
         $result = Process::timeout( $timeout )
@@ -847,6 +873,124 @@ class ApplicationUpdateManager
         if ( ! $result->successful() ) {
             throw UpdateException::composerInstallFailed( $result->errorOutput() );
         }
+    }
+
+    /**
+     * Verify the on-disk `composer.json` and `composer.lock` agree before
+     * handing them to composer.
+     *
+     * `composer install` only ever *reads* a lock file — it never writes one —
+     * and aborts when the lock disagrees with `composer.json`. Its own
+     * diagnosis of that state ("This usually happens when composer files are
+     * incorrectly merged or the composer.json file is manually edited") sends
+     * the operator hunting for a merge conflict or a hand-edit that never
+     * happened, when the real cause is a release that shipped no lock or a host
+     * whose `exclude_from_update` override still excludes it.
+     *
+     * Deliberately fails *open*. A missing `composer.json`, a missing or
+     * unparseable `composer.lock`, or a lock carrying no `content-hash` is left
+     * for composer to adjudicate — the framework only aborts on a positively
+     * detected mismatch, so a false alarm can never block an update that would
+     * otherwise have installed cleanly.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $command  The composer command about to be run.
+     *
+     * @throws UpdateException When the two files positively disagree.
+     */
+    protected function verifyComposerFilesInSync( string $command ): void
+    {
+        if ( ! config( 'cms.updates.verify_composer_lock_sync', true ) ) {
+            return;
+        }
+
+        // A host that has overridden `composer_install_command` to run
+        // `composer update` has deliberately opted into re-resolving the tree,
+        // and a lock that disagrees with composer.json is precisely what
+        // `update` exists to reconcile. Only `install` needs the guard.
+        if ( ! preg_match( '/(?:^|\s)install(?:\s|$)/', $command ) ) {
+            return;
+        }
+
+        $jsonPath = base_path( 'composer.json' );
+        $lockPath = base_path( 'composer.lock' );
+
+        if ( ! is_file( $jsonPath ) ) {
+            return;
+        }
+
+        if ( ! is_file( $lockPath ) ) {
+            Log::warning( 'Update left no composer.lock on disk; composer will resolve dependencies itself.', [
+                'lock_path' => $lockPath,
+            ] );
+
+            return;
+        }
+
+        $expectedHash = $this->composerContentHash( $jsonPath );
+        if ( null === $expectedHash ) {
+            return;
+        }
+
+        $lock = json_decode( (string) @file_get_contents( $lockPath ), true );
+        if ( ! is_array( $lock ) || ! is_string( $lock['content-hash'] ?? null ) ) {
+            return;
+        }
+
+        if ( $lock['content-hash'] === $expectedHash ) {
+            return;
+        }
+
+        Log::error( 'composer.json and composer.lock are out of sync after extraction.', [
+            'expected_content_hash' => $expectedHash,
+            'lock_content_hash'     => $lock['content-hash'],
+        ] );
+
+        throw UpdateException::composerFilesOutOfSync(
+            'the lock file records a different set of dependency constraints than composer.json declares.',
+        );
+    }
+
+    /**
+     * Compute the `content-hash` composer would write into a lock file for the
+     * given `composer.json`, mirroring `Composer\Package\Locker::getContentHash()`.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $jsonPath  Absolute path to a `composer.json`.
+     *
+     * @return string|null The hash, or null when the file cannot be read or parsed.
+     */
+    protected function composerContentHash( string $jsonPath ): ?string
+    {
+        $contents = @file_get_contents( $jsonPath );
+        if ( false === $contents ) {
+            return null;
+        }
+
+        $manifest = json_decode( $contents, true );
+        if ( ! is_array( $manifest ) ) {
+            return null;
+        }
+
+        $relevant = [];
+        foreach ( array_intersect( self::COMPOSER_CONTENT_HASH_KEYS, array_keys( $manifest ) ) as $key ) {
+            $relevant[ $key ] = $manifest[ $key ];
+        }
+
+        if ( isset( $manifest['config']['platform'] ) ) {
+            $relevant['config']['platform'] = $manifest['config']['platform'];
+        }
+
+        ksort( $relevant );
+
+        $encoded = json_encode( $relevant );
+        if ( false === $encoded ) {
+            return null;
+        }
+
+        return hash( 'md5', $encoded );
     }
 
     /**
