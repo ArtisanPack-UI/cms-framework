@@ -34,11 +34,14 @@ The download path still uses `Http::sink()` — it's shielded by a `withResponse
 2. **`cms.updates.composer_install_command` config value**, when it differs from the shipped default. Full shell string — set this when you need extra flags, a prepended `PATH`, or a bespoke composer wrapper. Backwards-compatible escape hatch for hosts that already carry a custom command.
 
 3. **Auto-discovery** across common install paths, first hit wins:
+   - `~/Library/Application Support/Herd/bin/composer`
    - `/usr/local/bin/composer`
    - `/opt/homebrew/bin/composer`
    - `~/.composer/vendor/bin/composer`
    - `~/.config/composer/vendor/bin/composer`
    - `/usr/bin/composer`
+
+   Laravel Herd's bundled composer leads the list for the same reason the CLI PHP list leads with Herd's `php`: a host that uses Herd for both FPM and CLI stays on a single toolchain. Herd's composer is a `#!/usr/bin/env php` script rather than a standalone binary, which is fine — the command is built as `{CLI PHP} {binary} install ...` regardless. Both lists derive the Herd `bin/` directory from one `herdBinPath()` helper so they can't drift apart.
 
    When discovery fails, the framework logs a structured `Log::warning` with the `is_file()`/`is_executable()` result for each candidate path, the current `php_sapi`, and a pointer at the fix. `UpdateException::composerBinaryNotFound()` renders the same per-candidate stat outcome in the exception message, so operators can distinguish a wrong-path failure from a PHP-FPM sandboxed-stat failure (macOS Herd Pro sandboxes `/opt/homebrew/*`; chrooted FPM pools and restrictive `open_basedir` behave the same way) without digging through the log.
 
@@ -58,7 +61,7 @@ The resolved CLI PHP is used to build both the install command and the rollback 
 
 ### When you need the escape hatch
 
-Laravel Herd's PHP-FPM pool ships a minimal `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`) that doesn't include Homebrew or Herd's own composer. Auto-discovery handles `/opt/homebrew/bin/composer` cleanly; if your composer lives elsewhere, either point `COMPOSER_BINARY` at it or set a full command:
+Laravel Herd's PHP-FPM pool ships a minimal `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`) that doesn't include Homebrew or Herd's own composer. Auto-discovery covers both `~/Library/Application Support/Herd/bin/composer` and `/opt/homebrew/bin/composer`, so a stock Herd or Homebrew install needs no configuration; if your composer lives elsewhere, either point `COMPOSER_BINARY` at it or set a full command:
 
 ```php
 // AppServiceProvider::boot()
@@ -74,6 +77,10 @@ config()->set(
 When an update fails, the framework rolls back to the pre-update backup. Two behaviors matter for diagnostics:
 
 - **Before invoking rollback's `composer install`, the framework runs `{binary} --version` with a 10-second timeout.** If that fails, you get `UpdateException::composerBinaryNotFound` naming the paths inspected and the `COMPOSER_BINARY` override — not the vague "Manual intervention required".
+
+- **When that probe fails, the diagnosis depends on whether PHP can see the binary on disk.** If `is_file()` also reports false, you get `UpdateException::configuredComposerBinaryMissing` naming the configured path — such a path can only have come from `COMPOSER_BINARY` / `cms.updates.composer_binary`, since auto-discovery only ever returns a path it has already stat'd. Otherwise you get `composerVerificationFailed` as before, with its exit code, captured output, and `CMS_PHP_BINARY` hint. Previously every failure took the second form, blaming the PHP interpreter on hosts where the interpreter had resolved correctly and the composer path was the sole fault.
+
+  The stat runs **after** the probe, never as a pre-flight gate — deliberately. A path PHP cannot `stat()` may still be perfectly reachable by the shelled-out child under PHP-FPM sandboxing, and pointing `COMPOSER_BINARY` at such a path is the documented workaround for exactly that case (see the discovery section above). Gating the probe on `is_file()` would close that escape hatch. Once the probe has failed too, the path is overwhelmingly just wrong.
 
 - **When rollback itself fails, the resulting exception preserves the original update-failure message.** You'll see both `Rollback failed: {rollback error}. Original update error: {original error}. Manual intervention required.` — no more losing the actual first-error text.
 

@@ -21,6 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The updater never looked for composer where Laravel Herd puts it, so a Herd-only macOS host could not self-update at all** ([#254](https://github.com/ArtisanPack-UI/cms-framework/issues/254)) — `phpCandidatePaths()` has listed Herd's `php` **first** since [#225](https://github.com/ArtisanPack-UI/cms-framework/issues/225), annotated "so hosts that use Herd for both FPM and CLI stay on a single toolchain". Herd bundles composer in that same `bin/` directory, but `composerCandidatePaths()` never learned about it — the one place the Herd awareness didn't get carried over. On a clean Herd install with no Homebrew composer and no global composer (Herd ships one, so there's no reason to `brew install` another), all five candidate paths missed, discovery returned `null`, and the updater fell through to bare `composer install` — which PHP-FPM's stripped `PATH` (`/usr/bin:/bin:/usr/sbin:/sbin`) cannot resolve:
+
+  ```
+  Update failed: Rollback failed: Composer install failed. Output: sh: composer: command not found .
+  Original update error: Composer install failed. Output: sh: composer: command not found .
+  Manual intervention required. The pre-update snapshot was restored.
+  ```
+
+  Three changes:
+
+  - **`~/Library/Application Support/Herd/bin/composer` now leads the composer candidate list**, mirroring the PHP list's ordering and rationale. Herd's composer is a `#!/usr/bin/env php` script rather than a standalone binary, which needed no other changes: `buildComposerCommand()` already invokes the discovered path as `{CLI PHP} {binary} install ...`.
+  - **Both candidate lists now derive Herd's `bin/` directory from a single `herdBinPath()` helper**, so they cannot drift apart again the way they did here.
+  - **A failed rollback `--version` probe against a path PHP also cannot `stat()` now throws the new `UpdateException::configuredComposerBinaryMissing`**, naming the offending path. Such a path can only have come from `COMPOSER_BINARY` / `cms.updates.composer_binary`, since discovery only ever returns a path it has already stat'd. This closes a second, more confusing failure: because `/opt/homebrew/bin/composer` is advertised in the `composerBinaryNotFound` message and is the canonical macOS location, the natural next move on a Herd-only machine was to set `COMPOSER_BINARY` to it — producing "Composer binary was located but could not be executed … Could not open input file" closing with a `CMS_PHP_BINARY` hint. It was never located, only configured; and `resolvePhpBinary()` had done its job correctly, so the trailing hint blamed the one component that was already right.
+
+    The stat runs **after** the probe rather than gating it, which matters for [#233](https://github.com/ArtisanPack-UI/cms-framework/issues/233): a path PHP cannot `stat()` may still be perfectly reachable by the shelled-out child under PHP-FPM sandboxing, and pointing `COMPOSER_BINARY` at such a path is the documented workaround for that case. A pre-flight `is_file()` gate would have closed that escape hatch. Probes that succeed are still honoured regardless of what `is_file()` thinks.
+
+  Hosts on an older framework version can work around this by setting the full path in `.env`, quoted because it contains spaces: `COMPOSER_BINARY="/Users/{you}/Library/Application Support/Herd/bin/composer"`.
+
 - **The updater excluded `composer.lock` from extraction but ran `composer install`, breaking every release that changed a dependency constraint** ([#255](https://github.com/ArtisanPack-UI/cms-framework/issues/255)) — `composer.lock` sat in the `exclude_from_update` default annotated `// Rebuilt via composer install`. It isn't: `composer install` only ever *reads* a lock file and aborts when it disagrees with `composer.json`; only `composer update` / `composer require` write one. The identical comment on the neighbouring `vendor` entry *is* correct, which made the pair easy to read past. The consequence was that `extractUpdate()` skipped the release's lock — leaving the **old** one in place — while `composer.json` was not excluded and was overwritten with the **new** one, then handed that mismatched pair to composer:
 
   ```
