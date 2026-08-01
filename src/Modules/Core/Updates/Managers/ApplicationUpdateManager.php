@@ -4,13 +4,17 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\UpdateStateStore;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -58,6 +62,37 @@ class ApplicationUpdateManager
     protected ?string $backupPath = null;
 
     /**
+     * Persisted step marker for the current update run.
+     *
+     * @since 2.7.1
+     */
+    protected ?UpdateStateStore $state = null;
+
+    /**
+     * The step currently in flight, or `null` when no update is running.
+     *
+     * @since 2.7.1
+     */
+    protected ?UpdateStep $currentStep = null;
+
+    /**
+     * Whether this instance put the site into maintenance mode and has not
+     * taken it back out. Read by the shutdown guard to decide whether a dead
+     * process left the site serving 503s.
+     *
+     * @since 2.7.1
+     */
+    protected bool $maintenanceModeActive = false;
+
+    /**
+     * Whether the shutdown guard has already been registered, so repeated
+     * `enableMaintenanceMode()` calls don't stack handlers.
+     *
+     * @since 2.7.1
+     */
+    protected bool $shutdownGuardArmed = false;
+
+    /**
      * Check for available updates.
      *
      * @since 1.0.0
@@ -76,6 +111,18 @@ class ApplicationUpdateManager
     /**
      * Perform the update.
      *
+     * A full update — download, extract, `composer install` across a real
+     * dependency tree, migrate — routinely runs for several minutes. Two
+     * guards make that survivable when the caller is an HTTP request rather
+     * than the CLI:
+     *
+     * - `raiseExecutionLimits()` lifts PHP's `max_execution_time` (30s by
+     *   default under PHP-FPM) so the parent request isn't killed long before
+     *   the composer child's own timeout budget is reached.
+     * - `enableMaintenanceMode()` arms a shutdown guard so that if the process
+     *   dies anyway, maintenance mode is still lifted rather than leaving the
+     *   site serving 503s indefinitely.
+     *
      * @since 1.0.0
      *
      * @param  string|null  $version  Version to update to (null = latest)
@@ -86,6 +133,8 @@ class ApplicationUpdateManager
      */
     public function performUpdate( ?string $version = null ): bool
     {
+        $this->raiseExecutionLimits();
+
         $updateInfo = $this->checkForUpdate();
 
         if ( ! $updateInfo->hasUpdate() ) {
@@ -95,45 +144,159 @@ class ApplicationUpdateManager
         // Use specified version or latest
         $targetVersion = $version ?? $updateInfo->latestVersion;
 
+        $this->state()->begin( $targetVersion, $updateInfo->resolveCurrentVersion() );
+
         try {
             // Step 1: Enable maintenance mode
+            $this->beginStep( UpdateStep::EnableMaintenanceMode );
             $this->enableMaintenanceMode();
 
             // Step 2: Create backup
+            $this->beginStep( UpdateStep::Backup );
             if ( config( 'cms.updates.backup_enabled', true ) ) {
                 $this->createBackup();
             }
 
             // Step 3: Download update
+            $this->beginStep( UpdateStep::Download );
             $zipPath = $this->getUpdateChecker()->downloadUpdate( $targetVersion );
 
             // Step 4: Verify checksum (or surface the silent skip)
+            $this->beginStep( UpdateStep::VerifyChecksum );
             $this->maybeVerifyChecksum( $zipPath, $updateInfo, $targetVersion );
 
             // Step 5: Extract update
+            $this->beginStep( UpdateStep::Extract );
             $this->extractUpdate( $zipPath );
 
             // Step 6: Run composer install
+            $this->beginStep( UpdateStep::ComposerInstall );
             $this->runComposerInstall();
 
             // Step 7: Run migrations
+            $this->beginStep( UpdateStep::Migrations );
             $this->runMigrations();
 
             // Step 8: Clear caches
+            $this->beginStep( UpdateStep::ClearCaches );
             $this->clearCaches();
 
             // Step 9: Clean up
+            $this->beginStep( UpdateStep::Cleanup );
             $this->cleanup( $zipPath );
 
             // Step 10: Disable maintenance mode
+            $this->beginStep( UpdateStep::DisableMaintenanceMode );
             $this->disableMaintenanceMode();
+
+            $this->currentStep = null;
+            $this->state()->markStatus( UpdateRunStatus::Completed );
 
             return true;
         } catch ( Throwable $e ) {
+            $this->state()->markStatus( UpdateRunStatus::Failed, $e->getMessage() );
+
             // Rollback on failure
             $this->handleUpdateFailure( $e );
 
             throw $e;
+        }
+    }
+
+    /**
+     * Persisted record of the most recent update run, or `null` when no update
+     * has been recorded. Host applications can poll this to surface progress
+     * and to detect an update that died mid-flight.
+     *
+     * @since 2.7.1
+     *
+     * @return array<string, mixed>|null Persisted update state.
+     */
+    public function updateState(): ?array
+    {
+        return $this->state()->read();
+    }
+
+    /**
+     * Discard the persisted update state record.
+     *
+     * @since 2.7.1
+     */
+    public function clearUpdateState(): void
+    {
+        $this->state()->clear();
+    }
+
+    /**
+     * Shutdown guard: lift maintenance mode when the update process died
+     * before reaching step 10.
+     *
+     * An execution-time or out-of-memory fatal is not a catchable `Throwable`
+     * — it is raised at shutdown, so `performUpdate()`'s `catch` block never
+     * runs, `handleUpdateFailure()` never rolls back, and step 10 never
+     * executes. Without this guard the operator is left with a site returning
+     * 503 to every visitor, no error in the UI (the request died before
+     * rendering a response), and no automatic way back.
+     *
+     * Registered by `enableMaintenanceMode()` and public only so it can be
+     * exercised directly by tests; treat it as internal.
+     *
+     * @since 2.7.1
+     */
+    public function handleInterruptedUpdate(): void
+    {
+        if ( ! $this->maintenanceModeActive ) {
+            return;
+        }
+
+        // Clear first: a failure below must not re-enter this handler.
+        $this->maintenanceModeActive = false;
+
+        $fatal = $this->lastFatalError();
+
+        Log::critical(
+            'cms-framework: the update process terminated before it finished; the site was left in maintenance mode.',
+            [
+                'step'       => $this->currentStep?->value,
+                'step_label' => $this->currentStep?->label(),
+                'php_sapi'   => PHP_SAPI,
+                'error'      => $fatal,
+                'state_file' => $this->state()->path(),
+                'hint'       => 'Run `php artisan update:status` to see how far the update got and what remains.',
+            ],
+        );
+
+        // Re-record the step from memory before stamping the status: an
+        // earlier per-step write may have failed (read-only storage, a disk
+        // that filled up), and the whole value of the marker is that it agrees
+        // with where the update actually was when it died.
+        if ( null !== $this->currentStep ) {
+            $this->state()->markStep( $this->currentStep );
+        }
+
+        $this->state()->markStatus(
+            UpdateRunStatus::Interrupted,
+            $fatal['message'] ?? 'The update process terminated before completing.',
+        );
+
+        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
+            Log::critical(
+                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
+            );
+
+            return;
+        }
+
+        try {
+            $this->disableMaintenanceMode();
+
+            Log::critical( 'cms-framework: maintenance mode was lifted by the update shutdown guard. The installation may be half-applied — run `php artisan update:status` before trusting it.' );
+        } catch ( Throwable $e ) {
+            Log::critical( 'cms-framework: the update shutdown guard could not lift maintenance mode via `artisan up`.', [
+                'exception' => $e->getMessage(),
+            ] );
+
+            $this->forceLiftMaintenanceMode();
         }
     }
 
@@ -160,6 +323,10 @@ class ApplicationUpdateManager
      */
     public function rollback( string $backupPath ): void
     {
+        // Rollback re-runs `composer install`, so it is subject to the same
+        // execution-time ceiling as the update itself when invoked over HTTP.
+        $this->raiseExecutionLimits();
+
         if ( ! File::exists( $backupPath ) ) {
             throw UpdateException::rollbackFailed( "Backup not found: {$backupPath}" );
         }
@@ -293,7 +460,7 @@ class ApplicationUpdateManager
 
             if ( false === $filePath ) {
                 // getRealPath() failed - log and skip
-                \Illuminate\Support\Facades\Log::warning( 'Failed to get real path for file during backup', [
+                Log::warning( 'Failed to get real path for file during backup', [
                     'file' => $file->getPathname(),
                 ] );
 
@@ -303,7 +470,7 @@ class ApplicationUpdateManager
             // Verify the resolved path starts with base_path() to prevent traversal issues
             if ( ! str_starts_with( $filePath, $basePath ) ) {
                 // File is outside base path (symlink or external) - log and skip
-                \Illuminate\Support\Facades\Log::warning( 'Skipping file outside base path during backup', [
+                Log::warning( 'Skipping file outside base path during backup', [
                     'file'      => $filePath,
                     'base_path' => $basePath,
                 ] );
@@ -421,7 +588,7 @@ class ApplicationUpdateManager
             throw UpdateException::checksumRequired( $targetVersion );
         }
 
-        \Illuminate\Support\Facades\Log::warning( 'Skipping update integrity verification: update source did not advertise a SHA-256 checksum.', [
+        Log::warning( 'Skipping update integrity verification: update source did not advertise a SHA-256 checksum.', [
             'target_version' => $targetVersion,
             'source'         => $updateInfo->metadata['source'] ?? null,
         ] );
@@ -485,7 +652,7 @@ class ApplicationUpdateManager
                 || str_contains( $normalizedTarget, '/../' )
                 || str_ends_with( $normalizedTarget, '/..' )
             ) {
-                \Illuminate\Support\Facades\Log::warning( 'Skipping update ZIP entry with unsafe path', [
+                Log::warning( 'Skipping update ZIP entry with unsafe path', [
                     'entry' => $filename,
                 ] );
 
@@ -501,7 +668,7 @@ class ApplicationUpdateManager
                 }
 
                 if ( ! $this->isPathWithinExtractRoot( $fullTargetPath, $extractPath ) ) {
-                    \Illuminate\Support\Facades\Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
+                    Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
                         'entry' => $filename,
                     ] );
 
@@ -520,7 +687,7 @@ class ApplicationUpdateManager
             // Defense-in-depth: after the parent exists, resolve it and confirm
             // it still sits under the extract root before opening the write stream.
             if ( ! $this->isPathWithinExtractRoot( $targetDir, $extractPath ) ) {
-                \Illuminate\Support\Facades\Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
+                Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
                     'entry' => $filename,
                 ] );
 
@@ -533,7 +700,7 @@ class ApplicationUpdateManager
             // the middle of extraction.
             $entryStream = $zip->getStream( $filename );
             if ( false === $entryStream ) {
-                \Illuminate\Support\Facades\Log::error( 'Failed to open ZIP entry stream during update extraction', [
+                Log::error( 'Failed to open ZIP entry stream during update extraction', [
                     'entry' => $filename,
                 ] );
 
@@ -545,7 +712,7 @@ class ApplicationUpdateManager
                 fclose( $entryStream );
 
                 $error = error_get_last();
-                \Illuminate\Support\Facades\Log::error( 'Failed to open update target for writing', [
+                Log::error( 'Failed to open update target for writing', [
                     'entry'  => $filename,
                     'target' => $fullTargetPath,
                     'errno'  => $error['type'] ?? null,
@@ -562,7 +729,7 @@ class ApplicationUpdateManager
                 while ( ! feof( $entryStream ) ) {
                     $chunk = fread( $entryStream, 1024 * 1024 );
                     if ( false === $chunk ) {
-                        \Illuminate\Support\Facades\Log::error( 'Read failure while streaming update entry', [
+                        Log::error( 'Read failure while streaming update entry', [
                             'entry'  => $filename,
                             'target' => $fullTargetPath,
                         ] );
@@ -840,7 +1007,7 @@ class ApplicationUpdateManager
             }
         }
 
-        \Illuminate\Support\Facades\Log::warning(
+        Log::warning(
             'cms-framework: composer binary discovery failed; no candidate path was both a file and executable in the current PHP process context.',
             [
                 'candidates' => $results,
@@ -1026,7 +1193,8 @@ class ApplicationUpdateManager
     }
 
     /**
-     * Enable maintenance mode.
+     * Enable maintenance mode and arm the shutdown guard that lifts it again
+     * if this process dies before step 10.
      *
      * @since 1.0.0
      *
@@ -1039,10 +1207,17 @@ class ApplicationUpdateManager
         } catch ( Throwable $e ) {
             throw UpdateException::maintenanceModeFailure( 'enable' );
         }
+
+        $this->maintenanceModeActive = true;
+
+        $this->armShutdownGuard();
     }
 
     /**
      * Disable maintenance mode.
+     *
+     * The active flag is only cleared once `up` has actually succeeded, so a
+     * failure here leaves the shutdown guard armed for one more attempt.
      *
      * @since 1.0.0
      *
@@ -1054,6 +1229,154 @@ class ApplicationUpdateManager
             Artisan::call( 'up' );
         } catch ( Throwable $e ) {
             throw UpdateException::maintenanceModeFailure( 'disable' );
+        }
+
+        $this->maintenanceModeActive = false;
+    }
+
+    /**
+     * Lift PHP's own limits on how long the update may run.
+     *
+     * `runComposerInstall()` gives the composer child process a
+     * `cms.updates.composer_timeout` budget (default 600s), but that only
+     * bounds the child — the parent PHP request is still governed by
+     * `max_execution_time`, which defaults to 30 seconds under PHP-FPM. Left
+     * alone, the request is killed roughly twenty times sooner than composer's
+     * own budget allows for, and because an execution-time fatal is raised at
+     * shutdown rather than thrown, it bypasses `performUpdate()`'s catch block
+     * entirely.
+     *
+     * `ignore_user_abort( true )` matters for the same reason: without it,
+     * closing the browser tab mid-update aborts the request and produces the
+     * identical stuck-in-maintenance-mode outcome.
+     *
+     * Neither call is guaranteed to succeed — shared hosts routinely put
+     * `set_time_limit` in `disable_functions`, and FPM's
+     * `request_terminate_timeout` cannot be overridden from userland at all.
+     * That is what the shutdown guard in `handleInterruptedUpdate()` is for.
+     *
+     * @since 2.7.1
+     */
+    protected function raiseExecutionLimits(): void
+    {
+        if ( ! function_exists( 'set_time_limit' ) || ! @set_time_limit( 0 ) ) {
+            Log::warning(
+                'cms-framework: could not lift PHP\'s max_execution_time for the update; the request may be killed mid-flight.',
+                [
+                    'php_sapi'           => PHP_SAPI,
+                    'max_execution_time' => ini_get( 'max_execution_time' ),
+                    'hint'               => 'Run `php artisan update:perform` from the CLI instead, or remove set_time_limit from the host\'s disable_functions.',
+                ],
+            );
+        }
+
+        if ( function_exists( 'ignore_user_abort' ) ) {
+            ignore_user_abort( true );
+        }
+    }
+
+    /**
+     * Record that a step is now in flight, both in memory (for the shutdown
+     * guard's log context) and on disk (so the step survives the process).
+     *
+     * @since 2.7.1
+     *
+     * @param  UpdateStep  $step  Step being entered.
+     */
+    protected function beginStep( UpdateStep $step ): void
+    {
+        $this->currentStep = $step;
+
+        $this->state()->markStep( $step );
+    }
+
+    /**
+     * Persisted step marker for this manager instance.
+     *
+     * @since 2.7.1
+     *
+     * @return UpdateStateStore State store.
+     */
+    protected function state(): UpdateStateStore
+    {
+        return $this->state ??= new UpdateStateStore;
+    }
+
+    /**
+     * Register the shutdown guard exactly once per manager instance.
+     *
+     * @since 2.7.1
+     */
+    protected function armShutdownGuard(): void
+    {
+        if ( $this->shutdownGuardArmed ) {
+            return;
+        }
+
+        $this->shutdownGuardArmed = true;
+
+        register_shutdown_function( function (): void {
+            $this->handleInterruptedUpdate();
+        } );
+    }
+
+    /**
+     * The fatal error that ended the process, or `null` when the process is
+     * ending for some other reason (a client abort, an `exit()`).
+     *
+     * `error_get_last()` alone is not enough: it returns the last diagnostic
+     * of *any* severity, and the extractor deliberately uses `@fopen()` /
+     * `@chmod()`, so a suppressed warning from step 5 would otherwise be
+     * reported as the reason an update died at step 7.
+     *
+     * @since 2.7.1
+     *
+     * @return array{type: int, message: string, file: string, line: int}|null Fatal error details.
+     */
+    protected function lastFatalError(): ?array
+    {
+        $error = error_get_last();
+
+        if ( null === $error ) {
+            return null;
+        }
+
+        $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+
+        return in_array( $error['type'] ?? 0, $fatalTypes, true ) ? $error : null;
+    }
+
+    /**
+     * Last-ditch attempt to take the site out of maintenance mode by removing
+     * the file-driver marker directly.
+     *
+     * Reached only when `artisan up` itself failed — typically because the
+     * process is shutting down after an out-of-memory fatal and there isn't
+     * enough headroom left to boot a console command. Unlinking a single file
+     * needs almost none, so it is worth trying before giving up and leaving
+     * the site serving 503s. Hosts using the cache-backed maintenance driver
+     * have no such file; the log line says so rather than claiming success.
+     *
+     * @since 2.7.1
+     */
+    protected function forceLiftMaintenanceMode(): void
+    {
+        try {
+            $downFile = storage_path( 'framework/down' );
+
+            if ( ! File::exists( $downFile ) ) {
+                Log::critical( 'cms-framework: no storage/framework/down marker to remove; if this host uses the cache-backed maintenance driver, run `php artisan up` manually.' );
+
+                return;
+            }
+
+            File::delete( $downFile );
+
+            Log::critical( 'cms-framework: removed storage/framework/down directly to take the site out of maintenance mode.' );
+        } catch ( Throwable $e ) {
+            Log::critical( 'cms-framework: could not remove the maintenance-mode marker; the site is still serving 503s and needs `php artisan up`.', [
+                'exception' => $e->getMessage(),
+            ] );
         }
     }
 
@@ -1067,7 +1390,7 @@ class ApplicationUpdateManager
     protected function handleUpdateFailure( Throwable $exception ): void
     {
         // Log the original exception for debugging
-        \Illuminate\Support\Facades\Log::error( 'Update failed, beginning rollback', [
+        Log::error( 'Update failed, beginning rollback', [
             'exception' => $exception->getMessage(),
             'trace'     => $exception->getTraceAsString(),
             'file'      => $exception->getFile(),
@@ -1078,7 +1401,7 @@ class ApplicationUpdateManager
         try {
             $this->disableMaintenanceMode();
         } catch ( Throwable $e ) {
-            \Illuminate\Support\Facades\Log::error(
+            Log::error(
                 'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
                 ['exception' => $e->getMessage()],
             );

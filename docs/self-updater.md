@@ -84,6 +84,59 @@ When an update fails, the framework rolls back to the pre-update backup. Two beh
 - **Zip-slip protection.** Entries whose normalized path starts with `/` or contains `..` segments are rejected before the target directory is created. After path assembly, `realpath()` verifies the resolved parent still sits under the extraction root before opening the write stream. Rejected entries are logged and skipped — a crafted `release-root/../../../etc/cron.d/x` can no longer escape the install root.
 - **fopen/fread failures surface as rollback triggers.** A failed `fopen('wb')` or `fread()` used to `continue`/`break` silently, leaving a partial install on disk that failed to boot on the next request with no obvious cause. Failures are now logged with the entry + errno and thrown via `UpdateException::extractionEntryFailed()`, so `performUpdate()`'s catch block rolls back to the pre-update snapshot.
 
+## Long-running updates and interrupted processes
+
+A full update — download, extract, `composer install` across a real dependency tree, migrate — routinely runs for several minutes. PHP's `max_execution_time` defaults to **30 seconds** under PHP-FPM, which is the path the admin UI uses. Three guards keep that survivable:
+
+- **`performUpdate()` and `rollback()` call `set_time_limit( 0 )` and `ignore_user_abort( true )` up front.** The `Process::timeout()` in `runComposerInstall()` only bounds the composer *child*; without this the parent request was killed roughly twenty times sooner than composer's own budget allowed for. `ignore_user_abort()` covers the operator closing the browser tab. When a host has `set_time_limit` in `disable_functions`, the framework logs a warning naming `php artisan update:perform` as the supported path instead.
+
+- **Maintenance mode is lifted by a shutdown handler when the process dies anyway.** An execution-time or out-of-memory fatal is raised at shutdown, not thrown, so `performUpdate()`'s `catch` never runs — no rollback, and step 10 (`disableMaintenanceMode()`) never executes. The site then serves 503 to every visitor with no error in the UI and no automatic way back. `enableMaintenanceMode()` now registers a shutdown guard that lifts maintenance mode in that case and logs a `critical` entry naming the step it died on. If `artisan up` itself fails (common when shutting down after an OOM fatal), the guard removes `storage/framework/down` directly.
+
+  Leaving the site up on a possibly half-applied install is a real trade-off. Set `cms.updates.lift_maintenance_on_interrupt` to `false` to fail closed and keep the site down until an operator has verified it by hand.
+
+  This cannot help against `kill -9`, which runs no shutdown handlers. The persisted state marker below covers that case.
+
+- **Each step is persisted to a state file, so a killed update is diagnosable.** Before this there was no way to distinguish "update in progress", "update died at step 6", and "the site was manually put into maintenance mode".
+
+### `php artisan update:status`
+
+Reports the most recent run — the step it reached, the versions involved, the recorded error, and, for an interrupted run, the outstanding steps with the command for each:
+
+```console
+$ php artisan update:status
+✗ Interrupted (process died mid-update)
+
+  From version    0.2.4
+  To version      0.3.0
+  Last step       7/10 — Run database migrations
+  ...
+
+The update process died before finishing. The install may be half-applied.
+
+These steps had not completed. Run them in order to finish the update:
+
+  7. Run database migrations
+     php artisan migrate --force
+  8. Clear application caches
+     php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear
+  10. Disable maintenance mode
+     php artisan up
+```
+
+It exits non-zero when the last run failed or was interrupted, so it composes with health checks. `--json` emits the raw record for an admin UI; `--clear` discards it after reporting. Host applications can read the same record programmatically via `ApplicationUpdateManager::updateState()`.
+
+A run interrupted during download or extraction is not resumable — the application tree may be partially overwritten — so the command points at the pre-update snapshot in `storage/backups/application/` instead of a resume checklist.
+
+The marker is a flat JSON file rather than a cache entry on purpose: step 8 runs `cache:clear`, and the database cache driver is unavailable while step 7's migrations are mid-flight. `storage/` is in `exclude_from_update`, so it survives extraction of the new release.
+
+> **Note:** the supported path for a slow host remains `php artisan update:perform` from the CLI, where `max_execution_time` is `0` and there is no gateway timeout to hit. The guards above make the HTTP path safe to *fail*; they don't make it a good place to run a multi-minute job.
+
+### Two consequences worth knowing about
+
+**Keep `performUpdate()` behind admin authorization.** Lifting `max_execution_time` and setting `ignore_user_abort( true )` means an HTTP-triggered update now occupies a PHP-FPM worker for as long as the update takes, and keeps occupying it even if the caller disconnects. The individual phases stay bounded (`download_timeout`, `composer_timeout`), so the total is bounded in practice — but an update endpoint reachable without authorization would be a much cheaper way to exhaust the worker pool than it was at 30 seconds. This has always been an operator responsibility; the guards raise the cost of getting it wrong.
+
+**Nothing serializes concurrent updates.** Two overlapping `performUpdate()` calls will fight over the same application tree and the same state marker; the second `begin()` overwrites the first. That was true before this change too, but the longer window makes an overlap easier to hit. If your admin UI can dispatch an update more than once, gate it — disable the button while `updateState()` reports `in_progress`, or take a lock around the call.
+
 ## Cached update info and out-of-band version bumps
 
 `UpdateChecker::checkForUpdate()` caches the resolved `UpdateInfo` value object under `cms.{type}.{slug}.update_check` for `cms.updates.cache_ttl` seconds (default 43,200s / 12h). The cached object contains both the feed's `latestVersion` and a snapshot of `config('app.version')` taken when the cache was populated.
@@ -103,6 +156,8 @@ When the host's installed version changes *out-of-band* (a manual `composer inst
 | `cms.updates.allow_unverified_updates` | Opt-in to warn-and-continue when the source omits a SHA-256 checksum. Default `false`. Env: `CMS_UPDATES_ALLOW_UNVERIFIED`. |
 | `cms.updates.backup_enabled` | Whether to snapshot before updating. |
 | `cms.updates.exclude_from_update` | Paths preserved during extraction. |
+| `cms.updates.state_path` | Where the step marker is written. Relative paths resolve against `storage_path()`. Default `framework/cms-update-state.json`. |
+| `cms.updates.lift_maintenance_on_interrupt` | Whether the shutdown guard lifts maintenance mode when an update dies mid-flight. Default `true`. Env: `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT`. |
 
 Environment variables:
 
@@ -111,3 +166,4 @@ Environment variables:
 | `COMPOSER_BINARY` | Absolute path to composer, exposed to `cms.updates.composer_binary` via `env()`. |
 | `CMS_PHP_BINARY` | Absolute path to a CLI PHP binary; overrides `PHP_BINARY` when the updater invokes composer. |
 | `CMS_UPDATES_ALLOW_UNVERIFIED` | Boolean; opts into warn-and-continue when the source omits a SHA-256 checksum. |
+| `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT` | Boolean; set `false` to leave the site in maintenance mode when an update dies mid-flight. |

@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\CheckForUpdateComman
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\CheckForUpdateScheduled;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\PerformUpdateCommand;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\RollbackUpdateCommand;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\UpdateStatusCommand;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -62,6 +63,7 @@ class CoreServiceProvider extends ServiceProvider
                 CheckForUpdateCommand::class,
                 PerformUpdateCommand::class,
                 RollbackUpdateCommand::class,
+                UpdateStatusCommand::class,
                 CheckForUpdateScheduled::class,
             ] );
         }
