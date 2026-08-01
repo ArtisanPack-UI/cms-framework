@@ -22,6 +22,15 @@
             <directory>tests/Feature/Ai</directory>
         </testsuite>
     </testsuites>
+    <php>
+        <!--
+            The OpenAPI spec test runs Scramble's generator across the whole
+            route table, which parses far more PHP than the 128M default
+            allows — without this the documented `composer test` fatals inside
+            nikic/php-parser instead of producing a report.
+        -->
+        <ini name="memory_limit" value="512M"/>
+    </php>
     <source>
         <include>
             <directory suffix=".php">src</directory>

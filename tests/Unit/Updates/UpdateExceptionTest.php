@@ -92,4 +92,26 @@ class UpdateExceptionTest extends TestCase
         $this->assertStringContainsString( '/opt/homebrew/bin/composer', $message );
         $this->assertStringContainsString( '/usr/local/bin/composer', $message );
     }
+
+    /**
+     * Regression for #254: `configuredComposerBinaryMissing()` names the
+     * offending path as the fault and points at the override that supplied it,
+     * without the `CMS_PHP_BINARY` hint that `composerVerificationFailed()`
+     * carries — that hint blamed the PHP interpreter on a host where the
+     * interpreter had resolved correctly and only the composer path was wrong.
+     *
+     * @since 2.7.1
+     */
+    public function test_configured_composer_binary_missing_names_the_path_and_the_override(): void
+    {
+        $exception = UpdateException::configuredComposerBinaryMissing( '/opt/homebrew/bin/composer' );
+
+        $message = $exception->getMessage();
+
+        $this->assertStringContainsString( 'could not be found at: /opt/homebrew/bin/composer', $message );
+        $this->assertStringContainsString( 'COMPOSER_BINARY', $message );
+        $this->assertStringContainsString( 'cms.updates.composer_binary', $message );
+        $this->assertStringContainsString( 'auto-discovery', $message );
+        $this->assertStringNotContainsString( 'CMS_PHP_BINARY', $message );
+    }
 }

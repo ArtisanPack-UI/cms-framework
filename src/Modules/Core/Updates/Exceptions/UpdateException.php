@@ -136,6 +136,34 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * The on-disk `composer.json` and `composer.lock` disagree, so
+     * `composer install` cannot succeed.
+     *
+     * Raised *before* composer is invoked, because composer's own diagnosis of
+     * this state — "This usually happens when composer files are incorrectly
+     * merged or the composer.json file is manually edited" — sends the operator
+     * hunting for a merge conflict or a hand-edit that never happened. In the
+     * updater's case the cause is nearly always a release that shipped no
+     * `composer.lock`, or a host whose `exclude_from_update` override still
+     * excludes it.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $reason  Which half of the pair is at fault.
+     */
+    public static function composerFilesOutOfSync( string $reason ): self
+    {
+        return new self(
+            "composer.json and composer.lock are out of sync after extraction: {$reason} "
+            . '`composer install` only ever reads a lock file — it never writes one — so it cannot '
+            . 'reconcile this. Confirm the release archive ships a committed `composer.lock` that '
+            . 'matches its `composer.json`, and that `cms.updates.exclude_from_update` does not list '
+            . '`composer.lock` (it is not in the framework default). This is not a merge conflict or '
+            . 'a hand-edited `composer.json`, whatever composer would have told you.',
+        );
+    }
+
+    /**
      * Composer binary could not be located on the host.
      *
      * Accepts either a flat list of searched paths (legacy 2.5.3 signature)
@@ -196,6 +224,44 @@ class UpdateException extends CMSFrameworkException
             . '`cms.updates.composer_install_command` with an absolute path to composer.';
 
         return new self( $message );
+    }
+
+    /**
+     * An explicitly configured composer binary failed its `--version` probe
+     * and is not visible to PHP on disk either.
+     *
+     * Distinct from `composerBinaryNotFound()` (auto-discovery exhausted its
+     * candidate list) and from `composerVerificationFailed()` (the probe
+     * failed against a binary PHP *can* see, so the interpreter is a live
+     * suspect). Raised only after the probe has already failed, never as a
+     * pre-flight gate: a path PHP cannot `stat()` may still be perfectly
+     * reachable by the shelled-out child under PHP-FPM sandboxing, which is
+     * the case `COMPOSER_BINARY` exists to work around.
+     *
+     * Once the probe has failed too, though, the path is overwhelmingly just
+     * wrong — and saying so beats `composerVerificationFailed()`'s "located
+     * but could not be executed" plus its trailing `CMS_PHP_BINARY` hint,
+     * which points the operator at the PHP interpreter when the composer path
+     * is the sole fault.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $binary  The configured path that could not be reached.
+     */
+    public static function configuredComposerBinaryMissing( string $binary ): self
+    {
+        return new self(
+            "The configured composer binary could not be found at: {$binary}. "
+            . 'It failed a `--version` probe and PHP cannot see a file there either. '
+            . 'This path came from `COMPOSER_BINARY` in your `.env` file, an OS-level '
+            . '`COMPOSER_BINARY` export, or `cms.updates.composer_binary` — not from '
+            . 'auto-discovery, which only ever returns a path it has already verified. '
+            . 'Correct the path or unset it to fall back to auto-discovery. '
+            . 'On macOS, run `which composer` in a shell to find the real one; Laravel '
+            . 'Herd bundles it at `~/Library/Application Support/Herd/bin/composer`, '
+            . 'which auto-discovery already checks. Quote the value in `.env` if the '
+            . 'path contains spaces.',
+        );
     }
 
     /**
@@ -266,6 +332,58 @@ class UpdateException extends CMSFrameworkException
     public static function noUpdateAvailable(): self
     {
         return new self( 'No update available. Already running the latest version.' );
+    }
+
+    /**
+     * Another update is already running on this host.
+     *
+     * @since 2.7.1
+     *
+     * @param  int|null  $pid  PID of the running update, when known.
+     */
+    public static function updateAlreadyRunning( ?int $pid = null ): self
+    {
+        return new self( sprintf(
+            'An application update is already running%s. Concurrent updates extract over each other and produce a tree that '
+            . 'no rollback can repair, because the second run snapshots the first run\'s half-applied state. '
+            . 'Wait for it to finish, or run `php artisan update:status` to see where it got to.',
+            null === $pid ? '' : " ( PID {$pid} )",
+        ) );
+    }
+
+    /**
+     * A release archive was about to be fetched over an insecure transport.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $url  The offending URL.
+     */
+    public static function insecureDownloadUrl( string $url ): self
+    {
+        return new self( sprintf(
+            'Refusing to download an update over an insecure transport: %s. The update pipeline overwrites PHP files and then '
+            . 'runs composer install, so a plaintext download is a remote-code-execution channel for anyone on the path. '
+            . 'Use https, or set cms.updates.allow_insecure_transport=true if this is a trusted air-gapped mirror.',
+            $url,
+        ) );
+    }
+
+    /**
+     * A downgrade was requested without an explicit opt-in.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $target  Requested version.
+     * @param  string  $current  Currently installed version.
+     */
+    public static function downgradeNotAllowed( string $target, string $current ): self
+    {
+        return new self( sprintf(
+            'Refusing to install %s over %s: it is not newer. Installing an older release re-introduces every '
+            . 'vulnerability fixed since it shipped, and migrations are not reversed. Pass --allow-downgrade if that is genuinely intended.',
+            $target,
+            $current,
+        ) );
     }
 
     /**

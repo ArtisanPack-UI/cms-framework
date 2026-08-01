@@ -12,6 +12,7 @@ Custom fields allow you to add additional data to content types in Digital Shopf
 - [Column Types](#column-types)
 - [Migration Generation](#migration-generation)
 - [Retrieving and Displaying Values](#retrieving-and-displaying-values)
+- [Applying Values From Untrusted Input](#applying-values-from-untrusted-input)
 - [Data Migration](#data-migration)
 - [Best Practices](#best-practices)
 
@@ -347,6 +348,28 @@ $field = $customFieldManager->createField([
 // Migration automatically created in database/migrations/
 ```
 
+#### Rejected keys
+
+Since 2.7.1, `createField()` throws `InvalidArgumentException` when the key is
+unavailable, and `CustomFieldRequest` surfaces the same conflict as a
+field-level validation error so the admin UI shows a message rather than a 500.
+Both call `CustomFieldManager::findKeyConflict()`, so the API and the UI cannot
+drift apart. A key is rejected when it:
+
+- appears in `CustomFieldManager::RESERVED_FIELD_KEYS` (`id`, `author_id`,
+  `status`, `published_at`, `slug`, `parent_id`, `metadata`, `password`,
+  `created_at`, `updated_at`, `deleted_at`, `user_id`, `uuid`,
+  `remember_token`); or
+- already names a column on one of the target content types' tables.
+
+The reason is that `addColumnToTable()` silently returns when the column already
+exists. Without the check, creating a field named `author_id` did not fail — the
+existing column was *adopted* as a custom field, and from then on any content
+editor's `custom_fields[author_id]` wrote the real column through the
+DB-persisted-field exemption. That is a permanent, quiet escalation from
+"manage custom fields" to "reassign authorship of any post", and a footgun even
+without a malicious actor.
+
 ### Generated Migration Example
 
 ```php
@@ -470,6 +493,62 @@ $products = $category->products()
     ->orderBy('price', 'asc')
     ->get();
 ```
+
+## Applying Values From Untrusted Input
+
+A custom-field payload that came from request input must be applied with
+`applyCustomFieldValues()`, not by assigning each key directly:
+
+```php
+// Correct — drops keys that shadow a real column.
+$post->applyCustomFieldValues($request->input('custom_fields', []));
+
+// Unsafe — `custom_fields[author_id]` would overwrite the real column.
+foreach ($request->input('custom_fields', []) as $key => $value) {
+    $post->{$key} = $value;
+}
+```
+
+The magic setter routes a metadata-storage field into the model's `metadata`
+JSON column, but a key naming a real column falls through to Eloquent and
+writes that column — and the custom-field half of a payload gets no fillable
+filtering.
+
+`applyCustomFieldValues()` is an **allowlist**. A key is applied only when it
+names a custom field actually registered for the model's content type; every
+other key is dropped and logged. In particular, all of these are dropped:
+
+- an unknown key, whether or not it names a column;
+- a key naming a real DB column, cast, mutator, accessor, or relation;
+- a case variant of one of those — `AUTHOR_ID` resolves to `author_id` on
+  MySQL and SQLite, which treat identifiers case-insensitively;
+- a JSON-path key such as `metadata->x` or `title->x`;
+- one of Eloquent's own properties (`table`, `exists`, `attributes`, …).
+
+Values are assigned through `setAttribute()`, never through a dynamic property
+write, so a payload can never reach the model's internal state.
+
+DB-registered fields are the exception on the column half: they own the column
+they name, so their values still write through. Filter-registered fields never
+qualify for that exemption, even if the registration declares
+`'storage' => 'column'` — only a row in the `custom_fields` table can authorize
+a real-column write. Since 2.7.1 such a row can no longer be created with a key
+that already names a column on the target table, nor with a framework-reserved
+key (`id`, `author_id`, `status`, `published_at`, `slug`, `parent_id`,
+`metadata`, `password`, …) — see `CustomFieldManager::RESERVED_FIELD_KEYS`.
+
+Dropped keys emit a `Log::warning` carrying the key, the reason, and the model,
+so a plugin author whose field "just doesn't save" has a breadcrumb, and an
+operator has a signal that someone is probing `custom_fields[author_id]`.
+
+`BlogManager::create()`/`update()` and `PageManager::create()`/`update()` apply
+their `$customFields` argument through this method already, so callers passing
+custom fields to a manager are covered without doing anything.
+
+Direct assignment from your own code is unaffected — `$post->title = 'New'`
+still writes the column even when a plugin has registered `title` as a custom
+field. Only the payload path is guarded, so a registration can never block a
+host model from writing its own columns.
 
 ## Data Migration
 

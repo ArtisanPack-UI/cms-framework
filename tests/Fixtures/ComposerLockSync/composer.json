@@ -1,0 +1,29 @@
+{
+    "name": "artisanpack-ui/lock-sync-fixture",
+    "description": "Fixture pair used to verify the framework's composer content-hash implementation.",
+    "type": "library",
+    "license": "MIT",
+    "version": "1.2.3",
+    "repositories": {
+        "packagist.org": false
+    },
+    "require": {
+        "php": "^8.2"
+    },
+    "conflict": {
+        "example/conflicting": "<2.0"
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.x-dev"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

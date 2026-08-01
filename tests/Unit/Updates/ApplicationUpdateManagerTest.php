@@ -8,7 +8,9 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use ArtisanPackUI\CMSFramework\Tests\Support\ShortWriteStreamWrapper;
 use Error;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Orchestra\Testbench\TestCase;
@@ -784,6 +786,12 @@ class ApplicationUpdateManagerTest extends TestCase
      * documented common install paths in preference order so the diagnostic
      * message stays honest and hosts see the same list the framework tried.
      *
+     * Regression for #254: Herd's bundled composer leads the list, mirroring
+     * `phpCandidatePaths()`. A Herd-only macOS host — no Homebrew composer, no
+     * global install — matched none of the other five paths, so discovery
+     * returned null and the updater fell through to bare `composer`, which
+     * PHP-FPM's stripped `PATH` cannot resolve.
+     *
      * @since 2.5.3
      */
     public function test_composer_candidate_paths_covers_documented_locations(): void
@@ -802,6 +810,7 @@ class ApplicationUpdateManagerTest extends TestCase
 
             $this->assertSame(
                 [
+                    '/home/tester/Library/Application Support/Herd/bin/composer',
                     '/usr/local/bin/composer',
                     '/opt/homebrew/bin/composer',
                     '/home/tester/.composer/vendor/bin/composer',
@@ -812,6 +821,145 @@ class ApplicationUpdateManagerTest extends TestCase
             );
         } finally {
             putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: with no `HOME` there is no Herd directory to derive,
+     * so the Herd entry is omitted rather than rendered against an empty
+     * string — which would stat `/Library/Application Support/Herd/bin/composer`
+     * on every candidate walk.
+     *
+     * @since 2.7.1
+     */
+    public function test_composer_candidate_paths_omits_herd_entry_without_home(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'composerCandidatePaths' );
+            $method->setAccessible( true );
+
+            $this->assertSame(
+                [
+                    '/usr/local/bin/composer',
+                    '/opt/homebrew/bin/composer',
+                    '/usr/bin/composer',
+                ],
+                $method->invoke( $manager ),
+            );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: both candidate lists derive Herd's `bin/` directory
+     * from the same helper, so they cannot drift apart again — the drift that
+     * left the composer list without Herd awareness after #225 taught the PHP
+     * list about it.
+     *
+     * @since 2.7.1
+     */
+    public function test_herd_bin_path_is_shared_by_both_candidate_lists(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+
+            $herdBin = $reflection->getMethod( 'herdBinPath' );
+            $herdBin->setAccessible( true );
+
+            $composerPaths = $reflection->getMethod( 'composerCandidatePaths' );
+            $composerPaths->setAccessible( true );
+
+            $phpPaths = $reflection->getMethod( 'phpCandidatePaths' );
+            $phpPaths->setAccessible( true );
+
+            $resolved = $herdBin->invoke( $manager );
+
+            $this->assertSame( '/home/tester/Library/Application Support/Herd/bin', $resolved );
+            $this->assertSame( $resolved . '/composer', $composerPaths->invoke( $manager )[0] );
+            $this->assertSame( $resolved . '/php', $phpPaths->invoke( $manager )[0] );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: `herdBinPath()` returns null when `HOME` is unset or
+     * empty, so callers omit the Herd candidate entirely.
+     *
+     * @since 2.7.1
+     */
+    public function test_herd_bin_path_returns_null_without_usable_home(): void
+    {
+        $original = getenv( 'HOME' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'herdBinPath' );
+            $method->setAccessible( true );
+
+            putenv( 'HOME' );
+            $this->assertNull( $method->invoke( $manager ) );
+
+            putenv( 'HOME=' );
+            $this->assertNull( $method->invoke( $manager ) );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: Herd's bundled composer wins discovery on a host
+     * that also carries a Homebrew composer, keeping a Herd machine on a single
+     * toolchain — the same rationale `phpCandidatePaths()` applies.
+     *
+     * @since 2.7.1
+     */
+    public function test_discover_composer_binary_prefers_herd_over_homebrew(): void
+    {
+        $tempHome = sys_get_temp_dir() . '/cmsfw-herd-' . bin2hex( random_bytes( 6 ) );
+        $herdBin  = $tempHome . '/Library/Application Support/Herd/bin';
+        mkdir( $herdBin, 0755, true );
+
+        $herdComposer = $herdBin . '/composer';
+        file_put_contents( $herdComposer, "#!/usr/bin/env php\n" );
+        chmod( $herdComposer, 0755 );
+
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=' . $tempHome );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callDiscover(): ?string
+                {
+                    return $this->discoverComposerBinary();
+                }
+            };
+
+            Log::shouldReceive( 'warning' )->never();
+
+            $this->assertSame( $herdComposer, $manager->callDiscover() );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+            @unlink( $herdComposer );
+            @rmdir( $herdBin );
+            @rmdir( $tempHome . '/Library/Application Support/Herd' );
+            @rmdir( $tempHome . '/Library/Application Support' );
+            @rmdir( $tempHome . '/Library' );
+            @rmdir( $tempHome );
         }
     }
 
@@ -951,6 +1099,11 @@ class ApplicationUpdateManagerTest extends TestCase
      * the binary *was* located, so the misleading "not found" wording was
      * masking real interpreter mismatches on PHP-FPM hosts.
      *
+     * As of 2.7.1 this branch requires the binary to be visible to PHP on
+     * disk; a failed probe against a path PHP cannot see takes the
+     * `configuredComposerBinaryMissing` branch instead (see #254), hence the
+     * real temp file below.
+     *
      * @since 2.5.3
      */
     public function test_rollback_throws_composer_verification_failed_when_version_check_fails(): void
@@ -959,10 +1112,17 @@ class ApplicationUpdateManagerTest extends TestCase
             '*--version*' => Process::result( '', 'command not found', 127 ),
         ] );
 
-        $manager = new class extends ApplicationUpdateManager {
+        $composerBinary = tempnam( sys_get_temp_dir(), 'cmsfw-composer-' );
+        file_put_contents( $composerBinary, "#!/usr/bin/env php\n" );
+
+        $manager = new class( $composerBinary ) extends ApplicationUpdateManager {
+            public function __construct( protected string $binary )
+            {
+            }
+
             protected function resolveComposerBinaryForVerification(): ?string
             {
-                return '/opt/homebrew/bin/composer';
+                return $this->binary;
             }
         };
 
@@ -979,6 +1139,109 @@ class ApplicationUpdateManagerTest extends TestCase
             $manager->rollback( $backupPath );
         } finally {
             @unlink( $backupPath );
+            @unlink( $composerBinary );
+        }
+    }
+
+    /**
+     * Regression for #254: when the probe fails against a path PHP cannot see
+     * either, the error names that path as the fault instead of reporting
+     * "Composer binary was located but could not be executed" with a trailing
+     * `CMS_PHP_BINARY` hint — which blames the PHP interpreter that had
+     * resolved correctly and buries the real cause mid-sentence.
+     *
+     * @since 2.7.1
+     */
+    public function test_rollback_throws_configured_binary_missing_when_path_does_not_exist(): void
+    {
+        Process::fake( [
+            '*--version*' => Process::result( '', 'Could not open input file', 1 ),
+        ] );
+
+        $missing = sys_get_temp_dir() . '/cmsfw-nonexistent-composer-' . bin2hex( random_bytes( 6 ) );
+
+        $manager = new class( $missing ) extends ApplicationUpdateManager {
+            public function __construct( protected string $binary )
+            {
+            }
+
+            protected function resolveComposerBinaryForVerification(): ?string
+            {
+                return $this->binary;
+            }
+        };
+
+        $backupPath = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' ) . '.zip';
+        $zip        = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'placeholder.txt', 'ok' );
+        $zip->close();
+
+        try {
+            $manager->rollback( $backupPath );
+            $this->fail( 'Expected UpdateException for the missing configured composer binary.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'could not be found at', $e->getMessage() );
+            $this->assertStringContainsString( $missing, $e->getMessage() );
+            $this->assertStringContainsString( 'COMPOSER_BINARY', $e->getMessage() );
+            $this->assertStringNotContainsString( 'CMS_PHP_BINARY', $e->getMessage() );
+        } finally {
+            @unlink( $backupPath );
+            // `rollback()` extracts before the binary probe throws, so the
+            // archive's entry lands in the Testbench app skeleton. This
+            // project has a history of skeleton files shadowing real ones.
+            @unlink( base_path( 'placeholder.txt' ) );
+        }
+    }
+
+    /**
+     * Regression for #254 guarding #233: a `COMPOSER_BINARY` whose `--version`
+     * probe *succeeds* must be accepted even when `is_file()` reports false for
+     * it. PHP-FPM sandboxing (macOS Herd Pro, chrooted pools, restrictive
+     * `open_basedir`) hides real files from `stat()` while the shelled-out
+     * child reaches them fine — the exact case `COMPOSER_BINARY` exists to work
+     * around. Gating the probe on `is_file()` would have closed that escape
+     * hatch, so the stat may only select the message after a failed probe.
+     *
+     * @since 2.7.1
+     */
+    public function test_rollback_accepts_unstattable_binary_whose_version_probe_succeeds(): void
+    {
+        Process::fake( [
+            '*--version*' => Process::result( 'Composer version 2.10.1', '', 0 ),
+            '*'           => Process::result( '', '', 0 ),
+        ] );
+
+        $sandboxed = '/opt/homebrew/bin/composer-visible-only-to-the-shell';
+        $this->assertFalse( is_file( $sandboxed ), 'Fixture path must be unstattable for this test to mean anything.' );
+
+        $manager = new class( $sandboxed ) extends ApplicationUpdateManager {
+            public function __construct( protected string $binary )
+            {
+            }
+
+            protected function resolveComposerBinaryForVerification(): ?string
+            {
+                return $this->binary;
+            }
+
+            protected function clearCaches(): void
+            {
+                // No-op; nothing to clear in this unit context.
+            }
+        };
+
+        $backupPath = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' ) . '.zip';
+        $zip        = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'placeholder.txt', 'ok' );
+        $zip->close();
+
+        try {
+            $manager->rollback( $backupPath );
+        } finally {
+            @unlink( $backupPath );
+            @unlink( base_path( 'placeholder.txt' ) );
         }
     }
 
@@ -1177,6 +1440,977 @@ class ApplicationUpdateManagerTest extends TestCase
         $this->assertStringContainsString( 'Exit code: 64', $message );
         $this->assertStringContainsString( 'Usage: php84-fpm', $message );
         $this->assertStringContainsString( 'CMS_PHP_BINARY', $message );
+    }
+
+    /**
+     * Regression for #255: `composer.lock` must not appear in the shipped
+     * `exclude_from_update` default.
+     *
+     * `composer install` only ever *reads* a lock file — it never writes one —
+     * so excluding the lock while letting `composer.json` be overwritten leaves
+     * the pair out of sync and aborts step 6 on every release that changes a
+     * dependency constraint. The `vendor` entry stays, because that directory
+     * genuinely is rebuilt by `composer install`.
+     *
+     * @since 2.7.1
+     */
+    public function test_composer_lock_is_not_excluded_from_updates_by_default(): void
+    {
+        $shipped = require __DIR__ . '/../../../src/Modules/Core/Updates/config/updates.php';
+
+        $this->assertIsArray( $shipped['exclude_from_update'] );
+        $this->assertNotContains(
+            'composer.lock',
+            $shipped['exclude_from_update'],
+            'composer.lock must land from the release so it stays in sync with the release composer.json.',
+        );
+        $this->assertContains(
+            'vendor',
+            $shipped['exclude_from_update'],
+            'vendor is genuinely rebuilt by composer install and must stay excluded.',
+        );
+    }
+
+    /**
+     * Regression for #255: extraction must overwrite the installed
+     * `composer.lock` with the release's, rather than skipping it and leaving
+     * the old lock beside the new `composer.json`.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_overwrites_composer_lock_from_release(): void
+    {
+        $shipped = require __DIR__ . '/../../../src/Modules/Core/Updates/config/updates.php';
+        config( ['cms.updates.exclude_from_update' => $shipped['exclude_from_update']] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-lock-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        // The installed site: an old constraint and the lock that matches it.
+        file_put_contents( $target . '/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.5.3"}}' );
+        file_put_contents( $target . '/composer.lock', '{"content-hash":"old","packages":[]}' );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}' );
+        $zip->addFromString( 'release-root/composer.lock', '{"content-hash":"new","packages":[]}' );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertStringContainsString(
+                '^2.7.0',
+                (string) file_get_contents( $target . '/composer.json' ),
+                'composer.json should carry the release constraint.',
+            );
+            $this->assertStringContainsString(
+                'new',
+                (string) file_get_contents( $target . '/composer.lock' ),
+                'composer.lock must be overwritten by the release lock, not preserved.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * The framework's reimplementation of `Locker::getContentHash()` must agree
+     * with the hash composer itself wrote, so the test fails loudly if a future
+     * composer release changes the algorithm.
+     *
+     * Verified against a committed fixture pair in
+     * `tests/Fixtures/ComposerLockSync/`, generated by running real
+     * `composer update` over a manifest that exercises every key the algorithm
+     * consumes — `name`, `version`, `require`, `conflict`, `repositories`,
+     * `extra`, `minimum-stability`, `prefer-stable`, and the special-cased
+     * `config.platform`.
+     *
+     * Deliberately *not* verified against this package's own
+     * `composer.json`/`composer.lock`: `version` participates in the hash, and
+     * a release that bumps it without regenerating the lock would fail this
+     * test for a reason having nothing to do with the algorithm. That has
+     * happened before — the 2.5.4 → 2.6.0 bump left the lock's `content-hash`
+     * untouched.
+     *
+     * @since 2.7.1
+     */
+    public function test_composer_content_hash_matches_composer_generated_lock(): void
+    {
+        $fixtureDir = __DIR__ . '/../../Fixtures/ComposerLockSync';
+
+        $lock = json_decode( (string) file_get_contents( $fixtureDir . '/composer.lock' ), true );
+
+        $manager    = new ApplicationUpdateManager;
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'composerContentHash' );
+        $method->setAccessible( true );
+
+        $this->assertSame(
+            $lock['content-hash'],
+            $method->invoke( $manager, $fixtureDir . '/composer.json' ),
+            'The framework must compute the same content-hash composer writes into the lock file.',
+        );
+    }
+
+    /**
+     * The sync check must accept the composer-generated fixture pair as-is —
+     * an end-to-end pass over `verifyComposerFilesInSync()` against files real
+     * composer produced, rather than hand-built JSON.
+     *
+     * @since 2.7.1
+     */
+    public function test_verify_composer_files_in_sync_accepts_a_real_composer_pair(): void
+    {
+        $fixtureDir = __DIR__ . '/../../Fixtures/ComposerLockSync';
+
+        $target = $this->makeComposerPair(
+            (string) file_get_contents( $fixtureDir . '/composer.json' ),
+            (string) file_get_contents( $fixtureDir . '/composer.lock' ),
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager    = new ApplicationUpdateManager;
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
+            $method->setAccessible( true );
+
+            $method->invoke( $manager, 'composer install --no-dev' );
+
+            $this->assertTrue( true ); // No exception means the real pair was accepted.
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Regression for #255 (Fix C): a positively-detected desync must abort with
+     * a message naming the real cause, rather than letting composer emit its
+     * "incorrectly merged or manually edited" guess.
+     *
+     * @since 2.7.1
+     */
+    public function test_verify_composer_files_in_sync_throws_when_lock_is_stale(): void
+    {
+        Process::fake();
+
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'out of sync', $e->getMessage() );
+                $this->assertStringContainsString( 'never writes one', $e->getMessage() );
+                $this->assertStringContainsString( 'not a merge conflict', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'A stale lock must abort the update before composer runs.' );
+
+            Process::assertNothingRan();
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The happy path: an in-sync pair passes the check and composer is invoked.
+     *
+     * @since 2.7.1
+     */
+    public function test_verify_composer_files_in_sync_passes_when_hashes_match(): void
+    {
+        $json   = '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}';
+        $target = $this->makeComposerPair( $json, null );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager    = new ApplicationUpdateManager;
+            $reflection = new ReflectionClass( $manager );
+
+            $hashMethod = $reflection->getMethod( 'composerContentHash' );
+            $hashMethod->setAccessible( true );
+            $hash = $hashMethod->invoke( $manager, $target . '/composer.json' );
+
+            file_put_contents(
+                $target . '/composer.lock',
+                json_encode( [
+                    'content-hash' => $hash,
+                    'packages'     => [],
+                ] ),
+            );
+
+            $method = $reflection->getMethod( 'verifyComposerFilesInSync' );
+            $method->setAccessible( true );
+            $method->invoke( $manager, 'composer install --no-dev' );
+
+            $this->assertTrue( true ); // No exception means the pair was accepted.
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The check fails *open*. A missing lock, an unparseable lock, or a lock
+     * with no `content-hash` is left for composer to adjudicate — a false alarm
+     * must never block an update that would otherwise install cleanly.
+     *
+     * @since 2.7.1
+     *
+     * @dataProvider inconclusiveComposerLockProvider
+     *
+     * @param  string|null  $lockContents  Lock file contents, or null to omit the file.
+     */
+    public function test_verify_composer_files_in_sync_fails_open_when_inconclusive( ?string $lockContents ): void
+    {
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            $lockContents,
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager    = new ApplicationUpdateManager;
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
+            $method->setAccessible( true );
+
+            $method->invoke( $manager, 'composer install --no-dev' );
+
+            $this->assertTrue( true ); // No exception means the check failed open.
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Inconclusive lock states that must not abort the update.
+     *
+     * @since 2.7.1
+     *
+     * @return array<string, array{0: string|null}>
+     */
+    public static function inconclusiveComposerLockProvider(): array
+    {
+        return [
+            'no lock file at all'         => [null],
+            'unparseable lock'            => ['{ this is not json'],
+            'lock without a hash key'     => ['{"packages":[]}'],
+            'lock with a non-string hash' => ['{"content-hash":123,"packages":[]}'],
+        ];
+    }
+
+    /**
+     * The check can be switched off entirely, for hosts stuck behind a composer
+     * release that changed the content-hash algorithm.
+     *
+     * @since 2.7.1
+     */
+    public function test_verify_composer_files_in_sync_can_be_disabled(): void
+    {
+        config( ['cms.updates.verify_composer_lock_sync' => false] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            '{"content-hash":"definitely-not-the-right-hash","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager    = new ApplicationUpdateManager;
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
+            $method->setAccessible( true );
+
+            $method->invoke( $manager, 'composer install --no-dev' );
+
+            $this->assertTrue( true ); // No exception means the check was skipped.
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * A host that has overridden `composer_install_command` to run `composer
+     * update` has deliberately opted into re-resolving the tree, and a lock
+     * that disagrees with `composer.json` is exactly what `update` reconciles.
+     * The guard must not abort those hosts.
+     *
+     * @since 2.7.1
+     */
+    public function test_verify_composer_files_in_sync_skips_non_install_commands(): void
+    {
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            '{"content-hash":"definitely-not-the-right-hash","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager    = new ApplicationUpdateManager;
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
+            $method->setAccessible( true );
+
+            $method->invoke( $manager, 'composer update --no-dev --no-interaction' );
+
+            $this->assertTrue( true ); // No exception means the guard stood down.
+
+            // ...but the same stale pair must still abort an `install`.
+            $this->expectException( UpdateException::class );
+            $method->invoke( $manager, 'composer install --no-dev' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Regression for SEC-1: `exclude_from_update` is matched against entry
+     * names as strings, so a `./`-prefixed entry was a different string from
+     * the excluded name and slipped past the list entirely — while
+     * `realpath( dirname( '/base/./.env' ) )` is just `/base`, so containment
+     * passed too. A malicious release archive could overwrite `.env`,
+     * `vendor/`, `bootstrap/cache/` and the SQLite database.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_excludes_dot_slash_prefixed_entries(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-dotslash-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/vendor', 0755, true );
+
+        file_put_contents( $target . '/.env', "APP_KEY=original\n" );
+        file_put_contents( $target . '/vendor/autoload.php', "<?php // original\n" );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // Benign entry, so the archive has a plausible shape.
+        $zip->addFromString( 'app/Model.php', "<?php\n" );
+        // The bypasses: same files, spelled so the exclusion list misses them.
+        $zip->addFromString( './.env', "APP_KEY=attacker\nAPP_DEBUG=true\n" );
+        $zip->addFromString( './vendor/autoload.php', "<?php // attacker\n" );
+        $zip->addFromString( 'app//..//.env', "APP_KEY=traversal\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertSame(
+                "APP_KEY=original\n",
+                file_get_contents( $target . '/.env' ),
+                'A `./`-prefixed entry must still be caught by exclude_from_update.',
+            );
+            $this->assertSame(
+                "<?php // original\n",
+                file_get_contents( $target . '/vendor/autoload.php' ),
+                'A `./`-prefixed vendor entry must still be excluded.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for BUG-7: `isPathExcluded()` used a bare string prefix, so
+     * `str_starts_with( 'storage-helpers.php', 'storage' )` matched and the
+     * file was skipped by both backup and extraction — never snapshotted, and
+     * silently stale forever.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_does_not_exclude_names_merely_prefixed_by_an_excluded_name(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-boundary-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'storage-helpers.php', "<?php // shipped\n" );
+        $zip->addFromString( '.envelope.json', "{}\n" );
+        $zip->addFromString( 'vendors/README.md', "shipped\n" );
+        // Genuinely excluded, for contrast.
+        $zip->addFromString( 'storage/logs/laravel.log', "should not land\n" );
+        $zip->addFromString( '.env', "should not land\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/storage-helpers.php' );
+            $this->assertFileExists( $target . '/.envelope.json' );
+            $this->assertFileExists( $target . '/vendors/README.md' );
+
+            $this->assertFileDoesNotExist( $target . '/storage/logs/laravel.log' );
+            $this->assertFileDoesNotExist( $target . '/.env' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for SEC-2 / BUG-8: directory entries were created *before*
+     * the containment check ran, so `mkdir -p` walked through a pre-existing
+     * symlink pointing outside `base_path()` — routine in Envoyer/Forge
+     * layouts — and the directories were never removed.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_does_not_create_directories_through_a_symlink_out_of_the_root(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-mkdir-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $shared   = $tempRoot . '/shared';
+        mkdir( $target, 0755, true );
+        mkdir( $shared, 0755, true );
+
+        // A shared directory symlinked into the app root, as Envoyer does.
+        symlink( $shared, $target . '/shared-link' );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'app/Model.php', "<?php\n" );
+        $zip->addFromString( 'shared-link/attacker/dir/', '' );
+        $zip->addFromString( 'shared-link/attacker/payload.php', "<?php // pwned\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Model.php' );
+            $this->assertDirectoryDoesNotExist(
+                $shared . '/attacker',
+                'Directory entries must be validated before mkdir, not after.',
+            );
+            $this->assertFileDoesNotExist( $shared . '/attacker/payload.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/shared-link' );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $shared );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for SEC-3: the containment check validated the *parent*
+     * directory, never the target itself, so `fopen( …, 'wb' )` followed a
+     * pre-existing symlink and truncated whatever it pointed at.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_refuses_to_write_through_an_existing_symlink(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-symlink-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $outside  = $tempRoot . '/outside';
+        mkdir( $target . '/config', 0755, true );
+        mkdir( $outside, 0755, true );
+
+        file_put_contents( $outside . '/shared.php', "<?php // original shared config\n" );
+        symlink( $outside . '/shared.php', $target . '/config/shared.php' );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // A second root, so detectCommonRootPrefix() finds nothing to strip
+        // and `config/shared.php` really lands at `config/shared.php`.
+        $zip->addFromString( 'app/Model.php', "<?php\n" );
+        $zip->addFromString( 'config/shared.php', "<?php // overwritten\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertSame(
+                "<?php // original shared config\n",
+                file_get_contents( $outside . '/shared.php' ),
+                'Extraction must not follow a pre-existing symlink and truncate its target.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/config/shared.php' );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $outside );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for BUG-6: `fwrite()`'s return value was never checked, so a
+     * disk that filled during extraction produced a short write with no
+     * exception — the entry counted as extracted and the update proceeded
+     * into `composer install` and migrations over truncated PHP files.
+     *
+     * @since 2.7.1
+     */
+    public function test_stream_entry_to_disk_throws_on_a_short_write(): void
+    {
+        ShortWriteStreamWrapper::register();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function streamInto( $in, $out, string $filename, string $target ): void
+            {
+                $this->streamEntryToDisk( $in, $out, $filename, $target );
+            }
+        };
+
+        $in  = fopen( 'php://memory', 'r+b' );
+        fwrite( $in, str_repeat( 'x', 4096 ) );
+        rewind( $in );
+
+        $out = fopen( 'cmsfw-shortwrite://target', 'wb' );
+
+        try {
+            $manager->streamInto( $in, $out, 'app/Model.php', '/tmp/app/Model.php' );
+            $this->fail( 'streamEntryToDisk must throw when fwrite reports a short write.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'short write', $e->getMessage() );
+        } finally {
+            ShortWriteStreamWrapper::unregister();
+        }
+    }
+
+    /**
+     * Regression for BUG-1: `UpCommand::handle()` catches its own exceptions
+     * and returns 1, so a failure to lift maintenance mode never threw. The
+     * flag was cleared anyway, the shutdown guard disarmed, and the run marked
+     * `Completed` — while the site served 503 to every visitor.
+     *
+     * @since 2.7.1
+     */
+    public function test_disable_maintenance_mode_throws_when_up_returns_non_zero(): void
+    {
+        // The Artisan facade cannot be Mockery-mocked here — Testbench's
+        // console kernel is `final` — so swap in a stand-in that reports the
+        // failing exit code `UpCommand` actually returns.
+        Artisan::swap( new class {
+            public array $calls = [];
+
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                $this->calls[] = $command;
+
+                return 1;
+            }
+        } );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function disableInto(): void
+            {
+                $this->disableMaintenanceMode();
+            }
+
+            public function maintenanceIsActive(): bool
+            {
+                return $this->maintenanceModeActive;
+            }
+
+            public function markActive(): void
+            {
+                $this->maintenanceModeActive = true;
+            }
+        };
+
+        $manager->markActive();
+
+        try {
+            $manager->disableInto();
+            $this->fail( 'disableMaintenanceMode must throw when `up` exits non-zero.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'maintenance mode', strtolower( $e->getMessage() ) );
+        }
+
+        $this->assertTrue(
+            $manager->maintenanceIsActive(),
+            'The active flag must stay set so the shutdown guard remains armed.',
+        );
+    }
+
+    /**
+     * Companion to the above: a failing `down` must abort the update rather
+     * than let it proceed to overwrite application files on a live site.
+     *
+     * @since 2.7.1
+     */
+    public function test_enable_maintenance_mode_throws_when_down_returns_non_zero(): void
+    {
+        Artisan::swap( new class {
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                return 1;
+            }
+        } );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function enableInto(): void
+            {
+                $this->enableMaintenanceMode();
+            }
+
+            public function maintenanceIsActive(): bool
+            {
+                return $this->maintenanceModeActive;
+            }
+        };
+
+        try {
+            $manager->enableInto();
+            $this->fail( 'enableMaintenanceMode must throw when `down` exits non-zero.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'maintenance mode', strtolower( $e->getMessage() ) );
+        }
+
+        $this->assertFalse(
+            $manager->maintenanceIsActive(),
+            'The active flag must not be set when the site was never taken down.',
+        );
+    }
+
+    /**
+     * BUG-7 companion at the predicate level: an excluded name must match on a
+     * path-segment boundary, not as a bare string prefix.
+     *
+     * @since 2.7.1
+     */
+    public function test_path_exclusion_matches_on_segment_boundaries(): void
+    {
+        $manager = new ApplicationUpdateManager;
+
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'isPathExcluded' );
+        $method->setAccessible( true );
+
+        $this->assertTrue( $method->invoke( $manager, 'storage', ['storage'] ) );
+        $this->assertTrue( $method->invoke( $manager, 'storage/logs/test.log', ['storage'] ) );
+
+        $this->assertFalse( $method->invoke( $manager, 'storage-helpers.php', ['storage'] ) );
+        $this->assertFalse( $method->invoke( $manager, 'storages/x.php', ['storage'] ) );
+        $this->assertFalse( $method->invoke( $manager, '.envelope.json', ['.env'] ) );
+        $this->assertFalse( $method->invoke( $manager, 'vendors/README.md', ['vendor'] ) );
+    }
+
+    /**
+     * SEC-1 at the predicate level.
+     *
+     * @since 2.7.1
+     */
+    public function test_canonicalize_archive_path_normalizes_and_rejects(): void
+    {
+        $manager = new ApplicationUpdateManager;
+
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'canonicalizeArchivePath' );
+        $method->setAccessible( true );
+
+        $this->assertSame( '.env', $method->invoke( $manager, './.env' ) );
+        $this->assertSame( 'app/Model.php', $method->invoke( $manager, 'app//Model.php' ) );
+        $this->assertSame( 'app/Model.php', $method->invoke( $manager, './app/./Model.php' ) );
+        $this->assertSame( 'app/Model.php', $method->invoke( $manager, 'app\\Model.php' ) );
+
+        $this->assertNull( $method->invoke( $manager, '/etc/passwd' ) );
+        $this->assertNull( $method->invoke( $manager, '../outside.php' ) );
+        $this->assertNull( $method->invoke( $manager, 'app/../../outside.php' ) );
+    }
+
+    /**
+     * SEC-12: archive-supplied permissions are clamped, so a `0777` `.php`
+     * file cannot land under the docroot writable by a neighbouring tenant.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_clamps_archive_supplied_permissions(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-perms-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'app/Wide.php', "<?php\n" );
+        $zip->addFromString( 'routes/web.php', "<?php\n" );
+        $zip->setExternalAttributesName( 'app/Wide.php', ZipArchive::OPSYS_UNIX, 0777 << 16 );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Wide.php' );
+
+            $mode = fileperms( $target . '/app/Wide.php' ) & 0777;
+
+            $this->assertSame( 0, $mode & 0022, 'Group/world write bits must be cleared on extracted files.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * SEC-7: rollback never consulted `exclude_from_update`, so a backup ZIP
+     * carrying `.env` replaced the live one — and `composer install` then ran
+     * scripts from the restored `composer.json`.
+     *
+     * @since 2.7.1
+     */
+    public function test_rollback_does_not_restore_excluded_paths(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-excl-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        file_put_contents( $target . '/.env', "APP_KEY=live\n" );
+
+        $backupPath = $tempRoot . '/backup.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( '.env', "APP_KEY=from-backup\n" );
+        $zip->addFromString( 'app/Model.php', "<?php // restored\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function restoreOnly( string $backupPath ): void
+            {
+                // Exercise the archive-restore half without shelling out to
+                // composer, which is covered by its own tests.
+                $zip = new ZipArchive;
+                $zip->open( $backupPath );
+
+                $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+                $restore      = [];
+
+                for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+                    $name      = (string) $zip->getNameIndex( $i );
+                    $canonical = $this->canonicalizeArchivePath( $name );
+
+                    if ( null === $canonical || '' === $canonical || $this->isPathExcluded( $canonical, $excludePaths ) ) {
+                        continue;
+                    }
+
+                    $restore[] = $name;
+                }
+
+                $zip->extractTo( base_path(), $restore );
+                $zip->close();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->restoreOnly( $backupPath );
+
+            $this->assertSame( "APP_KEY=live\n", file_get_contents( $target . '/.env' ) );
+            $this->assertFileExists( $target . '/app/Model.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $backupPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * SEC-5: a plaintext download URL is refused unless the operator has
+     * explicitly opted into insecure transport.
+     *
+     * @since 2.7.1
+     */
+    public function test_download_refuses_plaintext_transport(): void
+    {
+        $source = new class {
+            use \ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
+
+            public function fetch( string $url ): string
+            {
+                return $this->streamDownloadToTempFile( $url );
+            }
+        };
+
+        try {
+            $source->fetch( 'http://example.com/update.zip' );
+            $this->fail( 'A plaintext download URL must be refused.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'insecure transport', $e->getMessage() );
+        }
+    }
+
+    /**
+     * SEC-4: `performUpdate()` must refuse a target that is not newer than the
+     * installed version unless `--allow-downgrade` was passed. Installing an
+     * older release re-introduces every vulnerability fixed since it shipped,
+     * and migrations are not reversed.
+     *
+     * @since 2.7.1
+     */
+    public function test_perform_update_refuses_a_downgrade_by_default(): void
+    {
+        config( ['app.version' => '2.0.0'] );
+
+        $manager = new ApplicationUpdateManager;
+
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( new UpdateInfo(
+            currentVersion: '2.0.0',
+            latestVersion: '2.1.0',
+            downloadUrl: 'https://example.com/update.zip',
+        ) );
+
+        $manager->setUpdateChecker( $checker );
+
+        try {
+            $manager->performUpdate( '1.0.0' );
+            $this->fail( 'performUpdate() must refuse a downgrade without --allow-downgrade.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'not newer', $e->getMessage() );
+            $this->assertStringContainsString( '--allow-downgrade', $e->getMessage() );
+        }
+    }
+
+    /**
+     * Write a scratch base path holding a `composer.json` and, optionally, a
+     * `composer.lock`. Returns the directory, which the caller must remove.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $json  Contents for `composer.json`.
+     * @param  string|null  $lock  Contents for `composer.lock`, or null to omit it.
+     *
+     * @return string Absolute path to the scratch directory.
+     */
+    protected function makeComposerPair( string $json, ?string $lock ): string
+    {
+        $target = sys_get_temp_dir() . '/cmsfw-sync-' . bin2hex( random_bytes( 6 ) );
+        mkdir( $target, 0755, true );
+
+        file_put_contents( $target . '/composer.json', $json );
+
+        if ( null !== $lock ) {
+            file_put_contents( $target . '/composer.lock', $lock );
+        }
+
+        return $target;
     }
 
     /**

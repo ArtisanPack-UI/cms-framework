@@ -14,7 +14,9 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ColumnType;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Registries\CustomFieldTypeRegistry;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -103,6 +105,51 @@ class CustomFieldRequest extends FormRequest
                 'string',
             ],
         ];
+    }
+
+    /**
+     * Reject a key that is framework-reserved or already names a column on
+     * one of the selected content types' tables.
+     *
+     * `CustomFieldManager::addColumnToTable()` silently no-ops when the column
+     * already exists, so an existing column would be *adopted* as a custom
+     * field rather than created — permanently exposing it to untrusted
+     * `custom_fields` payloads through the DB-persisted-field exemption. The
+     * manager enforces this too; the rule lives here as well so the admin UI
+     * gets a field-level validation message instead of a 500.
+     *
+     * @since 2.7.1
+     *
+     * @param  Validator  $validator  The validator instance.
+     */
+    public function withValidator( Validator $validator ): void
+    {
+        $validator->after( function ( Validator $validator ): void {
+            $key = $this->input( 'key' );
+
+            if ( ! is_string( $key ) || '' === $key ) {
+                return;
+            }
+
+            $conflict = app( CustomFieldManager::class )->findKeyConflict(
+                $key,
+                (array) $this->input( 'content_types', [] ),
+            );
+
+            if ( null === $conflict ) {
+                return;
+            }
+
+            if ( 'reserved' === $conflict['reason'] ) {
+                $validator->errors()->add( 'key', __( 'That key is reserved by the CMS framework. Choose a different key.' ) );
+
+                return;
+            }
+
+            $validator->errors()->add( 'key', __( 'That key already names a column on the ":table" table. Choose a different key.', [
+                'table' => $conflict['table'],
+            ] ) );
+        } );
     }
 
     /**

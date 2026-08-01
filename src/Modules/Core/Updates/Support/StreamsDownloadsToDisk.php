@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use GuzzleHttp\Psr7\Utils;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
@@ -51,6 +52,8 @@ trait StreamsDownloadsToDisk
      */
     protected function streamDownloadToTempFile( string $downloadUrl, array $headers = [] ): string
     {
+        $this->assertSecureDownloadUrl( $downloadUrl );
+
         $tempPath = storage_path( 'app/temp/update-' . bin2hex( random_bytes( 16 ) ) . '.zip' );
 
         if ( ! File::exists( dirname( $tempPath ) ) ) {
@@ -60,6 +63,20 @@ trait StreamsDownloadsToDisk
         try {
             $response = Http::withHeaders( $headers )
                 ->timeout( config( 'cms.updates.download_timeout', 300 ) )
+                // Constrain redirects to the same scheme policy as the initial
+                // URL. Validating only the URL we were handed is not enough:
+                // Guzzle follows redirects by default, so an `https` release
+                // URL that 302s to `http` would downgrade the transport
+                // silently — and the archive it returns is executed as PHP.
+                ->withOptions( [
+                    'allow_redirects' => [
+                        'max'       => 5,
+                        'strict'    => true,
+                        'protocols' => config( 'cms.updates.allow_insecure_transport', false )
+                            ? ['http', 'https']
+                            : ['https'],
+                    ],
+                ] )
                 ->withResponseMiddleware( function ( ResponseInterface $response ): ResponseInterface {
                     $response->getBody()->close();
 
@@ -78,5 +95,45 @@ trait StreamsDownloadsToDisk
 
             throw $e;
         }
+    }
+
+    /**
+     * Refuse to fetch a release archive over an insecure transport.
+     *
+     * `download_url` arrives from the update source's own metadata — for the
+     * custom-JSON source, straight out of a remote document — and was passed
+     * to the downloader with no scheme or host validation at all. TLS is one
+     * of only three things standing between "update source compromised" and
+     * "host owned", the others being the checksum and the exclusion list, and
+     * this pipeline is by design an RCE channel: it overwrites PHP files and
+     * then runs `composer install`, which executes `post-install-cmd` scripts
+     * from the just-overwritten `composer.json`.
+     *
+     * `cms.updates.allow_insecure_transport` exists for air-gapped mirrors on
+     * a trusted network. It defaults to false.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $downloadUrl  URL about to be fetched.
+     *
+     * @throws UpdateException When the URL is not https and the opt-out is off.
+     */
+    protected function assertSecureDownloadUrl( string $downloadUrl ): void
+    {
+        $scheme = strtolower( (string) parse_url( $downloadUrl, PHP_URL_SCHEME ) );
+
+        if ( 'https' === $scheme ) {
+            return;
+        }
+
+        if ( config( 'cms.updates.allow_insecure_transport', false ) ) {
+            Log::warning( 'cms-framework: downloading an update over an insecure transport because cms.updates.allow_insecure_transport is enabled.', [
+                'scheme' => $scheme,
+            ] );
+
+            return;
+        }
+
+        throw UpdateException::insecureDownloadUrl( $downloadUrl );
     }
 }

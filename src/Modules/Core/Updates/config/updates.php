@@ -59,9 +59,13 @@ return [
     |    OS-level env var visible to `getenv()` in the PHP-FPM pool.
     | 2. A non-default value for this config key — set this to a bespoke shell
     |    string if you need full control (custom flags, prepended PATH, etc.).
-    | 3. Auto-discovery across common install paths (`/usr/local/bin/composer`,
-    |    `/opt/homebrew/bin/composer`, `~/.composer/vendor/bin/composer`,
+    | 3. Auto-discovery across common install paths
+    |    (`~/Library/Application Support/Herd/bin/composer`,
+    |    `/usr/local/bin/composer`, `/opt/homebrew/bin/composer`,
+    |    `~/.composer/vendor/bin/composer`,
     |    `~/.config/composer/vendor/bin/composer`, `/usr/bin/composer`).
+    |    Laravel Herd's bundled composer leads the list so a macOS Herd host
+    |    stays on one toolchain for both FPM and CLI.
     | 4. This default command (bare `composer`).
     |
     | The PHP interpreter used to invoke composer is resolved from a CLI SAPI
@@ -96,6 +100,50 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Update State File
+    |--------------------------------------------------------------------------
+    |
+    | Where the updater records which step of `performUpdate()` is in flight.
+    | Relative paths resolve against `storage_path()`; an absolute path is used
+    | verbatim.
+    |
+    | This is a plain file rather than a cache entry on purpose: step 8 of the
+    | update runs `cache:clear`, and the database cache driver is unavailable
+    | while step 7's migrations are mid-flight. `storage/` is in
+    | `exclude_from_update` below, so the marker survives extraction.
+    |
+    | Read it with `php artisan update:status`, or programmatically via
+    | `ApplicationUpdateManager::updateState()`.
+    |
+    */
+    'state_path' => 'framework/cms-update-state.json',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Lift Maintenance Mode On Interrupted Updates
+    |--------------------------------------------------------------------------
+    |
+    | An update that dies mid-flight (PHP fatal, out of memory, FPM's
+    | `request_terminate_timeout`, the operator closing the tab) never reaches
+    | step 10, so maintenance mode is never disabled and the site serves 503 to
+    | every visitor until somebody notices and runs `php artisan up`.
+    |
+    | When enabled (the default), a shutdown handler lifts maintenance mode in
+    | that case and logs a `critical` entry naming the step it died on. The
+    | install may be half-applied, which is a real trade-off — but an
+    | unattended outage the operator may not notice for hours is worse, and
+    | `php artisan update:status` reports exactly what is outstanding.
+    |
+    | Set to `false` to fail closed and keep the site down until an operator
+    | has verified the install by hand.
+    |
+    | Note this cannot help against `kill -9`, which runs no shutdown handlers.
+    |
+    */
+    'lift_maintenance_on_interrupt' => env( 'CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT', true ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Backup Settings
     |--------------------------------------------------------------------------
     |
@@ -114,6 +162,17 @@ return [
     | Files and directories to exclude from updates (preserved during extraction).
     | These are relative to base_path().
     |
+    | `composer.lock` is deliberately NOT excluded. `composer install` only ever
+    | *reads* a lock file — it never writes one — so excluding the lock while
+    | letting `composer.json` be overwritten leaves the two out of sync and
+    | aborts step 6 on every release that changes a dependency constraint. The
+    | release's lock must land alongside its `composer.json` so the host
+    | installs the exact dependency set the release was built and tested
+    | against. See `verify_composer_lock_sync` below.
+    |
+    | (The `vendor` comment below is correct as written — that directory really
+    | is rebuilt by `composer install`.)
+    |
     */
     'exclude_from_update' => [
         '.env',
@@ -125,8 +184,37 @@ return [
         '.git',
         '.gitignore',
         'bootstrap/cache/*.php',
-        'composer.lock', // Rebuilt via composer install
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Lock Sync Pre-Flight Check
+    |--------------------------------------------------------------------------
+    |
+    | Before invoking composer, verify that the on-disk `composer.lock` is in
+    | sync with the on-disk `composer.json` by comparing the lock's
+    | `content-hash` against a hash computed from `composer.json` using
+    | composer's own algorithm.
+    |
+    | When they diverge, composer aborts with "This usually happens when
+    | composer files are incorrectly merged or the composer.json file is
+    | manually edited" — which sends the operator hunting for a merge conflict
+    | or a hand-edit that never happened. The real cause is almost always a
+    | release that shipped no `composer.lock`, or a host whose
+    | `exclude_from_update` override still excludes it. This check names that
+    | cause instead.
+    |
+    | The check fails *open*: a missing `composer.json`, a missing or
+    | unparseable `composer.lock`, or a lock without a `content-hash` key is
+    | left for composer itself to adjudicate. Only a positively-detected
+    | mismatch aborts.
+    |
+    | Set to `false` to skip the check entirely — for instance if a future
+    | composer release changes the content-hash algorithm and the framework has
+    | not caught up.
+    |
+    */
+    'verify_composer_lock_sync' => env( 'CMS_UPDATES_VERIFY_LOCK_SYNC', true ),
 
     /*
     |--------------------------------------------------------------------------
@@ -177,10 +265,37 @@ return [
     | Integrity Verification
     |--------------------------------------------------------------------------
     |
-    | Whether to verify downloaded ZIPs using SHA-256 checksum.
+    | Whether to verify downloaded ZIPs using a SHA-256 checksum.
+    |
+    | Be clear about what this does and does not buy you. The digest comes
+    | from the *same origin and trust domain* as the archive: for GitLab and
+    | GitHub, a `*.sha256` sidecar on the same release or a `SHA-256:` line in
+    | the release description; for custom JSON, the same document that
+    | supplied `download_url`. It is therefore an **integrity** check — it
+    | catches truncation, CDN corruption and partial downloads — and not an
+    | **authenticity** check. It does not protect against a compromised update
+    | server, a compromised release-editor account, or a plaintext-HTTP MITM.
+    | There is no signature verification in this module.
     |
     */
     'verify_checksum' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Allow Insecure Transport
+    |--------------------------------------------------------------------------
+    |
+    | Release archives are downloaded over https only. TLS is one of the very
+    | few things standing between a compromised update source and a
+    | compromised host: this pipeline overwrites PHP files and then runs
+    | `composer install`, which executes `post-install-cmd` scripts from the
+    | just-overwritten `composer.json`.
+    |
+    | Set to `true` only for an air-gapped mirror on a trusted network that
+    | genuinely cannot serve https. The updater logs a warning and proceeds.
+    |
+    */
+    'allow_insecure_transport' => env( 'CMS_UPDATES_ALLOW_INSECURE_TRANSPORT', false ),
 
     /*
     |--------------------------------------------------------------------------

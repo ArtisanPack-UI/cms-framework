@@ -175,6 +175,26 @@ class GitLabUpdateSource implements UpdateSourceInterface
     }
 
     /**
+     * Resolve the SHA-256 digest published for a specific release.
+     *
+     * Used when the caller pinned `--target-version`, so the digest verified
+     * belongs to the archive actually being installed rather than to the
+     * latest release.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $version  Version to resolve.
+     *
+     * @return string|null Lowercase hex digest, or null when none is published.
+     */
+    public function checksumForVersion( string $version ): ?string
+    {
+        $release = $this->getReleaseByVersion( $version );
+
+        return $this->extractChecksum( $release, $this->resolveDownloadUrl( $release ) );
+    }
+
+    /**
      * Parse GitLab URL to extract project ID.
      *
      * @since 1.0.0
