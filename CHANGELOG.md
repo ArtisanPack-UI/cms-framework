@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.7.1] - 2026-08-01
 
+### Security
+
+- **Updated `guzzlehttp/guzzle` to `7.15.2`** (from `7.14.0`), clearing four advisories: host-only cookie scope not preserved, unbounded response cookies risking denial of service, and `Proxy-Authorization` headers being sent to origin servers. Guzzle sits directly on the update path — `MetadataClient` fetches release metadata and checksum sidecars through it, and `StreamsDownloadsToDisk` fetches the release archive itself — so the proxy-authorization advisory is the one that matters most for hosts behind a corporate proxy. `guzzlehttp/psr7` moved `2.12.4` → `2.13.0` as a required dependency of that upgrade. No other package changed, and `composer.json` is untouched, so the lock's `content-hash` is unaffected.
+
 ### Added
 
 - **`cms.updates.allow_insecure_transport` config key** — release archives are now downloaded over `https` only. `download_url` arrives from the update source's own metadata (for the custom-JSON source, straight out of a remote document) and was previously passed to the downloader with no scheme validation at all. Defaults to `false`; set `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT=true` for an air-gapped mirror that genuinely cannot serve https.
