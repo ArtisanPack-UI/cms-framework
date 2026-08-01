@@ -6,9 +6,11 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use ArtisanPackUI\CMSFramework\Tests\Support\RecordingApplicationUpdateManager;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Orchestra\Testbench\TestCase;
 use RuntimeException;
@@ -378,6 +380,121 @@ class UpdateInterruptionGuardTest extends TestCase
         }
 
         $this->assertTrue( $manager->shutdownGuardWasArmed );
+    }
+
+    /**
+     * TEST-2: the assertion above runs against the double, which overrides
+     * `enableMaintenanceMode()` and re-implements the arming itself — so if
+     * the *real* `enableMaintenanceMode()` stopped arming the guard, or armed
+     * it before `down` succeeded, every test would still pass. This exercises
+     * the real method, with only Artisan stood in for.
+     *
+     * @since 2.7.1
+     */
+    public function test_real_enable_maintenance_mode_arms_the_guard_after_down_succeeds(): void
+    {
+        Artisan::swap( new class {
+            public array $calls = [];
+
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                $this->calls[] = $command;
+
+                return 0;
+            }
+        } );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public bool $guardArmed = false;
+
+            public array $armedWhileActive = [];
+
+            public function enableInto(): void
+            {
+                $this->enableMaintenanceMode();
+            }
+
+            public function maintenanceIsActive(): bool
+            {
+                return $this->maintenanceModeActive;
+            }
+
+            protected function armShutdownGuard(): void
+            {
+                $this->guardArmed         = true;
+                $this->armedWhileActive[] = $this->maintenanceModeActive;
+            }
+        };
+
+        $manager->enableInto();
+
+        $this->assertTrue( $manager->guardArmed, 'The real enableMaintenanceMode() must arm the shutdown guard.' );
+        $this->assertTrue( $manager->maintenanceIsActive() );
+        $this->assertSame(
+            [true],
+            $manager->armedWhileActive,
+            'The active flag must already be set when the guard is armed, or a death between the two leaves the site down with nothing watching.',
+        );
+    }
+
+    /**
+     * BUG-3: the shutdown guard must not re-stamp an already-terminal record.
+     * `performUpdate()`'s catch marks `Failed` with the real error; if
+     * `disableMaintenanceMode()` then throws inside `handleUpdateFailure()`,
+     * the active flag stays set and this guard fires at shutdown even though
+     * the process never died. Re-stamping replaced a real SQL error with a
+     * generic "terminated before completing" and printed a resume checklist
+     * for an already-rolled-back tree.
+     *
+     * @since 2.7.1
+     */
+    public function test_shutdown_guard_does_not_overwrite_a_terminal_failed_record(): void
+    {
+        $manager             = $this->managerWithUpdateAvailable();
+        $manager->failAtStep = UpdateStep::Migrations;
+
+        try {
+            $manager->performUpdate();
+        } catch ( RuntimeException $e ) {
+            // Expected.
+        }
+
+        // Simulate the flag having been left set by a failed `up`.
+        $manager->forceMaintenanceModeActive();
+        $manager->handleInterruptedUpdate();
+
+        $state = $manager->updateState();
+
+        $this->assertSame(
+            UpdateRunStatus::Failed->value,
+            $state['status'],
+            'A terminal Failed record must not be rewritten as Interrupted.',
+        );
+        $this->assertStringContainsString(
+            'Simulated failure at migrations',
+            (string) $state['error'],
+            'The real error must survive the shutdown guard.',
+        );
+    }
+
+    /**
+     * The guard must still re-stamp a genuinely in-flight record.
+     *
+     * @since 2.7.1
+     */
+    public function test_shutdown_guard_still_records_a_genuinely_interrupted_run(): void
+    {
+        $manager = $this->managerWithUpdateAvailable();
+
+        $manager->beginRunForTest( '0.3.0', '0.2.4' );
+        $manager->markStepForTest( UpdateStep::Extract );
+        $manager->forceMaintenanceModeActive();
+
+        $manager->handleInterruptedUpdate();
+
+        $state = $manager->updateState();
+
+        $this->assertSame( UpdateRunStatus::Interrupted->value, $state['status'] );
     }
 
     /**

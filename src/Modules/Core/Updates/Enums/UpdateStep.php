@@ -75,7 +75,16 @@ enum UpdateStep: string
     public function recoveryCommand(): ?string
     {
         return match ( $this ) {
-            self::ComposerInstall        => 'composer install --no-dev --no-interaction --optimize-autoloader',
+            // Read from config so the printed command matches what the
+            // updater itself would run. A bare `composer` is exactly the
+            // invocation that cannot resolve on a Herd/FPM host — the failure
+            // mode #254 exists to fix — and any
+            // `composer_install_command` / `COMPOSER_BINARY` override was
+            // ignored here entirely.
+            self::ComposerInstall        => (string) config(
+                'cms.updates.composer_install_command',
+                'composer install --no-dev --no-interaction --optimize-autoloader',
+            ),
             self::Migrations             => 'php artisan migrate --force',
             self::ClearCaches            => 'php artisan config:clear && php artisan cache:clear && php artisan route:clear && php artisan view:clear',
             self::DisableMaintenanceMode => 'php artisan up',

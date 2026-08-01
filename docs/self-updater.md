@@ -156,7 +156,7 @@ These steps had not completed. Run them in order to finish the update:
      php artisan up
 ```
 
-It exits non-zero when the last run failed or was interrupted, so it composes with health checks. `--json` emits the raw record for an admin UI; `--clear` discards it after reporting. Host applications can read the same record programmatically via `ApplicationUpdateManager::updateState()`.
+It exits non-zero when the last run failed or was interrupted, so it composes with health checks — in **both** output modes, so `php artisan update:status --json || alert` is a valid monitoring idiom. (Before 2.7.1 the `--json` branch returned success unconditionally and never alerted on a dead update.) `--json` emits the raw record for an admin UI; `--clear` discards it after reporting. Host applications can read the same record programmatically via `ApplicationUpdateManager::updateState()`.
 
 A run interrupted during download or extraction is not resumable — the application tree may be partially overwritten — so the command points at the pre-update snapshot in `storage/backups/application/` instead of a resume checklist.
 
