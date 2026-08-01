@@ -108,6 +108,43 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     }
 
     /**
+     * Force the maintenance-mode flag on, so a test can drive
+     * `handleInterruptedUpdate()` directly.
+     *
+     * @since 2.7.1
+     */
+    public function forceMaintenanceModeActive(): void
+    {
+        $this->maintenanceModeActive = true;
+    }
+
+    /**
+     * Start a run in the state store without executing any steps.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $targetVersion  Version being installed.
+     * @param  string  $currentVersion  Version installed before the update.
+     */
+    public function beginRunForTest( string $targetVersion, string $currentVersion ): void
+    {
+        $this->state()->begin( $targetVersion, $currentVersion );
+    }
+
+    /**
+     * Record a step as in flight without executing it.
+     *
+     * @since 2.7.1
+     *
+     * @param  UpdateStep  $step  Step to record.
+     */
+    public function markStepForTest( UpdateStep $step ): void
+    {
+        $this->currentStep = $step;
+        $this->state()->markStep( $step );
+    }
+
+    /**
      * {@inheritDoc}
      *
      * @since 2.7.1

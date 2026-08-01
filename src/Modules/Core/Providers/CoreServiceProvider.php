@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\CheckForUpdateSchedu
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\PerformUpdateCommand;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\RollbackUpdateCommand;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\UpdateStatusCommand;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -36,6 +37,16 @@ class CoreServiceProvider extends ServiceProvider
     {
         $this->app->singleton( AssetManager::class, function ( $app ) {
             return new AssetManager;
+        } );
+
+        // Bound as a singleton so the shutdown guard is registered once.
+        // Every resolution of this manager that enters maintenance mode calls
+        // `register_shutdown_function`, and each closure captures `$this`
+        // permanently — under Octane or a long-lived queue worker, resolving
+        // it per request leaked an instance and stacked N no-op handlers to
+        // run at shutdown.
+        $this->app->singleton( ApplicationUpdateManager::class, function ( $app ) {
+            return new ApplicationUpdateManager;
         } );
 
         // Merge update configuration

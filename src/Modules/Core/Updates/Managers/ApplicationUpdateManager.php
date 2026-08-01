@@ -149,24 +149,279 @@ class ApplicationUpdateManager
      * @since 1.0.0
      *
      * @param  string|null  $version  Version to update to (null = latest)
+     * @param  bool  $allowDowngrade  Permit installing a version that is not newer than the installed one.
      *
      * @throws UpdateException
      *
      * @return bool True if update successful
      */
-    public function performUpdate( ?string $version = null ): bool
+    public function performUpdate( ?string $version = null, bool $allowDowngrade = false ): bool
     {
         $this->raiseExecutionLimits();
 
-        $updateInfo = $this->checkForUpdate();
+        // Nothing prevented two simultaneous runs — a double-clicked admin
+        // button, or the scheduled `auto_update` racing an operator's
+        // `update:perform`. Both would put the site down, both would extract
+        // over base_path(), and both would run `composer install` in the same
+        // directory; the interleaved writes produce a tree neither rollback
+        // repairs, because the second run's backup snapshots the first run's
+        // half-extracted state. Run A's step-10 `up` also undoes run B's
+        // step-1 `down`, serving traffic mid-extraction.
+        $lock = $this->acquireUpdateLock();
 
-        if ( ! $updateInfo->hasUpdate() ) {
-            throw UpdateException::noUpdateAvailable();
+        try {
+            $updateInfo = $this->checkForUpdate();
+
+            if ( ! $updateInfo->hasUpdate() ) {
+                throw UpdateException::noUpdateAvailable();
+            }
+
+            // Use specified version or latest
+            $targetVersion = $version ?? $updateInfo->latestVersion;
+
+            // `hasUpdate()` is only ever consulted against *latest*, never
+            // against the requested target, so `performUpdate( '1.0.0' )` on a
+            // 2.7.1 install was accepted and installed a known-vulnerable
+            // older release. Migrations are not reversed either, so the older
+            // code then runs against the newer schema.
+            if ( ! $allowDowngrade && ! version_compare( $targetVersion, $updateInfo->resolveCurrentVersion(), '>' ) ) {
+                throw UpdateException::downgradeNotAllowed( $targetVersion, $updateInfo->resolveCurrentVersion() );
+            }
+
+            return $this->runUpdateSteps( $targetVersion, $updateInfo );
+        } finally {
+            $this->releaseUpdateLock( $lock );
+        }
+    }
+
+    /**
+     * Persisted record of the most recent update run, or `null` when no update
+     * has been recorded. Host applications can poll this to surface progress
+     * and to detect an update that died mid-flight.
+     *
+     * @since 2.7.1
+     *
+     * @return array<string, mixed>|null Persisted update state.
+     */
+    public function updateState(): ?array
+    {
+        return $this->state()->read();
+    }
+
+    /**
+     * Discard the persisted update state record.
+     *
+     * @since 2.7.1
+     */
+    public function clearUpdateState(): void
+    {
+        $this->state()->clear();
+    }
+
+    /**
+     * Shutdown guard: lift maintenance mode when the update process died
+     * before reaching step 10.
+     *
+     * An execution-time or out-of-memory fatal is not a catchable `Throwable`
+     * — it is raised at shutdown, so `performUpdate()`'s `catch` block never
+     * runs, `handleUpdateFailure()` never rolls back, and step 10 never
+     * executes. Without this guard the operator is left with a site returning
+     * 503 to every visitor, no error in the UI (the request died before
+     * rendering a response), and no automatic way back.
+     *
+     * Registered by `enableMaintenanceMode()` and public only so it can be
+     * exercised directly by tests; treat it as internal.
+     *
+     * @since 2.7.1
+     */
+    public function handleInterruptedUpdate(): void
+    {
+        if ( ! $this->maintenanceModeActive ) {
+            return;
         }
 
-        // Use specified version or latest
-        $targetVersion = $version ?? $updateInfo->latestVersion;
+        // Clear first: a failure below must not re-enter this handler.
+        $this->maintenanceModeActive = false;
 
+        // The persisted record may already be terminal. `performUpdate()`'s
+        // catch marks `Failed` with the real error and then calls
+        // `handleUpdateFailure()`; if lifting maintenance mode threw in there,
+        // the active flag is still set and this guard fires at shutdown even
+        // though the process never died and the error was caught and handled.
+        // Re-stamping would replace a real SQL error with "the update process
+        // terminated before completing" and print a resume checklist for a
+        // tree that has already been rolled back. Maintenance mode still gets
+        // lifted below — we simply do not rewrite history.
+        $recorded        = $this->updateState();
+        $recordedStatus  = UpdateRunStatus::tryFrom(
+            is_string( $recorded['status'] ?? null ) ? $recorded['status'] : '',
+        );
+        $alreadyTerminal = null !== $recordedStatus && $recordedStatus->isTerminal();
+
+        $fatal = $this->lastFatalError();
+
+        Log::critical(
+            $alreadyTerminal
+                ? 'cms-framework: the update run had already finished, but maintenance mode was still active at shutdown.'
+                : 'cms-framework: the update process terminated before it finished; the site was left in maintenance mode.',
+            [
+                'step'             => $this->currentStep?->value,
+                'step_label'       => $this->currentStep?->label(),
+                'php_sapi'         => PHP_SAPI,
+                'error'            => $fatal,
+                'recorded_status'  => $recordedStatus?->value,
+                'state_file'       => $this->state()->path(),
+                'hint'             => 'Run `php artisan update:status` to see how far the update got and what remains.',
+            ],
+        );
+
+        if ( ! $alreadyTerminal ) {
+            // Re-record the step from memory before stamping the status: an
+            // earlier per-step write may have failed (read-only storage, a disk
+            // that filled up), and the whole value of the marker is that it agrees
+            // with where the update actually was when it died.
+            if ( null !== $this->currentStep ) {
+                $this->state()->markStep( $this->currentStep );
+            }
+
+            $this->state()->markStatus(
+                UpdateRunStatus::Interrupted,
+                $fatal['message'] ?? 'The update process terminated before completing.',
+            );
+        }
+
+        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
+            Log::critical(
+                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
+            );
+
+            return;
+        }
+
+        try {
+            $this->disableMaintenanceMode();
+
+            Log::critical( 'cms-framework: maintenance mode was lifted by the update shutdown guard. The installation may be half-applied — run `php artisan update:status` before trusting it.' );
+        } catch ( Throwable $e ) {
+            Log::critical( 'cms-framework: the update shutdown guard could not lift maintenance mode via `artisan up`.', [
+                'exception' => $e->getMessage(),
+            ] );
+
+            $this->forceLiftMaintenanceMode();
+        }
+    }
+
+    /**
+     * Set a custom update checker.
+     *
+     * @since 1.0.0
+     *
+     * @param  UpdateChecker  $checker  Update checker instance
+     */
+    public function setUpdateChecker( UpdateChecker $checker ): void
+    {
+        $this->checker = $checker;
+    }
+
+    /**
+     * Rollback to a previous backup.
+     *
+     * @since 1.0.0
+     *
+     * @param  string  $backupPath  Path to backup ZIP
+     *
+     * @throws UpdateException
+     */
+    public function rollback( string $backupPath ): void
+    {
+        // Rollback re-runs `composer install`, so it is subject to the same
+        // execution-time ceiling as the update itself when invoked over HTTP.
+        $this->raiseExecutionLimits();
+
+        if ( ! File::exists( $backupPath ) ) {
+            throw UpdateException::rollbackFailed( "Backup not found: {$backupPath}" );
+        }
+
+        $zip = new ZipArchive;
+
+        if ( true !== $zip->open( $backupPath ) ) {
+            throw UpdateException::rollbackFailed( 'Could not open backup ZIP' );
+        }
+
+        // Unlike extractUpdate(), rollback consulted no exclusion filter at
+        // all — so a backup ZIP carrying `.env` or `vendor/autoload.php`
+        // replaced the live copies, and `runComposerInstall()` below then
+        // executed scripts from the restored `composer.json`. Backups this
+        // framework writes never contain `.env` (they reuse the same exclusion
+        // list), but `update:rollback` will extract whatever ZIP it is
+        // pointed at.
+        $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+        $restore      = [];
+
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $name      = (string) $zip->getNameIndex( $i );
+            $canonical = $this->canonicalizeArchivePath( $name );
+
+            if ( null === $canonical || '' === $canonical ) {
+                continue;
+            }
+
+            if ( $this->isPathExcluded( $canonical, $excludePaths ) ) {
+                Log::info( 'cms-framework: skipping an excluded entry while restoring a backup.', [
+                    'entry' => $name,
+                ] );
+
+                continue;
+            }
+
+            $restore[] = $name;
+        }
+
+        // `extractTo()` with an explicit entry list stays the right tool here:
+        // it was empirically confirmed safe against traversal — `..` and
+        // absolute paths stripped, symlink entries written as regular files,
+        // permission bits discarded. Only the exclusion filter was missing.
+        $zip->extractTo( base_path(), $restore );
+        $zip->close();
+
+        // Before invoking composer install, verify the resolved binary is
+        // reachable. If it's not (e.g. PHP-FPM's PATH doesn't include composer
+        // on a Herd host) surface a specific error rather than "Manual
+        // intervention required" — no filesystem state has actually been
+        // damaged at this point since vendor/ was untouched by the update.
+        $this->verifyComposerBinaryAvailable();
+
+        // Restore composer dependencies
+        $this->runComposerInstall();
+
+        // Clear caches
+        $this->clearCaches();
+    }
+
+    /**
+     * Clear the update check cache.
+     *
+     * @since 1.0.0
+     */
+    public function clearCache(): void
+    {
+        $this->getUpdateChecker()->clearCache();
+    }
+
+    /**
+     * Run the ten update steps under an already-held update lock.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $targetVersion  Version being installed.
+     * @param  UpdateInfo  $updateInfo  Resolved update metadata.
+     *
+     * @throws UpdateException
+     *
+     * @return bool True if update successful
+     */
+    protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
+    {
         $this->state()->begin( $targetVersion, $updateInfo->resolveCurrentVersion() );
 
         try {
@@ -227,164 +482,132 @@ class ApplicationUpdateManager
     }
 
     /**
-     * Persisted record of the most recent update run, or `null` when no update
-     * has been recorded. Host applications can poll this to surface progress
-     * and to detect an update that died mid-flight.
+     * Take the exclusive update lock, or refuse to start.
+     *
+     * `flock` on a sentinel beside the state file — deliberately not a cache
+     * lock, since step 8 runs `cache:clear` and would drop it mid-run. The
+     * lock covers same-host concurrency, which is the realistic case here: the
+     * updater rewrites `base_path()` on the machine it runs on.
+     *
+     * The recorded PID is the second line of defence. #256 added exactly the
+     * artifact a mutex needs — a persistent `in_progress` marker carrying the
+     * PID that wrote it — and never consulted it. A stale `in_progress` from a
+     * `kill -9`'d run must not block updates forever, so the marker only
+     * refuses when that PID is still alive.
      *
      * @since 2.7.1
      *
-     * @return array<string, mixed>|null Persisted update state.
+     * @throws UpdateException When another update is already running.
+     *
+     * @return resource|null The held lock handle to pass to
+     *                       releaseUpdateLock(), or null when locking was
+     *                       unavailable and the run proceeded unprotected.
      */
-    public function updateState(): ?array
+    protected function acquireUpdateLock()
     {
-        return $this->state()->read();
-    }
+        $path = $this->state()->path() . '.lock';
 
-    /**
-     * Discard the persisted update state record.
-     *
-     * @since 2.7.1
-     */
-    public function clearUpdateState(): void
-    {
-        $this->state()->clear();
-    }
+        // On a fresh install the state directory does not exist yet — the
+        // store creates it lazily on its first write, which happens *after*
+        // this point. Without this, the very first update on a host would
+        // silently run unlocked.
+        $directory = dirname( $path );
 
-    /**
-     * Shutdown guard: lift maintenance mode when the update process died
-     * before reaching step 10.
-     *
-     * An execution-time or out-of-memory fatal is not a catchable `Throwable`
-     * — it is raised at shutdown, so `performUpdate()`'s `catch` block never
-     * runs, `handleUpdateFailure()` never rolls back, and step 10 never
-     * executes. Without this guard the operator is left with a site returning
-     * 503 to every visitor, no error in the UI (the request died before
-     * rendering a response), and no automatic way back.
-     *
-     * Registered by `enableMaintenanceMode()` and public only so it can be
-     * exercised directly by tests; treat it as internal.
-     *
-     * @since 2.7.1
-     */
-    public function handleInterruptedUpdate(): void
-    {
-        if ( ! $this->maintenanceModeActive ) {
-            return;
+        if ( ! File::isDirectory( $directory ) ) {
+            try {
+                File::makeDirectory( $directory, 0700, true );
+            } catch ( Throwable $e ) {
+                // Fall through to the fopen failure path below, which logs
+                // and proceeds without concurrency protection.
+            }
         }
 
-        // Clear first: a failure below must not re-enter this handler.
-        $this->maintenanceModeActive = false;
+        $handle = @fopen( $path, 'cb' );
 
-        $fatal = $this->lastFatalError();
-
-        Log::critical(
-            'cms-framework: the update process terminated before it finished; the site was left in maintenance mode.',
-            [
-                'step'       => $this->currentStep?->value,
-                'step_label' => $this->currentStep?->label(),
-                'php_sapi'   => PHP_SAPI,
-                'error'      => $fatal,
-                'state_file' => $this->state()->path(),
-                'hint'       => 'Run `php artisan update:status` to see how far the update got and what remains.',
-            ],
-        );
-
-        // Re-record the step from memory before stamping the status: an
-        // earlier per-step write may have failed (read-only storage, a disk
-        // that filled up), and the whole value of the marker is that it agrees
-        // with where the update actually was when it died.
-        if ( null !== $this->currentStep ) {
-            $this->state()->markStep( $this->currentStep );
-        }
-
-        $this->state()->markStatus(
-            UpdateRunStatus::Interrupted,
-            $fatal['message'] ?? 'The update process terminated before completing.',
-        );
-
-        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
-            Log::critical(
-                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
-            );
-
-            return;
-        }
-
-        try {
-            $this->disableMaintenanceMode();
-
-            Log::critical( 'cms-framework: maintenance mode was lifted by the update shutdown guard. The installation may be half-applied — run `php artisan update:status` before trusting it.' );
-        } catch ( Throwable $e ) {
-            Log::critical( 'cms-framework: the update shutdown guard could not lift maintenance mode via `artisan up`.', [
-                'exception' => $e->getMessage(),
+        if ( false === $handle ) {
+            // An unwritable state directory already degrades the step marker
+            // to best-effort; it must not also block updates outright.
+            Log::warning( 'cms-framework: could not open the update lock file; proceeding without concurrency protection.', [
+                'path' => $path,
             ] );
 
-            $this->forceLiftMaintenanceMode();
+            return null;
         }
+
+        if ( ! flock( $handle, LOCK_EX | LOCK_NB ) ) {
+            fclose( $handle );
+
+            throw UpdateException::updateAlreadyRunning( $this->runningUpdatePid() );
+        }
+
+        $recordedPid = $this->runningUpdatePid();
+
+        if ( null !== $recordedPid ) {
+            flock( $handle, LOCK_UN );
+            fclose( $handle );
+
+            throw UpdateException::updateAlreadyRunning( $recordedPid );
+        }
+
+        return $handle;
     }
 
     /**
-     * Set a custom update checker.
+     * Release the update lock.
      *
-     * @since 1.0.0
+     * @since 2.7.1
      *
-     * @param  UpdateChecker  $checker  Update checker instance
+     * @param  resource|null  $handle  Handle returned by acquireUpdateLock().
      */
-    public function setUpdateChecker( UpdateChecker $checker ): void
+    protected function releaseUpdateLock( $handle ): void
     {
-        $this->checker = $checker;
+        if ( ! is_resource( $handle ) ) {
+            return;
+        }
+
+        flock( $handle, LOCK_UN );
+        fclose( $handle );
     }
 
     /**
-     * Rollback to a previous backup.
+     * PID of a live update recorded as still in progress, or null.
      *
-     * @since 1.0.0
+     * Returns null for a stale marker — a run that died without clearing its
+     * status leaves `in_progress` behind forever, and that must not wedge the
+     * updater permanently.
      *
-     * @param  string  $backupPath  Path to backup ZIP
+     * @since 2.7.1
      *
-     * @throws UpdateException
+     * @return int|null Live PID, or null when no update is genuinely running.
      */
-    public function rollback( string $backupPath ): void
+    protected function runningUpdatePid(): ?int
     {
-        // Rollback re-runs `composer install`, so it is subject to the same
-        // execution-time ceiling as the update itself when invoked over HTTP.
-        $this->raiseExecutionLimits();
+        $state = $this->updateState();
 
-        if ( ! File::exists( $backupPath ) ) {
-            throw UpdateException::rollbackFailed( "Backup not found: {$backupPath}" );
+        if ( null === $state ) {
+            return null;
         }
 
-        $zip = new ZipArchive;
+        $status = UpdateRunStatus::tryFrom( is_string( $state['status'] ?? null ) ? $state['status'] : '' );
 
-        if ( true !== $zip->open( $backupPath ) ) {
-            throw UpdateException::rollbackFailed( 'Could not open backup ZIP' );
+        if ( UpdateRunStatus::InProgress !== $status ) {
+            return null;
         }
 
-        $zip->extractTo( base_path() );
-        $zip->close();
+        $pid = $state['pid'] ?? null;
 
-        // Before invoking composer install, verify the resolved binary is
-        // reachable. If it's not (e.g. PHP-FPM's PATH doesn't include composer
-        // on a Herd host) surface a specific error rather than "Manual
-        // intervention required" — no filesystem state has actually been
-        // damaged at this point since vendor/ was untouched by the update.
-        $this->verifyComposerBinaryAvailable();
+        if ( ! is_int( $pid ) || $pid <= 0 || $pid === getmypid() ) {
+            return null;
+        }
 
-        // Restore composer dependencies
-        $this->runComposerInstall();
+        // `posix_kill( $pid, 0 )` is the liveness probe; without the extension
+        // we cannot tell a live run from a stale marker, and refusing would be
+        // the safer of the two errors.
+        if ( ! function_exists( 'posix_kill' ) ) {
+            return $pid;
+        }
 
-        // Clear caches
-        $this->clearCaches();
-    }
-
-    /**
-     * Clear the update check cache.
-     *
-     * @since 1.0.0
-     */
-    public function clearCache(): void
-    {
-        $this->getUpdateChecker()->clearCache();
+        return posix_kill( $pid, 0 ) ? $pid : null;
     }
 
     /**
@@ -432,7 +655,10 @@ class ApplicationUpdateManager
 
         // Create backup directory
         if ( ! File::exists( $backupDir ) ) {
-            File::makeDirectory( $backupDir, 0755, true );
+            // 0700, not 0755: a backup is a full copy of the application
+            // source. It is not web-reachable in a standard layout, but on
+            // shared hosting any local user could otherwise read it.
+            File::makeDirectory( $backupDir, 0700, true );
         }
 
         // Create backup ZIP
@@ -527,7 +753,13 @@ class ApplicationUpdateManager
     protected function isPathExcluded( string $path, array $excludePaths ): bool
     {
         foreach ( $excludePaths as $exclude ) {
-            if ( str_starts_with( $path, $exclude ) ) {
+            // Match on a path-segment boundary, not a bare string prefix.
+            // `str_starts_with( 'storage-helpers.php', 'storage' )` is true,
+            // which silently excluded any release file whose name merely
+            // *began* with an excluded name — `storage.php`, `vendors/`,
+            // `.envelope.json` — from both the backup and the extraction, so
+            // it was neither snapshotted nor ever updated again.
+            if ( $path === $exclude || str_starts_with( $path, rtrim( $exclude, '/' ) . '/' ) ) {
                 return true;
             }
 
@@ -537,6 +769,109 @@ class ApplicationUpdateManager
         }
 
         return false;
+    }
+
+    /**
+     * Strip control characters from an attacker-controlled value before it
+     * reaches a log record.
+     *
+     * Entry names come from the archive. They already go into the log
+     * *context* array rather than being interpolated into the message, which
+     * is the important half — but a name carrying newlines or terminal escape
+     * sequences can still corrupt a plain-text log or a console tailing it.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $value  Untrusted value.
+     *
+     * @return string Value with control characters removed and length bounded.
+     */
+    protected function sanitizeForLog( string $value ): string
+    {
+        $clean = preg_replace( '/[\x00-\x1F\x7F]/u', '', $value );
+
+        if ( ! is_string( $clean ) ) {
+            $clean = preg_replace( '/[\x00-\x1F\x7F]/', '', $value ) ?? '';
+        }
+
+        return mb_strimwidth( $clean, 0, 512, '…' );
+    }
+
+    /**
+     * Canonicalize an archive entry name for path comparison.
+     *
+     * Splits on `/`, drops empty and `.` segments, and rejoins. Returns null
+     * when the entry cannot be safely placed — an absolute path, or one
+     * carrying a `..` segment.
+     *
+     * The exclusion list is matched against entry names verbatim, so without
+     * canonicalization an entry named `./.env` was simply a different string
+     * from `.env` and slipped past `exclude_from_update` entirely — while
+     * `realpath( dirname( '/base/./.env' ) )` is just `/base`, so the
+     * containment check waved it through too. A malicious release archive
+     * could therefore overwrite the host's `.env`, `vendor/`,
+     * `bootstrap/cache/*.php` and `database/database.sqlite`, every one of
+     * which the operator believes the exclusion list protects.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $path  Raw archive entry name.
+     *
+     * @return string|null Canonical relative path, or null when unsafe.
+     */
+    protected function canonicalizeArchivePath( string $path ): ?string
+    {
+        $normalized = str_replace( '\\', '/', $path );
+
+        if ( str_starts_with( $normalized, '/' ) ) {
+            return null;
+        }
+
+        $segments = [];
+
+        foreach ( explode( '/', $normalized ) as $segment ) {
+            if ( '' === $segment || '.' === $segment ) {
+                continue;
+            }
+
+            if ( '..' === $segment ) {
+                return null;
+            }
+
+            $segments[] = $segment;
+        }
+
+        return implode( '/', $segments );
+    }
+
+    /**
+     * Walk up from a path until an existing filesystem entry is found.
+     *
+     * Containment has to be validated *before* directories are created, and
+     * `realpath()` returns false for a path that does not exist yet — so the
+     * nearest existing ancestor is the deepest thing that can be resolved.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $path  Absolute path that may not exist yet.
+     *
+     * @return string The deepest existing ancestor ( possibly `$path` itself ).
+     */
+    protected function nearestExistingPath( string $path ): string
+    {
+        $current = $path;
+
+        while ( ! file_exists( $current ) ) {
+            $parent = dirname( $current );
+
+            if ( $parent === $current ) {
+                break;
+            }
+
+            $current = $parent;
+        }
+
+        return $current;
     }
 
     /**
@@ -601,8 +936,21 @@ class ApplicationUpdateManager
             return;
         }
 
-        if ( $updateInfo->sha256 ) {
-            $this->verifyChecksum( $zipPath, $updateInfo->sha256 );
+        // `$updateInfo` describes the *latest* release. When the caller pinned
+        // a different version, its digest belongs to a different archive: with
+        // `--target-version=1.2.3` while latest is 2.0.0, the 1.2.3 archive was
+        // being compared against 2.0.0's digest. That fails closed today, but
+        // combined with `allow_unverified_updates=true` — which the GitHub
+        // source effectively forces operators into — the pinned path installed
+        // an arbitrary older archive with no integrity check at all.
+        $sha256 = $updateInfo->sha256;
+
+        if ( $targetVersion !== $updateInfo->latestVersion ) {
+            $sha256 = $this->resolveChecksumForVersion( $targetVersion );
+        }
+
+        if ( $sha256 ) {
+            $this->verifyChecksum( $zipPath, $sha256 );
 
             return;
         }
@@ -615,6 +963,41 @@ class ApplicationUpdateManager
             'target_version' => $targetVersion,
             'source'         => $updateInfo->metadata['source'] ?? null,
         ] );
+    }
+
+    /**
+     * Resolve the SHA-256 digest advertised for a specific release.
+     *
+     * Returns null when the source cannot resolve that version, in which case
+     * `maybeVerifyChecksum()` falls back to the same fail-closed path a
+     * missing digest takes on the latest release.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $targetVersion  Version being installed.
+     *
+     * @return string|null Digest for that release, when the source advertises one.
+     */
+    protected function resolveChecksumForVersion( string $targetVersion ): ?string
+    {
+        $source = $this->getUpdateChecker()->getSource();
+
+        if ( ! method_exists( $source, 'checksumForVersion' ) ) {
+            return null;
+        }
+
+        try {
+            $sha256 = $source->checksumForVersion( $targetVersion );
+        } catch ( Throwable $e ) {
+            Log::warning( 'cms-framework: could not resolve a checksum for the pinned target version.', [
+                'target_version' => $targetVersion,
+                'exception'      => $e->getMessage(),
+            ] );
+
+            return null;
+        }
+
+        return is_string( $sha256 ) && '' !== $sha256 ? $sha256 : null;
     }
 
     /**
@@ -644,39 +1027,47 @@ class ApplicationUpdateManager
         for ( $i = 0; $i < $zip->numFiles; $i++ ) {
             $filename = $zip->getNameIndex( $i );
 
+            // Canonicalize before anything looks at the path. Both the
+            // exclusion check and the containment check operate on strings,
+            // and `./`-prefixed or `//`-infixed entries are different strings
+            // naming the same file — see canonicalizeArchivePath(). A null
+            // here means the entry is absolute or escapes via `..` (Zip Slip);
+            // extraction bypasses ZipArchive::extractTo(), so PHP's own
+            // traversal mitigations do not apply and the guard must live here.
+            $canonicalName = $this->canonicalizeArchivePath( $filename );
+
+            if ( null === $canonicalName ) {
+                Log::warning( 'Skipping update ZIP entry with unsafe path', [
+                    'entry' => $this->sanitizeForLog( $filename ),
+                ] );
+
+                continue;
+            }
+
             // Strip common prefix if detected
-            $targetPath = $commonPrefix ? substr( $filename, strlen( $commonPrefix ) ) : $filename;
+            $targetPath = $canonicalName;
+            if ( $commonPrefix && str_starts_with( $canonicalName, $commonPrefix ) ) {
+                $targetPath = substr( $canonicalName, strlen( $commonPrefix ) );
+            }
 
             // Skip excluded paths (check both original and stripped paths)
-            if ( $this->isPathExcluded( $filename, $excludePaths ) || $this->isPathExcluded( $targetPath, $excludePaths ) ) {
+            if ( $this->isPathExcluded( $canonicalName, $excludePaths ) || $this->isPathExcluded( $targetPath, $excludePaths ) ) {
                 continue;
             }
 
             // Skip empty paths (directories become empty after prefix stripping)
-            if ( empty( $targetPath ) ) {
+            if ( '' === $targetPath ) {
                 continue;
             }
 
-            // Get file info
+            // Get file info. A stat failure used to skip the entry silently,
+            // leaving the previous version of that file on disk while the
+            // update reported success.
             $stat = $zip->statIndex( $i );
             if ( false === $stat ) {
-                continue;
-            }
-
-            // Reject archive entries whose path would escape the extraction root
-            // (Zip Slip). Because extraction here bypasses ZipArchive::extractTo(),
-            // PHP's own traversal mitigations do not apply, so every entry must be
-            // validated against the base directory before any write.
-            $normalizedTarget = str_replace( '\\', '/', $targetPath );
-            if (
-                str_starts_with( $normalizedTarget, '/' )
-                || '..' === $normalizedTarget
-                || str_starts_with( $normalizedTarget, '../' )
-                || str_contains( $normalizedTarget, '/../' )
-                || str_ends_with( $normalizedTarget, '/..' )
-            ) {
-                Log::warning( 'Skipping update ZIP entry with unsafe path', [
-                    'entry' => $filename,
+                Log::warning( 'Skipping update ZIP entry whose metadata could not be read', [
+                    'entry' => $this->sanitizeForLog( $filename ),
+                    'index' => $i,
                 ] );
 
                 continue;
@@ -686,11 +1077,14 @@ class ApplicationUpdateManager
 
             // Handle directories
             if ( str_ends_with( $filename, '/' ) ) {
-                if ( ! File::exists( $fullTargetPath ) ) {
-                    File::makeDirectory( $fullTargetPath, 0755, true );
-                }
-
-                if ( ! $this->isPathWithinExtractRoot( $fullTargetPath, $extractPath ) ) {
+                // Validate *before* creating. The string-level filter above
+                // has already removed `..`, so the only remaining escape is a
+                // pre-existing symlink inside base_path() pointing outside it
+                // — routine in Envoyer/Forge/Deployer layouts where `storage`
+                // or `bootstrap/cache` are symlinked to shared directories.
+                // Creating first and checking second ran `mkdir -p` through
+                // that symlink, and never removed the directories it made.
+                if ( ! $this->isPathWithinExtractRoot( $this->nearestExistingPath( $fullTargetPath ), $extractPath ) ) {
                     Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
                         'entry' => $filename,
                     ] );
@@ -698,11 +1092,25 @@ class ApplicationUpdateManager
                     continue;
                 }
 
+                if ( ! File::exists( $fullTargetPath ) ) {
+                    File::makeDirectory( $fullTargetPath, 0755, true );
+                }
+
                 continue;
             }
 
-            // Handle files - ensure parent directory exists
+            // Handle files - ensure parent directory exists, validating the
+            // deepest ancestor that already exists before creating anything.
             $targetDir = dirname( $fullTargetPath );
+
+            if ( ! $this->isPathWithinExtractRoot( $this->nearestExistingPath( $targetDir ), $extractPath ) ) {
+                Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
+                    'entry' => $this->sanitizeForLog( $filename ),
+                ] );
+
+                continue;
+            }
+
             if ( ! File::exists( $targetDir ) ) {
                 File::makeDirectory( $targetDir, 0755, true );
             }
@@ -711,7 +1119,24 @@ class ApplicationUpdateManager
             // it still sits under the extract root before opening the write stream.
             if ( ! $this->isPathWithinExtractRoot( $targetDir, $extractPath ) ) {
                 Log::warning( 'Skipping update ZIP entry that resolved outside extract root', [
-                    'entry' => $filename,
+                    'entry' => $this->sanitizeForLog( $filename ),
+                ] );
+
+                continue;
+            }
+
+            // The containment check above validates the parent directory, not
+            // the target itself. `fopen( …, 'wb' )` follows an existing
+            // symlink and truncates whatever it points at, and `@chmod` below
+            // would chmod the link target. The archive cannot *introduce* a
+            // symlink — every entry is written as a regular file and
+            // `symlink()` is never called — so this is strictly about links
+            // already on disk: shared config, a log file, or a sibling release
+            // directory in a blue/green deploy.
+            if ( is_link( $fullTargetPath ) || ( file_exists( $fullTargetPath ) && ! is_file( $fullTargetPath ) ) ) {
+                Log::warning( 'Skipping update ZIP entry whose target is not a regular file', [
+                    'entry'  => $this->sanitizeForLog( $filename ),
+                    'target' => $fullTargetPath,
                 ] );
 
                 continue;
@@ -721,10 +1146,14 @@ class ApplicationUpdateManager
             // string via `getFromIndex()`. On a 128M host, a single large file
             // inside the release (bundled JS/CSS, images) can otherwise OOM in
             // the middle of extraction.
-            $entryStream = $zip->getStream( $filename );
+            // By index, not by name: metadata is read via `statIndex( $i )`,
+            // so fetching content by name meant that with duplicate entry
+            // names the file written for occurrence 2 got occurrence 1's
+            // content and occurrence 2's permissions.
+            $entryStream = $zip->getStreamIndex( $i );
             if ( false === $entryStream ) {
                 Log::error( 'Failed to open ZIP entry stream during update extraction', [
-                    'entry' => $filename,
+                    'entry' => $this->sanitizeForLog( $filename ),
                 ] );
 
                 throw UpdateException::extractionEntryFailed( $filename, 'could not open entry stream from archive' );
@@ -748,32 +1177,15 @@ class ApplicationUpdateManager
                 );
             }
 
-            try {
-                while ( ! feof( $entryStream ) ) {
-                    $chunk = fread( $entryStream, 1024 * 1024 );
-                    if ( false === $chunk ) {
-                        Log::error( 'Read failure while streaming update entry', [
-                            'entry'  => $filename,
-                            'target' => $fullTargetPath,
-                        ] );
+            $this->streamEntryToDisk( $entryStream, $out, $filename, $fullTargetPath );
 
-                        throw UpdateException::extractionEntryFailed( $filename, 'read failure while streaming entry from archive' );
-                    }
-
-                    if ( '' === $chunk ) {
-                        break;
-                    }
-
-                    fwrite( $out, $chunk );
-                }
-            } finally {
-                fclose( $entryStream );
-                fclose( $out );
-            }
-
-            // Preserve file permissions if available
+            // Preserve file permissions if available, clamped. setuid/setgid/
+            // sticky are already stripped by `& 0777`, but an archive-supplied
+            // `0777` on an extracted `.php` file under the docroot is
+            // persistent code execution for a neighbouring tenant on shared
+            // hosting. `& ~0022` drops group- and world-writability.
             if ( isset( $stat['external_attributes'] ) ) {
-                $permissions = ( $stat['external_attributes'] >> 16 ) & 0777;
+                $permissions = ( $stat['external_attributes'] >> 16 ) & 0777 & ~0022;
                 if ( $permissions > 0 ) {
                     @chmod( $fullTargetPath, $permissions );
                 }
@@ -781,6 +1193,94 @@ class ApplicationUpdateManager
         }
 
         $zip->close();
+    }
+
+    /**
+     * Copy one archive entry stream to its already-opened target handle.
+     *
+     * Both handles are closed before returning, whatever happens.
+     *
+     * Every failure here throws rather than returning, because throwing is
+     * what engages `performUpdate()`'s rollback — a silently truncated file is
+     * strictly worse than an aborted update. The read side was already checked;
+     * the write side was not, so a disk that filled mid-extraction produced a
+     * short `fwrite()` with no exception, the loop ran to completion, the entry
+     * counted as extracted, and the update proceeded into `composer install`
+     * and migrations over truncated PHP files.
+     *
+     * @since 2.7.1
+     *
+     * @param  resource  $entryStream  Open read handle on the archive entry.
+     * @param  resource  $out  Open write handle on the extraction target.
+     * @param  string  $filename  Archive entry name, for diagnostics.
+     * @param  string  $target  Absolute target path, for diagnostics.
+     *
+     * @throws UpdateException On any read, write, or close failure.
+     */
+    protected function streamEntryToDisk( $entryStream, $out, string $filename, string $target ): void
+    {
+        $failed = false;
+
+        try {
+            while ( ! feof( $entryStream ) ) {
+                $chunk = fread( $entryStream, 1024 * 1024 );
+
+                if ( false === $chunk ) {
+                    Log::error( 'Read failure while streaming update entry', [
+                        'entry'  => $filename,
+                        'target' => $target,
+                    ] );
+
+                    throw UpdateException::extractionEntryFailed( $filename, 'read failure while streaming entry from archive' );
+                }
+
+                if ( '' === $chunk ) {
+                    break;
+                }
+
+                $written = fwrite( $out, $chunk );
+
+                if ( false === $written || strlen( $chunk ) !== $written ) {
+                    Log::error( 'Short write while streaming update entry', [
+                        'entry'    => $filename,
+                        'target'   => $target,
+                        'expected' => strlen( $chunk ),
+                        'written'  => false === $written ? null : $written,
+                    ] );
+
+                    throw UpdateException::extractionEntryFailed( $filename, 'short write while extracting entry ( disk full? )' );
+                }
+            }
+        } catch ( Throwable $e ) {
+            $failed = true;
+
+            throw $e;
+        } finally {
+            fclose( $entryStream );
+            $closed = fclose( $out );
+
+            // Remove the partial file rather than leaving a truncated one on
+            // disk. Throwing engages the rollback, which would normally
+            // restore it — but rollback is skipped when backups are disabled,
+            // and a truncated PHP file left behind is exactly the outcome this
+            // check exists to prevent.
+            if ( $failed ) {
+                @unlink( $target );
+            }
+        }
+
+        // Buffered data can fail to reach the disk at close time, so a clean
+        // write loop is not on its own proof the file landed intact.
+        if ( false === $closed ) {
+            Log::error( 'Failed to close update target after writing', [
+                'entry'  => $filename,
+                'target' => $target,
+            ] );
+
+            @unlink( $target );
+
+            throw UpdateException::extractionEntryFailed( $filename, 'failed to close target after writing ( disk full? )' );
+        }
     }
 
     /**
@@ -826,13 +1326,22 @@ class ApplicationUpdateManager
         for ( $i = 0; $i < $zip->numFiles; $i++ ) {
             $filename = $zip->getNameIndex( $i );
 
+            // Canonicalized so this agrees with the extraction loop about what
+            // an entry is named — otherwise `./app/x` and `app/x` look like
+            // two different roots and prefix detection gives up.
+            $canonicalName = $this->canonicalizeArchivePath( $filename );
+
+            if ( null === $canonicalName || '' === $canonicalName ) {
+                continue;
+            }
+
             // Skip excluded paths
-            if ( $this->isPathExcluded( $filename, $excludePaths ) ) {
+            if ( $this->isPathExcluded( $canonicalName, $excludePaths ) ) {
                 continue;
             }
 
             // Get first path segment
-            $parts = explode( '/', $filename );
+            $parts = explode( '/', $canonicalName );
             if ( ! empty( $parts[0] ) ) {
                 $firstSegments[] = $parts[0];
             }
@@ -1404,8 +1913,19 @@ class ApplicationUpdateManager
     protected function enableMaintenanceMode(): void
     {
         try {
-            Artisan::call( 'down', ['--render' => 'errors::503'] );
+            $exitCode = Artisan::call( 'down', ['--render' => 'errors::503'] );
         } catch ( Throwable $e ) {
+            throw UpdateException::maintenanceModeFailure( 'enable' );
+        }
+
+        // `DownCommand::handle()` wraps its own body in a try/catch that logs
+        // and `return 1`s, so a genuine failure — an unwritable
+        // `storage/framework/`, say — arrives as a non-zero exit code and
+        // never as an exception. The catch above is very nearly dead code in
+        // practice; the exit code is the signal that actually fires. Without
+        // this check the updater would proceed to overwrite application files
+        // on a **live** site while believing it had taken the site down.
+        if ( 0 !== $exitCode ) {
             throw UpdateException::maintenanceModeFailure( 'enable' );
         }
 
@@ -1427,8 +1947,20 @@ class ApplicationUpdateManager
     protected function disableMaintenanceMode(): void
     {
         try {
-            Artisan::call( 'up' );
+            $exitCode = Artisan::call( 'up' );
         } catch ( Throwable $e ) {
+            throw UpdateException::maintenanceModeFailure( 'disable' );
+        }
+
+        // `UpCommand::handle()` catches its own exceptions and `return 1`s, so
+        // a failure to remove `storage/framework/down` — permission denied,
+        // say — comes back as a non-zero exit code rather than a throw.
+        // Trusting the absence of an exception cleared the active flag,
+        // disarmed the shutdown guard, and let the run be marked `Completed`,
+        // leaving the site serving 503 to every visitor while `update:status`
+        // reported a clean finish. That is the exact outcome the interruption
+        // machinery exists to prevent.
+        if ( 0 !== $exitCode ) {
             throw UpdateException::maintenanceModeFailure( 'disable' );
         }
 
@@ -1608,17 +2140,53 @@ class ApplicationUpdateManager
             );
         }
 
+        // Only roll back while a rollback can still help. Steps 8-10
+        // (`cache:clear`, cleanup, `up`) run *after* the code and the schema
+        // are already updated, so restoring the snapshot there discards a
+        // fully-applied update — and migrations are not reversed either,
+        // leaving old code against a new schema. A `cache:clear` hiccup must
+        // not undo a successful install; `update:status` already prints the
+        // commands to finish forward.
+        if ( null !== $this->currentStep && $this->currentStep->number() > UpdateStep::Migrations->number() ) {
+            Log::warning(
+                'cms-framework: the update failed after the code and schema were already applied, so the snapshot was NOT restored. Finish forward using `php artisan update:status`.',
+                ['step' => $this->currentStep->value],
+            );
+
+            $this->state()->markRollback( null );
+
+            return;
+        }
+
         // If we have a backup, attempt rollback
         if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {
                 $this->rollback( $this->backupPath );
+
+                $this->state()->markRollback( true );
             } catch ( Throwable $e ) {
                 // Rollback failed - this is critical. Preserve the original
                 // update-failure message alongside the rollback message so the
                 // operator can see both failures rather than only the trailing
                 // one.
-                throw UpdateException::rollbackAfterFailure( $exception->getMessage(), $e->getMessage());
+                $combined = UpdateException::rollbackAfterFailure( $exception->getMessage(), $e->getMessage() );
+
+                // Record it before throwing: the exception carries both
+                // messages to the caller, but `update:status` reads the state
+                // file, and without this the file still says the run merely
+                // "failed" with the original error — the rollback failure, the
+                // thing that actually needs a human, would never reach it.
+                $this->state()->markRollback( false, $combined->getMessage() );
+
+                throw $combined;
             }
+
+            return;
         }
+
+        // No snapshot to restore: backups disabled, or the run failed before
+        // `createBackup()` got that far. Either way the operator must not be
+        // told the tree was restored.
+        $this->state()->markRollback( null );
     }
 }

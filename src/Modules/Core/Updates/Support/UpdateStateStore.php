@@ -36,6 +36,8 @@ use Throwable;
  */
 class UpdateStateStore
 {
+    use ResolvesConfiguredPaths;
+
     /**
      * Default state file location, relative to `storage_path()`.
      *
@@ -61,11 +63,7 @@ class UpdateStateStore
             $configured = self::DEFAULT_STATE_PATH;
         }
 
-        if ( str_starts_with( $configured, DIRECTORY_SEPARATOR ) ) {
-            return $configured;
-        }
-
-        return storage_path( $configured );
+        return $this->resolveConfiguredPath( $configured );
     }
 
     /**
@@ -128,6 +126,33 @@ class UpdateStateStore
     }
 
     /**
+     * Record what happened to the pre-update snapshot after a failed run.
+     *
+     * Kept as its own field rather than folded into the status label, so the
+     * two cannot drift. The label used to assert `Failed (rolled back)`
+     * unconditionally, which told the operator the rollback had succeeded even
+     * when it had failed, when backups were disabled, or when the failure
+     * happened before a snapshot existed. A failed rollback is the single most
+     * dangerous state this updater can produce, and it was being reported as
+     * the safest.
+     *
+     * @since 2.7.1
+     *
+     * @param  bool|null  $rolledBack  True on success, false on failure, null when no rollback was attempted.
+     * @param  string|null  $error  Combined failure message, when the rollback itself failed.
+     */
+    public function markRollback( ?bool $rolledBack, ?string $error = null ): void
+    {
+        $attributes = ['rolled_back' => $rolledBack];
+
+        if ( null !== $error ) {
+            $attributes['error'] = $error;
+        }
+
+        $this->merge( $attributes );
+    }
+
+    /**
      * Read the persisted state, or `null` when no update has been recorded or
      * the file is unreadable/corrupt.
      *
@@ -185,7 +210,20 @@ class UpdateStateStore
      */
     protected function merge( array $attributes ): void
     {
-        $this->write( array_merge( $this->read() ?? [], $attributes ) );
+        $existing = $this->read();
+
+        if ( null === $existing ) {
+            // The record is gone or unreadable — a hand-cleared state file, a
+            // transient read failure. Merging into an empty array would drop
+            // `target_version`, `started_at` and `pid` for the rest of the
+            // run, so `update:status` would render `—` for all of them.
+            // Reconstructing what we can beats silently discarding it.
+            Log::warning( 'cms-framework: the update state file was unreadable during a merge; the record will be partially reconstructed.' );
+
+            $existing = [];
+        }
+
+        $this->write( array_merge( $existing, $attributes ) );
     }
 
     /**
@@ -213,7 +251,7 @@ class UpdateStateStore
             $directory = dirname( $path );
 
             if ( ! File::isDirectory( $directory ) ) {
-                File::makeDirectory( $directory, 0755, true );
+                File::makeDirectory( $directory, 0700, true );
             }
 
             // Composer and migration output can carry arbitrary bytes, and a
@@ -230,9 +268,38 @@ class UpdateStateStore
                 return;
             }
 
-            $temporaryPath = $path . '.' . getmypid() . '.tmp';
+            // Randomized rather than `getmypid()`-derived, and created with
+            // `x` so an existing path is never followed. The predictable name
+            // written via `File::put()` followed symlinks, so a local user who
+            // could create files in the state directory had a JSON write
+            // primitive — narrow with the default location, but the config
+            // explicitly invites absolute paths, and a world-writable
+            // `/tmp/cms-update-state.json` would qualify.
+            $temporaryPath = $path . '.' . bin2hex( random_bytes( 8 ) ) . '.tmp';
 
-            File::put( $temporaryPath, $encoded, true );
+            $handle = @fopen( $temporaryPath, 'xb' );
+
+            if ( false === $handle ) {
+                throw new RuntimeException( "Could not create the update state temp file at {$temporaryPath}" );
+            }
+
+            if ( ! @chmod( $temporaryPath, 0600 ) ) {
+                // Logged rather than thrown: the record is worth more than the
+                // permission bits. Aborting here would leave a host with no
+                // diagnostic at all for an interrupted update, which is the
+                // problem this store exists to solve — and every write in this
+                // class is deliberately best-effort.
+                Log::warning( 'cms-framework: could not restrict permissions on the update state file.', [
+                    'path' => $temporaryPath,
+                ] );
+            }
+
+            $written = fwrite( $handle, $encoded );
+            fclose( $handle );
+
+            if ( false === $written || strlen( $encoded ) !== $written ) {
+                throw new RuntimeException( "Could not write the update state file at {$temporaryPath}" );
+            }
 
             if ( ! @rename( $temporaryPath, $path ) ) {
                 throw new RuntimeException( "Could not move the update state file into place at {$path}" );

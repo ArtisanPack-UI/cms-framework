@@ -9,8 +9,10 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
+use Throwable;
 
 /**
  * GitHub Update Source
@@ -118,6 +120,7 @@ class GitHubUpdateSource implements UpdateSourceInterface
             downloadUrl: $zipAsset['browser_download_url'],
             changelog: $latest['body'] ?? null,
             releaseDate: $latest['published_at'] ?? null,
+            sha256: $this->extractChecksum( $latest, $zipAsset['name'] ?? null ),
             metadata: [
                 'source'      => 'github',
                 'release_id'  => $latest['id'],
@@ -179,6 +182,25 @@ class GitHubUpdateSource implements UpdateSourceInterface
     public function getName(): string
     {
         return 'GitHub';
+    }
+
+    /**
+     * Resolve the SHA-256 digest published for a specific release.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $version  Version to resolve.
+     *
+     * @return string|null Lowercase hex digest, or null when none is published.
+     */
+    public function checksumForVersion( string $version ): ?string
+    {
+        $release = $this->getReleaseByVersion( $version );
+
+        $zipAsset = collect( $release['assets'] ?? [] )
+            ->first( fn ( $asset ) => is_array( $asset ) && isset( $asset['name'] ) && Str::endsWith( $asset['name'], '.zip' ) );
+
+        return $this->extractChecksum( $release, $zipAsset['name'] ?? null );
     }
 
     /**
@@ -304,6 +326,170 @@ class GitHubUpdateSource implements UpdateSourceInterface
         }
 
         // Fallback to source code ZIP
-        return $release['zipball_url'] ?? throw UpdateException::downloadFailed( 'No download URL found in release');
+        return $release['zipball_url'] ?? throw UpdateException::downloadFailed( 'No download URL found in release' );
+    }
+
+    /**
+     * Extract a SHA-256 checksum from a GitHub release.
+     *
+     * Discovery order mirrors the GitLab source:
+     *   1. A release asset whose name ends with `.sha256` ( fetched and parsed ).
+     *   2. A `SHA-256: <64-hex>` line embedded in the release body.
+     *
+     * Without this the GitHub source never populated `sha256`, so with the
+     * shipped defaults ( `verify_checksum = true`,
+     * `allow_unverified_updates = false` ) **every** GitHub-sourced update
+     * threw `checksumRequired`. The only way to make GitHub updates work at
+     * all was `CMS_UPDATES_ALLOW_UNVERIFIED=true` — which disarms the control
+     * mitigating extraction-time vulnerabilities, and which an operator sets
+     * once and never revisits.
+     *
+     * @since 2.7.1
+     *
+     * @param  array<string, mixed>  $release  Release payload from the GitHub API.
+     * @param  string|null  $assetName  Name of the asset the digest must describe.
+     *
+     * @return string|null Lowercase 64-character hex digest, or null when none is published.
+     */
+    protected function extractChecksum( array $release, ?string $assetName = null ): ?string
+    {
+        $sidecar = $this->extractChecksumFromSidecar( $release, $assetName );
+
+        if ( null !== $sidecar ) {
+            return $sidecar;
+        }
+
+        return $this->extractChecksumFromBody( $release['body'] ?? null );
+    }
+
+    /**
+     * Locate and fetch a `*.sha256` asset from a release.
+     *
+     * @since 2.7.1
+     *
+     * A release can carry several archives and several sidecars. Accepting the
+     * first `.sha256` found would pair a digest with an archive it does not
+     * describe — which fails closed as a checksum mismatch, but blocks a
+     * legitimate update and looks like tampering. The sidecar must be named
+     * for the asset actually being downloaded.
+     *
+     * @param  array<string, mixed>  $release  Release payload from the GitHub API.
+     * @param  string|null  $assetName  Name of the asset the digest must describe.
+     *
+     * @return string|null Lowercase hex digest, or null when no usable sidecar exists.
+     */
+    protected function extractChecksumFromSidecar( array $release, ?string $assetName = null ): ?string
+    {
+        $assets = $release['assets'] ?? [];
+
+        if ( ! is_array( $assets ) ) {
+            return null;
+        }
+
+        // Only a sidecar named for the target asset qualifies. Without a
+        // resolved asset name — the zipball fallback has none — there is
+        // nothing to correlate against, so no sidecar is accepted and the
+        // release-body marker is used instead.
+        if ( null === $assetName || '' === $assetName ) {
+            return null;
+        }
+
+        $expected = strtolower( $assetName ) . '.sha256';
+
+        foreach ( $assets as $asset ) {
+            if ( ! is_array( $asset ) ) {
+                continue;
+            }
+
+            $name = isset( $asset['name'] ) && is_string( $asset['name'] ) ? $asset['name'] : '';
+            $url  = isset( $asset['browser_download_url'] ) && is_string( $asset['browser_download_url'] )
+                ? $asset['browser_download_url']
+                : '';
+
+            if ( '' === $url || strtolower( $name ) !== $expected ) {
+                continue;
+            }
+
+            $hash = $this->fetchSidecarHash( $url );
+
+            if ( null !== $hash ) {
+                return $hash;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Download a sidecar file and extract the first SHA-256 digest it carries.
+     *
+     * Accepts the common sidecar formats: a bare digest, or a
+     * `<digest>  <filename>` line.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $url  URL of the `.sha256` sidecar.
+     *
+     * @return string|null Lowercase hex digest, or null on failure.
+     */
+    protected function fetchSidecarHash( string $url ): ?string
+    {
+        $headers = ['Accept' => 'application/octet-stream'];
+
+        if ( $this->accessToken ) {
+            $headers['Authorization'] = "token {$this->accessToken}";
+        }
+
+        try {
+            $response = MetadataClient::get( $url, $headers );
+        } catch ( Throwable $e ) {
+            Log::warning( 'Failed to fetch GitHub SHA-256 sidecar.', [
+                'url'   => $url,
+                'error' => $e->getMessage(),
+            ] );
+
+            return null;
+        }
+
+        if ( ! $this->responseIsSuccessful( $response['status'] ) ) {
+            Log::warning( 'GitHub SHA-256 sidecar request returned a non-success status.', [
+                'url'    => $url,
+                'status' => $response['status'],
+            ] );
+
+            return null;
+        }
+
+        if ( preg_match( '/\b([a-f0-9]{64})\b/i', $response['body'], $matches ) ) {
+            return strtolower( $matches[1] );
+        }
+
+        Log::warning( 'GitHub SHA-256 sidecar did not contain a 64-character hex digest.', [
+            'url' => $url,
+        ] );
+
+        return null;
+    }
+
+    /**
+     * Extract a `SHA-256: <hex>` line from a release body.
+     *
+     * @since 2.7.1
+     *
+     * @param  string|null  $body  Release body ( Markdown allowed ).
+     *
+     * @return string|null Lowercase hex digest, or null when no marker is present.
+     */
+    protected function extractChecksumFromBody( ?string $body ): ?string
+    {
+        if ( ! is_string( $body ) || '' === $body ) {
+            return null;
+        }
+
+        if ( preg_match( '/SHA-?256\s*[:=]\s*`?([a-f0-9]{64})`?/i', $body, $matches ) ) {
+            return strtolower( $matches[1] );
+        }
+
+        return null;
     }
 }

@@ -335,6 +335,58 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * Another update is already running on this host.
+     *
+     * @since 2.7.1
+     *
+     * @param  int|null  $pid  PID of the running update, when known.
+     */
+    public static function updateAlreadyRunning( ?int $pid = null ): self
+    {
+        return new self( sprintf(
+            'An application update is already running%s. Concurrent updates extract over each other and produce a tree that '
+            . 'no rollback can repair, because the second run snapshots the first run\'s half-applied state. '
+            . 'Wait for it to finish, or run `php artisan update:status` to see where it got to.',
+            null === $pid ? '' : " ( PID {$pid} )",
+        ) );
+    }
+
+    /**
+     * A release archive was about to be fetched over an insecure transport.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $url  The offending URL.
+     */
+    public static function insecureDownloadUrl( string $url ): self
+    {
+        return new self( sprintf(
+            'Refusing to download an update over an insecure transport: %s. The update pipeline overwrites PHP files and then '
+            . 'runs composer install, so a plaintext download is a remote-code-execution channel for anyone on the path. '
+            . 'Use https, or set cms.updates.allow_insecure_transport=true if this is a trusted air-gapped mirror.',
+            $url,
+        ) );
+    }
+
+    /**
+     * A downgrade was requested without an explicit opt-in.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $target  Requested version.
+     * @param  string  $current  Currently installed version.
+     */
+    public static function downgradeNotAllowed( string $target, string $current ): self
+    {
+        return new self( sprintf(
+            'Refusing to install %s over %s: it is not newer. Installing an older release re-introduces every '
+            . 'vulnerability fixed since it shipped, and migrations are not reversed. Pass --allow-downgrade if that is genuinely intended.',
+            $target,
+            $current,
+        ) );
+    }
+
+    /**
      * Permission denied.
      *
      * @since 1.0.0

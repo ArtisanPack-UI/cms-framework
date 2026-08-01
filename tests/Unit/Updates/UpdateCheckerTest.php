@@ -35,15 +35,10 @@ class UpdateCheckerTest extends TestCase
         $cacheKey = 'cms.' . UpdateType::Application->value . '.test-app.update_check';
 
         // Prime the cache with a snapshot from when the host was on 0.2.0.
-        Cache::put(
-            $cacheKey,
-            new UpdateInfo(
-                currentVersion: '0.2.0',
-                latestVersion: '0.2.2',
-                downloadUrl: 'https://example.com/update.zip',
-            ),
-            3600,
-        );
+        // Seeded in the primitive form the checker now writes — `UpdateInfo`
+        // controls `downloadUrl` and `sha256`, so it is deliberately no longer
+        // serialized into a shared cache as an object.
+        Cache::put( $cacheKey, $this->cachedPayload( '0.2.0', '0.2.2' ), 3600 );
 
         $freshInfo = new UpdateInfo(
             currentVersion: '0.2.2',
@@ -106,13 +101,7 @@ class UpdateCheckerTest extends TestCase
 
         $cacheKey = 'cms.' . UpdateType::Application->value . '.test-app.update_check';
 
-        $cached = new UpdateInfo(
-            currentVersion: '0.2.0',
-            latestVersion: '0.2.2',
-            downloadUrl: 'https://example.com/update.zip',
-        );
-
-        Cache::put( $cacheKey, $cached, 3600 );
+        Cache::put( $cacheKey, $this->cachedPayload( '0.2.0', '0.2.2' ), 3600 );
 
         $source = new class implements UpdateSourceInterface {
             public int $checkCount = 0;
@@ -167,13 +156,7 @@ class UpdateCheckerTest extends TestCase
 
         $cacheKey = 'cms.' . UpdateType::Application->value . '.test-app.update_check';
 
-        $cached = new UpdateInfo(
-            currentVersion: '0.2.0',
-            latestVersion: '0.2.2',
-            downloadUrl: 'https://example.com/update.zip',
-        );
-
-        Cache::put( $cacheKey, $cached, 3600 );
+        Cache::put( $cacheKey, $this->cachedPayload( '0.2.0', '0.2.2' ), 3600 );
 
         $source = new class implements UpdateSourceInterface {
             public int $checkCount = 0;
@@ -224,5 +207,25 @@ class UpdateCheckerTest extends TestCase
     {
         $app['config']->set( 'cms.updates.cache_enabled', true );
         $app['config']->set( 'cms.updates.cache_ttl', 3600 );
+    }
+
+    /**
+     * The primitive cache payload shape `UpdateChecker` writes.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $currentVersion  Snapshotted installed version.
+     * @param  string  $latestVersion  Advertised latest version.
+     *
+     * @return array<string, mixed> Cache payload.
+     */
+    protected function cachedPayload( string $currentVersion, string $latestVersion ): array
+    {
+        return [
+            'currentVersion' => $currentVersion,
+            'latestVersion'  => $latestVersion,
+            'downloadUrl'    => 'https://example.com/update.zip',
+            'metadata'       => [],
+        ];
     }
 }

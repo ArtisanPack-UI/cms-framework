@@ -572,3 +572,131 @@ test( 'DB entry wins over filter entry when keys collide', function (): void {
     expect( $matches->first()->name )->toBe( 'DB Version' );
     expect( $matches->first()->exists )->toBeTrue();
 } );
+
+test( 'create field rejects a key that already names a column on the target table', function (): void {
+    // CF-4: addColumnToTable() silently no-ops when the column exists, so a
+    // field keyed after an existing protected column is *adopted* rather than
+    // created — permanently converting that column into a payload-writable
+    // custom field via the isPersistedColumnCustomField() exemption.
+    $manager = new CustomFieldManager;
+
+    ContentType::create( [
+        'name'          => 'Articles',
+        'slug'          => 'articles',
+        'table_name'    => 'test_articles',
+        'model_class'   => 'App\\Models\\Article',
+        'public'        => true,
+        'show_in_admin' => true,
+    ] );
+
+    Schema::create( 'test_articles', function ( $table ): void {
+        $table->id();
+        $table->string( 'title' );
+        $table->unsignedBigInteger( 'author_id' );
+        $table->timestamps();
+    } );
+
+    expect( fn () => $manager->createField( [
+        'name'          => 'Author',
+        'key'           => 'author_id',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['articles'],
+        'order'         => 1,
+        'required'      => false,
+    ] ) )->toThrow( InvalidArgumentException::class, 'author_id' );
+
+    expect( CustomField::where( 'key', 'author_id' )->exists() )->toBeFalse();
+
+    Schema::dropIfExists( 'test_articles' );
+} );
+
+test( 'create field rejects a framework-reserved key', function (): void {
+    // CF-4: even on a content type whose table does not yet carry the column,
+    // a framework-reserved key must never become a custom field.
+    $manager = new CustomFieldManager;
+
+    ContentType::create( [
+        'name'          => 'Notes',
+        'slug'          => 'notes',
+        'table_name'    => 'test_notes',
+        'model_class'   => 'App\\Models\\Note',
+        'public'        => true,
+        'show_in_admin' => true,
+    ] );
+
+    Schema::create( 'test_notes', function ( $table ): void {
+        $table->id();
+        $table->string( 'body' );
+        $table->timestamps();
+    } );
+
+    expect( fn () => $manager->createField( [
+        'name'          => 'Password',
+        'key'           => 'password',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['notes'],
+        'order'         => 1,
+        'required'      => false,
+    ] ) )->toThrow( InvalidArgumentException::class );
+
+    expect( Schema::hasColumn( 'test_notes', 'password' ) )->toBeFalse();
+
+    Schema::dropIfExists( 'test_notes' );
+} );
+
+test( 'adding and removing a custom field column flushes the real-column cache', function (): void {
+    // CF-7: the cache is keyed per model class and was never invalidated by
+    // the very manager that mutates the schema.
+    $manager = new CustomFieldManager;
+
+    ContentType::create( [
+        'name'          => 'Recipes',
+        'slug'          => 'recipes',
+        'table_name'    => 'test_recipes',
+        'model_class'   => 'App\\Models\\Recipe',
+        'public'        => true,
+        'show_in_admin' => true,
+    ] );
+
+    Schema::create( 'test_recipes', function ( $table ): void {
+        $table->id();
+        $table->string( 'title' );
+        $table->timestamps();
+    } );
+
+    $model = new class extends Illuminate\Database\Eloquent\Model {
+        use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
+
+        protected $table = 'test_recipes';
+
+        protected $guarded = [];
+
+        public function isColumn( string $key ): bool
+        {
+            return $this->isRealDatabaseColumn( $key );
+        }
+    };
+
+    $model::flushCustomFieldsRealColumnsCache();
+    expect( $model->isColumn( 'servings' ) )->toBeFalse();
+
+    $field = $manager->createField( [
+        'name'          => 'Servings',
+        'key'           => 'servings',
+        'type'          => 'number',
+        'column_type'   => 'integer',
+        'content_types' => ['recipes'],
+        'order'         => 1,
+        'required'      => false,
+    ] );
+
+    expect( $model->isColumn( 'servings' ) )->toBeTrue();
+
+    $manager->removeColumnFromTable( $field, 'test_recipes' );
+
+    expect( $model->isColumn( 'servings' ) )->toBeFalse();
+
+    Schema::dropIfExists( 'test_recipes' );
+} );

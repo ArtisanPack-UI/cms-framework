@@ -13,10 +13,13 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Support\CustomFieldColumnCache;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 /**
  * Manages custom field registration and operations.
@@ -26,6 +29,53 @@ use Illuminate\Support\Str;
 class CustomFieldManager
 {
     /**
+     * Framework-reserved custom-field keys.
+     *
+     * These name columns the framework itself owns on content-type tables, or
+     * attributes a host model is overwhelmingly likely to carry. Adopting one
+     * as a custom field would hand every content editor a write primitive on
+     * it via the `isPersistedColumnCustomField()` exemption — see
+     * {@see HasCustomFields::applyCustomFieldValues()}.
+     *
+     * @since 2.7.1
+     *
+     * @var array<int,string>
+     */
+    public const RESERVED_FIELD_KEYS = [
+        'author_id',
+        'created_at',
+        'deleted_at',
+        'id',
+        'metadata',
+        'parent_id',
+        'password',
+        'published_at',
+        'remember_token',
+        'slug',
+        'status',
+        'updated_at',
+        'user_id',
+        'uuid',
+    ];
+
+    /**
+     * Memoized field lists keyed by content type slug.
+     *
+     * The trait's per-*instance* memo meant an unknown attribute access on
+     * each model in a collection ran its own
+     * `CustomField::whereJsonContains(…)->get()` — 50 posts, 50 queries — and
+     * `bootHasCustomFields()` flushes that memo on every `saved`/`deleted`, so
+     * a bulk import re-queried on every iteration. This manager is resolved
+     * once per request, so hoisting the memo here collapses that to one query
+     * per content type.
+     *
+     * @since 2.7.1
+     *
+     * @var array<string,Collection<int,CustomField>>
+     */
+    protected array $fieldsByContentType = [];
+
+    /**
      * Register a custom field programmatically.
      *
      * @since 1.0.0
@@ -34,6 +84,9 @@ class CustomFieldManager
      */
     public function registerField( array $args ): void
     {
+        $this->flushFieldCache();
+        $this->warnOnReservedFieldKey( $args );
+
         /**
          * Filters the array of registered custom fields.
          *
@@ -64,17 +117,29 @@ class CustomFieldManager
      */
     public function getFieldsForContentType( string $contentType ): Collection
     {
-        $dbFields = CustomField::whereJsonContains( 'content_types', $contentType )
-            ->orderBy( 'order' )
-            ->get();
-
-        $filterFields = $this->filterFieldsForContentType( $contentType, $dbFields->pluck( 'key' )->all() );
-
-        if ( $filterFields->isEmpty() ) {
-            return $dbFields;
+        if ( isset( $this->fieldsByContentType[ $contentType ] ) ) {
+            return $this->fieldsByContentType[ $contentType ];
         }
 
-        return $dbFields->concat( $filterFields )->values();
+        return $this->fieldsByContentType[ $contentType ] = $this->loadFieldsForContentType( $contentType );
+    }
+
+    /**
+     * Forget the memoized field list for a content type, or for all of them.
+     *
+     * @since 2.7.1
+     *
+     * @param  string|null  $contentType  Content type slug, or null to flush everything.
+     */
+    public function flushFieldCache( ?string $contentType = null ): void
+    {
+        if ( null === $contentType ) {
+            $this->fieldsByContentType = [];
+
+            return;
+        }
+
+        unset( $this->fieldsByContentType[ $contentType ] );
     }
 
     /**
@@ -83,9 +148,13 @@ class CustomFieldManager
      * @since 1.0.0
      *
      * @param  array  $data  Custom field data.
+     *
+     * @throws InvalidArgumentException When the key is reserved or already names a column.
      */
     public function createField( array $data ): CustomField
     {
+        $this->assertFieldKeyIsAvailable( ( string ) ( $data['key'] ?? '' ), ( array ) ( $data['content_types'] ?? [] ) );
+
         $field = DB::transaction( function () use ( $data ) {
             $field = CustomField::create( $data );
 
@@ -101,6 +170,8 @@ class CustomFieldManager
 
             return $field;
         } );
+
+        $this->flushFieldCache();
 
         /**
          * Fires after a custom field has been created.
@@ -160,6 +231,8 @@ class CustomFieldManager
             return $field;
         } );
 
+        $this->flushFieldCache();
+
         /**
          * Fires after a custom field has been updated.
          *
@@ -200,6 +273,8 @@ class CustomFieldManager
             $deleted = $field->delete();
 
             if ( $deleted ) {
+                $this->flushFieldCache();
+
                 // Remove columns from content type tables. DB-only lookup
                 // matches the createField() / updateField() paths so we
                 // never dropColumn against a plugin-supplied `table_name`.
@@ -256,6 +331,8 @@ class CustomFieldManager
             }
         } );
 
+        CustomFieldColumnCache::flush( $tableName );
+
         /**
          * Fires after a custom field column has been added.
          *
@@ -290,6 +367,8 @@ class CustomFieldManager
         Schema::table( $tableName, function ( $table ) use ( $field ): void {
             $table->dropColumn( $field->key );
         } );
+
+        CustomFieldColumnCache::flush( $tableName );
 
         /**
          * Fires after a custom field column has been removed.
@@ -327,6 +406,159 @@ class CustomFieldManager
         file_put_contents( $migrationPath, $stub );
 
         return $migrationPath;
+    }
+
+    /**
+     * Find why a proposed custom-field key is unavailable, or null when it is
+     * fine.
+     *
+     * Single source of truth for both enforcement points — `createField()`
+     * below and `CustomFieldRequest::withValidator()` — so the API and the
+     * admin UI cannot drift into disagreeing about which keys are allowed.
+     *
+     * `addColumnToTable()` silently returns when the column already exists, so
+     * without this check an admin creating a field keyed `author_id` does not
+     * get an error: the existing column is *adopted* as a custom field, and
+     * from then on any content editor's `custom_fields[author_id]` writes it
+     * through the legitimate exemption path. That is a permanent, quiet
+     * escalation from "manage custom fields" to "reassign authorship of any
+     * post", and a plain footgun besides.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $key  The proposed field key.
+     * @param  array<int,string>  $contentTypes  Content type slugs the field targets.
+     *
+     * @return array{reason: 'column'|'reserved', table: string|null}|null Conflict, or null when the key is available.
+     */
+    public function findKeyConflict( string $key, array $contentTypes ): ?array
+    {
+        if ( '' === $key ) {
+            return null;
+        }
+
+        $normalized = strtolower( $key );
+
+        if ( in_array( $normalized, self::RESERVED_FIELD_KEYS, true ) ) {
+            return ['reason' => 'reserved', 'table' => null];
+        }
+
+        foreach ( $contentTypes as $contentTypeSlug ) {
+            if ( ! is_string( $contentTypeSlug ) ) {
+                continue;
+            }
+
+            $contentType = app( ContentTypeManager::class )->getPersistedContentType( $contentTypeSlug );
+
+            if ( ! $contentType || ! Schema::hasTable( $contentType->table_name ) ) {
+                continue;
+            }
+
+            foreach ( Schema::getColumnListing( $contentType->table_name ) as $column ) {
+                if ( strtolower( (string) $column ) === $normalized ) {
+                    return ['reason' => 'column', 'table' => $contentType->table_name];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Load the field list for a content type from the database and filters.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $contentType  Content type slug.
+     */
+    protected function loadFieldsForContentType( string $contentType ): Collection
+    {
+        $dbFields = CustomField::whereJsonContains( 'content_types', $contentType )
+            ->orderBy( 'order' )
+            ->get();
+
+        $filterFields = $this->filterFieldsForContentType( $contentType, $dbFields->pluck( 'key' )->all() );
+
+        if ( $filterFields->isEmpty() ) {
+            return $dbFields;
+        }
+
+        return $dbFields->concat( $filterFields )->values();
+    }
+
+    /**
+     * Warn a plugin author whose field key can never resolve.
+     *
+     * A key colliding with a model method — `author`, `comments`, `tags`,
+     * `order`, `save`, `touch` — is treated as reserved by
+     * `HasCustomFields::isReservedModelAttribute()`, so the field is silently
+     * inert: the getter never reads it and `applyCustomFieldValues()` drops
+     * the value. That is the correct behaviour ( a plugin must not be able to
+     * shadow a relation ), but it used to happen with no signal whatsoever, so
+     * the author saw only "my field doesn't save".
+     *
+     * A warning rather than an exception: registration usually runs from a
+     * service provider during boot, and a third-party plugin picking an
+     * unlucky key must not take the application down.
+     *
+     * @since 2.7.1
+     *
+     * @param  array  $args  Registration arguments.
+     */
+    protected function warnOnReservedFieldKey( array $args ): void
+    {
+        $key = (string) ( $args['key'] ?? '' );
+
+        if ( '' === $key ) {
+            return;
+        }
+
+        if ( ! in_array( strtolower( $key ), self::RESERVED_FIELD_KEYS, true ) ) {
+            return;
+        }
+
+        Log::warning(
+            'cms-framework: a custom field was registered under a reserved key and will be silently ignored.',
+            [
+                'key'   => $key,
+                'hint'  => 'Reserved keys name framework-owned columns. Choose a different key.',
+                'types' => $args['content_types'] ?? [],
+            ],
+        );
+    }
+
+    /**
+     * Reject a custom-field key that is framework-reserved or already names a
+     * column on one of the target content types' tables.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $key  The proposed field key.
+     * @param  array<int,string>  $contentTypes  Content type slugs the field targets.
+     *
+     * @throws InvalidArgumentException When the key is unavailable.
+     */
+    protected function assertFieldKeyIsAvailable( string $key, array $contentTypes ): void
+    {
+        $conflict = $this->findKeyConflict( $key, $contentTypes );
+
+        if ( null === $conflict ) {
+            return;
+        }
+
+        if ( 'reserved' === $conflict['reason'] ) {
+            throw new InvalidArgumentException( sprintf(
+                'The custom field key "%s" is reserved by the CMS framework and cannot be used.',
+                $key,
+            ) );
+        }
+
+        throw new InvalidArgumentException( sprintf(
+            'The custom field key "%s" already names a column on the "%s" table. '
+            . 'Choose a different key — an existing column cannot be adopted as a custom field.',
+            $key,
+            $conflict['table'],
+        ) );
     }
 
     /**

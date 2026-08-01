@@ -14,7 +14,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns;
 
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Support\CustomFieldColumnCache;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Throwable;
@@ -35,13 +37,12 @@ use Throwable;
 trait HasCustomFields
 {
     /**
-     * Per-model-class cache of the real DB columns for the model's table.
-     * Populated on first read so we never mistake a real column for a
-     * plugin-registered custom-field key.
+     * Payload keys already reported as dropped by this instance, so a large
+     * probing payload produces one log line per key rather than a flood.
      *
-     * @var array<class-string,array<int,string>>
+     * @var array<string,true>
      */
-    protected static array $customFieldsRealColumnsCache = [];
+    protected array $droppedCustomFieldKeys = [];
 
     /**
      * Per-instance cache of the custom-field collection for this model's
@@ -72,7 +73,18 @@ trait HasCustomFields
 
         $value = parent::__get( $key );
 
-        if ( null === $value && null !== $field && 'column' === $field->storageMode() ) {
+        // Substitute the default only when the attribute is *absent*, not
+        // whenever it reads null. Treating a stored null as "unset" meant a
+        // value an editor had deliberately cleared read back as the default,
+        // and a read-then-save round-trip resurrected that default into the
+        // column — so clearing a field silently failed to stick. The metadata
+        // branch above already gets this right via `array_key_exists()`.
+        if (
+            null === $value
+            && null !== $field
+            && 'column' === $field->storageMode()
+            && ! array_key_exists( $key, $this->attributes )
+        ) {
             return $field->default_value;
         }
 
@@ -113,27 +125,38 @@ trait HasCustomFields
     /**
      * Apply an untrusted map of custom-field values onto this model.
      *
-     * Every value routes through the magic setter above, so a
-     * metadata-storage field lands in the `metadata` JSON column exactly as
-     * a direct `$model->key = $value` write would. The difference is the
-     * guard: a key that names a real DB column, cast, mutator, accessor, or
-     * relation is **silently dropped** rather than written, unless it is a
-     * DB-persisted column-storage custom field ( see
+     * This is an **allowlist**: a key is applied only when it names a custom
+     * field actually registered for this content type. Everything else — an
+     * unknown key, a key naming a real DB column, cast, mutator, accessor or
+     * relation, a case variant of one of those, a `column->path` JSON key, or
+     * one of Eloquent's own properties — is silently dropped and logged.
+     *
+     * The allowlist shape is deliberate, and the reason is worth recording so
+     * nobody inverts it back into a denylist. The payload originates in
+     * request input and the keys it may carry are whatever a plugin has
+     * filter-registered; neither is trusted. A denylist has to enumerate
+     * every dangerous key correctly, and it did not: a key naming a real
+     * column overwrote that column, sidestepping the fillable allowlist the
+     * caller applied to the attribute half of the same request; a case
+     * variant of such a key slipped past a case-sensitive comparison while
+     * MySQL and SQLite resolved it to the real column anyway; a `metadata->x`
+     * key wrote straight through `fillJsonAttribute()` into the very store
+     * the guard protects; and an unregistered key with no column reached
+     * `save()` and raised a `QueryException`, rolling the whole write back.
+     *
+     * Values are assigned through `setAttribute()` — never `$this->{$key}`.
+     * This method is compiled into the model class, so a dynamic property
+     * write from here resolves Eloquent's *declared protected properties*
+     * directly instead of falling through to `__set()`. A payload carrying
+     * `table`, `exists` and `attributes` could therefore repoint the model at
+     * another table and issue an arbitrary UPDATE against it on `save()`.
+     *
+     * The one legitimate reason a payload may carry a key naming a real
+     * column is a DB-persisted, column-storage custom field ( see
      * {@see isPersistedColumnCustomField()} ), whose whole purpose is to
      * write its own column.
      *
-     * That guard is the whole point of routing custom-field payloads through
-     * here instead of assigning them directly. The payload originates in
-     * request input, and the keys it may carry are whatever a plugin has
-     * filter-registered — neither is trusted. Without the check, a payload
-     * key naming a real column (`author_id`, `status`, `password` on a host
-     * model) falls through the trait's setter to `parent::__set()` and
-     * overwrites the column, sidestepping the fillable allowlist the caller
-     * applied to the attribute half of the same request. Dropping the key is
-     * safe because a shadowing field can never round-trip anyway: the getter
-     * resolves a real column through Eloquent, never through metadata.
-     *
-     * The magic setter itself deliberately does *not* apply this guard —
+     * The magic setter deliberately does *not* apply this guard —
      * `$post->title = 'New title'` from host code must keep working even
      * while a rogue plugin has `title` filter-registered as a custom field.
      * Trusted assignment and untrusted payload application are different
@@ -145,14 +168,39 @@ trait HasCustomFields
      */
     public function applyCustomFieldValues( array $values ): void
     {
-        foreach ( $values as $key => $value ) {
-            $key = ( string ) $key;
+        $registered = [];
 
-            if ( $this->isReservedModelAttribute( $key ) && ! $this->isPersistedColumnCustomField( $key ) ) {
+        foreach ( $this->getCustomFieldsForType() as $field ) {
+            $registered[ ( string ) $field->key ] = $field;
+        }
+
+        foreach ( $values as $key => $value ) {
+            $key   = ( string ) $key;
+            $field = $registered[ $key ] ?? null;
+
+            if ( null === $field ) {
+                $this->logDroppedCustomFieldKey( $key, 'not a registered custom field' );
+
                 continue;
             }
 
-            $this->{$key} = $value;
+            if ( $this->isReservedModelAttribute( $key ) && ! $this->isPersistedColumnCustomField( $key ) ) {
+                $this->logDroppedCustomFieldKey( $key, 'shadows a model attribute' );
+
+                continue;
+            }
+
+            if ( 'metadata' === $field->storageMode() ) {
+                $this->assertMetadataColumnAvailable( $key );
+
+                $metadata         = ( array ) ( $this->getAttribute( 'metadata' ) ?? [] );
+                $metadata[ $key ] = $value;
+                $this->setAttribute( 'metadata', $metadata );
+
+                continue;
+            }
+
+            $this->setAttribute( $key, $value );
         }
     }
 
@@ -171,6 +219,29 @@ trait HasCustomFields
 
         return $this->customFieldsCache = app( CustomFieldManager::class )
             ->getFieldsForContentType( $this->getTable() );
+    }
+
+    /**
+     * Forget the cached real-column listing.
+     *
+     * The listing is cached for the life of the process, so anything that
+     * mutates a content type's schema — notably
+     * {@see CustomFieldManager::addColumnToTable()} and
+     * {@see CustomFieldManager::removeColumnFromTable()} — must flush it.
+     * Without the flush, a removed column keeps being treated as real and
+     * every payload key naming it is silently dropped for the rest of the
+     * process, which under Octane or a long-lived queue worker spans many
+     * requests.
+     *
+     * Passing no table flushes every cached listing.
+     *
+     * @since 2.7.1
+     *
+     * @param  string|null  $table  Table name to forget, or null for all.
+     */
+    public static function flushCustomFieldsRealColumnsCache( ?string $table = null ): void
+    {
+        CustomFieldColumnCache::flush( $table );
     }
 
     /**
@@ -236,16 +307,30 @@ trait HasCustomFields
      */
     protected function isReservedModelAttribute( string $key ): bool
     {
-        if ( array_key_exists( $key, $this->attributes ) ) {
+        // A `column->path` key is never a custom field, and Eloquent's
+        // `setAttribute()` routes it to `fillJsonAttribute()` — writing the
+        // real column named by the segment before the arrow.
+        if ( str_contains( $key, '->' ) ) {
             return true;
         }
-        if ( array_key_exists( $key, $this->getCasts() ) ) {
+        if ( $this->matchesKeyCaseInsensitively( $key, array_keys( $this->attributes ) ) ) {
+            return true;
+        }
+        if ( $this->matchesKeyCaseInsensitively( $key, array_keys( $this->getCasts() ) ) ) {
             return true;
         }
         if ( $this->isRealDatabaseColumn( $key ) ) {
             return true;
         }
-        if ( method_exists( $this, $key ) ) {
+        // A bare `method_exists()` looks over-broad — it reserves any key
+        // colliding with any method name (`save`, `delete`, `touch`,
+        // `refresh`) — but narrowing it changes nothing: Laravel implements
+        // `isRelation()` below as `method_exists() || relationResolver()`, so
+        // every such key is caught there regardless. Removing this check would
+        // buy no behaviour and cost clarity. The collision is surfaced to the
+        // plugin author at registration time instead — see
+        // {@see CustomFieldManager::registerField()}.
+        if ( '' === $key || method_exists( $this, $key ) ) {
             return true;
         }
         if ( method_exists( $this, 'hasGetMutator' ) && $this->hasGetMutator( $key ) ) {
@@ -317,21 +402,83 @@ trait HasCustomFields
      */
     protected function isRealDatabaseColumn( string $key ): bool
     {
-        $class = static::class;
+        $table   = $this->getTable();
+        $columns = CustomFieldColumnCache::get( $table );
 
-        if ( ! isset( self::$customFieldsRealColumnsCache[ $class ] ) ) {
-            $table = $this->getTable();
+        if ( null === $columns ) {
             try {
-                self::$customFieldsRealColumnsCache[ $class ] = Schema::getColumnListing( $table );
+                $columns = Schema::getColumnListing( $table );
             } catch ( Throwable ) {
                 // Schema introspection can fail during boot or with drivers
-                // that don't support column listing — fall back to an empty
-                // listing so we don't cache a false negative permanently.
+                // that don't support column listing. Return false without
+                // caching so we don't pin a false negative for the life of
+                // the process — note that for the duration of the failure the
+                // shadow guard is off for every key, which is why the failure
+                // must never be cached.
                 return false;
+            }
+
+            CustomFieldColumnCache::put( $table, $columns );
+            $columns = CustomFieldColumnCache::get( $table ) ?? [];
+        }
+
+        // Compared lower-cased: MySQL and SQLite resolve identifiers
+        // case-insensitively, so `AUTHOR_ID` is the real `author_id` column to
+        // the database even though the canonical listing spells it lower-case.
+        return in_array( strtolower( $key ), $columns, true );
+    }
+
+    /**
+     * Case-insensitive membership test for an attribute/cast key list.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $key  Key to look for.
+     * @param  array<int,string>  $candidates  Known key names.
+     *
+     * @return bool True when a case-insensitive match exists.
+     */
+    protected function matchesKeyCaseInsensitively( string $key, array $candidates ): bool
+    {
+        $needle = strtolower( $key );
+
+        foreach ( $candidates as $candidate ) {
+            if ( strtolower( ( string ) $candidate ) === $needle ) {
+                return true;
             }
         }
 
-        return in_array( $key, self::$customFieldsRealColumnsCache[ $class ], true );
+        return false;
+    }
+
+    /**
+     * Record that an untrusted custom-field key was dropped.
+     *
+     * Dropping used to be entirely silent, which left a plugin author staring
+     * at a field that "just doesn't save" with no breadcrumbs, and gave an
+     * operator no signal that someone was probing `custom_fields[author_id]`.
+     * Deduplicated per instance per key so a large probing payload cannot
+     * flood the log.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $key  The dropped payload key.
+     * @param  string  $reason  Why it was dropped.
+     */
+    protected function logDroppedCustomFieldKey( string $key, string $reason ): void
+    {
+        if ( isset( $this->droppedCustomFieldKeys[ $key ] ) ) {
+            return;
+        }
+
+        $this->droppedCustomFieldKeys[ $key ] = true;
+
+        Log::warning( 'Dropped a custom-field payload key.', [
+            'key'    => $key,
+            'reason' => $reason,
+            'model'  => static::class,
+            'table'  => $this->getTable(),
+        ] );
     }
 
     /**

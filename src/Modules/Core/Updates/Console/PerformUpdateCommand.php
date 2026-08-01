@@ -26,6 +26,7 @@ class PerformUpdateCommand extends Command
      */
     protected $signature = 'update:perform
                             {--target-version= : Specific version to update to (default: latest)}
+                            {--allow-downgrade : Permit a target version that is not newer than the installed one}
                             {--force : Skip confirmation prompt}';
 
     /**
@@ -77,7 +78,7 @@ class PerformUpdateCommand extends Command
             $this->line( 'This may take several minutes. Do not interrupt the process.' );
             $this->newLine();
 
-            $manager->performUpdate( $version );
+            $manager->performUpdate( $version, (bool) $this->option( 'allow-downgrade' ) );
 
             $this->newLine( 2 );
             $this->info( '✓ Update completed successfully!' );

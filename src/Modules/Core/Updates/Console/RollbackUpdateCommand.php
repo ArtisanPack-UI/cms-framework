@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ResolvesConfiguredPaths;
 use Exception;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\File;
  */
 class RollbackUpdateCommand extends Command
 {
+    use ResolvesConfiguredPaths;
+
     /**
      * The name and signature of the console command.
      *
@@ -27,7 +30,8 @@ class RollbackUpdateCommand extends Command
      */
     protected $signature = 'update:rollback
                             {backup? : Path to specific backup file (optional)}
-                            {--force : Skip confirmation prompt}';
+                            {--force : Skip confirmation prompt}
+                            {--allow-external : Permit a backup path outside the configured backup directory}';
 
     /**
      * The console command description.
@@ -50,7 +54,7 @@ class RollbackUpdateCommand extends Command
 
             // If no backup specified, find the latest
             if ( ! $backupPath ) {
-                $backupDir = storage_path( config( 'cms.updates.backup_path', 'backups/application' ) );
+                $backupDir = $this->backupDirectory();
                 $backups   = glob( "{$backupDir}/backup-*.zip" );
 
                 if ( false === $backups || empty( $backups ) ) {
@@ -67,6 +71,19 @@ class RollbackUpdateCommand extends Command
 
             if ( ! File::exists( $backupPath ) ) {
                 $this->error( "Backup not found: {$backupPath}" );
+
+                return self::FAILURE;
+            }
+
+            // Rollback extracts an arbitrary ZIP over base_path() and then
+            // runs `composer install`, which executes scripts from the
+            // restored `composer.json`. Any other vulnerability yielding a
+            // file write under storage/ would otherwise let an attacker plant
+            // a backup and wait for an operator to restore it.
+            if ( ! $this->option( 'allow-external' ) && ! $this->isWithinBackupDirectory( $backupPath ) ) {
+                $this->error( 'Refusing to restore a backup from outside the configured backup directory.' );
+                $this->line( 'Configured directory: ' . $this->backupDirectory() );
+                $this->line( 'Pass --allow-external if this path is genuinely trusted.' );
 
                 return self::FAILURE;
             }
@@ -107,5 +124,40 @@ class RollbackUpdateCommand extends Command
 
             return self::FAILURE;
         }
+    }
+
+    /**
+     * Absolute path to the configured backup directory.
+     *
+     * @since 2.7.1
+     *
+     * @return string Resolved backup directory.
+     */
+    protected function backupDirectory(): string
+    {
+        return $this->resolveConfiguredPath(
+            (string) config( 'cms.updates.backup_path', 'backups/application' ),
+        );
+    }
+
+    /**
+     * Whether a backup path sits inside the configured backup directory.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $backupPath  Path to check.
+     *
+     * @return bool True when the path is contained by the backup directory.
+     */
+    protected function isWithinBackupDirectory( string $backupPath ): bool
+    {
+        $realBackupDir = realpath( $this->backupDirectory() );
+        $realPath      = realpath( $backupPath );
+
+        if ( false === $realBackupDir || false === $realPath ) {
+            return false;
+        }
+
+        return str_starts_with( $realPath, $realBackupDir . DIRECTORY_SEPARATOR );
     }
 }

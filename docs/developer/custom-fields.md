@@ -490,14 +490,34 @@ foreach ($request->input('custom_fields', []) as $key => $value) {
 The magic setter routes a metadata-storage field into the model's `metadata`
 JSON column, but a key naming a real column falls through to Eloquent and
 writes that column — and the custom-field half of a payload gets no fillable
-filtering. `applyCustomFieldValues()` silently drops any key that names a real
-column, cast, mutator, accessor, or relation before assigning the rest, whether
-or not a field was ever registered under that key.
+filtering.
 
-DB-registered fields are the exception: they own the column they name, so their
-values still write through. Filter-registered fields never qualify for that
-exemption, even if the registration declares `'storage' => 'column'` — only a
-row in the `custom_fields` table can authorize a real-column write.
+`applyCustomFieldValues()` is an **allowlist**. A key is applied only when it
+names a custom field actually registered for the model's content type; every
+other key is dropped and logged. In particular, all of these are dropped:
+
+- an unknown key, whether or not it names a column;
+- a key naming a real DB column, cast, mutator, accessor, or relation;
+- a case variant of one of those — `AUTHOR_ID` resolves to `author_id` on
+  MySQL and SQLite, which treat identifiers case-insensitively;
+- a JSON-path key such as `metadata->x` or `title->x`;
+- one of Eloquent's own properties (`table`, `exists`, `attributes`, …).
+
+Values are assigned through `setAttribute()`, never through a dynamic property
+write, so a payload can never reach the model's internal state.
+
+DB-registered fields are the exception on the column half: they own the column
+they name, so their values still write through. Filter-registered fields never
+qualify for that exemption, even if the registration declares
+`'storage' => 'column'` — only a row in the `custom_fields` table can authorize
+a real-column write. Since 2.7.1 such a row can no longer be created with a key
+that already names a column on the target table, nor with a framework-reserved
+key (`id`, `author_id`, `status`, `published_at`, `slug`, `parent_id`,
+`metadata`, `password`, …) — see `CustomFieldManager::RESERVED_FIELD_KEYS`.
+
+Dropped keys emit a `Log::warning` carrying the key, the reason, and the model,
+so a plugin author whose field "just doesn't save" has a breadcrumb, and an
+operator has a signal that someone is probing `custom_fields[author_id]`.
 
 `BlogManager::create()`/`update()` and `PageManager::create()`/`update()` apply
 their `$customFields` argument through this method already, so callers passing

@@ -35,6 +35,18 @@ class UpdateChecker
     }
 
     /**
+     * The underlying update source.
+     *
+     * @since 2.7.1
+     *
+     * @return UpdateSourceInterface The configured source.
+     */
+    public function getSource(): UpdateSourceInterface
+    {
+        return $this->source;
+    }
+
+    /**
      * Check for available updates (with caching).
      *
      * @since 1.0.0
@@ -47,7 +59,15 @@ class UpdateChecker
         $cacheTtl = config( 'cms.updates.cache_ttl', 43200 );
 
         if ( config( 'cms.updates.cache_enabled', true ) ) {
-            $cached = Cache::get( $cacheKey );
+            // Rehydrated from a primitive array rather than cached as an
+            // object. `UpdateInfo` controls `downloadUrl` and `sha256`, so on
+            // a shared or unauthenticated cache backend a serialized object
+            // here is both an RCE-on-next-update primitive and a PHP
+            // object-injection sink. Storing plain scalars removes the
+            // unserialize step entirely; the values are still only as
+            // trustworthy as the cache, but they can no longer instantiate
+            // anything.
+            $cached = $this->hydrateCachedUpdateInfo( Cache::get( $cacheKey ) );
 
             // Discard cached UpdateInfo whose `currentVersion` snapshot
             // disagrees with the currently installed version. Without this, an
@@ -67,7 +87,7 @@ class UpdateChecker
         $updateInfo = $this->source->checkForUpdate();
 
         if ( config( 'cms.updates.cache_enabled', true ) ) {
-            Cache::put( $cacheKey, $updateInfo, $cacheTtl );
+            Cache::put( $cacheKey, $this->dehydrateUpdateInfo( $updateInfo ), $cacheTtl );
         }
 
         return $updateInfo;
@@ -148,6 +168,72 @@ class UpdateChecker
     public function getSlug(): string
     {
         return $this->slug;
+    }
+
+    /**
+     * Reduce an `UpdateInfo` to plain scalars for caching.
+     *
+     * @since 2.7.1
+     *
+     * @param  UpdateInfo  $updateInfo  Value object to flatten.
+     *
+     * @return array<string, mixed> Primitive representation.
+     */
+    protected function dehydrateUpdateInfo( UpdateInfo $updateInfo ): array
+    {
+        return [
+            'currentVersion'      => $updateInfo->currentVersion,
+            'latestVersion'       => $updateInfo->latestVersion,
+            'downloadUrl'         => $updateInfo->downloadUrl,
+            'changelog'           => $updateInfo->changelog,
+            'releaseDate'         => $updateInfo->releaseDate,
+            'minPhpVersion'       => $updateInfo->minPhpVersion,
+            'minFrameworkVersion' => $updateInfo->minFrameworkVersion,
+            'sha256'              => $updateInfo->sha256,
+            'fileSize'            => $updateInfo->fileSize,
+            'metadata'            => $updateInfo->metadata,
+        ];
+    }
+
+    /**
+     * Rebuild an `UpdateInfo` from its cached primitive form.
+     *
+     * Returns null for anything that is not a well-formed record, so a cache
+     * entry written by an older release — or by anyone else with write access
+     * to the cache — simply misses rather than being trusted.
+     *
+     * @since 2.7.1
+     *
+     * @param  mixed  $cached  Raw cache payload.
+     *
+     * @return UpdateInfo|null Rehydrated value object, or null when unusable.
+     */
+    protected function hydrateCachedUpdateInfo( mixed $cached ): ?UpdateInfo
+    {
+        if ( ! is_array( $cached ) ) {
+            return null;
+        }
+
+        foreach ( ['currentVersion', 'latestVersion', 'downloadUrl'] as $required ) {
+            if ( ! isset( $cached[ $required ] ) || ! is_string( $cached[ $required ] ) ) {
+                return null;
+            }
+        }
+
+        $string = static fn ( $value ): ?string => is_string( $value ) ? $value : null;
+
+        return new UpdateInfo(
+            currentVersion: $cached['currentVersion'],
+            latestVersion: $cached['latestVersion'],
+            downloadUrl: $cached['downloadUrl'],
+            changelog: $string( $cached['changelog'] ?? null ),
+            releaseDate: $string( $cached['releaseDate'] ?? null ),
+            minPhpVersion: $string( $cached['minPhpVersion'] ?? null ),
+            minFrameworkVersion: $string( $cached['minFrameworkVersion'] ?? null ),
+            sha256: $string( $cached['sha256'] ?? null ),
+            fileSize: is_int( $cached['fileSize'] ?? null ) ? $cached['fileSize'] : null,
+            metadata: is_array( $cached['metadata'] ?? null ) ? $cached['metadata'] : [],
+        );
     }
 
     /**

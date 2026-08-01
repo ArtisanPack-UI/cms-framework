@@ -265,10 +265,37 @@ return [
     | Integrity Verification
     |--------------------------------------------------------------------------
     |
-    | Whether to verify downloaded ZIPs using SHA-256 checksum.
+    | Whether to verify downloaded ZIPs using a SHA-256 checksum.
+    |
+    | Be clear about what this does and does not buy you. The digest comes
+    | from the *same origin and trust domain* as the archive: for GitLab and
+    | GitHub, a `*.sha256` sidecar on the same release or a `SHA-256:` line in
+    | the release description; for custom JSON, the same document that
+    | supplied `download_url`. It is therefore an **integrity** check — it
+    | catches truncation, CDN corruption and partial downloads — and not an
+    | **authenticity** check. It does not protect against a compromised update
+    | server, a compromised release-editor account, or a plaintext-HTTP MITM.
+    | There is no signature verification in this module.
     |
     */
     'verify_checksum' => true,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Allow Insecure Transport
+    |--------------------------------------------------------------------------
+    |
+    | Release archives are downloaded over https only. TLS is one of the very
+    | few things standing between a compromised update source and a
+    | compromised host: this pipeline overwrites PHP files and then runs
+    | `composer install`, which executes `post-install-cmd` scripts from the
+    | just-overwritten `composer.json`.
+    |
+    | Set to `true` only for an air-gapped mirror on a trusted network that
+    | genuinely cannot serve https. The updater logs a warning and proceeds.
+    |
+    */
+    'allow_insecure_transport' => env( 'CMS_UPDATES_ALLOW_INSECURE_TRANSPORT', false ),
 
     /*
     |--------------------------------------------------------------------------

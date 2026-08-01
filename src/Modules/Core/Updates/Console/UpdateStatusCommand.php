@@ -7,6 +7,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ResolvesConfiguredPaths;
 use Illuminate\Console\Command;
 
 /**
@@ -22,6 +23,8 @@ use Illuminate\Console\Command;
  */
 class UpdateStatusCommand extends Command
 {
+    use ResolvesConfiguredPaths;
+
     /**
      * The name and signature of the console command.
      *
@@ -65,18 +68,25 @@ class UpdateStatusCommand extends Command
             return self::SUCCESS;
         }
 
+        // The record is read after a crash by definition, so treat every field
+        // as untrusted rather than casting a half-written value.
+        $status = UpdateRunStatus::tryFrom( $this->stringField( $state, 'status' ) );
+        $step   = UpdateStep::tryFrom( $this->stringField( $state, 'step' ) );
+
+        // Resolved before the output branch so both modes agree. `--json` is
+        // the machine-consumption path — `php artisan update:status --json ||
+        // alert` is the natural monitoring idiom — and it returned SUCCESS
+        // unconditionally, so it never alerted on a failed or interrupted run
+        // while the very same state without `--json` exited 1.
+        $exitCode = null !== $status && $status->needsAttention() ? self::FAILURE : self::SUCCESS;
+
         if ( $this->option( 'json' ) ) {
             $this->line( (string) json_encode( $state, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES ) );
 
             $this->maybeClear( $manager );
 
-            return self::SUCCESS;
+            return $exitCode;
         }
-
-        // The record is read after a crash by definition, so treat every field
-        // as untrusted rather than casting a half-written value.
-        $status = UpdateRunStatus::tryFrom( $this->stringField( $state, 'status' ) );
-        $step   = UpdateStep::tryFrom( $this->stringField( $state, 'step' ) );
 
         $this->renderSummary( $state, $status, $step );
 
@@ -86,7 +96,7 @@ class UpdateStatusCommand extends Command
 
         $this->maybeClear( $manager );
 
-        return null !== $status && $status->needsAttention() ? self::FAILURE : self::SUCCESS;
+        return $exitCode;
     }
 
     /**
@@ -140,10 +150,51 @@ class UpdateStatusCommand extends Command
             $this->error( $error );
         }
 
+        if ( UpdateRunStatus::Failed === $status ) {
+            $this->renderRollbackOutcome( $state );
+        }
+
         if ( UpdateRunStatus::InProgress === $status ) {
             $this->newLine();
             $this->comment( __( 'An update is either still running or died without triggering its shutdown handler (e.g. `kill -9`). Check whether the recorded PID is still alive before intervening.' ) );
         }
+    }
+
+    /**
+     * Report what became of the pre-update snapshot after a failed run.
+     *
+     * The status label used to assert "Failed (rolled back)" unconditionally,
+     * so an operator looking at a **failed rollback** — the most dangerous
+     * state this updater produces — was told the restore had succeeded.
+     *
+     * @since 2.7.1
+     *
+     * @param  array<string, mixed>  $state  Persisted state.
+     */
+    protected function renderRollbackOutcome( array $state ): void
+    {
+        // Treated as untrusted like every other field this command reads —
+        // the record is examined after a crash by definition, so a
+        // half-written or hand-edited value must not be able to masquerade as
+        // a successful rollback.
+        $rolledBack = $state['rolled_back'] ?? null;
+        $rolledBack = is_bool( $rolledBack ) ? $rolledBack : null;
+
+        $this->newLine();
+
+        if ( true === $rolledBack ) {
+            $this->info( __( 'The pre-update snapshot was restored successfully.' ) );
+
+            return;
+        }
+
+        if ( false === $rolledBack ) {
+            $this->error( __( 'The rollback ITSELF failed. The application tree is in an unknown state and needs manual attention — restore from :dir by hand before bringing the site back up.', ['dir' => $this->backupDirectory()] ) );
+
+            return;
+        }
+
+        $this->warn( __( 'No rollback was attempted — either backups are disabled, or the run failed before the snapshot was taken. The tree may still carry a partial update.' ) );
     }
 
     /**
@@ -159,14 +210,32 @@ class UpdateStatusCommand extends Command
         $this->warn( __( 'The update process died before finishing. The install may be half-applied.' ) );
         $this->newLine();
 
+        $backupDir = $this->backupDirectory();
+
         if ( null === $step ) {
-            $this->line( __( 'The step in flight was not recorded. Restore the pre-update snapshot from storage/backups/application/ before continuing.' ) );
+            $this->line( __( 'The step in flight was not recorded. Restore the pre-update snapshot from :dir before continuing.', ['dir' => $backupDir] ) );
+
+            return;
+        }
+
+        // Steps 1-2 are special: nothing has overwritten the application tree
+        // yet. Sending the operator to "restore the snapshot" is wrong at step
+        // 1 (no snapshot exists) and actively dangerous at step 2, where a
+        // death mid-backup can leave a *truncated* backup-*.zip that this
+        // advice would invite them to extract over a perfectly healthy tree.
+        if ( $step->number() <= UpdateStep::Backup->number() ) {
+            $this->line( __( 'It died before any application files were modified, so the tree is untouched. Run `php artisan up` and retry the update — do not restore a snapshot.' ) );
+
+            if ( UpdateStep::Backup === $step ) {
+                $this->newLine();
+                $this->comment( __( 'A partial backup archive may have been left behind in :dir. Delete it before retrying.', ['dir' => $backupDir] ) );
+            }
 
             return;
         }
 
         if ( $step->number() < UpdateStep::ComposerInstall->number() ) {
-            $this->line( __( 'It died during download or extraction, which is not resumable — the application tree may be partially overwritten. Restore the pre-update snapshot from storage/backups/application/ instead of finishing by hand.' ) );
+            $this->line( __( 'It died during download or extraction, which is not resumable — the application tree may be partially overwritten. Restore the pre-update snapshot from :dir instead of finishing by hand.', ['dir' => $backupDir] ) );
 
             return;
         }
@@ -186,7 +255,26 @@ class UpdateStatusCommand extends Command
         }
 
         $this->newLine();
-        $this->line( __( 'If you would rather not finish by hand, restore the pre-update snapshot from storage/backups/application/.' ) );
+        $this->line( __( 'If you would rather not finish by hand, restore the pre-update snapshot from :dir.', ['dir' => $backupDir] ) );
+    }
+
+    /**
+     * Absolute path to the configured backup directory.
+     *
+     * The operator guidance above used to hardcode
+     * `storage/backups/application/`, so a host that had customized
+     * `cms.updates.backup_path` was pointed at a directory that does not
+     * exist.
+     *
+     * @since 2.7.1
+     *
+     * @return string Resolved backup directory.
+     */
+    protected function backupDirectory(): string
+    {
+        return $this->resolveConfiguredPath(
+            (string) config( 'cms.updates.backup_path', 'backups/application' ),
+        );
     }
 
     /**

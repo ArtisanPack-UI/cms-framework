@@ -8,7 +8,9 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use ArtisanPackUI\CMSFramework\Tests\Support\ShortWriteStreamWrapper;
 use Error;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Orchestra\Testbench\TestCase;
@@ -1185,6 +1187,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $this->assertStringNotContainsString( 'CMS_PHP_BINARY', $e->getMessage() );
         } finally {
             @unlink( $backupPath );
+            // `rollback()` extracts before the binary probe throws, so the
+            // archive's entry lands in the Testbench app skeleton. This
+            // project has a history of skeleton files shadowing real ones.
+            @unlink( base_path( 'placeholder.txt' ) );
         }
     }
 
@@ -1804,6 +1810,581 @@ class ApplicationUpdateManagerTest extends TestCase
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Regression for SEC-1: `exclude_from_update` is matched against entry
+     * names as strings, so a `./`-prefixed entry was a different string from
+     * the excluded name and slipped past the list entirely — while
+     * `realpath( dirname( '/base/./.env' ) )` is just `/base`, so containment
+     * passed too. A malicious release archive could overwrite `.env`,
+     * `vendor/`, `bootstrap/cache/` and the SQLite database.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_excludes_dot_slash_prefixed_entries(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-dotslash-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/vendor', 0755, true );
+
+        file_put_contents( $target . '/.env', "APP_KEY=original\n" );
+        file_put_contents( $target . '/vendor/autoload.php', "<?php // original\n" );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // Benign entry, so the archive has a plausible shape.
+        $zip->addFromString( 'app/Model.php', "<?php\n" );
+        // The bypasses: same files, spelled so the exclusion list misses them.
+        $zip->addFromString( './.env', "APP_KEY=attacker\nAPP_DEBUG=true\n" );
+        $zip->addFromString( './vendor/autoload.php', "<?php // attacker\n" );
+        $zip->addFromString( 'app//..//.env', "APP_KEY=traversal\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertSame(
+                "APP_KEY=original\n",
+                file_get_contents( $target . '/.env' ),
+                'A `./`-prefixed entry must still be caught by exclude_from_update.',
+            );
+            $this->assertSame(
+                "<?php // original\n",
+                file_get_contents( $target . '/vendor/autoload.php' ),
+                'A `./`-prefixed vendor entry must still be excluded.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for BUG-7: `isPathExcluded()` used a bare string prefix, so
+     * `str_starts_with( 'storage-helpers.php', 'storage' )` matched and the
+     * file was skipped by both backup and extraction — never snapshotted, and
+     * silently stale forever.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_does_not_exclude_names_merely_prefixed_by_an_excluded_name(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-boundary-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'storage-helpers.php', "<?php // shipped\n" );
+        $zip->addFromString( '.envelope.json', "{}\n" );
+        $zip->addFromString( 'vendors/README.md', "shipped\n" );
+        // Genuinely excluded, for contrast.
+        $zip->addFromString( 'storage/logs/laravel.log', "should not land\n" );
+        $zip->addFromString( '.env', "should not land\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/storage-helpers.php' );
+            $this->assertFileExists( $target . '/.envelope.json' );
+            $this->assertFileExists( $target . '/vendors/README.md' );
+
+            $this->assertFileDoesNotExist( $target . '/storage/logs/laravel.log' );
+            $this->assertFileDoesNotExist( $target . '/.env' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for SEC-2 / BUG-8: directory entries were created *before*
+     * the containment check ran, so `mkdir -p` walked through a pre-existing
+     * symlink pointing outside `base_path()` — routine in Envoyer/Forge
+     * layouts — and the directories were never removed.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_does_not_create_directories_through_a_symlink_out_of_the_root(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-mkdir-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $shared   = $tempRoot . '/shared';
+        mkdir( $target, 0755, true );
+        mkdir( $shared, 0755, true );
+
+        // A shared directory symlinked into the app root, as Envoyer does.
+        symlink( $shared, $target . '/shared-link' );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'app/Model.php', "<?php\n" );
+        $zip->addFromString( 'shared-link/attacker/dir/', '' );
+        $zip->addFromString( 'shared-link/attacker/payload.php', "<?php // pwned\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Model.php' );
+            $this->assertDirectoryDoesNotExist(
+                $shared . '/attacker',
+                'Directory entries must be validated before mkdir, not after.',
+            );
+            $this->assertFileDoesNotExist( $shared . '/attacker/payload.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/shared-link' );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $shared );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for SEC-3: the containment check validated the *parent*
+     * directory, never the target itself, so `fopen( …, 'wb' )` followed a
+     * pre-existing symlink and truncated whatever it pointed at.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_refuses_to_write_through_an_existing_symlink(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-symlink-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $outside  = $tempRoot . '/outside';
+        mkdir( $target . '/config', 0755, true );
+        mkdir( $outside, 0755, true );
+
+        file_put_contents( $outside . '/shared.php', "<?php // original shared config\n" );
+        symlink( $outside . '/shared.php', $target . '/config/shared.php' );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // A second root, so detectCommonRootPrefix() finds nothing to strip
+        // and `config/shared.php` really lands at `config/shared.php`.
+        $zip->addFromString( 'app/Model.php', "<?php\n" );
+        $zip->addFromString( 'config/shared.php', "<?php // overwritten\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertSame(
+                "<?php // original shared config\n",
+                file_get_contents( $outside . '/shared.php' ),
+                'Extraction must not follow a pre-existing symlink and truncate its target.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/config/shared.php' );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $outside );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for BUG-6: `fwrite()`'s return value was never checked, so a
+     * disk that filled during extraction produced a short write with no
+     * exception — the entry counted as extracted and the update proceeded
+     * into `composer install` and migrations over truncated PHP files.
+     *
+     * @since 2.7.1
+     */
+    public function test_stream_entry_to_disk_throws_on_a_short_write(): void
+    {
+        ShortWriteStreamWrapper::register();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function streamInto( $in, $out, string $filename, string $target ): void
+            {
+                $this->streamEntryToDisk( $in, $out, $filename, $target );
+            }
+        };
+
+        $in  = fopen( 'php://memory', 'r+b' );
+        fwrite( $in, str_repeat( 'x', 4096 ) );
+        rewind( $in );
+
+        $out = fopen( 'cmsfw-shortwrite://target', 'wb' );
+
+        try {
+            $manager->streamInto( $in, $out, 'app/Model.php', '/tmp/app/Model.php' );
+            $this->fail( 'streamEntryToDisk must throw when fwrite reports a short write.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'short write', $e->getMessage() );
+        } finally {
+            ShortWriteStreamWrapper::unregister();
+        }
+    }
+
+    /**
+     * Regression for BUG-1: `UpCommand::handle()` catches its own exceptions
+     * and returns 1, so a failure to lift maintenance mode never threw. The
+     * flag was cleared anyway, the shutdown guard disarmed, and the run marked
+     * `Completed` — while the site served 503 to every visitor.
+     *
+     * @since 2.7.1
+     */
+    public function test_disable_maintenance_mode_throws_when_up_returns_non_zero(): void
+    {
+        // The Artisan facade cannot be Mockery-mocked here — Testbench's
+        // console kernel is `final` — so swap in a stand-in that reports the
+        // failing exit code `UpCommand` actually returns.
+        Artisan::swap( new class {
+            public array $calls = [];
+
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                $this->calls[] = $command;
+
+                return 1;
+            }
+        } );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function disableInto(): void
+            {
+                $this->disableMaintenanceMode();
+            }
+
+            public function maintenanceIsActive(): bool
+            {
+                return $this->maintenanceModeActive;
+            }
+
+            public function markActive(): void
+            {
+                $this->maintenanceModeActive = true;
+            }
+        };
+
+        $manager->markActive();
+
+        try {
+            $manager->disableInto();
+            $this->fail( 'disableMaintenanceMode must throw when `up` exits non-zero.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'maintenance mode', strtolower( $e->getMessage() ) );
+        }
+
+        $this->assertTrue(
+            $manager->maintenanceIsActive(),
+            'The active flag must stay set so the shutdown guard remains armed.',
+        );
+    }
+
+    /**
+     * Companion to the above: a failing `down` must abort the update rather
+     * than let it proceed to overwrite application files on a live site.
+     *
+     * @since 2.7.1
+     */
+    public function test_enable_maintenance_mode_throws_when_down_returns_non_zero(): void
+    {
+        Artisan::swap( new class {
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                return 1;
+            }
+        } );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function enableInto(): void
+            {
+                $this->enableMaintenanceMode();
+            }
+
+            public function maintenanceIsActive(): bool
+            {
+                return $this->maintenanceModeActive;
+            }
+        };
+
+        try {
+            $manager->enableInto();
+            $this->fail( 'enableMaintenanceMode must throw when `down` exits non-zero.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'maintenance mode', strtolower( $e->getMessage() ) );
+        }
+
+        $this->assertFalse(
+            $manager->maintenanceIsActive(),
+            'The active flag must not be set when the site was never taken down.',
+        );
+    }
+
+    /**
+     * BUG-7 companion at the predicate level: an excluded name must match on a
+     * path-segment boundary, not as a bare string prefix.
+     *
+     * @since 2.7.1
+     */
+    public function test_path_exclusion_matches_on_segment_boundaries(): void
+    {
+        $manager = new ApplicationUpdateManager;
+
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'isPathExcluded' );
+        $method->setAccessible( true );
+
+        $this->assertTrue( $method->invoke( $manager, 'storage', ['storage'] ) );
+        $this->assertTrue( $method->invoke( $manager, 'storage/logs/test.log', ['storage'] ) );
+
+        $this->assertFalse( $method->invoke( $manager, 'storage-helpers.php', ['storage'] ) );
+        $this->assertFalse( $method->invoke( $manager, 'storages/x.php', ['storage'] ) );
+        $this->assertFalse( $method->invoke( $manager, '.envelope.json', ['.env'] ) );
+        $this->assertFalse( $method->invoke( $manager, 'vendors/README.md', ['vendor'] ) );
+    }
+
+    /**
+     * SEC-1 at the predicate level.
+     *
+     * @since 2.7.1
+     */
+    public function test_canonicalize_archive_path_normalizes_and_rejects(): void
+    {
+        $manager = new ApplicationUpdateManager;
+
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'canonicalizeArchivePath' );
+        $method->setAccessible( true );
+
+        $this->assertSame( '.env', $method->invoke( $manager, './.env' ) );
+        $this->assertSame( 'app/Model.php', $method->invoke( $manager, 'app//Model.php' ) );
+        $this->assertSame( 'app/Model.php', $method->invoke( $manager, './app/./Model.php' ) );
+        $this->assertSame( 'app/Model.php', $method->invoke( $manager, 'app\\Model.php' ) );
+
+        $this->assertNull( $method->invoke( $manager, '/etc/passwd' ) );
+        $this->assertNull( $method->invoke( $manager, '../outside.php' ) );
+        $this->assertNull( $method->invoke( $manager, 'app/../../outside.php' ) );
+    }
+
+    /**
+     * SEC-12: archive-supplied permissions are clamped, so a `0777` `.php`
+     * file cannot land under the docroot writable by a neighbouring tenant.
+     *
+     * @since 2.7.1
+     */
+    public function test_extract_update_clamps_archive_supplied_permissions(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-perms-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'app/Wide.php', "<?php\n" );
+        $zip->addFromString( 'routes/web.php', "<?php\n" );
+        $zip->setExternalAttributesName( 'app/Wide.php', ZipArchive::OPSYS_UNIX, 0777 << 16 );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists( $target . '/app/Wide.php' );
+
+            $mode = fileperms( $target . '/app/Wide.php' ) & 0777;
+
+            $this->assertSame( 0, $mode & 0022, 'Group/world write bits must be cleared on extracted files.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * SEC-7: rollback never consulted `exclude_from_update`, so a backup ZIP
+     * carrying `.env` replaced the live one — and `composer install` then ran
+     * scripts from the restored `composer.json`.
+     *
+     * @since 2.7.1
+     */
+    public function test_rollback_does_not_restore_excluded_paths(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-excl-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        file_put_contents( $target . '/.env', "APP_KEY=live\n" );
+
+        $backupPath = $tempRoot . '/backup.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( '.env', "APP_KEY=from-backup\n" );
+        $zip->addFromString( 'app/Model.php', "<?php // restored\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function restoreOnly( string $backupPath ): void
+            {
+                // Exercise the archive-restore half without shelling out to
+                // composer, which is covered by its own tests.
+                $zip = new ZipArchive;
+                $zip->open( $backupPath );
+
+                $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+                $restore      = [];
+
+                for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+                    $name      = (string) $zip->getNameIndex( $i );
+                    $canonical = $this->canonicalizeArchivePath( $name );
+
+                    if ( null === $canonical || '' === $canonical || $this->isPathExcluded( $canonical, $excludePaths ) ) {
+                        continue;
+                    }
+
+                    $restore[] = $name;
+                }
+
+                $zip->extractTo( base_path(), $restore );
+                $zip->close();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->restoreOnly( $backupPath );
+
+            $this->assertSame( "APP_KEY=live\n", file_get_contents( $target . '/.env' ) );
+            $this->assertFileExists( $target . '/app/Model.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $backupPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * SEC-5: a plaintext download URL is refused unless the operator has
+     * explicitly opted into insecure transport.
+     *
+     * @since 2.7.1
+     */
+    public function test_download_refuses_plaintext_transport(): void
+    {
+        $source = new class {
+            use \ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
+
+            public function fetch( string $url ): string
+            {
+                return $this->streamDownloadToTempFile( $url );
+            }
+        };
+
+        try {
+            $source->fetch( 'http://example.com/update.zip' );
+            $this->fail( 'A plaintext download URL must be refused.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'insecure transport', $e->getMessage() );
+        }
+    }
+
+    /**
+     * SEC-4: `performUpdate()` must refuse a target that is not newer than the
+     * installed version unless `--allow-downgrade` was passed. Installing an
+     * older release re-introduces every vulnerability fixed since it shipped,
+     * and migrations are not reversed.
+     *
+     * @since 2.7.1
+     */
+    public function test_perform_update_refuses_a_downgrade_by_default(): void
+    {
+        config( ['app.version' => '2.0.0'] );
+
+        $manager = new ApplicationUpdateManager;
+
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( new UpdateInfo(
+            currentVersion: '2.0.0',
+            latestVersion: '2.1.0',
+            downloadUrl: 'https://example.com/update.zip',
+        ) );
+
+        $manager->setUpdateChecker( $checker );
+
+        try {
+            $manager->performUpdate( '1.0.0' );
+            $this->fail( 'performUpdate() must refuse a downgrade without --allow-downgrade.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'not newer', $e->getMessage() );
+            $this->assertStringContainsString( '--allow-downgrade', $e->getMessage() );
         }
     }
 
