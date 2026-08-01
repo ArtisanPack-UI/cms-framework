@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`php artisan update:status`** ([#256](https://github.com/ArtisanPack-UI/cms-framework/issues/256)) — reports the most recent `performUpdate()` run from a persisted step marker: the step it reached, the versions involved, the recorded error, and — for a run that died mid-flight — the outstanding steps with the command to run for each. Exits non-zero when the last run failed or was interrupted, so it composes with health checks. `--json` emits the raw record for an admin UI; `--clear` discards it after reporting. Host applications can read the same record programmatically via the new `ApplicationUpdateManager::updateState()` / `clearUpdateState()`.
+- **`cms.updates.state_path` and `cms.updates.lift_maintenance_on_interrupt` config keys** ([#256](https://github.com/ArtisanPack-UI/cms-framework/issues/256)) — where the step marker is written (relative paths resolve against `storage_path()`), and whether the new shutdown guard lifts maintenance mode when an update dies mid-flight. The latter defaults to `true`; set `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT=false` to fail closed and keep the site down until an operator has verified a possibly half-applied install.
+
 ### Changed
 
 ### Deprecated
@@ -16,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 ### Fixed
+
+- **`performUpdate()` had no execution-time guard, so a PHP timeout killed it mid-flight and left the site stuck in maintenance mode** ([#256](https://github.com/ArtisanPack-UI/cms-framework/issues/256)) — `runComposerInstall()` gave the composer child a `cms.updates.composer_timeout` budget (default 600s), but the parent PHP request was still governed by `max_execution_time`, which defaults to **30 seconds** under PHP-FPM — the path the admin UI uses. Composer was given ten minutes and the request was killed after thirty seconds. Worse, an execution-time fatal is raised at shutdown rather than thrown, so `performUpdate()`'s `catch` block never ran: no rollback, and step 10's `disableMaintenanceMode()` never executed. The operator was left with a site returning 503 to every visitor, no error in the UI (the request died before rendering a response), and no automatic way back. Every other failure in this module to date failed *safely*; this one failed open. Three guards now cover it:
+
+  - `performUpdate()` and `rollback()` call `set_time_limit( 0 )` and `ignore_user_abort( true )` up front, so neither PHP's execution ceiling nor the operator closing the browser tab can kill the request mid-update. Hosts that put `set_time_limit` in `disable_functions` get a warning log naming `php artisan update:perform` as the supported path instead.
+  - `enableMaintenanceMode()` registers a shutdown guard that lifts maintenance mode if the process dies before step 10 — covering out-of-memory fatals and FPM's `request_terminate_timeout`, neither of which `set_time_limit()` can override. It logs a `critical` entry naming the step it died on, and if `artisan up` itself fails (likely when shutting down after an OOM fatal) it removes `storage/framework/down` directly.
+  - Each of the ten steps is persisted to a state file as it is entered, so a killed update is *detectable*. Previously there was no way to distinguish "update in progress", "update died at step 6", and "the site was manually put into maintenance mode". A flat file rather than a cache entry on purpose: step 8 runs `cache:clear`, and the database cache driver is unavailable while step 7's migrations are mid-flight.
+
+  Nothing here makes an HTTP request a *good* place to run a multi-minute job — `php artisan update:perform` from the CLI remains the supported path, and moving the HTTP endpoint to a queued job is tracked separately. These guards make the HTTP path fail safely instead of taking the site down and leaving it there.
 
 ### Security
 

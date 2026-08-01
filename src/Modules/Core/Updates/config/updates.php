@@ -96,6 +96,50 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Update State File
+    |--------------------------------------------------------------------------
+    |
+    | Where the updater records which step of `performUpdate()` is in flight.
+    | Relative paths resolve against `storage_path()`; an absolute path is used
+    | verbatim.
+    |
+    | This is a plain file rather than a cache entry on purpose: step 8 of the
+    | update runs `cache:clear`, and the database cache driver is unavailable
+    | while step 7's migrations are mid-flight. `storage/` is in
+    | `exclude_from_update` below, so the marker survives extraction.
+    |
+    | Read it with `php artisan update:status`, or programmatically via
+    | `ApplicationUpdateManager::updateState()`.
+    |
+    */
+    'state_path' => 'framework/cms-update-state.json',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Lift Maintenance Mode On Interrupted Updates
+    |--------------------------------------------------------------------------
+    |
+    | An update that dies mid-flight (PHP fatal, out of memory, FPM's
+    | `request_terminate_timeout`, the operator closing the tab) never reaches
+    | step 10, so maintenance mode is never disabled and the site serves 503 to
+    | every visitor until somebody notices and runs `php artisan up`.
+    |
+    | When enabled (the default), a shutdown handler lifts maintenance mode in
+    | that case and logs a `critical` entry naming the step it died on. The
+    | install may be half-applied, which is a real trade-off — but an
+    | unattended outage the operator may not notice for hours is worse, and
+    | `php artisan update:status` reports exactly what is outstanding.
+    |
+    | Set to `false` to fail closed and keep the site down until an operator
+    | has verified the install by hand.
+    |
+    | Note this cannot help against `kill -9`, which runs no shutdown handlers.
+    |
+    */
+    'lift_maintenance_on_interrupt' => env( 'CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT', true ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Backup Settings
     |--------------------------------------------------------------------------
     |
