@@ -84,6 +84,32 @@ When an update fails, the framework rolls back to the pre-update backup. Two beh
 - **Zip-slip protection.** Entries whose normalized path starts with `/` or contains `..` segments are rejected before the target directory is created. After path assembly, `realpath()` verifies the resolved parent still sits under the extraction root before opening the write stream. Rejected entries are logged and skipped — a crafted `release-root/../../../etc/cron.d/x` can no longer escape the install root.
 - **fopen/fread failures surface as rollback triggers.** A failed `fopen('wb')` or `fread()` used to `continue`/`break` silently, leaving a partial install on disk that failed to boot on the next request with no obvious cause. Failures are now logged with the entry + errno and thrown via `UpdateException::extractionEntryFailed()`, so `performUpdate()`'s catch block rolls back to the pre-update snapshot.
 
+## Dependency installation: `composer.lock` ships with the release
+
+**Releases must ship a committed `composer.lock` that matches their `composer.json`.** The updater extracts both and runs `composer install` against the pair, so the host installs the exact dependency set the release was built and tested against rather than re-resolving the tree on production hardware at update time.
+
+`composer.lock` is therefore **not** in the `exclude_from_update` default. It used to be, annotated `// Rebuilt via composer install` — but `composer install` only ever *reads* a lock file. It never writes one; only `composer update` / `composer require` do. Excluding the lock while letting `composer.json` be overwritten left the two out of sync and aborted step 6 on **every release that changed any dependency constraint, on every host**. Releases that changed no dependencies still worked, which is why it went unnoticed until the first constraint bump.
+
+For the `auto_archive` GitLab strategy this is free — the archive is the repository tree, and an application should commit its lock. For `release_asset`, whoever builds the ZIP must include the lock.
+
+The pre-update snapshot includes `composer.lock` for the same reason, so a rollback restores the old `composer.json` and old lock together.
+
+### Lock-sync pre-flight check
+
+Before invoking composer, the framework compares the on-disk `composer.lock`'s `content-hash` against a hash computed from `composer.json` using composer's own algorithm. On a mismatch it aborts with `UpdateException::composerFilesOutOfSync` naming the real cause.
+
+This exists because composer's own diagnosis of that state is actively misleading:
+
+```
+- Required package "artisanpack-ui/cms-framework" is in the lock file as "2.5.4" but that
+  does not satisfy your constraint "^2.7.0". This usually happens when composer files are
+  incorrectly merged or the composer.json file is manually edited.
+```
+
+Nothing was merged and nothing was hand-edited — but that sentence sends the operator hunting for both. The remaining ways to reach this state are a release that shipped no lock, or a host whose `exclude_from_update` override still lists `composer.lock`; the framework's message says so.
+
+The check **fails open**: a missing `composer.json`, a missing or unparseable `composer.lock`, or a lock carrying no `content-hash` is left for composer to adjudicate. Only a positively-detected mismatch aborts, so a false alarm can't block an update that would otherwise have installed cleanly. Set `cms.updates.verify_composer_lock_sync` to `false` (env `CMS_UPDATES_VERIFY_LOCK_SYNC`) to skip it entirely — for instance if a future composer release changes the content-hash algorithm before the framework catches up.
+
 ## Long-running updates and interrupted processes
 
 A full update — download, extract, `composer install` across a real dependency tree, migrate — routinely runs for several minutes. PHP's `max_execution_time` defaults to **30 seconds** under PHP-FPM, which is the path the admin UI uses. Three guards keep that survivable:
@@ -155,7 +181,8 @@ When the host's installed version changes *out-of-band* (a manual `composer inst
 | `cms.updates.composer_timeout` | Seconds to wait for composer install (default 600). |
 | `cms.updates.allow_unverified_updates` | Opt-in to warn-and-continue when the source omits a SHA-256 checksum. Default `false`. Env: `CMS_UPDATES_ALLOW_UNVERIFIED`. |
 | `cms.updates.backup_enabled` | Whether to snapshot before updating. |
-| `cms.updates.exclude_from_update` | Paths preserved during extraction. |
+| `cms.updates.exclude_from_update` | Paths preserved during extraction. Must **not** list `composer.lock` — see above. |
+| `cms.updates.verify_composer_lock_sync` | Whether to check `composer.json`/`composer.lock` agreement before invoking composer. Default `true`. Env: `CMS_UPDATES_VERIFY_LOCK_SYNC`. |
 | `cms.updates.state_path` | Where the step marker is written. Relative paths resolve against `storage_path()`. Default `framework/cms-update-state.json`. |
 | `cms.updates.lift_maintenance_on_interrupt` | Whether the shutdown guard lifts maintenance mode when an update dies mid-flight. Default `true`. Env: `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT`. |
 
@@ -167,3 +194,4 @@ Environment variables:
 | `CMS_PHP_BINARY` | Absolute path to a CLI PHP binary; overrides `PHP_BINARY` when the updater invokes composer. |
 | `CMS_UPDATES_ALLOW_UNVERIFIED` | Boolean; opts into warn-and-continue when the source omits a SHA-256 checksum. |
 | `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT` | Boolean; set `false` to leave the site in maintenance mode when an update dies mid-flight. |
+| `CMS_UPDATES_VERIFY_LOCK_SYNC` | Boolean; set `false` to skip the `composer.json`/`composer.lock` sync pre-flight check. |

@@ -158,6 +158,17 @@ return [
     | Files and directories to exclude from updates (preserved during extraction).
     | These are relative to base_path().
     |
+    | `composer.lock` is deliberately NOT excluded. `composer install` only ever
+    | *reads* a lock file — it never writes one — so excluding the lock while
+    | letting `composer.json` be overwritten leaves the two out of sync and
+    | aborts step 6 on every release that changes a dependency constraint. The
+    | release's lock must land alongside its `composer.json` so the host
+    | installs the exact dependency set the release was built and tested
+    | against. See `verify_composer_lock_sync` below.
+    |
+    | (The `vendor` comment below is correct as written — that directory really
+    | is rebuilt by `composer install`.)
+    |
     */
     'exclude_from_update' => [
         '.env',
@@ -169,8 +180,37 @@ return [
         '.git',
         '.gitignore',
         'bootstrap/cache/*.php',
-        'composer.lock', // Rebuilt via composer install
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Composer Lock Sync Pre-Flight Check
+    |--------------------------------------------------------------------------
+    |
+    | Before invoking composer, verify that the on-disk `composer.lock` is in
+    | sync with the on-disk `composer.json` by comparing the lock's
+    | `content-hash` against a hash computed from `composer.json` using
+    | composer's own algorithm.
+    |
+    | When they diverge, composer aborts with "This usually happens when
+    | composer files are incorrectly merged or the composer.json file is
+    | manually edited" — which sends the operator hunting for a merge conflict
+    | or a hand-edit that never happened. The real cause is almost always a
+    | release that shipped no `composer.lock`, or a host whose
+    | `exclude_from_update` override still excludes it. This check names that
+    | cause instead.
+    |
+    | The check fails *open*: a missing `composer.json`, a missing or
+    | unparseable `composer.lock`, or a lock without a `content-hash` key is
+    | left for composer itself to adjudicate. Only a positively-detected
+    | mismatch aborts.
+    |
+    | Set to `false` to skip the check entirely — for instance if a future
+    | composer release changes the content-hash algorithm and the framework has
+    | not caught up.
+    |
+    */
+    'verify_composer_lock_sync' => env( 'CMS_UPDATES_VERIFY_LOCK_SYNC', true ),
 
     /*
     |--------------------------------------------------------------------------
