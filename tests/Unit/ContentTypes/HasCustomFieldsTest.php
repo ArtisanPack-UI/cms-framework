@@ -174,6 +174,170 @@ test( 'plugin custom field write on a model without metadata column fails loud',
     Schema::dropIfExists( 'test_no_meta_hcf' );
 } );
 
+test( 'applyCustomFieldValues routes a registered metadata field into the metadata column', function (): void {
+    app( CustomFieldManager::class )->registerField( [
+        'name'          => 'Plugin Field',
+        'key'           => 'plugin_subtitle',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['test_hcf_posts'],
+    ] );
+
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'Payload Post';
+    $post->applyCustomFieldValues( ['plugin_subtitle' => 'From the payload'] );
+    $post->save();
+
+    $reloaded = TestHasCustomFieldsPost::find( $post->id );
+
+    expect( $reloaded->metadata )->toBe( ['plugin_subtitle' => 'From the payload'] );
+    expect( $reloaded->plugin_subtitle )->toBe( 'From the payload' );
+} );
+
+test( 'applyCustomFieldValues silently drops a metadata field whose key names a real column', function (): void {
+    // The #253 attack: a plugin filter-registers a metadata field keyed to a
+    // real column, so an untrusted custom-field payload carrying that key
+    // reaches `parent::__set()` and overwrites the column. The payload key
+    // must be dropped — neither the column nor the metadata JSON may change.
+    // `title` is a real column on `test_hcf_posts`.
+    app( CustomFieldManager::class )->registerField( [
+        'name'          => 'Hijack Attempt',
+        'key'           => 'title',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['test_hcf_posts'],
+    ] );
+
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'Legit Title';
+    $post->applyCustomFieldValues( ['title' => 'Hijacked Title'] );
+    $post->save();
+
+    $reloaded = TestHasCustomFieldsPost::find( $post->id );
+
+    expect( $reloaded->title )->toBe( 'Legit Title' );
+    expect( $reloaded->metadata )->toBeNull();
+} );
+
+test( 'applyCustomFieldValues drops a real-column key even when nothing registered it', function (): void {
+    // The payload is untrusted whether or not a plugin registered the key,
+    // so an unregistered column name must be dropped on the same terms.
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'Legit Title';
+    $post->applyCustomFieldValues( ['title' => 'Hijacked Title'] );
+    $post->save();
+
+    expect( TestHasCustomFieldsPost::find( $post->id )->title )->toBe( 'Legit Title' );
+} );
+
+test( 'applyCustomFieldValues drops a key naming the metadata column itself', function (): void {
+    // `metadata` is both a real column and a cast attribute; a payload key
+    // matching it would otherwise replace the entire custom-field store.
+    $post           = new TestHasCustomFieldsPost;
+    $post->title    = 'Meta Post';
+    $post->metadata = ['kept' => 'yes'];
+    $post->applyCustomFieldValues( ['metadata' => ['wiped' => 'everything']] );
+    $post->save();
+
+    expect( TestHasCustomFieldsPost::find( $post->id )->metadata )->toBe( ['kept' => 'yes'] );
+} );
+
+test( 'applyCustomFieldValues applies the safe keys alongside a dropped one', function (): void {
+    app( CustomFieldManager::class )->registerField( [
+        'name'          => 'Plugin Field',
+        'key'           => 'plugin_blurb',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['test_hcf_posts'],
+    ] );
+
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'Mixed Payload';
+    $post->applyCustomFieldValues( [
+        'title'        => 'Hijacked Title',
+        'plugin_blurb' => 'A blurb.',
+    ] );
+    $post->save();
+
+    $reloaded = TestHasCustomFieldsPost::find( $post->id );
+
+    expect( $reloaded->title )->toBe( 'Mixed Payload' );
+    expect( $reloaded->metadata )->toBe( ['plugin_blurb' => 'A blurb.'] );
+} );
+
+test( 'applyCustomFieldValues writes a DB-registered field into its own column', function (): void {
+    // DB-registered fields are always column-storage and own a physical
+    // column, so the shadow-column drop must not swallow their values —
+    // otherwise every admin-created custom field stops persisting.
+    Schema::table( 'test_hcf_posts', function ( $table ): void {
+        $table->string( 'sku' )->nullable();
+    } );
+
+    CustomField::create( [
+        'name'          => 'SKU',
+        'key'           => 'sku',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['test_hcf_posts'],
+        'order'         => 1,
+        'required'      => false,
+    ] );
+
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'DB Field Payload';
+    $post->applyCustomFieldValues( ['sku' => 'ABC-123'] );
+    $post->save();
+
+    $reloaded = TestHasCustomFieldsPost::find( $post->id );
+
+    expect( $reloaded->sku )->toBe( 'ABC-123' );
+    expect( $reloaded->metadata )->toBeNull();
+} );
+
+test( 'applyCustomFieldValues ignores a filter registration claiming column storage', function (): void {
+    // The DB-registered exemption keys off `exists`, not the declared
+    // storage mode. A plugin declaring `storage => column` on a key that
+    // names a real column must still be dropped, or #253 reopens verbatim.
+    addFilter( 'ap.contentTypes.registeredCustomFields', function ( array $fields ): array {
+        $fields['title'] = [
+            'key'           => 'title',
+            'name'          => 'Hijack Attempt',
+            'type'          => 'text',
+            'column_type'   => 'string',
+            'content_types' => ['test_hcf_posts'],
+            'storage'       => 'column',
+        ];
+
+        return $fields;
+    } );
+
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'Legit Title';
+    $post->applyCustomFieldValues( ['title' => 'Hijacked Title'] );
+    $post->save();
+
+    expect( TestHasCustomFieldsPost::find( $post->id )->title )->toBe( 'Legit Title' );
+} );
+
+test( 'direct assignment to a real column still wins over a shadowing registration', function (): void {
+    // The guard belongs to the untrusted payload path only. Host code
+    // writing its own column must keep working, otherwise any plugin could
+    // brick saves by registering a field keyed to a required column.
+    app( CustomFieldManager::class )->registerField( [
+        'name'          => 'Hijack Attempt',
+        'key'           => 'title',
+        'type'          => 'text',
+        'column_type'   => 'string',
+        'content_types' => ['test_hcf_posts'],
+    ] );
+
+    $post        = new TestHasCustomFieldsPost;
+    $post->title = 'Written By The Host';
+    $post->save();
+
+    expect( TestHasCustomFieldsPost::find( $post->id )->title )->toBe( 'Written By The Host' );
+} );
+
 test( 'getCustomFieldsForType is memoized per instance', function (): void {
     app( CustomFieldManager::class )->registerField( [
         'name'          => 'Plugin Field',

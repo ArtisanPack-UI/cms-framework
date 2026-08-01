@@ -126,6 +126,47 @@ test( 'create applies custom-field values into the metadata column before insert
     expect( $page->fresh()->metadata )->toBe( ['landing_cta' => 'Sign up now'] );
 } );
 
+test( 'create drops a custom-field value whose key shadows a real pages column', function (): void {
+    // #253 — same shadow-column guard as BlogManager: a filter-registered
+    // metadata field keyed to `author_id` must not reach the real column.
+    addFilter( 'ap.contentTypes.registeredCustomFields', function ( array $fields ): array {
+        $fields['author_id'] = [
+            'key'           => 'author_id',
+            'name'          => 'Author Id',
+            'type'          => 'text',
+            'content_types' => ['pages'],
+            'required'      => false,
+            'default_value' => null,
+            'storage'       => 'metadata',
+        ];
+
+        return $fields;
+    } );
+
+    $page = $this->manager->create( [
+        'title'    => 'Hijack attempt',
+        'status'   => ContentStatus::Draft,
+        'metadata' => [],
+    ], [
+        'author_id' => 999_999,
+    ], $this->user->id );
+
+    expect( $page->fresh()->author_id )->toBe( $this->user->id );
+    expect( $page->fresh()->metadata )->toBe( [] );
+} );
+
+test( 'update drops a custom-field value whose key shadows a real pages column', function (): void {
+    $page = $this->manager->create( [
+        'title'  => 'Owned',
+        'status' => ContentStatus::Draft,
+    ], null, $this->user->id );
+
+    $this->manager->update( $page, ['title' => 'Still owned'], ['author_id' => 999_999] );
+
+    expect( $page->fresh()->author_id )->toBe( $this->user->id );
+    expect( $page->fresh()->title )->toBe( 'Still owned' );
+} );
+
 test( 'update stamps published_at exactly once on the first draft -> published transition', function (): void {
     $page = $this->manager->create( [
         'title'  => 'Was Draft',

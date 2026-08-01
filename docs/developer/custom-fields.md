@@ -12,6 +12,7 @@ Custom fields allow you to add additional data to content types in Digital Shopf
 - [Column Types](#column-types)
 - [Migration Generation](#migration-generation)
 - [Retrieving and Displaying Values](#retrieving-and-displaying-values)
+- [Applying Values From Untrusted Input](#applying-values-from-untrusted-input)
 - [Data Migration](#data-migration)
 - [Best Practices](#best-practices)
 
@@ -470,6 +471,42 @@ $products = $category->products()
     ->orderBy('price', 'asc')
     ->get();
 ```
+
+## Applying Values From Untrusted Input
+
+A custom-field payload that came from request input must be applied with
+`applyCustomFieldValues()`, not by assigning each key directly:
+
+```php
+// Correct — drops keys that shadow a real column.
+$post->applyCustomFieldValues($request->input('custom_fields', []));
+
+// Unsafe — `custom_fields[author_id]` would overwrite the real column.
+foreach ($request->input('custom_fields', []) as $key => $value) {
+    $post->{$key} = $value;
+}
+```
+
+The magic setter routes a metadata-storage field into the model's `metadata`
+JSON column, but a key naming a real column falls through to Eloquent and
+writes that column — and the custom-field half of a payload gets no fillable
+filtering. `applyCustomFieldValues()` silently drops any key that names a real
+column, cast, mutator, accessor, or relation before assigning the rest, whether
+or not a field was ever registered under that key.
+
+DB-registered fields are the exception: they own the column they name, so their
+values still write through. Filter-registered fields never qualify for that
+exemption, even if the registration declares `'storage' => 'column'` — only a
+row in the `custom_fields` table can authorize a real-column write.
+
+`BlogManager::create()`/`update()` and `PageManager::create()`/`update()` apply
+their `$customFields` argument through this method already, so callers passing
+custom fields to a manager are covered without doing anything.
+
+Direct assignment from your own code is unaffected — `$post->title = 'New'`
+still writes the column even when a plugin has registered `title` as a custom
+field. Only the payload path is guarded, so a registration can never block a
+host model from writing its own columns.
 
 ## Data Migration
 
