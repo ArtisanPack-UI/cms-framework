@@ -348,6 +348,28 @@ $field = $customFieldManager->createField([
 // Migration automatically created in database/migrations/
 ```
 
+#### Rejected keys
+
+Since 2.7.1, `createField()` throws `InvalidArgumentException` when the key is
+unavailable, and `CustomFieldRequest` surfaces the same conflict as a
+field-level validation error so the admin UI shows a message rather than a 500.
+Both call `CustomFieldManager::findKeyConflict()`, so the API and the UI cannot
+drift apart. A key is rejected when it:
+
+- appears in `CustomFieldManager::RESERVED_FIELD_KEYS` (`id`, `author_id`,
+  `status`, `published_at`, `slug`, `parent_id`, `metadata`, `password`,
+  `created_at`, `updated_at`, `deleted_at`, `user_id`, `uuid`,
+  `remember_token`); or
+- already names a column on one of the target content types' tables.
+
+The reason is that `addColumnToTable()` silently returns when the column already
+exists. Without the check, creating a field named `author_id` did not fail — the
+existing column was *adopted* as a custom field, and from then on any content
+editor's `custom_fields[author_id]` wrote the real column through the
+DB-persisted-field exemption. That is a permanent, quiet escalation from
+"manage custom fields" to "reassign authorship of any post", and a footgun even
+without a malicious actor.
+
 ### Generated Migration Example
 
 ```php

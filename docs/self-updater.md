@@ -17,6 +17,70 @@ Hosts on trusted networks or air-gapped mirrors that intentionally accept the ri
 
 Those hosts still get the original warning log for every unverified update.
 
+### What the checksum does and does not protect against
+
+Be clear about the guarantee. The digest comes from the **same origin and trust
+domain** as the archive — a `*.sha256` sidecar on the same release, a `SHA-256:`
+line in the release description, or the same JSON document that supplied
+`download_url`. It is therefore an **integrity** check: it catches truncation,
+CDN corruption, and partial downloads. It is **not** an authenticity check. It
+does not protect against a compromised update server, a compromised
+release-editor account, or a plaintext-HTTP MITM. There is no signature
+verification in this module.
+
+As of 2.7.1, `GitHubUpdateSource` discovers checksums the same way
+`GitLabUpdateSource` does — a `{asset}.sha256` release asset first, falling back
+to a `SHA-256:` marker in the release body. Before that it never populated
+`sha256` at all, so with shipped defaults every GitHub-sourced update threw
+`checksumRequired` and the only workaround was enabling
+`allow_unverified_updates` permanently.
+
+### Transport (2.7.1)
+
+Release archives are downloaded over `https` only, and **redirects are
+constrained to the same scheme** — an `https` URL that 302s to `http` is
+refused rather than silently downgraded. This matters because the update
+pipeline is by design a remote-code-execution channel: it overwrites PHP files
+and then runs `composer install`, which executes `post-install-cmd` scripts from
+the just-overwritten `composer.json`.
+
+Air-gapped mirrors on a trusted network that genuinely cannot serve https can
+opt out with `cms.updates.allow_insecure_transport` (env:
+`CMS_UPDATES_ALLOW_INSECURE_TRANSPORT`). The updater logs a warning and
+proceeds.
+
+### Target version and downgrades (2.7.1)
+
+When `--target-version` pins a release other than the latest, the checksum is
+resolved for **that** release rather than for the latest one. Previously the
+pinned archive was compared against the latest release's digest, which failed
+closed on its own but installed an unverified archive when combined with
+`allow_unverified_updates`.
+
+A target that is not newer than the installed version is refused, because
+installing an older release re-introduces every vulnerability fixed since it
+shipped and migrations are not reversed:
+
+```bash
+php artisan update:perform --target-version=2.6.0                    # refused
+php artisan update:perform --target-version=2.6.0 --allow-downgrade   # explicit opt-in
+```
+
+## Concurrent updates (2.7.1)
+
+`performUpdate()` takes an exclusive `flock` on a sentinel beside the state file
+before doing anything. A second update — a double-clicked admin button, or the
+scheduled `auto_update` racing an operator's `update:perform` — is refused with
+`UpdateException::updateAlreadyRunning()` rather than extracting over the first
+one. Interleaved runs produce a tree no rollback repairs, because the second
+run's backup snapshots the first run's half-applied state.
+
+The lock is deliberately **not** a cache lock: step 8 runs `cache:clear` and
+would drop it mid-run. As a second line of defence, a persisted `in_progress`
+record whose recorded PID is still alive also blocks a new run. A stale marker
+from a `kill -9`'d run does not wedge the updater — liveness is checked, not
+just presence.
+
 ## Metadata request path
 
 The feed check, single-release lookup, SHA-256 sidecar fetch, and custom JSON endpoint are issued through the internal `MetadataClient` — a raw `GuzzleHttp\Client` that bypasses Laravel's HTTP factory. This is deliberate: any userland `RequestSending`/`ResponseReceived` listener (Herd Pro's `HttpClientWatcher`, Telescope, Debugbar, custom monitoring) can block or corrupt the metadata request lifecycle, and a wedged Herd dump-server socket used to hang the updater until `max_execution_time` instead of the ~200ms round-trip.
@@ -89,7 +153,18 @@ When an update fails, the framework rolls back to the pre-update backup. Two beh
 `ApplicationUpdateManager::extractUpdate()` streams each ZIP entry via `fopen()`/`fwrite()` (rather than `ZipArchive::extractTo()`) so a single large file can't OOM mid-extraction. Two guards keep that path safe:
 
 - **Zip-slip protection.** Entries whose normalized path starts with `/` or contains `..` segments are rejected before the target directory is created. After path assembly, `realpath()` verifies the resolved parent still sits under the extraction root before opening the write stream. Rejected entries are logged and skipped — a crafted `release-root/../../../etc/cron.d/x` can no longer escape the install root.
+- **Path canonicalization (2.7.1).** Entry names are canonicalized — split on `/`, empty and `.` segments dropped, any `..` segment rejected — *before* both the exclusion check and the containment check. Without this, an entry named `./.env` was simply a different string from `.env` and slipped past `exclude_from_update` entirely, while `realpath( dirname( '/base/./.env' ) )` resolves to `/base` so the containment check passed too. The reachable targets were the ones the exclusion list is believed to protect: `.env`, `vendor/`, `bootstrap/cache/*.php`, and the SQLite database.
+- **Exclusion matches on path-segment boundaries (2.7.1).** `isPathExcluded()` used a bare string prefix, so `storage-helpers.php` matched `storage` and was skipped by both the backup and the extraction — neither snapshotted nor ever updated.
 - **fopen/fread failures surface as rollback triggers.** A failed `fopen('wb')` or `fread()` used to `continue`/`break` silently, leaving a partial install on disk that failed to boot on the next request with no obvious cause. Failures are now logged with the entry + errno and thrown via `UpdateException::extractionEntryFailed()`, so `performUpdate()`'s catch block rolls back to the pre-update snapshot.
+- **Short writes and close failures too (2.7.1).** `fwrite()`'s return value and `fclose()`'s are both checked. A disk filling mid-extraction previously produced a short write with no exception: the entry counted as extracted and the update proceeded into `composer install` and migrations over truncated PHP files. The partial file is removed before the exception propagates.
+- **Symlinks and permissions (2.7.1).** A target that is an existing symlink (or any non-regular file) is skipped rather than followed and truncated — relevant on Envoyer/Forge/Deployer layouts where `storage` or `bootstrap/cache` are symlinked to shared directories. Directory entries are validated *before* `mkdir -p` runs rather than after. Archive-supplied permissions are clamped with `& ~0022`, so a `0777` `.php` file cannot land under the docroot writable by a neighbouring tenant.
+
+## Rollback safety (2.7.1)
+
+- **`exclude_from_update` applies on restore.** Rollback previously restored every entry in the backup ZIP with no filter, so an archive carrying `.env` or `vendor/autoload.php` replaced the live copies — and the `composer install` that follows executes scripts from the restored `composer.json`.
+- **Backups outside the configured directory are refused.** `update:rollback` with no argument picks the newest `backup-*.zip` by mtime. Any other vulnerability yielding a file write under `storage/` would otherwise let an attacker plant a backup and wait for a restore. Pass `--allow-external` to restore from a path outside `cms.updates.backup_path`.
+- **Rollback is skipped once the update is fully applied.** A failure at steps 8-10 (`cache:clear`, cleanup, `up`) happens *after* the code and schema are updated, so restoring the snapshot would discard a working install and leave old code against a new schema. Those failures log and point at `update:status`, which prints the commands to finish forward.
+- **A failed rollback is reported as such.** The `Failed` status label used to read `Failed (rolled back)` unconditionally, so an operator facing the most dangerous state this updater produces was told the tree had been restored. A separate `rolled_back` field now records `true` / `false` / `null` (not attempted), and `update:status` renders each distinctly.
 
 ## Dependency installation: `composer.lock` ships with the release
 
@@ -192,6 +267,8 @@ When the host's installed version changes *out-of-band* (a manual `composer inst
 | `cms.updates.verify_composer_lock_sync` | Whether to check `composer.json`/`composer.lock` agreement before invoking composer. Default `true`. Env: `CMS_UPDATES_VERIFY_LOCK_SYNC`. |
 | `cms.updates.state_path` | Where the step marker is written. Relative paths resolve against `storage_path()`. Default `framework/cms-update-state.json`. |
 | `cms.updates.lift_maintenance_on_interrupt` | Whether the shutdown guard lifts maintenance mode when an update dies mid-flight. Default `true`. Env: `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT`. |
+| `cms.updates.allow_insecure_transport` | Permit downloading a release archive over plaintext http, including via redirect. Default `false`. Env: `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT`. |
+| `cms.updates.backup_path` | Where snapshots are written. Relative paths resolve against `storage_path()`. Also bounds which archives `update:rollback` will restore without `--allow-external`. |
 
 Environment variables:
 
@@ -202,3 +279,13 @@ Environment variables:
 | `CMS_UPDATES_ALLOW_UNVERIFIED` | Boolean; opts into warn-and-continue when the source omits a SHA-256 checksum. |
 | `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT` | Boolean; set `false` to leave the site in maintenance mode when an update dies mid-flight. |
 | `CMS_UPDATES_VERIFY_LOCK_SYNC` | Boolean; set `false` to skip the `composer.json`/`composer.lock` sync pre-flight check. |
+| `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT` | Boolean; set `true` to allow plaintext-http downloads on a trusted air-gapped mirror. |
+
+## Command reference
+
+| Command | Purpose |
+|---------|---------|
+| `php artisan update:check` | Report whether an update is available. |
+| `php artisan update:perform` | Run the ten-step update. `--target-version=x.y.z` pins a release; `--allow-downgrade` permits a target that is not newer than the installed version. |
+| `php artisan update:rollback` | Restore a snapshot. Takes an optional path; defaults to the newest archive in `backup_path`. `--allow-external` permits a path outside that directory; `--force` skips the confirmation prompt. |
+| `php artisan update:status` | Report the most recent run. Exits non-zero when it failed or was interrupted, in **both** output modes. `--json` emits the raw record; `--clear` discards it after reporting. |
