@@ -59,9 +59,13 @@ return [
     |    OS-level env var visible to `getenv()` in the PHP-FPM pool.
     | 2. A non-default value for this config key — set this to a bespoke shell
     |    string if you need full control (custom flags, prepended PATH, etc.).
-    | 3. Auto-discovery across common install paths (`/usr/local/bin/composer`,
-    |    `/opt/homebrew/bin/composer`, `~/.composer/vendor/bin/composer`,
+    | 3. Auto-discovery across common install paths
+    |    (`~/Library/Application Support/Herd/bin/composer`,
+    |    `/usr/local/bin/composer`, `/opt/homebrew/bin/composer`,
+    |    `~/.composer/vendor/bin/composer`,
     |    `~/.config/composer/vendor/bin/composer`, `/usr/bin/composer`).
+    |    Laravel Herd's bundled composer leads the list so a macOS Herd host
+    |    stays on one toolchain for both FPM and CLI.
     | 4. This default command (bare `composer`).
     |
     | The PHP interpreter used to invoke composer is resolved from a CLI SAPI

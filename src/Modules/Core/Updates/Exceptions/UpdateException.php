@@ -227,6 +227,44 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * An explicitly configured composer binary failed its `--version` probe
+     * and is not visible to PHP on disk either.
+     *
+     * Distinct from `composerBinaryNotFound()` (auto-discovery exhausted its
+     * candidate list) and from `composerVerificationFailed()` (the probe
+     * failed against a binary PHP *can* see, so the interpreter is a live
+     * suspect). Raised only after the probe has already failed, never as a
+     * pre-flight gate: a path PHP cannot `stat()` may still be perfectly
+     * reachable by the shelled-out child under PHP-FPM sandboxing, which is
+     * the case `COMPOSER_BINARY` exists to work around.
+     *
+     * Once the probe has failed too, though, the path is overwhelmingly just
+     * wrong — and saying so beats `composerVerificationFailed()`'s "located
+     * but could not be executed" plus its trailing `CMS_PHP_BINARY` hint,
+     * which points the operator at the PHP interpreter when the composer path
+     * is the sole fault.
+     *
+     * @since 2.7.1
+     *
+     * @param  string  $binary  The configured path that could not be reached.
+     */
+    public static function configuredComposerBinaryMissing( string $binary ): self
+    {
+        return new self(
+            "The configured composer binary could not be found at: {$binary}. "
+            . 'It failed a `--version` probe and PHP cannot see a file there either. '
+            . 'This path came from `COMPOSER_BINARY` in your `.env` file, an OS-level '
+            . '`COMPOSER_BINARY` export, or `cms.updates.composer_binary` — not from '
+            . 'auto-discovery, which only ever returns a path it has already verified. '
+            . 'Correct the path or unset it to fall back to auto-discovery. '
+            . 'On macOS, run `which composer` in a shell to find the real one; Laravel '
+            . 'Herd bundles it at `~/Library/Application Support/Herd/bin/composer`, '
+            . 'which auto-discovery already checks. Quote the value in `.env` if the '
+            . 'path contains spaces.',
+        );
+    }
+
+    /**
      * Composer binary was located but `--version` execution failed. Surfaces
      * the resolved binary, the PHP interpreter used to invoke it, the exit
      * code, and any captured output so operators can distinguish an

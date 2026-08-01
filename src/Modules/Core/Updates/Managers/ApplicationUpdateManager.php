@@ -1039,8 +1039,11 @@ class ApplicationUpdateManager
      *
      * @since 2.5.3
      *
-     * @throws UpdateException When the binary is resolvable but `--version`
-     *                         cannot be executed.
+     * @throws UpdateException When `--version` cannot be executed — as
+     *                         `configuredComposerBinaryMissing` if the binary
+     *                         is also absent from PHP's view of the
+     *                         filesystem, otherwise as
+     *                         `composerVerificationFailed`.
      */
     protected function verifyComposerBinaryAvailable(): void
     {
@@ -1057,6 +1060,22 @@ class ApplicationUpdateManager
             ->run( $command );
 
         if ( ! $result->successful() ) {
+            // Select the diagnosis *after* the probe, never before it. A path
+            // PHP cannot stat is not automatically a wrong path: PHP-FPM
+            // sandboxes (macOS Herd Pro, chrooted pools, restrictive
+            // `open_basedir`) hide real files from `is_file()` while the
+            // shelled-out child reaches them fine, which is precisely why
+            // `COMPOSER_BINARY` is the documented escape hatch for that case
+            // (#233). Gating the probe on `is_file()` would close it. Once the
+            // probe has already failed, though, a path PHP also cannot see is
+            // overwhelmingly a typo'd or stale override rather than a
+            // sandboxed one — and saying so beats "located but could not be
+            // executed" plus a `CMS_PHP_BINARY` hint, which blames the PHP
+            // interpreter on hosts where it resolved perfectly well (#254).
+            if ( ! is_file( $binary ) ) {
+                throw UpdateException::configuredComposerBinaryMissing( $binary );
+            }
+
             $stderr = trim( (string) $result->errorOutput() );
             $stdout = trim( (string) $result->output() );
             $detail = '' !== $stderr ? $stderr : $stdout;
@@ -1173,12 +1192,24 @@ class ApplicationUpdateManager
      */
     protected function composerCandidatePaths(): array
     {
-        $home = getenv( 'HOME' );
+        $home    = getenv( 'HOME' );
+        $herdBin = $this->herdBinPath();
 
-        $candidates = [
-            '/usr/local/bin/composer',
-            '/opt/homebrew/bin/composer',
-        ];
+        $candidates = [];
+
+        if ( null !== $herdBin ) {
+            // Laravel Herd on macOS bundles composer alongside its PHP
+            // binaries. Prefer it for the same reason phpCandidatePaths()
+            // prefers Herd's php: hosts that use Herd for both FPM and CLI
+            // stay on a single toolchain. Without this a Herd-only machine —
+            // no Homebrew composer, no global install — matches none of the
+            // paths below and discovery falls through to bare `composer`,
+            // which PHP-FPM's stripped `PATH` cannot resolve.
+            $candidates[] = $herdBin . '/composer';
+        }
+
+        $candidates[] = '/usr/local/bin/composer';
+        $candidates[] = '/opt/homebrew/bin/composer';
 
         if ( is_string( $home ) && '' !== $home ) {
             $candidates[] = $home . '/.composer/vendor/bin/composer';
@@ -1188,6 +1219,32 @@ class ApplicationUpdateManager
         $candidates[] = '/usr/bin/composer';
 
         return $candidates;
+    }
+
+    /**
+     * Absolute path to Laravel Herd's macOS `bin/` directory, or `null` when
+     * `HOME` is unset or empty.
+     *
+     * Herd keeps both its `php` symlink and its bundled `composer` script in
+     * this one directory, and both `phpCandidatePaths()` and
+     * `composerCandidatePaths()` need it. Deriving it in one place keeps the
+     * two lists from drifting apart — the drift that produced #254, where the
+     * PHP list learned about Herd in #225 and the composer list never did.
+     *
+     * The directory is not checked for existence: callers append a filename
+     * and stat that, and a non-Herd host simply misses on every candidate.
+     *
+     * @since 2.7.1
+     */
+    protected function herdBinPath(): ?string
+    {
+        $home = getenv( 'HOME' );
+
+        if ( ! is_string( $home ) || '' === $home ) {
+            return null;
+        }
+
+        return $home . '/Library/Application Support/Herd/bin';
     }
 
     /**
@@ -1255,15 +1312,15 @@ class ApplicationUpdateManager
      */
     protected function phpCandidatePaths(): array
     {
-        $home = getenv( 'HOME' );
+        $herdBin = $this->herdBinPath();
 
         $candidates = [];
 
-        if ( is_string( $home ) && '' !== $home ) {
+        if ( null !== $herdBin ) {
             // Laravel Herd on macOS ships a `php` symlink pointing at the
             // currently-active CLI binary (e.g. `php84`). Prefer it so hosts
             // that use Herd for both FPM and CLI stay on a single toolchain.
-            $candidates[] = $home . '/Library/Application Support/Herd/bin/php';
+            $candidates[] = $herdBin . '/php';
         }
 
         $candidates[] = '/opt/homebrew/bin/php';

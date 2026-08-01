@@ -784,6 +784,12 @@ class ApplicationUpdateManagerTest extends TestCase
      * documented common install paths in preference order so the diagnostic
      * message stays honest and hosts see the same list the framework tried.
      *
+     * Regression for #254: Herd's bundled composer leads the list, mirroring
+     * `phpCandidatePaths()`. A Herd-only macOS host — no Homebrew composer, no
+     * global install — matched none of the other five paths, so discovery
+     * returned null and the updater fell through to bare `composer`, which
+     * PHP-FPM's stripped `PATH` cannot resolve.
+     *
      * @since 2.5.3
      */
     public function test_composer_candidate_paths_covers_documented_locations(): void
@@ -802,6 +808,7 @@ class ApplicationUpdateManagerTest extends TestCase
 
             $this->assertSame(
                 [
+                    '/home/tester/Library/Application Support/Herd/bin/composer',
                     '/usr/local/bin/composer',
                     '/opt/homebrew/bin/composer',
                     '/home/tester/.composer/vendor/bin/composer',
@@ -812,6 +819,145 @@ class ApplicationUpdateManagerTest extends TestCase
             );
         } finally {
             putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: with no `HOME` there is no Herd directory to derive,
+     * so the Herd entry is omitted rather than rendered against an empty
+     * string — which would stat `/Library/Application Support/Herd/bin/composer`
+     * on every candidate walk.
+     *
+     * @since 2.7.1
+     */
+    public function test_composer_candidate_paths_omits_herd_entry_without_home(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'composerCandidatePaths' );
+            $method->setAccessible( true );
+
+            $this->assertSame(
+                [
+                    '/usr/local/bin/composer',
+                    '/opt/homebrew/bin/composer',
+                    '/usr/bin/composer',
+                ],
+                $method->invoke( $manager ),
+            );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: both candidate lists derive Herd's `bin/` directory
+     * from the same helper, so they cannot drift apart again — the drift that
+     * left the composer list without Herd awareness after #225 taught the PHP
+     * list about it.
+     *
+     * @since 2.7.1
+     */
+    public function test_herd_bin_path_is_shared_by_both_candidate_lists(): void
+    {
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=/home/tester' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+
+            $herdBin = $reflection->getMethod( 'herdBinPath' );
+            $herdBin->setAccessible( true );
+
+            $composerPaths = $reflection->getMethod( 'composerCandidatePaths' );
+            $composerPaths->setAccessible( true );
+
+            $phpPaths = $reflection->getMethod( 'phpCandidatePaths' );
+            $phpPaths->setAccessible( true );
+
+            $resolved = $herdBin->invoke( $manager );
+
+            $this->assertSame( '/home/tester/Library/Application Support/Herd/bin', $resolved );
+            $this->assertSame( $resolved . '/composer', $composerPaths->invoke( $manager )[0] );
+            $this->assertSame( $resolved . '/php', $phpPaths->invoke( $manager )[0] );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: `herdBinPath()` returns null when `HOME` is unset or
+     * empty, so callers omit the Herd candidate entirely.
+     *
+     * @since 2.7.1
+     */
+    public function test_herd_bin_path_returns_null_without_usable_home(): void
+    {
+        $original = getenv( 'HOME' );
+
+        try {
+            $manager = new ApplicationUpdateManager;
+
+            $reflection = new ReflectionClass( $manager );
+            $method     = $reflection->getMethod( 'herdBinPath' );
+            $method->setAccessible( true );
+
+            putenv( 'HOME' );
+            $this->assertNull( $method->invoke( $manager ) );
+
+            putenv( 'HOME=' );
+            $this->assertNull( $method->invoke( $manager ) );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+        }
+    }
+
+    /**
+     * Regression for #254: Herd's bundled composer wins discovery on a host
+     * that also carries a Homebrew composer, keeping a Herd machine on a single
+     * toolchain — the same rationale `phpCandidatePaths()` applies.
+     *
+     * @since 2.7.1
+     */
+    public function test_discover_composer_binary_prefers_herd_over_homebrew(): void
+    {
+        $tempHome = sys_get_temp_dir() . '/cmsfw-herd-' . bin2hex( random_bytes( 6 ) );
+        $herdBin  = $tempHome . '/Library/Application Support/Herd/bin';
+        mkdir( $herdBin, 0755, true );
+
+        $herdComposer = $herdBin . '/composer';
+        file_put_contents( $herdComposer, "#!/usr/bin/env php\n" );
+        chmod( $herdComposer, 0755 );
+
+        $original = getenv( 'HOME' );
+        putenv( 'HOME=' . $tempHome );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callDiscover(): ?string
+                {
+                    return $this->discoverComposerBinary();
+                }
+            };
+
+            Log::shouldReceive( 'warning' )->never();
+
+            $this->assertSame( $herdComposer, $manager->callDiscover() );
+        } finally {
+            putenv( false === $original ? 'HOME' : 'HOME=' . $original );
+            @unlink( $herdComposer );
+            @rmdir( $herdBin );
+            @rmdir( $tempHome . '/Library/Application Support/Herd' );
+            @rmdir( $tempHome . '/Library/Application Support' );
+            @rmdir( $tempHome . '/Library' );
+            @rmdir( $tempHome );
         }
     }
 
@@ -951,6 +1097,11 @@ class ApplicationUpdateManagerTest extends TestCase
      * the binary *was* located, so the misleading "not found" wording was
      * masking real interpreter mismatches on PHP-FPM hosts.
      *
+     * As of 2.7.1 this branch requires the binary to be visible to PHP on
+     * disk; a failed probe against a path PHP cannot see takes the
+     * `configuredComposerBinaryMissing` branch instead (see #254), hence the
+     * real temp file below.
+     *
      * @since 2.5.3
      */
     public function test_rollback_throws_composer_verification_failed_when_version_check_fails(): void
@@ -959,10 +1110,17 @@ class ApplicationUpdateManagerTest extends TestCase
             '*--version*' => Process::result( '', 'command not found', 127 ),
         ] );
 
-        $manager = new class extends ApplicationUpdateManager {
+        $composerBinary = tempnam( sys_get_temp_dir(), 'cmsfw-composer-' );
+        file_put_contents( $composerBinary, "#!/usr/bin/env php\n" );
+
+        $manager = new class( $composerBinary ) extends ApplicationUpdateManager {
+            public function __construct( protected string $binary )
+            {
+            }
+
             protected function resolveComposerBinaryForVerification(): ?string
             {
-                return '/opt/homebrew/bin/composer';
+                return $this->binary;
             }
         };
 
@@ -979,6 +1137,105 @@ class ApplicationUpdateManagerTest extends TestCase
             $manager->rollback( $backupPath );
         } finally {
             @unlink( $backupPath );
+            @unlink( $composerBinary );
+        }
+    }
+
+    /**
+     * Regression for #254: when the probe fails against a path PHP cannot see
+     * either, the error names that path as the fault instead of reporting
+     * "Composer binary was located but could not be executed" with a trailing
+     * `CMS_PHP_BINARY` hint — which blames the PHP interpreter that had
+     * resolved correctly and buries the real cause mid-sentence.
+     *
+     * @since 2.7.1
+     */
+    public function test_rollback_throws_configured_binary_missing_when_path_does_not_exist(): void
+    {
+        Process::fake( [
+            '*--version*' => Process::result( '', 'Could not open input file', 1 ),
+        ] );
+
+        $missing = sys_get_temp_dir() . '/cmsfw-nonexistent-composer-' . bin2hex( random_bytes( 6 ) );
+
+        $manager = new class( $missing ) extends ApplicationUpdateManager {
+            public function __construct( protected string $binary )
+            {
+            }
+
+            protected function resolveComposerBinaryForVerification(): ?string
+            {
+                return $this->binary;
+            }
+        };
+
+        $backupPath = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' ) . '.zip';
+        $zip        = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'placeholder.txt', 'ok' );
+        $zip->close();
+
+        try {
+            $manager->rollback( $backupPath );
+            $this->fail( 'Expected UpdateException for the missing configured composer binary.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'could not be found at', $e->getMessage() );
+            $this->assertStringContainsString( $missing, $e->getMessage() );
+            $this->assertStringContainsString( 'COMPOSER_BINARY', $e->getMessage() );
+            $this->assertStringNotContainsString( 'CMS_PHP_BINARY', $e->getMessage() );
+        } finally {
+            @unlink( $backupPath );
+        }
+    }
+
+    /**
+     * Regression for #254 guarding #233: a `COMPOSER_BINARY` whose `--version`
+     * probe *succeeds* must be accepted even when `is_file()` reports false for
+     * it. PHP-FPM sandboxing (macOS Herd Pro, chrooted pools, restrictive
+     * `open_basedir`) hides real files from `stat()` while the shelled-out
+     * child reaches them fine — the exact case `COMPOSER_BINARY` exists to work
+     * around. Gating the probe on `is_file()` would have closed that escape
+     * hatch, so the stat may only select the message after a failed probe.
+     *
+     * @since 2.7.1
+     */
+    public function test_rollback_accepts_unstattable_binary_whose_version_probe_succeeds(): void
+    {
+        Process::fake( [
+            '*--version*' => Process::result( 'Composer version 2.10.1', '', 0 ),
+            '*'           => Process::result( '', '', 0 ),
+        ] );
+
+        $sandboxed = '/opt/homebrew/bin/composer-visible-only-to-the-shell';
+        $this->assertFalse( is_file( $sandboxed ), 'Fixture path must be unstattable for this test to mean anything.' );
+
+        $manager = new class( $sandboxed ) extends ApplicationUpdateManager {
+            public function __construct( protected string $binary )
+            {
+            }
+
+            protected function resolveComposerBinaryForVerification(): ?string
+            {
+                return $this->binary;
+            }
+
+            protected function clearCaches(): void
+            {
+                // No-op; nothing to clear in this unit context.
+            }
+        };
+
+        $backupPath = tempnam( sys_get_temp_dir(), 'cmsfw-backup-' ) . '.zip';
+        $zip        = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'placeholder.txt', 'ok' );
+        $zip->close();
+
+        try {
+            $manager->rollback( $backupPath );
+        } finally {
+            @unlink( $backupPath );
+            @unlink( base_path( 'placeholder.txt' ) );
         }
     }
 
