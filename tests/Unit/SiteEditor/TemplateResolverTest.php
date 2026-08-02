@@ -5,7 +5,9 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedEntity;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeFileBlockParser;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Tests\Support\BlockMarkupHydratorStub;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
 
@@ -40,7 +42,7 @@ afterEach( function (): void {
 } );
 
 describe( 'TemplateResolver::resolve()', function (): void {
-    it( 'returns the theme file with raw content populated and blocks empty', function (): void {
+    it( 'returns the theme file with both raw content and a parsed block tree', function (): void {
         File::put( $this->themeFiles . '/page.html', '<!-- wp:paragraph --><p>Page</p><!-- /wp:paragraph -->' );
 
         $result = $this->resolver->resolve( 'page' );
@@ -51,10 +53,45 @@ describe( 'TemplateResolver::resolve()', function (): void {
             ->and( $result->slug )->toBe( 'page' )
             ->and( $result->theme )->toBe( $this->themeSlug )
             ->and( $result->raw )->toContain( 'wp:paragraph' )
-            ->and( $result->blocks )->toBe( [] )
+            ->and( $result->blocks )->toHaveCount( 1 )
+            ->and( $result->blocks[0]['blockName'] )->toBe( 'core/paragraph' )
             ->and( $result->hasThemeFile )->toBeTrue()
             ->and( $result->isCustom )->toBeFalse()
             ->and( $result->wpId() )->toBe( 0 );
+    } );
+
+    it( 'hands theme-file markup to the block hydrator when visual-editor supplies one (#274)', function (): void {
+        File::put( $this->themeFiles . '/home.html', '<!-- wp:heading --><h2>Home</h2><!-- /wp:heading -->' );
+
+        $stub = new BlockMarkupHydratorStub();
+        app()->instance( ThemeFileBlockParser::HYDRATOR_CLASS, $stub );
+
+        $result = $this->resolver->resolve( 'home' );
+
+        expect( $result->blocks )->toBe( [
+            [
+                'name'        => 'core/paragraph',
+                'attributes'  => ['content' => 'hydrated'],
+                'innerBlocks' => [],
+            ],
+        ] )
+            ->and( $stub->received )->toBe( ['<!-- wp:heading --><h2>Home</h2><!-- /wp:heading -->'] );
+    } );
+
+    it( 'leaves blocks empty for an empty theme file', function (): void {
+        File::put( $this->themeFiles . '/blank.html', '' );
+
+        expect( $this->resolver->resolve( 'blank' )->blocks )->toBe( [] );
+    } );
+
+    it( 'populates blocks for every theme-file entity returned by all() (#274)', function (): void {
+        File::put( $this->themeFiles . '/one.html', '<!-- wp:paragraph --><p>One</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/two.html', '<!-- wp:heading --><h2>Two</h2><!-- /wp:heading -->' );
+
+        $all = collect( $this->resolver->all() )->keyBy( 'slug' );
+
+        expect( $all->get( 'one' )->blocks[0]['blockName'] )->toBe( 'core/paragraph' )
+            ->and( $all->get( 'two' )->blocks[0]['blockName'] )->toBe( 'core/heading' );
     } );
 
     it( 'returns the DB row with blocks populated and raw empty (custom template)', function (): void {
