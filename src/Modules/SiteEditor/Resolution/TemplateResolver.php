@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeFileBlockParser;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Support\Facades\File;
 
@@ -72,12 +73,14 @@ class TemplateResolver implements EntityResolver
             return null;
         }
 
+        $markup = File::get( $themeFile );
+
         return new ResolvedEntity(
             slug         : $slug,
             theme        : $theme,
             source       : 'theme',
-            raw          : File::get( $themeFile ),
-            blocks       : [],
+            raw          : $markup,
+            blocks       : ThemeFileBlockParser::parse( $markup ),
             title        : $this->humanizeSlug( $slug ),
             description  : null,
             status       : 'publish',

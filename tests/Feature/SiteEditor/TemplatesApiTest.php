@@ -124,7 +124,9 @@ describe( 'GET /api/v1/templates/{slug}', function (): void {
         expect( $response->json( 'has_theme_file' ) )->toBeTrue();
         expect( $response->json( 'wp_id' ) )->toBe( 0 );
         expect( $response->json( 'content.raw' ) )->toContain( 'wp:heading' );
-        expect( $response->json( 'content.blocks' ) )->toBe( [] );
+        // #274 — theme files are parsed on resolve, so `blocks` is populated
+        // for both sources rather than only for DB rows.
+        expect( $response->json( 'content.blocks.0.blockName' ) )->toBe( 'core/heading' );
     } );
 
     it( 'returns DB-stored templates with empty content.raw and populated content.blocks', function (): void {

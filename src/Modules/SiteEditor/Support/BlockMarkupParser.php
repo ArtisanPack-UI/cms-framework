@@ -19,8 +19,9 @@
  * {@see PatternFileParser}. Without a parsed block tree the pattern browser
  * shows the "Empty pattern" placeholder for every shipped pattern. The parser
  * is deliberately generic — the sibling `TemplateResolver` and
- * `TemplatePartResolver` theme-file branches ship the same `blocks: []` gap
- * and can drop this in as-is.
+ * `TemplatePartResolver` theme-file branches closed the same `blocks: []` gap
+ * in 2.7.2 (#274) via {@see ThemeFileBlockParser}, which wraps this parser to
+ * prefer visual-editor's editor-shape hydrator when it is installed.
  *
  * ## Correctness scope
  *

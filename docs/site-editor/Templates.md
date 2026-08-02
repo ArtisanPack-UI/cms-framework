@@ -41,7 +41,9 @@ Mirrors WordPress's `/wp/v2/templates`:
     "origin": null,
     "content": {
         "raw": "<!-- wp:paragraph --><p>Hello</p><!-- /wp:paragraph -->",
-        "blocks": [],
+        "blocks": [
+            { "name": "core/paragraph", "attributes": { "content": "Hello" }, "innerBlocks": [] }
+        ],
         "block_version": 1
     },
     "title": { "raw": "Page", "rendered": "Page" },
@@ -58,9 +60,22 @@ Mirrors WordPress's `/wp/v2/templates`:
 - `id` is always the `theme//slug` form, matching WP exactly.
 - `wp_id` carries the DB row's integer ID separately (0 when only a theme file backs the slug).
 - `content.raw` carries the file contents for theme-file-sourced entities and is the empty string `''` for DB-stored entities.
-- `content.blocks` carries the parsed block array for DB-stored entities and is empty `[]` for theme-file-sourced entities.
+- `content.blocks` carries the parsed block array for **both** sources. DB-stored entities return their `block_content` column verbatim; theme-file entities are parsed on resolve (since 2.7.2 — before that they returned `[]`, so a block theme resolved to nothing anywhere in the stack).
 
 cms-framework's `HasBlockContent` trait stores only the parsed block array — never a raw HTML mirror — so consumers requiring HTML render through the matching renderer package, and consumers needing the parsed tree read from `content.blocks`.
+
+#### Block shape for theme-file entities
+
+`content.blocks` is authoritative for both sources: a consumer reads it and never needs to fall back to `content.raw`. Which *shape* it carries for a theme file depends on whether visual-editor is installed:
+
+| Install | Shape | Text recovery |
+|---------|-------|---------------|
+| With `artisanpack-ui/visual-editor` ≥ 1.5.5 | Editor shape (`{name, attributes, innerBlocks}`) — matches what DB rows store | Yes — `attributes.content` and other `source`-declared attributes are recovered from the saved HTML |
+| Standalone cms-framework | WP `parse_blocks()` shape (`{blockName, attrs, innerBlocks, innerHTML, innerContent}`) | No — block text stays in `innerHTML` |
+
+The split exists because Gutenberg persists most block text in the saved HTML rather than in the delimiter's JSON, so recovering it needs each block type's `block.json` `source` definitions — which live with the block partials in visual-editor, not here. `ThemeFileBlockParser` looks up visual-editor's `BlockMarkupHydrator` through the container and falls back to `BlockMarkupParser`'s WP-shape output when it is absent.
+
+Theme files are read and parsed on every resolve; there is no parse cache. `all()` therefore parses every template the active theme ships.
 
 ### Conflict and validation behavior
 

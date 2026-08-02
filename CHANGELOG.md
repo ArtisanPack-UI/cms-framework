@@ -17,6 +17,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [2.7.2] - 2026-08-02
+
+### Added
+
+- **`ThemeFileBlockParser`** (`Modules\SiteEditor\Support`) — the seam that turns a block theme's raw `.html` markup into the block tree `ResolvedEntity::$blocks` carries. Prefers visual-editor's `BlockMarkupHydrator` (resolved out of the container by name, so visual-editor stays a non-dependency) and falls back to `BlockMarkupParser`'s WP `parse_blocks()` output when it is absent. A hydrator that throws is logged and degrades to the fallback rather than taking the template down.
+
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+- **Theme-file templates and parts now resolve to a populated block tree** ([#274](https://github.com/ArtisanPack-UI/cms-framework/issues/274)) — `TemplateResolver` and `TemplatePartResolver` put a theme file's markup in `ResolvedEntity::$raw` and left `$blocks` empty, but every consumer in the stack reads `$blocks` and ignores `$raw`. On a fresh activation the `templates` table is empty, so every template and part in a block theme resolved to `[]` and the front end rendered no theme markup at all — visual-editor's `TemplatePartInliner` inlined empty `<header>` wrappers, and the public render pipeline produced nothing. Both resolvers now parse the file on resolve via the new `ThemeFileBlockParser`, making `$blocks` authoritative regardless of source. With visual-editor ≥ 1.5.5 installed the tree comes back in the same editor shape DB rows store, with block text recovered from the saved HTML ([visual-editor#688](https://github.com/ArtisanPack-UI/visual-editor/issues/688)); standalone, it comes back in the WP `parse_blocks()` shape. Theme files are parsed on every resolve — there is no parse cache, matching `PatternResolver`'s existing behavior. `GET /api/v1/templates/{slug}` for a theme-file slug consequently returns a populated `content.blocks` where it previously returned `[]`.
+
 ## [2.7.1] - 2026-08-01
 
 ### Security
