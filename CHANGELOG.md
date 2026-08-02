@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+## [2.7.2] - 2026-08-02
+
+### Added
+
 - **`ThemeFileBlockParser`** (`Modules\SiteEditor\Support`) — the seam that turns a block theme's raw `.html` markup into the block tree `ResolvedEntity::$blocks` carries. Prefers visual-editor's `BlockMarkupHydrator` (resolved out of the container by name, so visual-editor stays a non-dependency) and falls back to `BlockMarkupParser`'s WP `parse_blocks()` output when it is absent. A hydrator that throws is logged and degrades to the fallback rather than taking the template down.
 
 ### Changed

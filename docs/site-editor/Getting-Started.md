@@ -31,8 +31,9 @@ $resolver = app(TemplateResolver::class);
 $resolved = $resolver->resolve('page');
 
 if ($resolved !== null) {
-    echo $resolved->source;   // 'db' or 'theme'
-    echo $resolved->content;  // block content (raw HTML for theme-file, empty for DB)
+    echo $resolved->source;      // 'db' or 'theme'
+    echo $resolved->raw;         // raw block markup — the file contents for theme-file, '' for DB
+    var_dump($resolved->blocks); // parsed block tree — populated for both sources (since 2.7.2)
     var_dump($resolved->isCustom);
 }
 ```
