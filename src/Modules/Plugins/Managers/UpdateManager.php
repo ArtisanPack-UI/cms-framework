@@ -21,6 +21,9 @@ use ZipArchive;
 
 class UpdateManager
 {
+    /**
+     * @param  PluginManager  $pluginManager  Used to deactivate and reactivate a plugin around an update.
+     */
     public function __construct(
         private PluginManager $pluginManager,
     ) {

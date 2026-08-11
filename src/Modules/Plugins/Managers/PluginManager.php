@@ -27,6 +27,10 @@ class PluginManager
 
     private ClassLoader $classLoader;
 
+    /**
+     * Resolve Composer's runtime ClassLoader so discovered plugins can register
+     * their own PSR-4 prefixes.
+     */
     public function __construct()
     {
         // Get Composer's ClassLoader instance from registered autoloaders
@@ -616,9 +620,7 @@ class PluginManager
         }
 
         if ( null !== $github ) {
-            $isShorthand = is_string( $github ) && 1 === preg_match( '#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $github );
-
-            if ( ! $isShorthand && ! $this->isAbsoluteHttpsUrl( $github ) ) {
+            if ( ! $this->isRepositoryShorthand( $github ) && ! $this->isAbsoluteHttpsUrl( $github ) ) {
                 throw PluginValidationException::invalidManifest( 'Invalid update.github. Must be "owner/repo" or an absolute https repository URL.' );
             }
         }
@@ -626,6 +628,32 @@ class PluginManager
         if ( null !== $url && ! $this->isAbsoluteHttpsUrl( $url ) ) {
             throw PluginValidationException::invalidManifest( 'Invalid update.url. Must be an absolute https URL.' );
         }
+    }
+
+    /**
+     * Whether a manifest value is an `owner/repo` repository shorthand.
+     *
+     * Both segments must carry at least one non-dot character. The character
+     * class alone accepts `../..`, `./x` and `x/.`, and
+     * `UpdateManager::resolveUpdateSourceUrl()` interpolates the shorthand into
+     * a URL that `GitHubUpdateSource::parseUrl()` then splits back into the
+     * owner and repository of an api.github.com path — so a dot-only segment
+     * becomes a relative path segment in the API request. The host stays
+     * github.com either way, so this is not a redirection primitive; it is an
+     * input that reaches a URL builder as something other than a repository
+     * name, which is worth refusing outright rather than reasoning about.
+     *
+     * @param  mixed  $value  Value to test.
+     *
+     * @return bool True when the value is a usable owner/repo pair.
+     */
+    protected function isRepositoryShorthand( mixed $value ): bool
+    {
+        if ( ! is_string( $value ) || 1 !== preg_match( '#^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$#', $value, $matches ) ) {
+            return false;
+        }
+
+        return '' !== trim( $matches[1], '.' ) && '' !== trim( $matches[2], '.' );
     }
 
     /**

@@ -324,7 +324,7 @@ version does not satisfy the `cms-framework` constraint.
 
 ## Shipping updates
 
-Declare an update source in `plugin.json` and publishing a new version is
+Declare an update source in `plugin.json`. Publishing a new version is then
 `git tag` plus a GitHub Release — no hosted JSON feed, no manual ZIP upload:
 
 ```json

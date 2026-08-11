@@ -192,6 +192,25 @@ describe( 'update', function (): void {
             ->toThrow( PluginValidationException::class, 'Invalid update.github' );
     } );
 
+    it( 'rejects dot-only shorthand segments', function ( string $shorthand ): void {
+        $manifest = array_merge( $this->base, ['update' => ['github' => $shorthand]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid update.github' );
+    } )->with( [
+        'traversal pair'  => '../..',
+        'dot owner'       => './repo',
+        'dot repo'        => 'owner/.',
+        'single dot pair' => './.',
+    ] );
+
+    it( 'still accepts dots inside otherwise-valid segments', function (): void {
+        $manifest = array_merge( $this->base, ['update' => ['github' => 'ArtisanPack-UI/cms.framework']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
     it( 'rejects a plaintext http url', function (): void {
         $manifest = array_merge( $this->base, ['update' => ['url' => 'http://example.com/updates.json']] );
 
