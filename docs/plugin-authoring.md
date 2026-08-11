@@ -93,6 +93,8 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
 | `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
 | `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
+| `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
+| `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
 
 ## Base `PluginServiceProvider`
 
@@ -319,6 +321,74 @@ Semver your plugin. Declare host-compatibility in `plugin.json`:
 
 `PluginManager::install()` refuses installation when the running framework
 version does not satisfy the `cms-framework` constraint.
+
+## Shipping updates
+
+Declare an update source in `plugin.json` and publishing a new version is
+`git tag` plus a GitHub Release — no hosted JSON feed, no manual ZIP upload:
+
+```json
+"update": {
+    "github": "ArtisanPack-UI/artisanpack-ui-plugin"
+}
+```
+
+`update` accepts either form:
+
+| Key      | Value | Notes |
+| -------- | ----- | ----- |
+| `github` | `owner/repo`, or a full `https://github.com/owner/repo` URL | Shorthand for the GitHub Releases source. |
+| `url`    | Absolute `https://` URL | Handed to the source detector as-is, so GitLab repository URLs and custom JSON endpoints work through the same key. |
+
+Both forms are https-only: the resolved archive is extracted into your
+`plugins/` directory and its PHP is executed by the host.
+
+`UpdateManager` walks your releases, skips prereleases, and picks the first
+release asset ending in `.zip` — falling back to GitHub's generated
+`zipball_url` when the release has no attached asset. **Attach a real ZIP.**
+The generated zipball's root directory is named for the repository and commit,
+not for your plugin slug, so extraction lands the plugin in the wrong
+directory.
+
+### Checksums
+
+The updater verifies the downloaded archive against a SHA-256 digest, resolved
+from either:
+
+- a release asset named `{your-asset}.zip.sha256`, or
+- a `SHA-256: <64 hex chars>` line in the release description.
+
+With the shipped defaults ( `cms.updates.verify_checksum = true`,
+`cms.updates.allow_unverified_updates = false` ) a release that publishes
+**neither** is refused. Add a sidecar step to your release workflow:
+
+```bash
+sha256sum my-plugin.zip | cut -d' ' -f1 > my-plugin.zip.sha256
+```
+
+This is an integrity check, not an authenticity check — the digest comes from
+the same release as the archive. It catches truncation and CDN corruption; it
+does not defend against a compromised release-editor account.
+
+Legacy `update_url` feeds are unaffected by this: they have never advertised a
+digest, and checksum enforcement does not apply to them.
+
+### Private repositories
+
+Public repositories need no credentials. For a private one, the host adds a
+token keyed by your plugin slug:
+
+```php
+// config/cms.php
+'plugins' => [
+    'updateTokens' => [
+        'my-private-plugin' => env( 'MY_PRIVATE_PLUGIN_UPDATE_TOKEN' ),
+    ],
+],
+```
+
+Tokens live in host config, never in `plugin.json` — the manifest ships inside
+the distributed ZIP.
 
 ## Testing your plugin
 

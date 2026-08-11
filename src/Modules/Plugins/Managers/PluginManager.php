@@ -584,6 +584,62 @@ class PluginManager
                 throw PluginValidationException::invalidManifest( 'Invalid migrations_path. Must be a relative path inside the plugin directory (no "..", no absolute paths).' );
             }
         }
+
+        if ( isset( $manifest['update'] ) ) {
+            $this->validateUpdateSourceManifestField( $manifest['update'] );
+        }
+    }
+
+    /**
+     * Validate the optional `update` manifest key, which declares the source
+     * `UpdateManager` resolves plugin updates from.
+     *
+     * Both forms are transport-restricted to https: the resolved URL is handed
+     * to an update source that downloads an archive whose PHP the host then
+     * executes.
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateUpdateSourceManifestField( mixed $update ): void
+    {
+        if ( ! is_array( $update ) || array_is_list( $update ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid update. Must be an object with a "github" or "url" key.' );
+        }
+
+        $github = $update['github'] ?? null;
+        $url    = $update['url'] ?? null;
+
+        if ( null === $github && null === $url ) {
+            throw PluginValidationException::invalidManifest( 'Invalid update. Must declare "github" ("owner/repo") or "url" (absolute https URL).' );
+        }
+
+        if ( null !== $github ) {
+            $isShorthand = is_string( $github ) && 1 === preg_match( '#^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$#', $github );
+
+            if ( ! $isShorthand && ! $this->isAbsoluteHttpsUrl( $github ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid update.github. Must be "owner/repo" or an absolute https repository URL.' );
+            }
+        }
+
+        if ( null !== $url && ! $this->isAbsoluteHttpsUrl( $url ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid update.url. Must be an absolute https URL.' );
+        }
+    }
+
+    /**
+     * Whether a manifest value is a well-formed absolute https URL.
+     *
+     * @param  mixed  $value  Value to test.
+     *
+     * @return bool True when the value is an https URL.
+     */
+    protected function isAbsoluteHttpsUrl( mixed $value ): bool
+    {
+        return is_string( $value )
+            && str_starts_with( $value, 'https://' )
+            && false !== filter_var( $value, FILTER_VALIDATE_URL );
     }
 
     /**

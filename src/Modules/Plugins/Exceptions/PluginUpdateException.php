@@ -17,4 +17,14 @@ class PluginUpdateException extends CMSFrameworkException
     {
         return new self( "Failed to create backup for plugin '{$slug}'." );
     }
+
+    /**
+     * An update failed for a reason worth surfacing verbatim — a checksum
+     * mismatch, or an archive whose source published no digest to verify
+     * against.
+     */
+    public static function updateFailed( string $slug, string $reason ): self
+    {
+        return new self( "Failed to update plugin '{$slug}': {$reason}" );
+    }
 }

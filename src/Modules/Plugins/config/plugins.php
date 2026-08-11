@@ -55,6 +55,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Plugin Update Source Tokens
+    |--------------------------------------------------------------------------
+    | Access tokens for plugins whose `update` manifest key points at a private
+    | repository, keyed by plugin slug:
+    |
+    |     'updateTokens' => [
+    |         'my-private-plugin' => env( 'MY_PRIVATE_PLUGIN_UPDATE_TOKEN' ),
+    |     ],
+    |
+    | Deliberately per-slug rather than one global token. A plugin names its own
+    | update host in its own manifest, so a shared token would be handed to
+    | whatever host any installed plugin asks for. Public repositories — the
+    | normal case — need no entry here.
+    */
+    'updateTokens' => [],
+
+    /*
+    |--------------------------------------------------------------------------
     | Auto-clear Framework Caches on Lifecycle Events
     |--------------------------------------------------------------------------
     | If true, activate/deactivate/delete will run route:clear, config:clear
