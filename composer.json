@@ -60,7 +60,8 @@
     "artisanpack-ui/code-style-pint": "^1.1",
     "artisanpack-ui/ai": "^1.0",
     "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
-    "livewire/livewire": "^3.6"
+    "livewire/livewire": "^3.6",
+    "symfony/yaml": "^7.2"
   },
   "suggest": {
     "artisanpack-ui/ai": "Recommended ^1.0 — enables the AI content-authoring agents (post-title suggestions, excerpt generation, tag/category suggestion, SEO slug suggestion). Without it the `aiFeatures()` service-provider hook is a no-op and the AI trigger surfaces (Livewire component + REST endpoints) stay hidden."
