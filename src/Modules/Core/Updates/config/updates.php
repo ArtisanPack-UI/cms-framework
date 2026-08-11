@@ -5,6 +5,41 @@ declare( strict_types = 1 );
 return [
     /*
     |--------------------------------------------------------------------------
+    | Authorization (read this before wiring an admin UI)
+    |--------------------------------------------------------------------------
+    |
+    | `ApplicationUpdateManager` performs NO authorization of its own. It
+    | cannot: the five `update:*` commands run from the console with no
+    | authenticated user. Everything below configures *how* an update runs,
+    | never *who* may run one.
+    |
+    | The framework ships no HTTP or Livewire trigger for updates. If you add
+    | one, it is yours to gate. `performUpdate()` is by design a
+    | remote-code-execution channel — it overwrites PHP files and then runs
+    | `composer install`, which executes `post-install-cmd` scripts from the
+    | just-overwritten `composer.json` — so an unauthenticated or
+    | under-authorized endpoint is total compromise.
+    |
+    | Authorize against the abilities in `UpdateCapability`, which the
+    | framework registers and denies by default:
+    |
+    |   Gate::authorize( UpdateCapability::PERFORM );   // cms.updates.perform
+    |   Gate::authorize( UpdateCapability::ROLLBACK );  // cms.updates.rollback
+    |   Gate::authorize( UpdateCapability::VIEW );      // cms.updates.view
+    |
+    | Grant them by seeding an RBAC permission whose slug matches, or by
+    | defining the ability yourself in `AppServiceProvider::boot()`.
+    |
+    | Rate-limit and CSRF-protect the route as well. An update occupies a
+    | PHP-FPM worker for the whole run and keeps occupying it after the caller
+    | disconnects (`ignore_user_abort`), so a trigger reachable without those
+    | guards is a cheap way to exhaust the worker pool. See
+    | `docs/self-updater.md` for the full wiring.
+    |
+    */
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Update Source
     |--------------------------------------------------------------------------
     |

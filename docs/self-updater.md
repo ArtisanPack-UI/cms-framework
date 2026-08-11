@@ -2,6 +2,49 @@
 
 The framework ships a self-updater that downloads a release archive, extracts it, runs `composer install`, executes migrations, and rolls back on failure. The bulk of it is transparent, but a few knobs matter on hosts where composer isn't on the PHP-FPM pool's `PATH`.
 
+## Authorization (2.8.0)
+
+**`ApplicationUpdateManager` performs no authorization of its own.** It cannot: the five `update:*` commands run from the console with no authenticated user. Nothing in the framework changes that — the manager stays a plain service, and every shipped trigger stays console-gated.
+
+What the framework does ship, as of 2.8.0, is the ability names a host application authorizes against when it wires the admin UI this module was written for:
+
+| Constant | Ability | Covers |
+|----------|---------|--------|
+| `UpdateCapability::PERFORM` | `cms.updates.perform` | `performUpdate()` — the ten-step update. |
+| `UpdateCapability::ROLLBACK` | `cms.updates.rollback` | `rollback()` — restore a pre-update snapshot. |
+| `UpdateCapability::VIEW` | `cms.updates.view` | `checkForUpdate()` / `updateState()` — read update availability and status. |
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCapability;
+use Illuminate\Support\Facades\Gate;
+
+Route::post( '/admin/updates/perform', function () {
+    Gate::authorize( UpdateCapability::PERFORM );
+
+    return app( ApplicationUpdateManager::class )->performUpdate();
+} )->middleware( ['web', 'auth', 'throttle:2,60'] );
+```
+
+### The default is deny
+
+`CoreServiceProvider` registers each ability with a definition that returns `false`. That is deliberate. `performUpdate()` is by design a remote-code-execution channel — it overwrites PHP files and then runs `composer install`, which executes `post-install-cmd` scripts from the just-overwritten `composer.json` — so a permissive default would hand that to every authenticated user of every host that upgrades. Two paths grant it:
+
+- **Seed an RBAC permission whose name or slug matches the ability.** `PermissionsTableSeeder` seeds all three and assigns them to the `admin` role (which receives every permission). rbac's `Gate::before` hook runs ahead of every Gate definition and short-circuits it, so a seeded permission decides on its own.
+
+  **This beats your own definition too, not just the framework's.** `Gate::before` matches an ability against the `name` and `slug` columns of every row in `permissions`; a hit returns `hasPermissionTo()` and the `Gate::define()` below is never reached. So if you seed `cms.updates.perform` *and* define a stricter rule for it, the seeded permission wins and your rule is silently bypassed. Pick one mechanism per ability: grant through roles, or define the ability and don't seed the permission.
+- **Define the ability in your own application.** Provider boot order puts `AppServiceProvider::boot()` after the framework's package providers, so your definition replaces the shipped one:
+
+  ```php
+  Gate::define( UpdateCapability::PERFORM, fn ( $user ) => $user->hasRole( 'owner' ) );
+  ```
+
+  If your host registers the ability from a provider that boots *before* the framework's, that definition is left alone too — the framework skips any ability `Gate::has()` already reports.
+
+### Gate the route, not just the ability
+
+Authorization is necessary and not sufficient. An HTTP-triggered update occupies a PHP-FPM worker for the whole run and keeps occupying it after the caller disconnects (see [Long-running updates](#long-running-updates-and-interrupted-processes)), so the route wants a rate limiter and CSRF protection as well, and the UI wants the button disabled while `updateState()` reports `in_progress`.
+
 ## Integrity verification (fail-closed by default)
 
 As of 2.5.4, `ApplicationUpdateManager::maybeVerifyChecksum()` **throws** `UpdateException::checksumRequired()` when the update source does not advertise a SHA-256 hash. This closes the "download and execute arbitrary remote code without integrity verification" gap that existed through 2.5.3.
@@ -241,7 +284,7 @@ The marker is a flat JSON file rather than a cache entry on purpose: step 8 runs
 
 ### Two consequences worth knowing about
 
-**Keep `performUpdate()` behind admin authorization.** Lifting `max_execution_time` and setting `ignore_user_abort( true )` means an HTTP-triggered update now occupies a PHP-FPM worker for as long as the update takes, and keeps occupying it even if the caller disconnects. The individual phases stay bounded (`download_timeout`, `composer_timeout`), so the total is bounded in practice — but an update endpoint reachable without authorization would be a much cheaper way to exhaust the worker pool than it was at 30 seconds. This has always been an operator responsibility; the guards raise the cost of getting it wrong.
+**Keep `performUpdate()` behind admin authorization** — `Gate::authorize( UpdateCapability::PERFORM )`, per [Authorization](#authorization-280). Lifting `max_execution_time` and setting `ignore_user_abort( true )` means an HTTP-triggered update now occupies a PHP-FPM worker for as long as the update takes, and keeps occupying it even if the caller disconnects. The individual phases stay bounded (`download_timeout`, `composer_timeout`), so the total is bounded in practice — but an update endpoint reachable without authorization would be a much cheaper way to exhaust the worker pool than it was at 30 seconds. This has always been an operator responsibility; the guards raise the cost of getting it wrong.
 
 **Nothing serializes concurrent updates.** Two overlapping `performUpdate()` calls will fight over the same application tree and the same state marker; the second `begin()` overwrites the first. That was true before this change too, but the longer window makes an overlap easier to hit. If your admin UI can dispatch an update more than once, gate it — disable the button while `updateState()` reports `in_progress`, or take a lock around the call.
 
