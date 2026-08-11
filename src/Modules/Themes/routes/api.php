@@ -24,8 +24,10 @@ use Illuminate\Support\Facades\Route;
 | Available endpoints:
 | - GET    /v1/themes              List all themes
 | - POST   /v1/themes              Upload and install a theme from a ZIP
+| - GET    /v1/themes/updates      List themes with an update available
 | - GET    /v1/themes/{slug}       Get theme details
 | - POST   /v1/themes/{slug}/activate   Activate a theme
+| - POST   /v1/themes/{slug}/update     Update a theme in place
 |
 */
 
@@ -34,6 +36,12 @@ Route::middleware( ['auth:sanctum'] )
     ->group( function (): void {
         Route::get( '/themes', [ThemesController::class, 'index'] )->name( 'themes.index' );
         Route::post( '/themes', [ThemesController::class, 'upload'] )->name( 'themes.upload' );
+
+        // Registered ahead of `/themes/{slug}` so the literal segment wins;
+        // otherwise "updates" is swallowed as a theme slug.
+        Route::get( '/themes/updates', [ThemesController::class, 'checkUpdates'] )->name( 'themes.updates' );
+
         Route::get( '/themes/{slug}', [ThemesController::class, 'show'] )->name( 'themes.show' );
         Route::post( '/themes/{slug}/activate', [ThemesController::class, 'activate'] )->name( 'themes.activate' );
+        Route::post( '/themes/{slug}/update', [ThemesController::class, 'update'] )->name( 'themes.update' );
     } );

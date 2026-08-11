@@ -20,6 +20,7 @@ The Themes module provides a flexible, WordPress‑inspired theme system with:
 - [Theme Manifest](Themes-Theme-Manifest) — The theme.json file format
 - [API Reference](Themes-Api-Reference) — REST endpoints and helper functions
 - [[themes/Installing From Zip]] — Upload a theme as a ZIP archive *(2.0.0)*
+- [[themes/Updating]] — Declare an `update` source and update an installed theme in place *(2.8.0)*
 - [[themes/Lifecycle Hooks]] — Listen to `theme.activating`, `theme.activated`, `theme.installing`, `theme.installed` *(2.0.0)*
 - [[themes/Theme Base Class]] — Optional `themes/{slug}/Theme.php` for per-request enqueues, image sizes, and REST/block registration *(2.5.0)*
 - [[themes/Editor Stylesheet]] — Ship a `themes/{slug}/editor.css` for canvas-only overrides *(2.5.0)*
@@ -209,14 +210,17 @@ This allows themes to provide increasingly specific templates for different cont
 All endpoints require authentication via Laravel Sanctum and are prefixed with `/api/v1`:
 
 - `GET /themes` — List all available themes
+- `POST /themes` — Upload and install a theme from a ZIP
+- `GET /themes/updates` — List themes with an update available *(2.8.0)*
 - `GET /themes/{slug}` — Get specific theme details
 - `POST /themes/{slug}/activate` — Activate a theme
+- `POST /themes/{slug}/update` — Update a theme in place *(2.8.0)*
 
 ## Service Registration
 
 The `ThemesServiceProvider` automatically:
 
-- Registers the `ThemeManager` as a singleton
+- Registers the `ThemeManager` and `UpdateManager` as singletons
 - Merges theme configuration
 - Registers the active theme's view path with Laravel
 - Loads theme API routes

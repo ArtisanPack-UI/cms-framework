@@ -14,13 +14,16 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Http\Controllers;
 
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
 use Dedoc\Scramble\Attributes\Group;
 use Exception;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Themes Controller class.
@@ -41,9 +44,11 @@ class ThemesController extends Controller
      * @since 1.0.0
      *
      * @param  ThemeManager  $themeManager  Theme manager instance.
+     * @param  UpdateManager  $updateManager  Theme update manager instance.
      */
     public function __construct(
         private ThemeManager $themeManager,
+        private UpdateManager $updateManager,
     ) {
     }
 
@@ -67,6 +72,76 @@ class ThemesController extends Controller
         return response()->json( [
             'themes' => $themes,
             'active' => $activeTheme['slug'] ?? null,
+        ] );
+    }
+
+    /**
+     * Lists the installed themes that have an update available.
+     *
+     * Each entry is keyed by theme slug and carries the same shape the plugins
+     * update endpoint returns, so a host admin UI can render both extension
+     * types through one component. Themes that declare no `update` source in
+     * their theme.json, or that are already current, are omitted.
+     *
+     * Endpoint: GET /v1/themes/updates
+     *
+     * @since 2.8.0
+     *
+     * @return JsonResponse JSON response with the available updates keyed by slug.
+     */
+    public function checkUpdates(): JsonResponse
+    {
+        return response()->json( [
+            'updates' => $this->updateManager->checkForUpdates(),
+        ] );
+    }
+
+    /**
+     * Updates an installed theme to its latest published version.
+     *
+     * Failures surface as a `ValidationException` rather than a bare JSON
+     * error body, so host apps using Inertia get a working error bag instead
+     * of an unhandled response.
+     *
+     * Endpoint: POST /v1/themes/{slug}/update
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $slug  Theme slug identifier.
+     *
+     * @throws ValidationException If the update fails.
+     *
+     * @return JsonResponse JSON response reporting whether an update was installed.
+     */
+    public function update( string $slug ): JsonResponse
+    {
+        try {
+            $updated = $this->updateManager->updateTheme( $slug );
+        } catch ( ThemeNotFoundException ) {
+            return response()->json( [
+                'message' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
+            ], 404 );
+        } catch ( ThemeUpdateException $e ) {
+            // `UpdateManager` funnels every in-flight failure — corrupt archive,
+            // checksum mismatch, failed swap — through this type, carrying the
+            // underlying reason verbatim.
+            throw ValidationException::withMessages( [
+                'slug' => $e->getMessage(),
+            ] );
+        } catch ( Exception $e ) {
+            report( $e );
+
+            throw ValidationException::withMessages( [
+                'slug' => __( 'An unexpected error occurred while updating the theme.' ),
+            ] );
+        }
+
+        return response()->json( [
+            'message' => $updated
+                ? __( 'Theme updated successfully.' )
+                : __( 'Theme is already up to date.' ),
+            'updated' => $updated,
+            'theme'   => $this->themeManager->getTheme( $slug ),
         ] );
     }
 
