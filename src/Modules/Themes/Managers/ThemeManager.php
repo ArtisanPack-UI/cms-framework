@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use Exception;
@@ -271,6 +272,199 @@ class ThemeManager
     }
 
     /**
+     * Extracts and fully validates an update archive into a staging directory,
+     * without touching the installed theme.
+     *
+     * This is the half of {@see installFromZip()} that an in-place update needs
+     * and cannot get from it: the same ZIP validation, ZIP-slip guard, schema
+     * validation, strict manifest validation and slug/directory-match assertion,
+     * applied to a directory the live site is not serving from. A corrupt or
+     * mismatched archive is therefore rejected *before* anything replaces a
+     * working theme — the caller only has to swap once this method has returned.
+     *
+     * The staging root lives inside the themes directory
+     * (`{themes}/.updates/{slug}-{uniqid}`) rather than under `storage/`, so
+     * {@see swapStagedTheme()} can complete the swap with `rename()` — the two
+     * paths are guaranteed to be on the same filesystem even when
+     * `cms.themes.directory` points at an external mount. It is skipped by
+     * discovery, which requires a `theme.json` at the top level of each
+     * directory it scans.
+     *
+     * The staging directory is removed on any failure. On success the caller
+     * owns it and must delete it once the swap is done.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $zipPath  Absolute path to the downloaded update archive.
+     * @param  string  $expectedSlug  Slug of the installed theme being updated.
+     *
+     * @throws ThemeValidationException If the ZIP or extracted manifest fails validation.
+     * @throws ThemeInstallationException If extraction fails or a ZIP-slip attempt is detected.
+     *
+     * @return array{path: string, stagingPath: string, manifest: array} Staged theme path, staging root, and parsed manifest.
+     */
+    public function stageThemeFromZip( string $zipPath, string $expectedSlug ): array
+    {
+        // `$expectedSlug` is interpolated into a directory this method creates.
+        // The in-tree caller only reaches here after `getTheme()` has already
+        // validated the slug, but this is a public entry point on a path that
+        // writes to disk — it re-checks rather than inheriting a caller's
+        // diligence.
+        if ( ! $this->validateSlug( $expectedSlug ) ) {
+            throw ThemeValidationException::invalidManifest(
+                'Invalid slug format. Use alphanumeric, hyphens, and underscores only.',
+            );
+        }
+
+        // `cms.themes.maxUploadSize` is an abuse control on the *upload*
+        // endpoint, where the archive arrives from whoever is logged in. An
+        // update archive comes from the source the theme itself names, and a
+        // theme with images and fonts clears 10 MB easily — gating updates on
+        // the upload ceiling would make such a theme permanently un-updatable,
+        // which is the exact situation this feature exists to fix. Hence a
+        // separate, larger ceiling.
+        $this->validateZip( $zipPath, (int) config( 'cms.themes.maxUpdateSize', 50 * 1024 * 1024 ) );
+
+        $stagingPath = $this->getStagingPath() . '/' . $expectedSlug . '-' . uniqid();
+
+        File::ensureDirectoryExists( $stagingPath );
+
+        try {
+            $slug = $this->extractZipTo( $zipPath, $stagingPath );
+
+            $stagedThemePath = $stagingPath . '/' . $slug;
+
+            if ( ! $this->validateTheme( $stagedThemePath ) ) {
+                throw ThemeValidationException::invalidManifest( "Theme '{$slug}' failed schema validation after extraction." );
+            }
+
+            $manifest = $this->parseManifest( $stagedThemePath . '/theme.json' );
+
+            if ( null === $manifest ) {
+                throw ThemeValidationException::invalidManifest( "Theme '{$slug}' manifest could not be parsed after extraction." );
+            }
+
+            $this->validateManifest( $manifest );
+
+            if ( $manifest['slug'] !== $slug ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
+                );
+            }
+
+            // The archive must be an update *of this theme*. Without this an
+            // update source that starts serving a different theme's ZIP would
+            // overwrite the installed theme's directory with a theme whose slug
+            // no longer matches the directory it lives in — leaving it
+            // installed but unreachable, exactly the failure the
+            // slug/directory assertion above exists to prevent.
+            if ( $slug !== $expectedSlug ) {
+                throw ThemeValidationException::invalidManifest(
+                    "Update archive contains theme '{$slug}', but theme '{$expectedSlug}' is being updated.",
+                );
+            }
+        } catch ( Throwable $e ) {
+            File::deleteDirectory( $stagingPath );
+
+            throw $e;
+        }
+
+        return [
+            'path'        => $stagedThemePath,
+            'stagingPath' => $stagingPath,
+            'manifest'    => $manifest,
+        ];
+    }
+
+    /**
+     * Moves a staged theme directory into place over the installed one.
+     *
+     * The swap is two `rename()` calls — the installed directory is moved
+     * aside, then the staged directory takes its name. Both are metadata-only
+     * operations on the same filesystem, so the window during which the active
+     * theme's directory does not exist is a single syscall wide rather than
+     * however long it takes to delete and re-extract a theme's worth of files.
+     * That is what lets an *active* theme be updated without dropping the site
+     * into maintenance mode; see the theme-updating guide for the reasoning.
+     *
+     * If the second rename fails, the first is undone so the installed theme is
+     * left exactly as it was.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $slug  Slug of the installed theme being replaced.
+     * @param  string  $stagedThemePath  Absolute path to the validated staged theme directory.
+     *
+     * @throws ThemeUpdateException If either rename fails.
+     */
+    public function swapStagedTheme( string $slug, string $stagedThemePath ): void
+    {
+        // Both arguments become operands of a `rename()`. Re-checked here for
+        // the same reason as in `stageThemeFromZip()`: this is a public entry
+        // point, and a slug or path that escaped the themes directory would
+        // move a directory the caller never named.
+        if ( ! $this->validateSlug( $slug ) ) {
+            throw ThemeUpdateException::swapFailed( $slug );
+        }
+
+        $stagingRoot     = $this->getStagingPath();
+        $realStagedPath  = realpath( $stagedThemePath );
+        $realStagingRoot = realpath( $stagingRoot );
+
+        // Strictly inside, not equal: the staging root itself is not a staged
+        // theme, and swapping it into place would move every in-flight update
+        // directory into the themes tree under one theme's name.
+        if ( false === $realStagedPath
+            || false === $realStagingRoot
+            || $realStagedPath === $realStagingRoot
+            || ! str_starts_with( $realStagedPath . '/', $realStagingRoot . '/' ) ) {
+            throw ThemeUpdateException::swapFailed( $slug );
+        }
+
+        $livePath     = $this->getThemesPath() . '/' . $slug;
+        $previousPath = $stagingRoot . '/previous-' . $slug . '-' . uniqid();
+
+        $hadPrevious = File::isDirectory( $livePath );
+
+        if ( $hadPrevious && ! @rename( $livePath, $previousPath ) ) {
+            throw ThemeUpdateException::swapFailed( $slug );
+        }
+
+        // The resolved path rather than the argument: renaming a symlink would
+        // move the link and leave the real staged directory behind.
+        if ( ! @rename( $realStagedPath, $livePath ) ) {
+            if ( $hadPrevious ) {
+                @rename( $previousPath, $livePath );
+            }
+
+            throw ThemeUpdateException::swapFailed( $slug );
+        }
+
+        if ( $hadPrevious ) {
+            File::deleteDirectory( $previousPath );
+        }
+    }
+
+    /**
+     * Gets the staging directory used by in-place theme updates.
+     *
+     * Created on demand so a host that never updates a theme never grows the
+     * directory.
+     *
+     * @since 2.8.0
+     *
+     * @return string Absolute path to the staging root.
+     */
+    public function getStagingPath(): string
+    {
+        $path = $this->getThemesPath() . '/.updates';
+
+        File::ensureDirectoryExists( $path );
+
+        return $path;
+    }
+
+    /**
      * Gets a specific theme by slug.
      *
      * Locates a theme by its slug identifier, validates its structure,
@@ -457,6 +651,28 @@ class ThemeManager
     }
 
     /**
+     * Whether a manifest's `update` value is a well-formed update source.
+     *
+     * The same rules `validateManifest()` enforces, exposed as a predicate for
+     * the *read* path. Only themes that arrived through `installFromZip()` or
+     * `stageThemeFromZip()` have ever had their manifest strictly validated —
+     * a theme copied into `themes/` by hand, which is the deployment style
+     * this feature exists to replace, never has. `UpdateManager` therefore
+     * cannot assume the `update` key it reads back off disk was ever checked,
+     * and asks here rather than re-deriving a weaker rule of its own.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @return bool True when the value is a usable update source declaration.
+     */
+    public function isUsableUpdateSource( mixed $update ): bool
+    {
+        return null === $this->checkUpdateSourceManifestField( $update );
+    }
+
+    /**
      * Validate a theme ZIP file before extraction.
      *
      * Mirrors the Plugins module's pre-extraction validation: confirms the file
@@ -466,10 +682,11 @@ class ThemeManager
      * @since 2.0.0
      *
      * @param  string  $zipPath  Absolute path to the ZIP file.
+     * @param  int|null  $maxSize  Size ceiling in bytes. Defaults to `cms.themes.maxUploadSize`.
      *
      * @throws ThemeValidationException If the ZIP is invalid or fails any check.
      */
-    protected function validateZip( string $zipPath ): void
+    protected function validateZip( string $zipPath, ?int $maxSize = null ): void
     {
         if ( ! File::exists( $zipPath ) ) {
             throw ThemeValidationException::invalidZip( 'ZIP file not found.' );
@@ -496,7 +713,8 @@ class ThemeManager
             throw ThemeValidationException::invalidZip( 'Invalid file type. Must be a ZIP file.' );
         }
 
-        $maxSize = config( 'cms.themes.maxUploadSize', 10 * 1024 * 1024 );
+        $maxSize ??= (int) config( 'cms.themes.maxUploadSize', 10 * 1024 * 1024 );
+
         if ( filesize( $zipPath ) > $maxSize ) {
             throw ThemeValidationException::invalidZip( 'File size exceeds maximum allowed size.' );
         }
@@ -540,6 +758,30 @@ class ThemeManager
      */
     protected function extractZip( string $zipPath ): string
     {
+        return $this->extractZipTo( $zipPath, $this->getThemesPath() );
+    }
+
+    /**
+     * Extract a validated theme ZIP into an arbitrary base directory.
+     *
+     * Carries the whole of {@see extractZip()}'s guard set — slug derivation
+     * from the first entry, rejection of absolute paths and `..` segments,
+     * rejection of any entry outside the derived slug directory, and an
+     * anchored resolve of each destination against the base directory — with
+     * the base directory as a parameter so in-place updates can extract into a
+     * staging root instead of over the live themes directory.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $zipPath  Absolute path to the ZIP file.
+     * @param  string  $baseDir  Absolute path of the existing directory to extract into.
+     *
+     * @throws ThemeInstallationException If extraction fails, the slug already exists in the base directory, or a ZIP-slip attempt is detected.
+     *
+     * @return string The extracted theme slug.
+     */
+    protected function extractZipTo( string $zipPath, string $baseDir ): string
+    {
         $zip = new ZipArchive;
         if ( true !== $zip->open( $zipPath ) ) {
             throw ThemeInstallationException::extractionFailed( 'unknown' );
@@ -560,8 +802,7 @@ class ThemeManager
 
         $slug = explode( '/', $firstEntry )[0];
 
-        $themesBasePath = $this->getThemesPath();
-        $realBasePath   = realpath( $themesBasePath );
+        $realBasePath = realpath( $baseDir );
 
         if ( false === $realBasePath ) {
             $zip->close();
@@ -569,7 +810,7 @@ class ThemeManager
         }
 
         // Reject if the slug directory already exists.
-        if ( File::exists( $themesBasePath . '/' . $slug ) ) {
+        if ( File::exists( $baseDir . '/' . $slug ) ) {
             $zip->close();
             throw ThemeInstallationException::alreadyInstalled( $slug );
         }
@@ -617,11 +858,11 @@ class ThemeManager
             }
         }
 
-        if ( ! $zip->extractTo( $themesBasePath ) ) {
+        if ( ! $zip->extractTo( $baseDir ) ) {
             $zip->close();
 
             // Clean up any partial files extractTo() may have written before failing.
-            $partialPath = $themesBasePath . '/' . $slug;
+            $partialPath = $baseDir . '/' . $slug;
             if ( File::exists( $partialPath ) ) {
                 File::deleteDirectory( $partialPath );
             }
@@ -833,6 +1074,10 @@ class ThemeManager
             }
         }
 
+        if ( array_key_exists( 'update', $manifest ) ) {
+            $this->validateUpdateSourceManifestField( $manifest['update'] );
+        }
+
         // Manifest override for the Theme base-class discovery
         // (issue #198). ThemeLoader also runs a runtime
         // reflection-based provenance check to prove the resolved
@@ -848,6 +1093,29 @@ class ThemeManager
                     "Field 'themeClass' must be a fully-qualified PHP class name.",
                 );
             }
+        }
+    }
+
+    /**
+     * Validate the optional `update` manifest key, which declares the source
+     * the theme `UpdateManager` resolves updates from.
+     *
+     * The rules themselves live in `HasManifestParsing` so plugins and themes
+     * cannot drift on a key they deliberately spell identically; this wrapper
+     * only turns the shared failure reason into a theme-namespaced exception.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @throws ThemeValidationException If the key is malformed.
+     */
+    protected function validateUpdateSourceManifestField( mixed $update ): void
+    {
+        $reason = $this->checkUpdateSourceManifestField( $update );
+
+        if ( null !== $reason ) {
+            throw ThemeValidationException::invalidManifest( $reason );
         }
     }
 

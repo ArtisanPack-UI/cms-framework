@@ -73,6 +73,95 @@ trait HasManifestParsing
     }
 
     /**
+     * Check the optional `update` manifest key that declares where a package's
+     * self-updates come from.
+     *
+     * Plugins and themes spell this key identically on purpose — two spellings
+     * for the same concept is a documentation tax forever — so the rules live
+     * here rather than in either manager. Returns the failure reason instead of
+     * throwing so each manager can raise its own exception type.
+     *
+     * Both forms are transport-restricted to https: the resolved URL is handed
+     * to an update source that downloads an archive the host then extracts over
+     * its own `plugins/` or `themes/` directory.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @return string|null Failure reason, or null when the key is well-formed.
+     */
+    protected function checkUpdateSourceManifestField( mixed $update ): ?string
+    {
+        if ( ! is_array( $update ) || array_is_list( $update ) ) {
+            return 'Invalid update. Must be an object with a "github" or "url" key.';
+        }
+
+        $github = $update['github'] ?? null;
+        $url    = $update['url'] ?? null;
+
+        if ( null === $github && null === $url ) {
+            return 'Invalid update. Must declare "github" ("owner/repo") or "url" (absolute https URL).';
+        }
+
+        if ( null !== $github
+            && ! $this->isRepositoryShorthand( $github )
+            && ! $this->isAbsoluteHttpsUrl( $github ) ) {
+            return 'Invalid update.github. Must be "owner/repo" or an absolute https repository URL.';
+        }
+
+        if ( null !== $url && ! $this->isAbsoluteHttpsUrl( $url ) ) {
+            return 'Invalid update.url. Must be an absolute https URL.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Whether a manifest value is an `owner/repo` repository shorthand.
+     *
+     * Both segments must carry at least one non-dot character. The character
+     * class alone accepts `../..`, `./x` and `x/.`, and the update managers
+     * interpolate the shorthand into a URL that `GitHubUpdateSource::parseUrl()`
+     * then splits back into the owner and repository of an api.github.com path
+     * — so a dot-only segment becomes a relative path segment in the API
+     * request. The host stays github.com either way, so this is not a
+     * redirection primitive; it is an input that reaches a URL builder as
+     * something other than a repository name, which is worth refusing outright
+     * rather than reasoning about.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $value  Value to test.
+     *
+     * @return bool True when the value is a usable owner/repo pair.
+     */
+    protected function isRepositoryShorthand( mixed $value ): bool
+    {
+        if ( ! is_string( $value ) || 1 !== preg_match( '#^([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)$#', $value, $matches ) ) {
+            return false;
+        }
+
+        return '' !== trim( $matches[1], '.' ) && '' !== trim( $matches[2], '.' );
+    }
+
+    /**
+     * Whether a manifest value is a well-formed absolute https URL.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $value  Value to test.
+     *
+     * @return bool True when the value is an https URL.
+     */
+    protected function isAbsoluteHttpsUrl( mixed $value ): bool
+    {
+        return is_string( $value )
+            && str_starts_with( $value, 'https://' )
+            && false !== filter_var( $value, FILTER_VALIDATE_URL );
+    }
+
+    /**
      * Resolve and validate a path within a base directory.
      *
      * Resolves the real filesystem path and verifies it is contained within

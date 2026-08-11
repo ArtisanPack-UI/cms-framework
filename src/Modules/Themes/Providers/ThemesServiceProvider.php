@@ -15,6 +15,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Providers;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Support\EnqueuedAssets;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Support\ThemeLoader;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
@@ -56,6 +57,11 @@ class ThemesServiceProvider extends ServiceProvider
                 $app->make( SettingsManager::class ),
                 $app->make( WpThemeJsonValidator::class ),
             );
+        } );
+
+        // Register the theme UpdateManager as a singleton.
+        $this->app->singleton( UpdateManager::class, function ( $app ) {
+            return new UpdateManager( $app->make( ThemeManager::class ) );
         } );
 
         // Register ThemeLoader as singleton — one per-request boot pass.
