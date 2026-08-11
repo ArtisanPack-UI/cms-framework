@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\Database\Seeders;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCapability;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 use Illuminate\Database\Seeder;
@@ -28,7 +29,7 @@ class PermissionsTableSeeder extends Seeder
      * Run the database seeds.
      *
      * Creates default permissions for content management, user management,
-     * settings, and system administration.
+     * settings, system administration, and the self-updater.
      *
      *
      * @since 1.0.0
@@ -94,6 +95,28 @@ class PermissionsTableSeeder extends Seeder
                 'name'        => 'Access Admin',
                 'slug'        => 'access-admin',
                 'description' => 'Access the admin dashboard',
+            ],
+
+            // Self-updater permissions. The slugs are the `UpdateCapability`
+            // ability names verbatim, because rbac's `Gate::before` matches an
+            // ability against permission names and slugs — seeding these is
+            // what makes `Gate::authorize( UpdateCapability::PERFORM )` resolve
+            // through RBAC rather than falling through to the framework's
+            // deny-by-default definition.
+            [
+                'name'        => 'Perform Application Updates',
+                'slug'        => UpdateCapability::PERFORM,
+                'description' => 'Download and install application updates',
+            ],
+            [
+                'name'        => 'Roll Back Application Updates',
+                'slug'        => UpdateCapability::ROLLBACK,
+                'description' => 'Restore the application from a pre-update backup',
+            ],
+            [
+                'name'        => 'View Application Updates',
+                'slug'        => UpdateCapability::VIEW,
+                'description' => 'View available application updates and update status',
             ],
         ];
 

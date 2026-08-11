@@ -146,6 +146,19 @@ class ApplicationUpdateManager
      *   dies anyway, maintenance mode is still lifted rather than leaving the
      *   site serving 503s indefinitely.
      *
+     * This method performs **no authorization** — it cannot, because the
+     * console commands that call it run with no authenticated user. A caller
+     * reached over HTTP must authorize first:
+     *
+     * ```php
+     * Gate::authorize( UpdateCapability::PERFORM );
+     * ```
+     *
+     * It matters more here than almost anywhere else in the framework: this
+     * pipeline overwrites PHP files and then runs `composer install`, which
+     * executes `post-install-cmd` scripts from the just-overwritten
+     * `composer.json`. See `UpdateCapability` and `docs/self-updater.md`.
+     *
      * @since 1.0.0
      *
      * @param  string|null  $version  Version to update to (null = latest)
@@ -325,6 +338,12 @@ class ApplicationUpdateManager
 
     /**
      * Rollback to a previous backup.
+     *
+     * Performs no authorization, for the same reason `performUpdate()` does
+     * not. A caller reached over HTTP must first
+     * `Gate::authorize( UpdateCapability::ROLLBACK )` — restoring a snapshot
+     * reinstates its `composer.json` and `composer.lock` and then runs
+     * `composer install` against them.
      *
      * @since 1.0.0
      *
