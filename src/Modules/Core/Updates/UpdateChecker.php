@@ -245,6 +245,16 @@ class UpdateChecker
      */
     protected function cacheIsStale( UpdateInfo $cached ): bool
     {
+        // `app.version` describes the host application, not a plugin or theme.
+        // Comparing a plugin's cached `currentVersion` ( its own semver ) against
+        // it marks every plugin entry stale on the first read, so the cache is
+        // written and never read back. Plugin and theme callers re-read the
+        // installed version from their own store on every check and own their
+        // own freshness window.
+        if ( UpdateType::Application !== $this->type ) {
+            return false;
+        }
+
         $configured = config( 'app.version' );
 
         if ( ! is_string( $configured ) || '' === $configured ) {

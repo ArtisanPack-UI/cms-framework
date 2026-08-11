@@ -9,13 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Plugins can update from GitHub Releases** ([#277](https://github.com/ArtisanPack-UI/cms-framework/issues/277)) — a new optional `update` key in `plugin.json` declares where self-updates come from, and `Modules\Plugins\Managers\UpdateManager` resolves it through the same `UpdateCheckerFactory` / `UpdateSourceInterface` the application updater uses. `{"update": {"github": "owner/repo"}}` is shorthand for the GitHub Releases source; `{"update": {"url": "https://..."}}` is handed to the source detector as-is, so GitLab repositories and custom JSON endpoints fall out of the same key. Both forms are https-only. Publishing a plugin update is now `git tag` plus a GitHub Release, with no separately-hosted JSON feed. `UpdateCheckerFactory` already accepted `UpdateType::Plugin` and already resolved a plugin's installed version out of the `plugins` table — nothing had ever called it with that type.
+- **`cms.plugins.updateTokens`** — access tokens for plugins whose `update` source is a private repository, keyed by plugin slug. Deliberately per-slug rather than one global token: a plugin names its own update host in its own manifest, so a shared token would be handed to whatever host any installed plugin asks for. Public repositories need no entry.
+- **`PluginUpdateException::updateFailed()`** — carries a reason string, so an integrity failure surfaces as what it is instead of being collapsed into `downloadFailed()`'s "Failed to download update for plugin".
+
 ### Changed
+
+- **Source-backed plugin updates stream to disk and are checksum-verified** ([#277](https://github.com/ArtisanPack-UI/cms-framework/issues/277)) — a plugin using the new `update` key downloads through its update source, which streams the archive via `StreamsDownloadsToDisk` rather than buffering the whole ZIP in memory (the OOM shape fixed for the core updater in #214 / #216 / #219) and enforces https across the initial request and every redirect. The archive is then verified against the SHA-256 the release advertises — a `{asset}.zip.sha256` sidecar, or a `SHA-256:` line in the release body — honoring `cms.updates.verify_checksum` and `cms.updates.allow_unverified_updates` exactly as `ApplicationUpdateManager` does. With the shipped defaults a release publishing neither is refused; see #271 for the publishing-side workflow change that attaches the sidecar.
+- **Plugin update checks normalize on `UpdateInfo` internally**, which is what makes `sha256` reachable at all. The payload at `GET /api/v1/plugins/updates` is unchanged: source-backed results are flattened onto the same `version` / `download_url` keys the endpoint has always returned, with `sha256`, `changelog`, `release_date`, `file_size` and `metadata` added alongside. Plugins declaring only the legacy `update_url` keep the existing custom-JSON behavior verbatim — raw feed payload as the response body, no checksum enforcement.
+- **`UpdateChecker` no longer evicts plugin and theme cache entries using `app.version`** — the staleness heuristic added in 2.5.3 compares a cached `currentVersion` against the host application's version, which for a plugin is a different number by construction. Every plugin cache entry was therefore stale on its first read, so the cache was written and never served. The heuristic now applies only to `UpdateType::Application`.
 
 ### Deprecated
 
 ### Removed
 
+### Security
+
+- **Plugin update sources are re-checked for https at the point of use**, not only during install-time manifest validation. `UpdateManager::updatePlugin()` refreshes a plugin's `meta` straight from the manifest inside the downloaded ZIP and never re-runs `PluginManager::validateManifest()`, so an update can seat an `update` value that never passed validation. A plaintext source is not cosmetic there: `CustomJsonUpdateSource` would fetch the update metadata over http, and a network attacker rewriting that response chooses both the download URL *and* the `sha256` it is checked against — digest and archive come from the same document, so verification would confirm the attacker's own archive, which is then extracted into `plugins/` and executed as PHP. A non-https source is now ignored with a warning instead of being fetched.
+
 ### Fixed
+
+- **A plugin update that fails while taking its backup no longer trips an undefined-variable error** — `updatePlugin()` referenced `$backupPath` from its `catch` blocks, but the variable is assigned by the first statement of the `try`. When `backupPlugin()` itself threw, the recovery path died on the undefined variable instead of reporting the backup failure. `restoreFromBackup()` now takes a nullable path and returns early when there is no backup to restore from, rather than deleting a working install it has nothing to replace.
 
 ## [2.7.2] - 2026-08-02
 
