@@ -60,8 +60,14 @@ jobs:
 
       - name: Extract release notes from CHANGELOG
         id: changelog
+        # Passed through `env:` rather than interpolated into the script body: a
+        # workflow expression is substituted textually before the shell parses
+        # anything, and a git tag may legally contain `;`, `|`, `$` and
+        # backticks — so `VERSION=${{ … }}` inside `run:` is a command-injection
+        # sink for anyone who can push a tag.
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          VERSION=${{ steps.version.outputs.version }}
           echo "Extracting notes for version $VERSION"
 
           if [ ! -f "CHANGELOG.md" ]; then
@@ -88,12 +94,49 @@ jobs:
           # Write to file for multi-line support
           echo "$NOTES" > release_notes.txt
 
+      - name: Build release archive and checksum
+        id: archive
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          ARCHIVE="cms-framework-${VERSION}.zip"
+
+          # `git archive` output is byte-stable for a given tree, unlike the
+          # zipball GitHub generates on demand — so a digest computed here keeps
+          # describing the bytes a host downloads later.
+          git archive --format=zip --prefix="cms-framework-${VERSION}/" -o "$ARCHIVE" HEAD
+
+          # The updater installs from the release's lock rather than
+          # re-resolving (#255), so an archive without composer.lock silently
+          # defeats that. Fail the release instead of publishing one.
+          # Listed to a file rather than piped into `grep -q`: under `pipefail`
+          # an early-exiting `grep -q` can SIGPIPE `unzip` and fail the pipeline
+          # on a match.
+          unzip -l "$ARCHIVE" > archive_contents.txt
+
+          if ! grep -qF "cms-framework-${VERSION}/composer.lock" archive_contents.txt; then
+            echo "::error::Release archive ${ARCHIVE} does not contain composer.lock"
+            exit 1
+          fi
+
+          # GitHubUpdateSource::extractChecksumFromSidecar() correlates on
+          # exactly `{asset}.sha256`; a sidecar named anything else is ignored
+          # by design, so this name is a contract, not a convention.
+          sha256sum "$ARCHIVE" > "${ARCHIVE}.sha256"
+
+          echo "archive=$ARCHIVE" >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: v${{ steps.version.outputs.version }}
           body_path: release_notes.txt
           generate_release_notes: false
+          files: |
+            ${{ steps.archive.outputs.archive }}
+            ${{ steps.archive.outputs.archive }}.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
