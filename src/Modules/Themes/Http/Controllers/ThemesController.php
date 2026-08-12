@@ -99,9 +99,10 @@ class ThemesController extends Controller
     /**
      * Updates an installed theme to its latest published version.
      *
-     * Failures surface as a `ValidationException` rather than a bare JSON
-     * error body, so host apps using Inertia get a working error bag instead
-     * of an unhandled response.
+     * A rejected update surfaces as a `ValidationException` keyed by `slug`
+     * rather than a bare JSON error body, so host apps using Inertia get a
+     * working error bag instead of an unhandled response. An unexpected server
+     * fault is reported and returns 500, matching `upload()` and `activate()`.
      *
      * Endpoint: POST /v1/themes/{slug}/update
      *
@@ -129,11 +130,14 @@ class ThemesController extends Controller
                 'slug' => $e->getMessage(),
             ] );
         } catch ( Exception $e ) {
+            // Anything else is a server fault rather than a rejected update, so
+            // it stays a 500 instead of being dressed up as a field error —
+            // matching `upload()` and `activate()`.
             report( $e );
 
-            throw ValidationException::withMessages( [
-                'slug' => __( 'An unexpected error occurred while updating the theme.' ),
-            ] );
+            return response()->json( [
+                'message' => __( 'An unexpected error occurred while updating the theme.' ),
+            ], 500 );
         }
 
         return response()->json( [

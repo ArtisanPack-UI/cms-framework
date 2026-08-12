@@ -95,4 +95,4 @@ The pinned schema version lives at `config('cms.themes.wpThemeJsonSchemaVersion'
 
 - ZIP files larger than `php.ini`'s `upload_max_filesize` are rejected by Laravel's form-request validator before reaching the controller.
 - The temporary extracted directory is removed automatically on validation failure.
-- The original ZIP file is **not** deleted by `installFromZip()` — that's the caller's responsibility (a controller wrapping a multipart upload would typically use `$request->file('theme')->store('temp')` and clean up after success).
+- The original ZIP file is **not** deleted by `installFromZip()` — that's the caller's responsibility (a controller wrapping a multipart upload would typically use `$request->file('theme_zip')->store('temp')` and clean up after success).

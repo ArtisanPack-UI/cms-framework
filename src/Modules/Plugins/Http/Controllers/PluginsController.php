@@ -111,7 +111,7 @@ class PluginsController extends Controller
             report( $e );
 
             throw ValidationException::withMessages( [
-                'plugin_zip' => __( 'Installation failed: :reason', ['reason' => $e->getMessage()] ),
+                'plugin_zip' => __( 'An unexpected error occurred while installing the plugin.' ),
             ] );
         }
 
@@ -158,7 +158,7 @@ class PluginsController extends Controller
             report( $e );
 
             throw ValidationException::withMessages( [
-                'slug' => __( 'Activation failed: :reason', ['reason' => $e->getMessage()] ),
+                'slug' => __( 'An unexpected error occurred while activating the plugin.' ),
             ] );
         }
 
@@ -192,7 +192,7 @@ class PluginsController extends Controller
             report( $e );
 
             throw ValidationException::withMessages( [
-                'slug' => __( 'Deactivation failed: :reason', ['reason' => $e->getMessage()] ),
+                'slug' => __( 'An unexpected error occurred while deactivating the plugin.' ),
             ] );
         }
 
@@ -226,7 +226,7 @@ class PluginsController extends Controller
             report( $e );
 
             throw ValidationException::withMessages( [
-                'slug' => __( 'Deletion failed: :reason', ['reason' => $e->getMessage()] ),
+                'slug' => __( 'An unexpected error occurred while deleting the plugin.' ),
             ] );
         }
 
@@ -259,12 +259,12 @@ class PluginsController extends Controller
      *
      * @throws ValidationException If the update fails.
      *
-     * @return JsonResponse JSON response with a success message.
+     * @return JsonResponse JSON response reporting whether an update was installed.
      */
     public function update( string $slug ): JsonResponse
     {
         try {
-            $this->updateManager->updatePlugin( $slug );
+            $updated = $this->updateManager->updatePlugin( $slug );
         } catch ( PluginUpdateException $e ) {
             // `UpdateManager` funnels every in-flight failure — unknown slug,
             // download, checksum mismatch, failed swap — through this type,
@@ -276,12 +276,15 @@ class PluginsController extends Controller
             report( $e );
 
             throw ValidationException::withMessages( [
-                'slug' => __( 'Update failed: :reason', ['reason' => $e->getMessage()] ),
+                'slug' => __( 'An unexpected error occurred while updating the plugin.' ),
             ] );
         }
 
         return response()->json( [
-            'message' => __( 'Plugin updated successfully' ),
+            'message' => $updated
+                ? __( 'Plugin updated successfully' )
+                : __( 'Plugin is already up to date.' ),
+            'updated' => $updated,
         ] );
     }
 }

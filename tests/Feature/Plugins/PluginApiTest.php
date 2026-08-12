@@ -275,6 +275,25 @@ describe( 'Plugin API - Update', function (): void {
         $response->assertStatus( 422 )
             ->assertJsonValidationErrors( 'slug' );
     } );
+
+    it( 'reports a no-op rather than success when no update is available', function (): void {
+        $this->actingAs( $this->admin );
+
+        // No `update` source in meta, so checkPluginUpdate() finds nothing and
+        // updatePlugin() returns false without touching the install.
+        Plugin::create( [
+            'slug'    => 'current-plugin',
+            'name'    => 'Current Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['slug' => 'current-plugin'],
+        ] );
+
+        $response = $this->postJson( '/api/v1/plugins/current-plugin/update' );
+
+        $response->assertOk()
+            ->assertJsonPath( 'updated', false )
+            ->assertJsonPath( 'message', 'Plugin is already up to date.' );
+    } );
 } );
 
 describe( 'Plugin API - Check Updates', function (): void {
