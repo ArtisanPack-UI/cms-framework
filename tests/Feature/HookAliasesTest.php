@@ -28,6 +28,23 @@ it( 'registers every rename against the hooks deprecation manager', function ():
 	expect( $map[ 'ap.roleRegistered' ] )->toBe( 'ap.rbac.roleRegistered' );
 } );
 
+it( 'aliases comments.form.action even though visual-editor owns the fire site', function (): void {
+	$map = HookAliases::map();
+
+	expect( $map )->toHaveKey( 'comments.form.action' );
+	expect( $map[ 'comments.form.action' ] )->toBe( 'ap.cmsFramework.comments.form.action' );
+} );
+
+it( 'forwards comments.form.action fired on the old name to subscribers on the new name', function (): void {
+	addFilter( 'ap.cmsFramework.comments.form.action', static fn (): string => '/comments' );
+
+	$result = applyFilters( 'comments.form.action', '/api/v1/comments' );
+
+	expect( $result )->toBe( '/comments' );
+
+	removeAllFilters( 'ap.cmsFramework.comments.form.action' );
+} );
+
 it( 'forwards actions fired on the old name to subscribers on the new name', function (): void {
 	$called = 0;
 
