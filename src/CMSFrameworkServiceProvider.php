@@ -20,6 +20,7 @@ use ArtisanPackUI\CMSFramework\Ai\Agents\ExcerptGenerationAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\PostTitleSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\SlugSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\TagSuggestionAgent;
+use ArtisanPackUI\CMSFramework\Ai\Support\AgentMeta;
 use ArtisanPackUI\CMSFramework\Livewire\Ai\AiTools;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
@@ -80,6 +81,29 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         'cms.suggest_category',
         'cms.suggest_slug',
     ];
+
+    /**
+     * The agent class behind each cms.* AI feature.
+     *
+     * {@see aiFeatures()} derives its whole map from this list, reading
+     * each agent's own `$featureKey` and `$package` rather than
+     * respelling them here — so a key is spelled in exactly two places:
+     * the agent that owns it, and {@see AI_FEATURE_KEYS} above. The
+     * `keeps AI_FEATURE_KEYS in step with the agents` test asserts those
+     * two agree, so they cannot drift silently.
+     *
+     * @since 2.8.0
+     *
+     * @var array<int, class-string>
+     */
+    public const AI_AGENTS = [
+        PostTitleSuggestionAgent::class,
+        ExcerptGenerationAgent::class,
+        TagSuggestionAgent::class,
+        CategorySuggestionAgent::class,
+        SlugSuggestionAgent::class,
+    ];
+
     /**
      * Permission slugs and human-readable names registered into
      * cms-framework's RBAC tables when visual-editor is detected.
@@ -113,34 +137,36 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      * cms-framework still boots without AI wiring, and the AI Livewire
      * component + REST endpoints stay unregistered.
      *
+     * Derived from {@see AI_AGENTS}: each agent already declares the
+     * `$featureKey` and `$package` this map needs, so respelling them
+     * here would be a third place to edit for a rename — and one with no
+     * compile-time link to the agent it describes.
+     *
+     * Metadata is read off the declared class ({@see AgentMeta}), not off
+     * a container-resolved instance. A host that binds a subclass over an
+     * agent — the pattern `docs/AI-Features.md` documents — would
+     * otherwise have the map keyed by the override's `$featureKey` while
+     * `'agent'` still named the original class and {@see AI_FEATURE_KEYS}
+     * still listed the original key, leaving three sources disagreeing.
+     * The AI package's guidance is that a host wanting the registry
+     * pointed at its subclass declares it in its own `aiFeatures()`.
+     *
      * @since 2.3.0
      *
      * @return array<string, array{ agent: class-string, package: string }>
      */
     public function aiFeatures(): array
     {
-        return [
-            'cms.post_title'       => [
-                'agent'   => PostTitleSuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.excerpt'          => [
-                'agent'   => ExcerptGenerationAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.suggest_tags'     => [
-                'agent'   => TagSuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.suggest_category' => [
-                'agent'   => CategorySuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.suggest_slug'     => [
-                'agent'   => SlugSuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-        ];
+        $features = [];
+
+        foreach ( static::AI_AGENTS as $agentClass ) {
+            $features[ AgentMeta::featureKey( $agentClass ) ] = [
+                'agent'   => $agentClass,
+                'package' => AgentMeta::package( $agentClass ),
+            ];
+        }
+
+        return $features;
     }
 
     /**
