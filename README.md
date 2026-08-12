@@ -346,6 +346,18 @@ The theme system allows customization of the CMS appearance.
 - Limited theme customization API
 - No theme preview functionality
 
+**Default Theme**
+
+`cms.themes.default` names the theme to fall back to before any theme has been activated. It defaults to `null`, because the framework ships no themes of its own and so has no slug that would be correct for every consumer. Left unset, an install with no activated theme resolves to "no active theme": `ThemeManager::getActiveTheme()` returns `null`, no theme view path is prepended, and every discovered theme is listed as inactive.
+
+Name one with the env var:
+
+```dotenv
+CMS_DEFAULT_THEME=my-theme
+```
+
+See [docs/themes.md](docs/themes.md#the-default-theme-cms_default_theme) for the full behavior.
+
 **Theme Lifecycle Hooks**
 
 The Themes module fires `doAction()` callbacks around `installFromZip()` and `activateTheme()` so host applications can subscribe listeners (seed content, register theme-supplied service providers, etc.) without forking the framework.

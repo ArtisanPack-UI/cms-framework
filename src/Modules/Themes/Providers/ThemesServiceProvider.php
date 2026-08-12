@@ -110,11 +110,14 @@ class ThemesServiceProvider extends ServiceProvider
 
         $this->registerThemeAssetBladeDirectives();
 
-        // Register default setting
+        // Register default setting. The registered default is what
+        // `SettingsManager::getSetting()` falls back to once the caller's own
+        // default is null, so it has to track `cms.themes.default` exactly —
+        // a literal here would reinstate the fallback the config removed.
         $settingsManager = $this->app->make( SettingsManager::class );
         $settingsManager->registerSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront' ),
+            config( 'cms.themes.default' ),
             fn ( $value ) => is_string( $value ) ? sanitizeText( $value ) : '',
             SettingType::String,
         );

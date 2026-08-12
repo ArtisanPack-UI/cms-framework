@@ -26,10 +26,16 @@ return [
     | Default Theme
     |--------------------------------------------------------------------------
     |
-    | The slug of the default theme to use if no theme is activated.
+    | The slug of the default theme to fall back to when no theme has been
+    | activated. Deliberately null unless the host application names one: the
+    | framework ships no themes of its own, so any hard-coded slug here would
+    | send every consumer that ships a differently-named default looking for a
+    | theme that does not exist. Left null, "no theme is active yet" stays an
+    | explicit state — `ThemeManager::getActiveTheme()` returns null and
+    | callers already handle that — rather than a lookup that silently misses.
     |
     */
-    'default' => 'digital-shopfront',
+    'default' => env( 'CMS_DEFAULT_THEME' ),
 
     /*
     |--------------------------------------------------------------------------

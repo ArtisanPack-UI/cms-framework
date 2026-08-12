@@ -66,8 +66,8 @@ return [
         // Directory where themes are stored (relative to base_path)
         'directory' => 'themes',
 
-        // Default theme slug
-        'default' => 'digital-shopfront',
+        // Default theme slug — null unless you name one. See below.
+        'default' => env( 'CMS_DEFAULT_THEME' ),
 
         // Required files for theme validation
         'requiredFiles' => [
@@ -86,6 +86,43 @@ return [
     ],
 ];
 ```
+
+### The default theme (`CMS_DEFAULT_THEME`)
+
+`cms.themes.default` is the slug the framework falls back to when the
+`themes.activeTheme` setting has never been written — a fresh install, or one
+whose settings table has not been seeded. It ships as `null`.
+
+The framework bundles no themes of its own, so it has no slug it could name
+here that would be right for every consumer. Left null, an install with no
+activated theme resolves cleanly to "no active theme":
+
+- `ThemeManager::getActiveTheme()` returns `null`.
+- `registerThemeViewPath()` early-returns, leaving the host application's own
+  view paths in place.
+- `markActiveTheme()` flags every discovered theme `is_active => false`, so
+  `GET /v1/themes` lists them all with nothing selected.
+- The site-editor resolvers (templates, template parts, menus, patterns,
+  global styles) each fall back to their theme-less path.
+
+Name a default by setting the env var:
+
+```dotenv
+CMS_DEFAULT_THEME=my-theme
+```
+
+Or by editing the published config directly. Either way the slug is only a
+fallback — the moment a theme is activated through
+`ThemeManager::activateTheme()` or `POST /v1/themes/{slug}/activate`, the
+stored `themes.activeTheme` setting wins and the default is no longer
+consulted.
+
+> **If you cache your config**, `env()` is evaluated once when the cache is
+> written and the result is baked in. Changing `CMS_DEFAULT_THEME` in `.env`
+> afterwards has no effect until you re-run `php artisan config:cache`. This is
+> standard Laravel behavior for every `env()` call in a config file, but it is
+> easy to miss here because the symptom — no active theme — looks identical to
+> not having set the variable at all.
 
 ## Theme Manifest
 
