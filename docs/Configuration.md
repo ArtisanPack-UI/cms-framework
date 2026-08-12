@@ -6,13 +6,29 @@ title: Configuration
 
 The CMS Framework provides flexible configuration options to customize its behavior for your specific application needs.
 
-## Configuration File
+## Configuration Files
 
-The main configuration file is located at `config/cms-framework.php`. You can publish it using:
+The framework publishes four configuration files. Publish all of them with the
+umbrella tag:
 
 ```bash
-php artisan vendor:publish --provider="ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider" --tag="config"
+php artisan vendor:publish --tag=cms-framework-config
 ```
+
+| File | Config key | Narrower tag |
+|---|---|---|
+| `config/artisanpack/cms-framework.php` | `artisanpack.cms-framework` | `artisanpack-package-config` |
+| `config/cms/themes.php` | `cms.themes` | `cms-themes-config` |
+| `config/cms/plugins.php` | `cms.plugins` | `cms-plugins-config` |
+| `config/cms/updates.php` | `cms.updates` | `cms-updates-config` |
+
+The main configuration file is `config/artisanpack/cms-framework.php`; the
+options documented below live there unless stated otherwise.
+
+The three `cms-*-config` tags each publish exactly the one file beside them.
+`artisanpack-package-config` is shared across the whole ArtisanPack UI
+ecosystem — it publishes this framework's config *and* the config of every
+other installed ArtisanPack UI package.
 
 ## Configuration Options
 
@@ -124,7 +140,7 @@ To customize validation, extend the UserController or create your own controller
 While the framework doesn't define specific environment variables, you can reference them in your configuration:
 
 ```php
-// config/cms-framework.php
+// config/artisanpack/cms-framework.php
 return [
     'user_model' => env('CMS_USER_MODEL', \App\Models\User::class),
 ];
@@ -140,7 +156,7 @@ CMS_USER_MODEL="App\\Models\\CustomUser"
 If your application has multiple user types, you can create different configurations:
 
 ```php
-// config/cms-framework.php
+// config/artisanpack/cms-framework.php
 return [
     'user_model' => \App\Models\User::class,
     'admin_model' => \App\Models\Admin::class, // Custom configuration

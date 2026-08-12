@@ -37,11 +37,27 @@ You can install the CMS Framework package by running the following composer comm
 composer require artisanpack-ui/cms-framework
 ```
 
-After installation, publish the configuration file:
+After installation, publish the configuration files:
 
 ```bash
 php artisan vendor:publish --tag=cms-framework-config
 ```
+
+This umbrella tag publishes every one of the framework's config files in one
+command:
+
+| File | Config key | Narrower tag |
+|---|---|---|
+| `config/artisanpack/cms-framework.php` | `artisanpack.cms-framework` | `artisanpack-package-config` |
+| `config/cms/themes.php` | `cms.themes` | `cms-themes-config` |
+| `config/cms/plugins.php` | `cms.plugins` | `cms-plugins-config` |
+| `config/cms/updates.php` | `cms.updates` | `cms-updates-config` |
+
+The three `cms-*-config` tags each publish exactly the one file beside them, so
+you can take a single module's config in isolation. `artisanpack-package-config`
+is shared across the whole ArtisanPack UI ecosystem — it publishes this
+framework's config *and* the config of every other installed ArtisanPack UI
+package, so reach for `cms-framework-config` when you want this package alone.
 
 Run the migrations to set up the database tables:
 

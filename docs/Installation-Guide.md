@@ -22,13 +22,24 @@ composer require artisanpack-ui/cms-framework
 
 ### 2. Publish Configuration
 
-Publish the configuration file to customize the framework settings:
+Publish the configuration files to customize the framework settings:
 
 ```bash
-php artisan vendor:publish --provider="ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider" --tag="config"
+php artisan vendor:publish --tag=cms-framework-config
 ```
 
-This will create a `config/cms-framework.php` file in your application.
+This creates four files in your application:
+
+- `config/artisanpack/cms-framework.php` — core framework settings
+- `config/cms/themes.php` — theme discovery and caching
+- `config/cms/plugins.php` — plugin discovery and loading
+- `config/cms/updates.php` — self-updater settings
+
+To take one module's config in isolation, use `cms-themes-config`,
+`cms-plugins-config` or `cms-updates-config` instead — each publishes exactly
+one file. (`artisanpack-package-config` also publishes the main config file,
+but it is shared across the ArtisanPack UI ecosystem and will publish every
+other installed ArtisanPack UI package's config alongside it.)
 
 ### 3. Run Migrations
 
@@ -66,7 +77,7 @@ class User extends Authenticatable
 
 ### 5. Update Configuration
 
-Edit the `config/cms-framework.php` file to point to your User model:
+Edit the `config/artisanpack/cms-framework.php` file to point to your User model:
 
 ```php
 <?php

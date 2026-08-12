@@ -58,34 +58,47 @@ if ($themeManager->templateExists('single-post')) {
 
 ## Configuration
 
-Configure themes in `config/cms.php` under the `themes` key:
+Theme settings live at `config/cms/themes.php` and are read under the
+`cms.themes` config key. Publish the file with either the umbrella tag or the
+themes-only tag:
+
+```bash
+php artisan vendor:publish --tag=cms-framework-config
+# or, themes config only:
+php artisan vendor:publish --tag=cms-themes-config
+```
+
+The published file returns the settings array directly — it is *not* wrapped in
+a `themes` key, since the module merges it under `cms.themes` for you:
 
 ```php
 return [
-    'themes' => [
-        // Directory where themes are stored (relative to base_path)
-        'directory' => 'themes',
+    // Directory where themes are stored (relative to base_path)
+    'directory' => 'themes',
 
-        // Default theme slug — null unless you name one. See below.
-        'default' => env( 'CMS_DEFAULT_THEME' ),
+    // Default theme slug — null unless you name one. See below.
+    'default' => env( 'CMS_DEFAULT_THEME' ),
 
-        // Required files for theme validation
-        'requiredFiles' => [
-            'theme.json',
-        ],
-
-        // Cache settings
-        'cacheEnabled' => env('THEMES_CACHE_ENABLED', true),
-        'cacheKey' => 'cms.themes.discovered',
-        'cacheTtl' => 3600, // 1 hour
-
-        // WordPress theme.json schema version used to validate the WP-shape
-        // subset of theme.json. Pinned to match the @wordpress/* package
-        // versions in artisanpack-ui/visual-editor.
-        'wpThemeJsonSchemaVersion' => '3',
+    // Required files for theme validation
+    'requiredFiles' => [
+        'theme.json',
     ],
+
+    // Cache settings
+    'cacheEnabled' => env( 'THEMES_CACHE_ENABLED', true ),
+    'cacheKey'     => 'cms.themes.discovered',
+    'cacheTtl'     => 3600, // 1 hour
+
+    // WordPress theme.json schema version used to validate the WP-shape
+    // subset of theme.json. Pinned to match the @wordpress/* package
+    // versions in artisanpack-ui/visual-editor.
+    'wpThemeJsonSchemaVersion' => '3',
 ];
 ```
+
+The published file carries more keys than are shown here — upload limits,
+update settings and asset caching among them. See the shipped
+`src/Modules/Themes/config/themes.php` for the annotated full list.
 
 ### The default theme (`CMS_DEFAULT_THEME`)
 

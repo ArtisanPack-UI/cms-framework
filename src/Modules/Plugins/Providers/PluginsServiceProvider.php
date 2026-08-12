@@ -42,10 +42,12 @@ class PluginsServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        // Publish config
+        // Publish config. Also tagged `cms-framework-config` so the umbrella
+        // tag the README documents publishes every module's config in one
+        // command.
         $this->publishes( [
             __DIR__ . '/../config/plugins.php' => config_path( 'cms/plugins.php' ),
-        ], 'cms-plugins-config' );
+        ], [ 'cms-plugins-config', 'cms-framework-config' ] );
 
         // Load API routes
         $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );

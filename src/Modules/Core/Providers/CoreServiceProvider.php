@@ -65,10 +65,12 @@ class CoreServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Publish update configuration
+        // Publish update configuration. Also tagged `cms-framework-config` so
+        // the umbrella tag the README documents publishes every module's
+        // config in one command.
         $this->publishes( [
             __DIR__ . '/../Updates/config/updates.php' => config_path( 'cms/updates.php' ),
-        ], 'cms-updates-config' );
+        ], [ 'cms-updates-config', 'cms-framework-config' ] );
 
         $this->registerUpdateCapabilities();
 

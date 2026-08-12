@@ -90,10 +90,12 @@ class ThemesServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Publish config
+        // Publish config. Also tagged `cms-framework-config` so the umbrella
+        // tag the README documents publishes every module's config in one
+        // command.
         $this->publishes( [
             __DIR__ . '/../config/themes.php' => config_path( 'cms/themes.php' ),
-        ], 'cms-themes-config' );
+        ], [ 'cms-themes-config', 'cms-framework-config' ] );
 
         // Register theme view paths early in the boot cycle
         $themeManager = $this->app->make( ThemeManager::class );

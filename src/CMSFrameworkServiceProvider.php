@@ -187,9 +187,15 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->validateConfiguration();
 
         if ( $this->app->runningInConsole() ) {
+            // Every config file is tagged twice: once under its own specific
+            // tag, and once under the umbrella `cms-framework-config` tag the
+            // README documents. `vendor:publish` silently succeeds on an
+            // unregistered tag, so a consumer following the README got an
+            // empty config/ and no error. The per-module tags are kept so a
+            // consumer can still publish one module's config in isolation.
             $this->publishes( [
                 __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
-            ], 'artisanpack-package-config' );
+            ], [ 'artisanpack-package-config', 'cms-framework-config' ] );
 
             $this->publishes( [
                 __DIR__ . '/../resources/types' => resource_path( 'types/cms-framework' ),
