@@ -113,7 +113,9 @@ class ThemeManager
      * Gets the currently active theme.
      *
      * Retrieves the active theme slug from settings and returns its manifest data.
-     * Falls back to the default theme configured in cms.themes.default if no theme is set.
+     * Falls back to `cms.themes.default` when no theme has been activated, which
+     * is itself null unless the host application configures one — so an
+     * unconfigured install resolves to null rather than to a guessed slug.
      *
      * @since 1.0.0
      *
@@ -123,7 +125,7 @@ class ThemeManager
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront' ),
+            config( 'cms.themes.default' ),
         );
 
         if ( empty( $activeSlug ) ) {
@@ -1124,7 +1126,8 @@ class ThemeManager
      *
      * Adds an 'is_active' boolean flag to each theme manifest indicating
      * whether it is the currently active theme. Safely handles themes that
-     * may be missing the 'slug' key.
+     * may be missing the 'slug' key. When no theme has been activated and
+     * `cms.themes.default` is unconfigured, every theme is flagged inactive.
      *
      * @since 1.0.0
      *
@@ -1136,7 +1139,7 @@ class ThemeManager
     {
         $activeSlug = $this->settingsManager->getSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront' ),
+            config( 'cms.themes.default' ),
         );
 
         return array_map( function ( $theme ) use ( $activeSlug ) {
