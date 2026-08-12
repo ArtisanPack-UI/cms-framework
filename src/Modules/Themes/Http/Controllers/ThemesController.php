@@ -16,12 +16,12 @@ use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationExcept
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeValidationException;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Http\Requests\UploadThemeRequest;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
 use Dedoc\Scramble\Attributes\Group;
 use Exception;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\ValidationException;
 
@@ -99,9 +99,10 @@ class ThemesController extends Controller
     /**
      * Updates an installed theme to its latest published version.
      *
-     * Failures surface as a `ValidationException` rather than a bare JSON
-     * error body, so host apps using Inertia get a working error bag instead
-     * of an unhandled response.
+     * A rejected update surfaces as a `ValidationException` keyed by `slug`
+     * rather than a bare JSON error body, so host apps using Inertia get a
+     * working error bag instead of an unhandled response. An unexpected server
+     * fault is reported and returns 500, matching `upload()` and `activate()`.
      *
      * Endpoint: POST /v1/themes/{slug}/update
      *
@@ -129,11 +130,14 @@ class ThemesController extends Controller
                 'slug' => $e->getMessage(),
             ] );
         } catch ( Exception $e ) {
+            // Anything else is a server fault rather than a rejected update, so
+            // it stays a 500 instead of being dressed up as a field error —
+            // matching `upload()` and `activate()`.
             report( $e );
 
-            throw ValidationException::withMessages( [
-                'slug' => __( 'An unexpected error occurred while updating the theme.' ),
-            ] );
+            return response()->json( [
+                'message' => __( 'An unexpected error occurred while updating the theme.' ),
+            ], 500 );
         }
 
         return response()->json( [
@@ -180,39 +184,44 @@ class ThemesController extends Controller
      * theme. Mirrors the Plugins module's install endpoint, with theme-named
      * exceptions and config keys plus a ZIP-slip guard during extraction.
      *
+     * A rejected archive — bad manifest, failed extraction, slug already
+     * installed — surfaces as a `ValidationException` keyed by `theme_zip`, so
+     * the 422 carries an `errors` bag an Inertia form can render against the
+     * file field rather than a bare `message` body.
+     *
      * Endpoint: POST /v1/themes
      *
      * @since 2.0.0
      *
-     * @param  Request  $request  Incoming request carrying the uploaded theme_zip.
+     * @param  UploadThemeRequest  $request  Validated request carrying the uploaded theme_zip.
+     *
+     * @throws ValidationException If the archive is rejected by the theme manager.
      *
      * @return JsonResponse JSON response with the installed theme manifest, or an error.
      */
-    public function upload( Request $request ): JsonResponse
+    public function upload( UploadThemeRequest $request ): JsonResponse
     {
-        $request->validate( [
-            'theme_zip' => 'required|file|mimes:zip|max:' . (int) ( config( 'cms.themes.maxUploadSize', 10 * 1024 * 1024 ) / 1024 ),
-        ] );
-
         try {
             $zipPath  = $request->file( 'theme_zip' )->path();
             $manifest = $this->themeManager->installFromZip( $zipPath );
-
-            return response()->json( [
-                'message' => __( 'Theme installed successfully.' ),
-                'theme'   => $manifest,
-            ], 201 );
         } catch ( ThemeValidationException|ThemeInstallationException $e ) {
-            return response()->json( [
-                'message' => $e->getMessage(),
-            ], 422 );
+            throw ValidationException::withMessages( [
+                'theme_zip' => $e->getMessage(),
+            ] );
         } catch ( Exception $e ) {
+            // Anything else is a server fault rather than a rejected upload, so
+            // it stays a 500 instead of being dressed up as a field error.
             report( $e );
 
             return response()->json( [
                 'message' => __( 'An unexpected error occurred while installing the theme.' ),
             ], 500 );
         }
+
+        return response()->json( [
+            'message' => __( 'Theme installed successfully.' ),
+            'theme'   => $manifest,
+        ], 201 );
     }
 
     /**
@@ -222,11 +231,18 @@ class ThemesController extends Controller
      * Returns a success message with the activated theme data, or an error
      * message if activation fails.
      *
-     * Endpoint: POST /api/v1/themes/{slug}/activate
+     * An unknown slug surfaces as a `ValidationException` keyed by `slug`
+     * rather than a 404. The slug is form input here — an admin picking from a
+     * theme list that has drifted out of sync with the themes directory should
+     * see a field error, not a hard error page.
+     *
+     * Endpoint: POST /v1/themes/{slug}/activate
      *
      * @since 1.0.0
      *
      * @param  string  $slug  Theme slug identifier.
+     *
+     * @throws ValidationException If no theme is installed under the given slug.
      *
      * @return JsonResponse JSON response with success message and theme data, or error.
      */
@@ -235,14 +251,11 @@ class ThemesController extends Controller
         try {
             $this->themeManager->activateTheme( $slug );
 
-            return response()->json( [
-                'message' => __( 'Theme activated successfully.' ),
-                'theme'   => $this->themeManager->getTheme( $slug ),
-            ] );
+            $theme = $this->themeManager->getTheme( $slug );
         } catch ( ThemeNotFoundException ) {
-            return response()->json( [
-                'message' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
-            ], 404 );
+            throw ValidationException::withMessages( [
+                'slug' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
+            ] );
         } catch ( Exception $e ) {
             report( $e );
 
@@ -250,5 +263,10 @@ class ThemesController extends Controller
                 'message' => __( 'An unexpected error occurred while activating the theme.' ),
             ], 500 );
         }
+
+        return response()->json( [
+            'message' => __( 'Theme activated successfully.' ),
+            'theme'   => $theme,
+        ] );
     }
 }

@@ -207,7 +207,7 @@ This allows themes to provide increasingly specific templates for different cont
 
 ## REST API Endpoints
 
-All endpoints require authentication via Laravel Sanctum and are prefixed with `/api/v1`:
+All endpoints require authentication via Laravel Sanctum and are prefixed with `/v1`:
 
 - `GET /themes` — List all available themes
 - `POST /themes` — Upload and install a theme from a ZIP
@@ -215,6 +215,16 @@ All endpoints require authentication via Laravel Sanctum and are prefixed with `
 - `GET /themes/{slug}` — Get specific theme details
 - `POST /themes/{slug}/activate` — Activate a theme
 - `POST /themes/{slug}/update` — Update a theme in place *(2.8.0)*
+
+### Error shape
+
+Action endpoints (`POST /themes`, `POST /themes/{slug}/activate`, `POST /themes/{slug}/update`) surface failures as a Laravel `ValidationException` — `422` with an `errors` bag keyed by the field the failure belongs to (`theme_zip` for uploads, `slug` for actions taken against an installed theme). That is the shape Inertia's `usePage().props.errors` and `useForm().errors` read, so an admin UI can render field-level messages without an error-shape adapter, and a pure-API client gets a parseable `errors` object rather than a bare `message`.
+
+Since *2.8.0*, activating an unknown slug is one of those `422` responses rather than a `404` — the slug is form input there, not a resource path. `GET /themes/{slug}` still answers `404`, because there the slug *is* the resource path.
+
+The `422` covers request validation and the manager's own named rejections. An *unexpected* server fault is reported and returns `500` on every endpoint above.
+
+> **Known inconsistency:** `POST /themes/{slug}/update` still answers an unknown slug with `404` rather than joining `activate()` on `422`. Tracked in [#288](https://github.com/ArtisanPack-UI/cms-framework/issues/288).
 
 ## Service Registration
 

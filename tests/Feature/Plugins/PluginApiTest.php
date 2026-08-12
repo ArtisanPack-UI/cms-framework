@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
@@ -131,13 +132,61 @@ describe( 'Plugin API - Activate', function (): void {
         expect( $plugin->is_active )->toBeTrue();
     } );
 
-    it( 'returns error when activating non-existent plugin', function (): void {
+    it( 'returns a 422 errors bag keyed by slug when activating a non-existent plugin', function (): void {
         $this->actingAs( $this->admin );
 
         $response = $this->postJson( '/api/v1/plugins/non-existent/activate' );
 
         $response->assertStatus( 422 )
-            ->assertJsonStructure( ['message'] );
+            ->assertJsonValidationErrors( [
+                'slug' => "Plugin with slug 'non-existent' not found.",
+            ] );
+    } );
+} );
+
+describe( 'Plugin API - Install', function (): void {
+    it( 'returns a 422 errors bag keyed by plugin_zip when no file is uploaded', function (): void {
+        $this->actingAs( $this->admin );
+
+        $response = $this->postJson( '/api/v1/plugins/install', [] );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( 'plugin_zip' );
+    } );
+
+    it( 'returns a 422 errors bag keyed by plugin_zip when the upload is not a ZIP', function (): void {
+        $this->actingAs( $this->admin );
+
+        $response = $this->postJson( '/api/v1/plugins/install', [
+            'plugin_zip' => UploadedFile::fake()->create( 'plugin.txt', 4, 'text/plain' ),
+        ] );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( 'plugin_zip' );
+    } );
+
+    it( 'reports a manager-level rejection in the same errors bag keyed by plugin_zip', function (): void {
+        $this->actingAs( $this->admin );
+
+        // Passes the form request's rules (a real ZIP, under the size ceiling)
+        // but is rejected by PluginManager::validateZip() for carrying no
+        // manifest — the path that previously returned a message-only body.
+        $zipPath = storage_path( 'app/manifestless-plugin.zip' );
+        File::ensureDirectoryExists( dirname( $zipPath ) );
+
+        $zip = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'readme.txt', 'no manifest here' );
+        $zip->close();
+
+        $response = $this->postJson( '/api/v1/plugins/install', [
+            'plugin_zip' => new UploadedFile( $zipPath, 'plugin.zip', 'application/zip', null, true ),
+        ] );
+
+        File::delete( $zipPath );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( 'plugin_zip' );
     } );
 } );
 
@@ -163,6 +212,17 @@ describe( 'Plugin API - Deactivate', function (): void {
         // Verify plugin is inactive
         $plugin = Plugin::where( 'slug', 'test-plugin' )->first();
         expect( $plugin->is_active )->toBeFalse();
+    } );
+
+    it( 'returns a 422 errors bag keyed by slug when deactivating a non-existent plugin', function (): void {
+        $this->actingAs( $this->admin );
+
+        $response = $this->postJson( '/api/v1/plugins/non-existent/deactivate' );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( [
+                'slug' => "Plugin with slug 'non-existent' not found.",
+            ] );
     } );
 } );
 
@@ -192,6 +252,47 @@ describe( 'Plugin API - Delete', function (): void {
 
         // Verify plugin is deleted
         expect( Plugin::where( 'slug', 'valid-plugin' )->exists() )->toBeFalse();
+    } );
+
+    it( 'returns a 422 errors bag keyed by slug when deleting a non-existent plugin', function (): void {
+        $this->actingAs( $this->admin );
+
+        $response = $this->deleteJson( '/api/v1/plugins/non-existent' );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( [
+                'slug' => "Plugin with slug 'non-existent' not found.",
+            ] );
+    } );
+} );
+
+describe( 'Plugin API - Update', function (): void {
+    it( 'returns a 422 errors bag keyed by slug when updating a non-existent plugin', function (): void {
+        $this->actingAs( $this->admin );
+
+        $response = $this->postJson( '/api/v1/plugins/non-existent/update' );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( 'slug' );
+    } );
+
+    it( 'reports a no-op rather than success when no update is available', function (): void {
+        $this->actingAs( $this->admin );
+
+        // No `update` source in meta, so checkPluginUpdate() finds nothing and
+        // updatePlugin() returns false without touching the install.
+        Plugin::create( [
+            'slug'    => 'current-plugin',
+            'name'    => 'Current Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['slug' => 'current-plugin'],
+        ] );
+
+        $response = $this->postJson( '/api/v1/plugins/current-plugin/update' );
+
+        $response->assertOk()
+            ->assertJsonPath( 'updated', false )
+            ->assertJsonPath( 'message', 'Plugin is already up to date.' );
     } );
 } );
 
