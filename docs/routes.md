@@ -177,6 +177,8 @@ Standard RESTful resource routes for managing taxonomies (categories, tags, etc.
 | POST | `/{slug}/update` | `PluginsController@update` | `api.plugins.update` | Update plugin |
 | DELETE | `/{slug}` | `PluginsController@destroy` | `api.plugins.destroy` | Delete plugin |
 
+**Error shape**: since *2.8.0*, every failing action endpoint returns `422` with Laravel's standard `errors` bag — keyed by `plugin_zip` for the install upload and by `slug` for the actions taken against an installed plugin — so Inertia consumers get field-level errors. The one exception is activating a plugin whose `min_host_version` the host does not satisfy, which keeps its dedicated `409` response and its structured `code` / `required_version` / `host_version` payload.
+
 ---
 
 ## Themes Module (Experimental)

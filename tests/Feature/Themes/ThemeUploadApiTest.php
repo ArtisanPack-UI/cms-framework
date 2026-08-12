@@ -76,15 +76,27 @@ describe( 'POST /v1/themes (upload)', function (): void {
         expect( File::exists( $this->themesPath . '/api-upload-theme/theme.json' ) )->toBeTrue();
     } );
 
-    it( 'returns 422 when no file is uploaded', function (): void {
+    it( 'returns 422 with an errors bag keyed by theme_zip when no file is uploaded', function (): void {
         $this->actingAs( $this->admin );
 
         $response = $this->postJson( '/v1/themes', [] );
 
-        $response->assertStatus( 422 );
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( 'theme_zip' );
     } );
 
-    it( 'returns 422 when the slug is already installed', function (): void {
+    it( 'returns 422 with an errors bag keyed by theme_zip when the upload is not a ZIP', function (): void {
+        $this->actingAs( $this->admin );
+
+        $response = $this->postJson( '/v1/themes', [
+            'theme_zip' => UploadedFile::fake()->create( 'theme.txt', 4, 'text/plain' ),
+        ] );
+
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( 'theme_zip' );
+    } );
+
+    it( 'returns 422 with an errors bag keyed by theme_zip when the slug is already installed', function (): void {
         $this->actingAs( $this->admin );
 
         // Seeded directory and ZIP both use the same slug — makeUploadedThemeZip
@@ -107,7 +119,9 @@ describe( 'POST /v1/themes (upload)', function (): void {
         $response = $this->postJson( '/v1/themes', ['theme_zip' => $file] );
 
         $response->assertStatus( 422 )
-            ->assertJsonFragment( ['message' => "Theme 'dup-api-theme' is already installed."] );
+            ->assertJsonValidationErrors( [
+                'theme_zip' => "Theme 'dup-api-theme' is already installed.",
+            ] );
     } );
 
     it( 'requires authentication', function (): void {

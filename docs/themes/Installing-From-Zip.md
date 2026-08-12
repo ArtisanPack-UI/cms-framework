@@ -28,13 +28,26 @@ try {
 ## REST endpoint
 
 ```
-POST /api/v1/themes
+POST /v1/themes
 Content-Type: multipart/form-data
 
-theme=@/path/to/theme.zip
+theme_zip=@/path/to/theme.zip
 ```
 
-The endpoint accepts a single multipart file field named `theme`. On success it returns `201 Created` with the parsed manifest. On failure it returns `422` (validation error) or `400` (extraction error) with the framework's standard error envelope.
+The endpoint accepts a single multipart file field named `theme_zip`. On success it returns `201 Created` with the parsed manifest.
+
+A rejected upload returns `422` carrying Laravel's standard validation shape, keyed by the field the failure belongs to:
+
+```json
+{
+  "message": "Theme 'my-theme' is already installed.",
+  "errors": {
+    "theme_zip": ["Theme 'my-theme' is already installed."]
+  }
+}
+```
+
+Both the request-level rules (file present, ZIP MIME type, within `cms.themes.maxUploadSize`) and the manager-level rejections (`ThemeValidationException`, `ThemeInstallationException`) produce this shape, so an Inertia consumer can render either against the file field without a bespoke adapter. A failure that is *not* a rejected upload — an unexpected server fault — is reported and returns `500`.
 
 ## Pre-extraction validation
 

@@ -207,7 +207,7 @@ This allows themes to provide increasingly specific templates for different cont
 
 ## REST API Endpoints
 
-All endpoints require authentication via Laravel Sanctum and are prefixed with `/api/v1`:
+All endpoints require authentication via Laravel Sanctum and are prefixed with `/v1`:
 
 - `GET /themes` — List all available themes
 - `POST /themes` — Upload and install a theme from a ZIP
@@ -215,6 +215,12 @@ All endpoints require authentication via Laravel Sanctum and are prefixed with `
 - `GET /themes/{slug}` — Get specific theme details
 - `POST /themes/{slug}/activate` — Activate a theme
 - `POST /themes/{slug}/update` — Update a theme in place *(2.8.0)*
+
+### Error shape
+
+Action endpoints (`POST /themes`, `POST /themes/{slug}/activate`, `POST /themes/{slug}/update`) surface failures as a Laravel `ValidationException` — `422` with an `errors` bag keyed by the field the failure belongs to (`theme_zip` for uploads, `slug` for actions taken against an installed theme). That is the shape Inertia's `usePage().props.errors` and `useForm().errors` read, so an admin UI can render field-level messages without an error-shape adapter, and a pure-API client gets a parseable `errors` object rather than a bare `message`.
+
+Since *2.8.0*, activating an unknown slug is one of those `422` responses rather than a `404` — the slug is form input there, not a resource path. Unexpected server faults are reported and still return `500`.
 
 ## Service Registration
 
