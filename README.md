@@ -46,7 +46,7 @@ php artisan vendor:publish --tag=cms-framework-config
 This umbrella tag publishes every one of the framework's config files in one
 command:
 
-| File | Config key | Narrower tag |
+| File | Config key | Also published by |
 |---|---|---|
 | `config/artisanpack/cms-framework.php` | `artisanpack.cms-framework` | `artisanpack-package-config` |
 | `config/cms/themes.php` | `cms.themes` | `cms-themes-config` |

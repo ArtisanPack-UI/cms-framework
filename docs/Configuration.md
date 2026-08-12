@@ -15,15 +15,16 @@ umbrella tag:
 php artisan vendor:publish --tag=cms-framework-config
 ```
 
-| File | Config key | Narrower tag |
+| File | Config key | Also published by |
 |---|---|---|
 | `config/artisanpack/cms-framework.php` | `artisanpack.cms-framework` | `artisanpack-package-config` |
 | `config/cms/themes.php` | `cms.themes` | `cms-themes-config` |
 | `config/cms/plugins.php` | `cms.plugins` | `cms-plugins-config` |
 | `config/cms/updates.php` | `cms.updates` | `cms-updates-config` |
 
-The main configuration file is `config/artisanpack/cms-framework.php`; the
-options documented below live there unless stated otherwise.
+The main configuration file is `config/artisanpack/cms-framework.php`, which
+carries `user_model` and `openapi`. The "Advanced Configuration" sections below
+describe code-level customization rather than keys in that file.
 
 The three `cms-*-config` tags each publish exactly the one file beside them.
 `artisanpack-package-config` is shared across the whole ArtisanPack UI
