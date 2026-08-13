@@ -155,6 +155,66 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Queued Updates
+    |--------------------------------------------------------------------------
+    |
+    | `ApplicationUpdateManager::dispatchUpdate()` pushes the update onto a
+    | queue instead of running it inline, which is the supported way to trigger
+    | one from an HTTP request: an inline `performUpdate()` occupies a PHP-FPM
+    | worker for several minutes, keeps occupying it after the caller
+    | disconnects, and is subject to gateway timeouts and FPM's
+    | `request_terminate_timeout` that no userland call can override.
+    |
+    | `connection` — the queue connection to dispatch to. Null uses
+    | `queue.default`.
+    |
+    | `queue` — the queue name to push onto. Null uses the connection's default
+    | queue. Give updates their own queue if your default queue is busy; an
+    | update that sits behind a thousand emails is an update that has not
+    | started.
+    |
+    | `timeout` — seconds the worker allows the job before killing it. Null
+    | derives it from `download_timeout` + `composer_timeout` + a 900s buffer
+    | for the steps that have no timeout of their own (backup, extraction,
+    | migrations). This value travels with the job and **takes precedence over
+    | the worker's `--timeout`** (`Worker::timeoutForJob()` falls back to the
+    | worker flag only when the job carries no timeout of its own), so a worker
+    | started with a short `--timeout` will not cut an update short.
+    |
+    | What does have to be set by hand is the connection's `retry_after` in
+    | config/queue.php. That is the queue's "this reserved job must have died"
+    | timer, and Laravel ships **90 seconds** for `database`, `redis` and
+    | `beanstalkd` — far shorter than any real update. Left alone, the queue
+    | hands the same update to a second worker 90 seconds in, while the first
+    | is still running `composer install`. `dispatchUpdate()` refuses to
+    | dispatch when `retry_after` is not greater than the timeout above, so
+    | raise it past this value:
+    |
+    |     'retry_after' => 1900,   // config/queue.php, above the job timeout
+    |
+    |     php artisan queue:work --queue=updates --tries=1
+    |
+    | `allow_sync` — dispatching to the `sync` driver runs the job inline in the
+    | dispatching process, which reintroduces exactly the blocking behavior
+    | queueing exists to avoid while looking from the outside like the feature
+    | works. `dispatchUpdate()` therefore refuses a `sync` connection unless
+    | this is set to `true`, in which case it warns and proceeds. It does not
+    | rescue the `null` driver or an unconfigured connection: neither ever runs
+    | the job, so there is nothing to opt in to.
+    |
+    | Nothing here affects a direct `performUpdate()` call, which remains
+    | supported and unchanged.
+    |
+    */
+    'queue' => [
+        'connection' => env( 'CMS_UPDATES_QUEUE_CONNECTION' ),
+        'queue'      => env( 'CMS_UPDATES_QUEUE' ),
+        'timeout'    => env( 'CMS_UPDATES_QUEUE_TIMEOUT' ),
+        'allow_sync' => env( 'CMS_UPDATES_QUEUE_ALLOW_SYNC', false ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Lift Maintenance Mode On Interrupted Updates
     |--------------------------------------------------------------------------
     |

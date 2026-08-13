@@ -8,10 +8,14 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\UpdateStateStore;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -208,6 +212,204 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Push an update onto the queue instead of running it inline.
+     *
+     * **This is the supported entry point for an HTTP-triggered update.** The
+     * endpoint should authorize, call this, and then poll `updateState()` for
+     * progress; it must not call `performUpdate()` and block. An HTTP-triggered
+     * update occupies a PHP-FPM worker for the whole run and keeps occupying it
+     * after the caller disconnects, and it is subject to gateway timeouts
+     * (nginx `proxy_read_timeout`, load balancers, Cloudflare's 100s) and to
+     * FPM's `request_terminate_timeout` — none of which any userland call can
+     * override. The 2.7.1 guards make that failure *survivable*; they do not
+     * make it appropriate.
+     *
+     * Authorization is still the caller's job, exactly as it is for
+     * `performUpdate()` — dispatching a job that will overwrite PHP files and
+     * run `composer install` is the same remote-code-execution channel as
+     * running it inline:
+     *
+     * ```php
+     * Gate::authorize( UpdateCapability::PERFORM );
+     * $manager->dispatchUpdate();
+     * ```
+     *
+     * Refuses rather than degrades when the queue cannot actually run the job
+     * in the background — see `guardQueueDriver()`. A `sync` connection would
+     * reintroduce the exact blocking behavior this method exists to avoid,
+     * silently, which is the worst outcome available here.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $version  Version to install, or null for latest.
+     * @param  bool  $allowDowngrade  Permit a target that is not newer than the installed one.
+     *
+     * @throws UpdateException When the queue is unusable, or an update is already queued or running.
+     *
+     * @return PerformUpdateJob The dispatched job.
+     */
+    public function dispatchUpdate( ?string $version = null, bool $allowDowngrade = false ): PerformUpdateJob
+    {
+        $connection = $this->updateQueueConnection();
+        $queue      = $this->updateQueueName();
+
+        $this->guardQueueDriver( $connection );
+        $this->guardNoPendingUpdate();
+
+        $job = new PerformUpdateJob( $version, $allowDowngrade );
+        $job->onConnection( $connection );
+
+        if ( null !== $queue ) {
+            $job->onQueue( $queue );
+        }
+
+        // Acquired here rather than left to `PerformUpdateJob::dispatch()`,
+        // which takes the same lock from `PendingDispatch::__destruct()` and
+        // then *silently returns* when it cannot get it. Silence is the wrong
+        // answer for a double-clicked admin button: the caller would be told
+        // the update was queued, the state file would say `queued`, and
+        // nothing would ever run it.
+        $lock = new UniqueLock( app( CacheRepository::class ) );
+
+        if ( ! $lock->acquire( $job ) ) {
+            throw UpdateException::updateAlreadyQueued( $this->queuedAt() );
+        }
+
+        $this->state()->markQueued( $version, $this->installedVersion(), $connection, $queue );
+
+        try {
+            app( Dispatcher::class )->dispatch( $job );
+        } catch ( Throwable $e ) {
+            // A queue backend that is configured but unreachable — Redis down,
+            // a missing `jobs` table. Without this the record would sit at
+            // `queued` forever describing a job that was never accepted.
+            //
+            // Only when the push itself failed, though. Under `allow_sync` the
+            // dispatch *is* the whole update: `SyncQueue::handleException()`
+            // fails the job — releasing the lock and running
+            // `handleFailedUpdateJob()` — and only then rethrows. Re-stamping
+            // here would overwrite the outcome that reconciliation just
+            // settled, and release a lock that is already released. A record
+            // still sitting at `queued` is the signal that nothing ran.
+            $recorded = $this->updateState();
+            $recorded = is_string( $recorded['status'] ?? null ) ? $recorded['status'] : '';
+
+            if ( UpdateRunStatus::Queued === UpdateRunStatus::tryFrom( $recorded ) ) {
+                $lock->release( $job );
+
+                $this->state()->markStatus( UpdateRunStatus::Failed, $e->getMessage() );
+            }
+
+            throw $e;
+        }
+
+        Log::info( 'cms-framework: an application update was queued.', [
+            'target_version'   => $version,
+            'queue_connection' => $connection,
+            'queue_name'       => $queue,
+            'timeout'          => $job->timeout,
+        ] );
+
+        return $job;
+    }
+
+    /**
+     * Reconcile the persisted record after the queued update job failed.
+     *
+     * Called from `PerformUpdateJob::failed()`. The case this exists for is the
+     * worker timeout: the worker kills the run mid-step, so `performUpdate()`'s
+     * `catch` never marks the record and — under `kill -9`-style termination —
+     * the shutdown guard never lifts maintenance mode either. Left alone, the
+     * record would claim `in_progress` forever and the site would keep serving
+     * 503s, which is precisely the failure the interruption machinery exists to
+     * prevent, reintroduced through the queue.
+     *
+     * @since 2.8.0
+     *
+     * @param  Throwable|null  $exception  The failure, when there was one.
+     */
+    public function handleFailedUpdateJob( ?Throwable $exception = null ): void
+    {
+        $message = null !== $exception
+            ? $exception->getMessage()
+            : 'The queued update job failed without reporting an error.';
+
+        // The record this job failed against may not be its own. Two ways to
+        // arrive here holding someone else's:
+        //
+        // - `performUpdate()` takes the `flock` sentinel *before* its own try
+        //   block, so losing that race throws `updateAlreadyRunning` straight
+        //   past the bookkeeping and into the worker.
+        // - The queue redelivers a long-running job once `retry_after`
+        //   elapses. With `$tries = 1` the duplicate is failed without
+        //   `handle()` ever running, so it arrives here having done nothing.
+        //
+        // In both cases the live record belongs to a run that may still be
+        // extracting over `base_path()`. Marking it `Interrupted` would report
+        // a healthy run as dead, and lifting maintenance mode would serve
+        // traffic from a half-extracted tree — the exact outcome the whole
+        // interruption machinery exists to prevent, caused by the machinery
+        // itself. `runningUpdatePid()` is already the liveness probe for this.
+        $foreignPid = $this->runningUpdatePid();
+
+        if ( null !== $foreignPid ) {
+            Log::warning( 'cms-framework: a queued application update job failed against a run owned by another live process; leaving that run alone.', [
+                'running_pid' => $foreignPid,
+                'error'       => $message,
+            ] );
+
+            return;
+        }
+
+        $recorded = $this->updateState();
+        $status   = UpdateRunStatus::tryFrom(
+            is_string( $recorded['status'] ?? null ) ? $recorded['status'] : '',
+        );
+
+        if ( null !== $status && $status->isTerminal() ) {
+            // `performUpdate()` caught the error, rolled back, and recorded the
+            // real reason before rethrowing it into the worker. Overwriting
+            // that with the same message would be noise; overwriting a
+            // `Completed` record — a job that finished the update and then
+            // failed on the way out — would be a lie.
+            Log::error( 'cms-framework: the queued application update job failed after the run had already been recorded as finished.', [
+                'recorded_status' => $status->value,
+                'error'           => $message,
+            ] );
+
+            return;
+        }
+
+        $step = is_string( $recorded['step'] ?? null ) ? $recorded['step'] : null;
+
+        if ( UpdateRunStatus::InProgress === $status ) {
+            Log::critical( 'cms-framework: the queued application update was killed while it was running; the job is gone but the update never finished.', [
+                'step'       => $step,
+                'error'      => $message,
+                'state_file' => $this->state()->path(),
+                'hint'       => 'Run `php artisan update:status` to see how far it got and what remains.',
+            ] );
+
+            $this->state()->markStatus( UpdateRunStatus::Interrupted, $message );
+
+            if ( $this->maintenanceModeActive || null !== $step ) {
+                $this->liftMaintenanceModeAfterFailure( 'the failed queued update job' );
+            }
+
+            return;
+        }
+
+        // Still `queued` (or no readable record at all): the job never reached
+        // `performUpdate()`'s own bookkeeping, so nothing else will record this.
+        Log::error( 'cms-framework: the queued application update failed before it started.', [
+            'recorded_status' => $status?->value,
+            'error'           => $message,
+        ] );
+
+        $this->state()->markStatus( UpdateRunStatus::Failed, $message );
+    }
+
+    /**
      * Persisted record of the most recent update run, or `null` when no update
      * has been recorded. Host applications can poll this to surface progress
      * and to detect an update that died mid-flight.
@@ -224,11 +426,29 @@ class ApplicationUpdateManager
     /**
      * Discard the persisted update state record.
      *
+     * Also releases the dispatch lock. The record and the lock live in
+     * different places — a file under `storage/` and the cache — so they can
+     * desynchronise, and clearing only the record would leave the operator
+     * unable to dispatch until the lock aged out: `guardNoPendingUpdate()`
+     * would pass (no record) and the lock acquire would then fail, reporting
+     * "an update is already queued" while `update:status` reported that none
+     * had ever been recorded. The lock key is Laravel-internal, so the only
+     * other way out was `cache:clear`. Discarding the record is the operator's
+     * reset button; it has to actually reset.
+     *
      * @since 2.7.1
      */
     public function clearUpdateState(): void
     {
         $this->state()->clear();
+
+        try {
+            ( new UniqueLock( app( CacheRepository::class ) ) )->release( new PerformUpdateJob );
+        } catch ( Throwable $e ) {
+            Log::warning( 'cms-framework: could not release the queued-update dispatch lock while clearing the update state.', [
+                'exception' => $e->getMessage(),
+            ] );
+        }
     }
 
     /**
@@ -303,25 +523,7 @@ class ApplicationUpdateManager
             );
         }
 
-        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
-            Log::critical(
-                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
-            );
-
-            return;
-        }
-
-        try {
-            $this->disableMaintenanceMode();
-
-            Log::critical( 'cms-framework: maintenance mode was lifted by the update shutdown guard. The installation may be half-applied — run `php artisan update:status` before trusting it.' );
-        } catch ( Throwable $e ) {
-            Log::critical( 'cms-framework: the update shutdown guard could not lift maintenance mode via `artisan up`.', [
-                'exception' => $e->getMessage(),
-            ] );
-
-            $this->forceLiftMaintenanceMode();
-        }
+        $this->liftMaintenanceModeAfterFailure( 'the update shutdown guard' );
     }
 
     /**
@@ -2096,6 +2298,250 @@ class ApplicationUpdateManager
         $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
 
         return in_array( $error['type'] ?? 0, $fatalTypes, true ) ? $error : null;
+    }
+
+    /**
+     * Take the site back out of maintenance mode after an update that did not
+     * reach step 10, honouring `cms.updates.lift_maintenance_on_interrupt`.
+     *
+     * Shared by the in-process shutdown guard and by the queued job's `failed()`
+     * hook, which face the same situation from different angles: a run that
+     * stopped somewhere between step 1 and step 10, with the site still down.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $liftedBy  What is doing the lifting, for the log line.
+     */
+    protected function liftMaintenanceModeAfterFailure( string $liftedBy ): void
+    {
+        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
+            Log::critical(
+                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
+            );
+
+            return;
+        }
+
+        try {
+            $this->disableMaintenanceMode();
+
+            Log::critical( "cms-framework: maintenance mode was lifted by {$liftedBy}. The installation may be half-applied — run `php artisan update:status` before trusting it." );
+        } catch ( Throwable $e ) {
+            Log::critical( "cms-framework: {$liftedBy} could not lift maintenance mode via `artisan up`.", [
+                'exception' => $e->getMessage(),
+            ] );
+
+            $this->forceLiftMaintenanceMode();
+        }
+    }
+
+    /**
+     * Queue connection a queued update is dispatched to.
+     *
+     * `cms.updates.queue.connection` when set, otherwise the application
+     * default. Resolved eagerly rather than left null so the driver guard and
+     * the persisted record both name the connection the operator would have to
+     * run a worker against.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Connection name, or null when none is configured.
+     */
+    protected function updateQueueConnection(): ?string
+    {
+        $configured = config( 'cms.updates.queue.connection' );
+
+        if ( is_string( $configured ) && '' !== $configured ) {
+            return $configured;
+        }
+
+        $default = config( 'queue.default' );
+
+        return is_string( $default ) && '' !== $default ? $default : null;
+    }
+
+    /**
+     * Queue name a queued update is pushed onto, or null for the connection's
+     * default queue.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Queue name.
+     */
+    protected function updateQueueName(): ?string
+    {
+        $configured = config( 'cms.updates.queue.queue' );
+
+        return is_string( $configured ) && '' !== $configured ? $configured : null;
+    }
+
+    /**
+     * Refuse to queue an update onto a connection that will not run it in the
+     * background.
+     *
+     * Three connections are unusable, for two different reasons:
+     *
+     * - **`sync`** runs the job inline in the dispatching process. Dispatching
+     *   an update to it produces exactly the multi-minute blocking HTTP request
+     *   that queueing exists to avoid, while looking from the outside like the
+     *   feature works. Opt in with `cms.updates.queue.allow_sync` if that is
+     *   genuinely intended — a CLI caller, say — and the framework warns and
+     *   proceeds.
+     * - **`null`** discards the job. The site would simply never be updated.
+     * - **An unconfigured connection** cannot be dispatched to at all.
+     *
+     * The last two are not covered by `allow_sync`: neither ever runs the
+     * update, so there is nothing to opt in to.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $connection  Resolved connection name.
+     *
+     * @throws UpdateException When the connection cannot run a background job.
+     */
+    protected function guardQueueDriver( ?string $connection ): void
+    {
+        $driver = null === $connection ? null : config( "queue.connections.{$connection}.driver" );
+        $driver = is_string( $driver ) ? $driver : null;
+
+        if ( 'sync' === $driver && config( 'cms.updates.queue.allow_sync', false ) ) {
+            Log::warning( 'cms-framework: queueing an application update onto the sync driver, so it will run inline and block the caller for the whole update.', [
+                'queue_connection' => $connection,
+                'hint'             => 'This is opt-in via cms.updates.queue.allow_sync. Configure a real queue connection and run a worker to get the non-blocking behavior.',
+            ] );
+
+            return;
+        }
+
+        if ( null === $driver || 'sync' === $driver || 'null' === $driver ) {
+            throw UpdateException::updateQueueUnusable( $connection, $driver );
+        }
+
+        $this->guardQueueRetryAfter( $connection );
+    }
+
+    /**
+     * Refuse a connection that would redeliver the update before it finishes.
+     *
+     * `retry_after` is the queue's "this reserved job must have died" timer.
+     * Laravel ships 90 seconds for the `database`, `redis` and `beanstalkd`
+     * connections; a real update runs for minutes, so the stock configuration
+     * hands the same update to a second worker while the first is still
+     * running `composer install`.
+     *
+     * `$tries = 1` does not save this — it is what makes it land here. The
+     * duplicate exceeds max attempts, so the worker fails it *without* calling
+     * `handle()`, and it goes straight to `failed()` carrying a
+     * `MaxAttemptsExceededException` against a run that is perfectly healthy.
+     * (`handleFailedUpdateJob()`'s ownership check is the second line of
+     * defence for exactly that, but a spurious `failed_jobs` row and a
+     * `critical` log line on every long update is not something to ship.)
+     *
+     * Only connections that actually carry the setting are checked: SQS
+     * expresses the same idea as a queue-side visibility timeout that is not
+     * readable from here.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $connection  Resolved connection name.
+     *
+     * @throws UpdateException When redelivery would happen mid-update.
+     */
+    protected function guardQueueRetryAfter( ?string $connection ): void
+    {
+        $retryAfter = config( "queue.connections.{$connection}.retry_after" );
+
+        if ( ! is_numeric( $retryAfter ) ) {
+            return;
+        }
+
+        $retryAfter = (int) $retryAfter;
+        $timeout    = PerformUpdateJob::resolveTimeout();
+
+        if ( $retryAfter > $timeout ) {
+            return;
+        }
+
+        throw UpdateException::updateQueueRetryTooShort( $connection, $retryAfter, $timeout );
+    }
+
+    /**
+     * Refuse to queue an update while another one is still expected to run.
+     *
+     * A live in-progress run is refused outright. A `queued` record is refused
+     * only while it is young enough to plausibly still be waiting: a host with
+     * no worker running would otherwise be wedged permanently by its own first
+     * dispatch, with nothing to tell the operator that clearing the record is
+     * what unblocks it.
+     *
+     * @since 2.8.0
+     *
+     * @throws UpdateException When an update is already running or queued.
+     */
+    protected function guardNoPendingUpdate(): void
+    {
+        $runningPid = $this->runningUpdatePid();
+
+        if ( null !== $runningPid ) {
+            throw UpdateException::updateAlreadyRunning( $runningPid );
+        }
+
+        $state  = $this->updateState();
+        $status = UpdateRunStatus::tryFrom( is_string( $state['status'] ?? null ) ? $state['status'] : '' );
+
+        if ( UpdateRunStatus::Queued !== $status ) {
+            return;
+        }
+
+        $queuedAt = $this->queuedAt();
+
+        // Shares the window with the job's unique lock, so the two expire
+        // together and a retry that clears this guard is not then swallowed by
+        // a lock that has not.
+        if ( $this->state()->isStaleTimestamp( $queuedAt ) ) {
+            Log::warning( 'cms-framework: a previously queued application update was never picked up by a worker; queueing a new one over it.', [
+                'queued_at' => $queuedAt,
+                'hint'      => 'Check that a queue worker is running against the configured connection.',
+            ] );
+
+            return;
+        }
+
+        throw UpdateException::updateAlreadyQueued( $queuedAt );
+    }
+
+    /**
+     * When the recorded run was pushed onto the queue, or null.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null ISO-8601 timestamp.
+     */
+    protected function queuedAt(): ?string
+    {
+        $state    = $this->updateState();
+        $queuedAt = $state['queued_at'] ?? null;
+
+        return is_string( $queuedAt ) && '' !== $queuedAt ? $queuedAt : null;
+    }
+
+    /**
+     * The currently installed application version, recorded alongside a queued
+     * run so `update:status` can render it before the job resolves the target.
+     *
+     * Reads `config('app.version')` — the same source `UpdateInfo::resolveCurrentVersion()`
+     * consults — rather than asking the update checker, which would mean a
+     * network round-trip in the request doing the dispatching.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Installed version.
+     */
+    protected function installedVersion(): ?string
+    {
+        $version = config( 'app.version' );
+
+        return is_string( $version ) && '' !== $version ? $version : null;
     }
 
     /**

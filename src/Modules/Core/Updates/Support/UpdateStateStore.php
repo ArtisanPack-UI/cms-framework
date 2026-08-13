@@ -6,6 +6,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -67,6 +68,45 @@ class UpdateStateStore
     }
 
     /**
+     * Record that an update has been pushed onto the queue and is waiting for a
+     * worker, replacing any previous record.
+     *
+     * The target version is whatever the caller asked for, which is `null` when
+     * they asked for "latest" — resolving it would mean a network round-trip in
+     * the request that is dispatching. `begin()` fills in the resolved version
+     * once the job actually starts.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $targetVersion  Requested version, or null for latest.
+     * @param  string|null  $currentVersion  Version installed before the update.
+     * @param  string|null  $connection  Queue connection the job was pushed to.
+     * @param  string|null  $queue  Queue name the job was pushed to.
+     */
+    public function markQueued(
+        ?string $targetVersion = null,
+        ?string $currentVersion = null,
+        ?string $connection = null,
+        ?string $queue = null,
+    ): void {
+        $this->write( [
+            'status'           => UpdateRunStatus::Queued->value,
+            'step'             => null,
+            'step_number'      => null,
+            'step_label'       => null,
+            'target_version'   => $targetVersion,
+            'current_version'  => $currentVersion,
+            'php_sapi'         => PHP_SAPI,
+            'pid'              => null,
+            'queued_at'        => $this->timestamp(),
+            'queue_connection' => $connection,
+            'queue_name'       => $queue,
+            'started_at'       => null,
+            'error'            => null,
+        ] );
+    }
+
+    /**
      * Record the start of an update run, replacing any previous record.
      *
      * @since 2.7.1
@@ -78,7 +118,7 @@ class UpdateStateStore
     {
         $pid = getmypid();
 
-        $this->write( [
+        $this->write( array_merge( $this->queueProvenance(), [
             'status'          => UpdateRunStatus::InProgress->value,
             'step'            => null,
             'step_number'     => null,
@@ -89,7 +129,7 @@ class UpdateStateStore
             'pid'             => false === $pid ? null : $pid,
             'started_at'      => $this->timestamp(),
             'error'           => null,
-        ] );
+        ] ) );
     }
 
     /**
@@ -199,6 +239,89 @@ class UpdateStateStore
                 'exception' => $e->getMessage(),
             ] );
         }
+    }
+
+    /**
+     * Whether a recorded timestamp is older than the window a queued update is
+     * given to be claimed.
+     *
+     * An unparseable or missing timestamp counts as stale — a record that
+     * cannot be dated must not be trusted to describe the current run, and
+     * must not block a future one either.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $timestamp  ISO-8601 timestamp from the record.
+     *
+     * @return bool True when the timestamp is outside the window.
+     */
+    public function isStaleTimestamp( ?string $timestamp ): bool
+    {
+        if ( null === $timestamp ) {
+            return true;
+        }
+
+        $parsed = strtotime( $timestamp );
+
+        if ( false === $parsed ) {
+            return true;
+        }
+
+        return ( time() - $parsed ) >= PerformUpdateJob::resolveTimeout();
+    }
+
+    /**
+     * The queue fields to carry into a run that started life on the queue.
+     *
+     * `begin()` deliberately replaces the record rather than merging, so a
+     * previous run's fields cannot leak into the current one. That would
+     * otherwise drop `queued_at` / `queue_connection` / `queue_name` the moment
+     * the worker picked the job up — the operator would see a run in progress
+     * with no indication it came from a queue, and no way to tell how long it
+     * waited.
+     *
+     * A `Queued` record does not by itself prove the run belongs to it. The
+     * abandoned-dispatch case is real and the rest of the feature works to
+     * handle it: `update:perform --queue` with no worker running leaves the
+     * record at `queued`, the operator gives up and runs a plain
+     * `update:perform`, and without the freshness gate that inline run would
+     * be stamped with the dead dispatch's queue — `update:status` showing
+     * "Queue: redis / cms-updates" for a run executing in the operator's own
+     * terminal, and pointing them at a worker with nothing to do with it if it
+     * dies. Same window `dispatchUpdate()` uses to decide a queued record has
+     * been abandoned.
+     *
+     * @since 2.8.0
+     *
+     * @return array<string, mixed> Queue provenance fields, or an empty array.
+     */
+    protected function queueProvenance(): array
+    {
+        $existing = $this->read();
+
+        if ( null === $existing ) {
+            return [];
+        }
+
+        $status = UpdateRunStatus::tryFrom(
+            is_string( $existing['status'] ?? null ) ? $existing['status'] : '',
+        );
+
+        if ( UpdateRunStatus::Queued !== $status ) {
+            return [];
+        }
+
+        $queuedAt = $existing['queued_at'] ?? null;
+
+        if ( $this->isStaleTimestamp( is_string( $queuedAt ) ? $queuedAt : null ) ) {
+            return [];
+        }
+
+        return [
+            'queued_at'        => $queuedAt,
+            'queue_connection' => $existing['queue_connection'] ?? null,
+            'queue_name'       => $existing['queue_name'] ?? null,
+        ];
     }
 
     /**

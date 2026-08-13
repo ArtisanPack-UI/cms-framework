@@ -352,6 +352,99 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * An update is already sitting on the queue waiting for a worker.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $queuedAt  ISO-8601 timestamp the run was queued at, when known.
+     */
+    public static function updateAlreadyQueued( ?string $queuedAt = null ): self
+    {
+        return new self( sprintf(
+            'An application update is already queued%s and has not been picked up yet. Dispatching a second one would put two '
+            . 'updates through the same application tree. Run `php artisan update:status` to see whether it is still waiting, '
+            . 'and check that a queue worker is running.',
+            null === $queuedAt ? '' : " ( since {$queuedAt} )",
+        ) );
+    }
+
+    /**
+     * The configured queue connection cannot run a queued update.
+     *
+     * The `sync` driver is the dangerous one: dispatching to it executes the
+     * job inline in the dispatching process, which is exactly the multi-minute
+     * blocking HTTP request that queueing exists to avoid — the feature would
+     * look like it worked while changing nothing.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $connection  Queue connection name.
+     * @param  string|null  $driver  Resolved driver, or null when the connection is not configured.
+     */
+    public static function updateQueueUnusable( ?string $connection, ?string $driver ): self
+    {
+        $name = null === $connection || '' === $connection ? '(none)' : $connection;
+
+        if ( 'sync' === $driver ) {
+            return new self( sprintf(
+                'The queue connection "%s" uses the sync driver, which runs the job inline in the dispatching process — a queued '
+                . 'update would block the caller for the whole update exactly as a direct performUpdate() call does. Configure a '
+                . 'real queue connection and run a worker, call performUpdate() directly if blocking is genuinely what you want, '
+                . 'or set cms.updates.queue.allow_sync=true to opt in to the inline behavior deliberately.',
+                $name,
+            ) );
+        }
+
+        if ( 'null' === $driver ) {
+            return new self( sprintf(
+                'The queue connection "%s" uses the null driver, which discards every job it is given. A queued update would be '
+                . 'thrown away silently and the site would never be updated. Configure a real queue connection and run a worker.',
+                $name,
+            ) );
+        }
+
+        return new self( sprintf(
+            'The queue connection "%s" is not configured, so a queued update cannot be dispatched. Set '
+            . 'cms.updates.queue.connection to a connection defined in config/queue.php, or leave it null to use the '
+            . 'application default.',
+            $name,
+        ) );
+    }
+
+    /**
+     * The queue connection would redeliver the update before it can finish.
+     *
+     * `retry_after` is how long the queue waits before deciding a reserved job
+     * has died and making it visible again. Laravel's shipped default is 90
+     * seconds; a real update runs for minutes. A redelivered update is not a
+     * second attempt at the work — `$tries = 1` means the duplicate is failed
+     * without `handle()` ever running — but it does arrive in `failed()` while
+     * the original is still mid-flight.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $connection  Queue connection name.
+     * @param  int  $retryAfter  Configured retry_after, in seconds.
+     * @param  int  $timeout  Seconds this update is allowed to run.
+     */
+    public static function updateQueueRetryTooShort( ?string $connection, int $retryAfter, int $timeout ): self
+    {
+        $name = null === $connection || '' === $connection ? '(none)' : $connection;
+
+        return new self( sprintf(
+            'The queue connection "%s" has retry_after=%d, but a queued update is allowed to run for %d seconds. The queue would '
+            . 'hand the same update to a second worker %d seconds in, while the first is still extracting over the application '
+            . 'tree. Raise retry_after above %d in config/queue.php, or lower cms.updates.queue.timeout below %d.',
+            $name,
+            $retryAfter,
+            $timeout,
+            $retryAfter,
+            $timeout,
+            $retryAfter,
+        ) );
+    }
+
+    /**
      * A release archive was about to be fetched over an insecure transport.
      *
      * @since 2.7.1

