@@ -35,7 +35,7 @@ apAddAdminPage(
     slug: 'dashboard',
     sectionSlug: null,
     options: [
-        // A controller action, closure, or view response
+        // A controller action or closure — see "Routing and Authorization" below
         'action' => [\App\Http\Controllers\Admin\DashboardController::class, 'index'],
         // Icon name used by your UI (consumer defined)
         'icon' => 'fas.gauge',
@@ -86,6 +86,26 @@ apAddSubAdminPage(
   - `posts/create` → route name `admin.posts.create`
 
 Behind the scenes, AdminPageManager::registerRoutes() creates the routes during application boot.
+
+`action` is handed to `Route::get()` unchanged, so it must be something Laravel accepts as a route action: a closure, an invokable controller class, a `Class@method` string, or a `[Controller::class, 'method']` array. A Blade view name is **not** one of them — wrap it yourself:
+
+```php
+'action' => fn () => view('admin.dashboard'),
+```
+
+Plugins extending `PluginServiceProvider` get this for free: `registerAdminPage()`'s `view` key is wrapped for you. See [Plugin Authoring](../plugin-authoring.md).
+
+## The Admin Layout
+
+The framework ships a plain admin layout at `cms::admin.layouts.app` with `title` and `content` sections and `styles` / `scripts` stacks. It renders the menu from `apGetAdminMenu()` and nothing else — the framework is front-end agnostic and ships no CSS build.
+
+Replace it with your own chrome by publishing it:
+
+```bash
+php artisan vendor:publish --tag=cms-views
+```
+
+Published views land in `resources/views/vendor/cms/`, which Laravel resolves ahead of the package's copy, so packages and plugins extending `cms::admin.layouts.app` pick up your version without changing a line.
 
 ## Building the Menu for the Current User
 

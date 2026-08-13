@@ -186,6 +186,13 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->validateConfiguration();
 
+        // The `cms` namespace is the framework's stable Blade surface — most
+        // notably `cms::admin.layouts.app`, the layout plugin admin pages
+        // extend. Registered here rather than in a module provider so the
+        // namespace exists for every consumer regardless of which modules a
+        // host has enabled.
+        $this->loadViewsFrom( __DIR__ . '/../resources/views', 'cms' );
+
         if ( $this->app->runningInConsole() ) {
             // Every config file is tagged twice: once under its own specific
             // tag, and once under the umbrella `cms-framework-config` tag the
@@ -200,6 +207,14 @@ class CMSFrameworkServiceProvider extends ServiceProvider
             $this->publishes( [
                 __DIR__ . '/../resources/types' => resource_path( 'types/cms-framework' ),
             ], 'cms-types' );
+
+            // Published views land where Laravel looks first for the `cms`
+            // namespace, so a host replacing the bundled admin layout with its
+            // own chrome does so without any plugin having to change the view
+            // it extends.
+            $this->publishes( [
+                __DIR__ . '/../resources/views' => resource_path( 'views/vendor/cms' ),
+            ], 'cms-views' );
         }
 
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
