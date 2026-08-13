@@ -164,7 +164,36 @@ $this->registerAdminPage( 'hello-world', [
 ```
 
 The `view` value is a namespaced Blade view; register it with `loadViewsFrom(
-$this->pluginPath('resources/views'), 'hello-world' )` in `boot()`.
+$this->pluginPath('resources/views'), 'hello-world' )` in `boot()`. The
+framework wraps it in a closure before it reaches the route, so you get a
+rendered page rather than Laravel's `Invalid route action` error.
+
+### The admin layout
+
+Extend `cms::admin.layouts.app` and fill its `title` and `content` sections:
+
+```blade
+@extends('cms::admin.layouts.app')
+
+@section('title', __('Hello World'))
+
+@section('content')
+    <h1>{{ __('Hello World') }}</h1>
+@endsection
+```
+
+The layout is deliberately plain — the framework is front-end agnostic and
+ships no CSS build. It renders the admin menu, yields your content, and
+exposes `styles` and `scripts` stacks. Host apps replace it with their own
+chrome by publishing it:
+
+```bash
+php artisan vendor:publish --tag=cms-views
+```
+
+That writes to `resources/views/vendor/cms/`, which Laravel resolves ahead of
+the package's copy — so a host swapping in its own chrome does not require any
+plugin to change the view it extends.
 
 Federated ( React ) version — same helper, use `component` instead of `view`:
 
@@ -178,6 +207,16 @@ $this->registerAdminPage( 'hello-world', [
 
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
+
+> **Known limitation ( as of 2.8.0 ):** unlike `view`, a `component` is still
+> passed to `Route::get()` verbatim, and Laravel rejects it as an invalid route
+> action. Because admin routes are registered from a `booted()` callback, that
+> exception surfaces on *every* request, not just the plugin's own page — so a
+> `component`-only admin page currently takes the whole application down. Until
+> the framework settles on how a host mounts a federated page, register the
+> page with a `view` that renders your own mount point, and declare the
+> federated module separately with `registerFederatedModule()`. Tracked as a
+> follow-up to [#246](https://github.com/ArtisanPack-UI/cms-framework/issues/246).
 
 ## Registering nav entries
 

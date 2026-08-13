@@ -5,6 +5,10 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
+use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
+use Closure;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
 use ReflectionClass;
@@ -35,6 +39,15 @@ abstract class PluginServiceProvider extends ServiceProvider
     /**
      * Register a Blade or Inertia admin page.
      *
+     * A `view` is wrapped in a closure before it reaches the route: Laravel's
+     * `Route::get( $uri, $action )` accepts a closure, a controller class, a
+     * `Class@method` string or an array — a Blade view name is none of those,
+     * and passing one through verbatim throws `Invalid route action`.
+     *
+     * A `component` is a Module Federation identifier that only the host's
+     * federation runtime can resolve, so it is still passed through as-is for
+     * the host to interpret.
+     *
      * @param  string  $slug  Route/URL slug for the admin page.
      * @param  array{title?:string,section?:string,view?:string,component?:string,capability?:string,icon?:string,order?:int}  $config
      */
@@ -47,7 +60,7 @@ abstract class PluginServiceProvider extends ServiceProvider
         $section = $config['section'] ?? null;
 
         $options = array_filter( [
-            'action'     => $config['view'] ?? $config['component'] ?? '',
+            'action'     => $this->resolveAdminPageAction( $config ),
             'capability' => $config['capability'] ?? 'access_admin_dashboard',
             'icon'       => $config['icon'] ?? 'fas.puzzle-piece',
             'order'      => $config['order'] ?? 50,
@@ -55,6 +68,31 @@ abstract class PluginServiceProvider extends ServiceProvider
         ], fn ( $value ) => null !== $value );
 
         $menu->addPage( $title, $slug, $section, $options );
+    }
+
+    /**
+     * Turn an admin-page config into something `Route::get()` will accept.
+     *
+     * Blade pages arrive as a view name and are wrapped in a closure that
+     * renders it, with the route's own parameters passed through as view data
+     * so a page registered at `reports/{id}` can read `$id`. Federated pages
+     * keep their raw `component` identifier for the host to resolve.
+     *
+     * @since 2.8.0
+     *
+     * @param  array{view?:string,component?:string}  $config
+     *
+     * @return Closure|string The route action.
+     */
+    protected function resolveAdminPageAction( array $config ): Closure|string
+    {
+        if ( isset( $config['view'] ) ) {
+            $view = ( string ) $config['view'];
+
+            return static fn ( Request $request ): View => view( $view, $request->route()?->parameters() ?? [] );
+        }
+
+        return ( string ) ( $config['component'] ?? '' );
     }
 
     /**
@@ -242,28 +280,21 @@ abstract class PluginServiceProvider extends ServiceProvider
      * Sanitize a plugin-supplied URL before it enters the nav registry.
      * Rejects unsafe schemes; falls back to '#' for anything not obviously a
      * navigation target. AdminMenuManager also sanitizes on render, but
-     * blocking at the ingress point keeps the registry itself clean.
+     * blocking at the ingress point keeps the registry itself clean — and the
+     * registry is a public surface in its own right, read by
+     * `PluginRegistry::navEntries()` and `Plugin::getNavEntriesAttribute()`
+     * rather than only through `getAdminMenu()`.
+     *
+     * Shares {@see NavUrl} with the render path: these rules were duplicated
+     * until 2.8.0, which is how the render copy came to be hardened against
+     * `java\tscript:` while this one kept storing the raw value.
+     *
+     * @param  string  $url  The plugin-supplied URL.
+     *
+     * @return string A URL safe to store and render.
      */
     protected function normalizeNavUrl( string $url ): string
     {
-        $trimmed = trim( $url );
-        if ( '' === $trimmed ) {
-            return '#';
-        }
-
-        if ( str_starts_with( $trimmed, '/' ) || str_starts_with( $trimmed, '#' ) ) {
-            return $trimmed;
-        }
-
-        if ( 1 === preg_match( '#^([a-zA-Z][a-zA-Z0-9+.\-]*):#', $trimmed, $matches ) ) {
-            $scheme = strtolower( $matches[1] );
-            if ( in_array( $scheme, ['http', 'https', 'mailto', 'tel'], true ) ) {
-                return $trimmed;
-            }
-
-            return '#';
-        }
-
-        return $trimmed;
+        return NavUrl::sanitize( $url, static::class );
     }
 }
