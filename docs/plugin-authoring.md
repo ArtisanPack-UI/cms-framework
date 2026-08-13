@@ -215,8 +215,8 @@ their Module Federation loader.
 > `component`-only admin page currently takes the whole application down. Until
 > the framework settles on how a host mounts a federated page, register the
 > page with a `view` that renders your own mount point, and declare the
-> federated module separately with `registerFederatedModule()`. Tracked as a
-> follow-up to [#246](https://github.com/ArtisanPack-UI/cms-framework/issues/246).
+> federated module separately with `registerFederatedModule()`. Tracked as
+> [#296](https://github.com/ArtisanPack-UI/cms-framework/issues/296).
 
 ## Registering nav entries
 

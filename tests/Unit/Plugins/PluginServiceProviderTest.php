@@ -4,11 +4,14 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminPageManager;
+use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\HtmlString;
 
 beforeEach( function (): void {
     Gate::before( fn ( ?Illuminate\Contracts\Auth\Authenticatable $user, string $ability ) => true );
@@ -175,6 +178,48 @@ it( 'injects a nav entry via the ap.cmsFramework.admin.menu filter', function ()
         ->and( $menu['reports']['url'] )->toBe( '/admin/reports' )
         ->and( $menu['reports']['permission'] )->toBe( 'reports.view' )
         ->and( $menu['reports']['external'] )->toBeFalse();
+} );
+
+it( 'reduces a non-string nav url to # instead of raising a TypeError', function ( mixed $url ): void {
+    expect( NavUrl::sanitizeValue( $url ) )->toBe( '#' );
+} )->with( [
+    // Htmlable without __toString: not Stringable, so it cannot be coerced.
+    'non-stringable htmlable' => fn () => new class implements Htmlable {
+        public function toHtml(): string
+        {
+            return 'javascript:alert(1)';
+        }
+    },
+    // Stringable, but still not a string — strict_types rejected it too.
+    'html string' => fn () => new HtmlString( 'javascript:alert(1)' ),
+    'array'       => fn () => ['javascript:alert(1)'],
+    'integer'     => fn () => 42,
+] );
+
+it( 'stores # for a non-string nav url rather than dying in the plugin boot', function (): void {
+    // registerNavEntry takes a plugin-supplied array, and PluginServiceProvider
+    // runs under strict_types — a non-string `url` used to TypeError at
+    // normalizeNavUrl's parameter boundary inside boot(), taking the whole app
+    // down rather than taking the documented fallback.
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerNavEntry( [
+                'slug'  => 'docs',
+                'label' => 'Docs',
+                'url'   => new HtmlString( 'javascript:alert(1)' ),
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'docs-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    expect( app( PluginRegistry::class )->navEntries()['docs']['url'] )->toBe( '#' );
 } );
 
 it( 'sanitizes javascript: URLs in nav entries down to #', function (): void {

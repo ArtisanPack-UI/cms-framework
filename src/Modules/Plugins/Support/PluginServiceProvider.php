@@ -289,12 +289,20 @@ abstract class PluginServiceProvider extends ServiceProvider
      * until 2.8.0, which is how the render copy came to be hardened against
      * `java\tscript:` while this one kept storing the raw value.
      *
-     * @param  string  $url  The plugin-supplied URL.
+     * Takes `mixed` rather than `string`: the entry is a plugin-supplied array
+     * and this file declares `strict_types=1`, so a `url` that is anything but
+     * a string — an `HtmlString`, an int, an accidental array — raised a
+     * TypeError at the parameter boundary. That happens inside the plugin's
+     * `boot()`, which is the same whole-application failure mode as the route
+     * action bug this release fixes. Non-strings now take the documented '#'
+     * fallback instead.
+     *
+     * @param  mixed  $url  The plugin-supplied URL.
      *
      * @return string A URL safe to store and render.
      */
-    protected function normalizeNavUrl( string $url ): string
+    protected function normalizeNavUrl( mixed $url ): string
     {
-        return NavUrl::sanitize( $url, static::class );
+        return NavUrl::sanitizeValue( $url, static::class );
     }
 }
