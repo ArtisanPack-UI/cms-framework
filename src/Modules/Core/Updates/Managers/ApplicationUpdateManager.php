@@ -1592,7 +1592,7 @@ class ApplicationUpdateManager
     {
         $command = $this->resolveComposerCommand();
 
-        $this->verifyComposerFilesInSync( $command );
+        $composerFilesDiverged = $this->verifyComposerFilesInSync( $command );
 
         $timeout = config( 'cms.updates.composer_timeout', 600 );
 
@@ -1601,53 +1601,62 @@ class ApplicationUpdateManager
             ->run( $command );
 
         if ( ! $result->successful() ) {
-            throw UpdateException::composerInstallFailed( $result->errorOutput() );
+            throw UpdateException::composerInstallFailed( $result->errorOutput(), $composerFilesDiverged );
         }
     }
 
     /**
-     * Verify the on-disk `composer.json` and `composer.lock` agree before
-     * handing them to composer.
+     * Check whether the on-disk `composer.json` and `composer.lock` agree,
+     * logging a warning when they positively disagree.
      *
-     * `composer install` only ever *reads* a lock file — it never writes one —
-     * and aborts when the lock disagrees with `composer.json`. Its own
-     * diagnosis of that state ("This usually happens when composer files are
-     * incorrectly merged or the composer.json file is manually edited") sends
-     * the operator hunting for a merge conflict or a hand-edit that never
-     * happened, when the real cause is a release that shipped no lock or a host
-     * whose `exclude_from_update` override still excludes it.
+     * This is a *diagnostic*, not a gate. `composer install` reads the lock and
+     * only ever *warns* about a stale `content-hash` — it installs from the lock
+     * regardless, and hard-fails solely when a required package is absent from
+     * the lock or violates one of `composer.json`'s constraints. An earlier
+     * version of this method aborted step 6 (and triggered a full backup
+     * rollback) on *any* divergence, turning a release that shipped an
+     * old-but-satisfying lock into a failed update composer would have installed
+     * cleanly. It no longer pre-empts composer.
      *
-     * Deliberately fails *open*. A missing `composer.json`, a missing or
-     * unparseable `composer.lock`, or a lock carrying no `content-hash` is left
-     * for composer to adjudicate — the framework only aborts on a positively
-     * detected mismatch, so a false alarm can never block an update that would
-     * otherwise have installed cleanly.
+     * What it keeps is composer's *diagnosis*: when composer does fail on a
+     * genuinely unsatisfiable lock, its own message ("This usually happens when
+     * composer files are incorrectly merged or the composer.json file is
+     * manually edited") sends the operator hunting for a merge conflict or a
+     * hand-edit that never happened, when the real cause is a release that
+     * shipped no lock or a host whose `exclude_from_update` override still
+     * excludes it. The boolean returned here lets `runComposerInstall()` wrap
+     * composer's *own* failure with that accurate diagnosis — but only after
+     * composer, not this check, has decided the update cannot proceed.
+     *
+     * Fails *open*: a missing `composer.json`, a missing or unparseable
+     * `composer.lock`, or a lock carrying no `content-hash` returns `false` and
+     * is left for composer to adjudicate.
      *
      * @since 2.7.1
      *
      * @param  string  $command  The composer command about to be run.
      *
-     * @throws UpdateException When the two files positively disagree.
+     * @return bool True when the two files positively disagree, false otherwise.
      */
-    protected function verifyComposerFilesInSync( string $command ): void
+    protected function verifyComposerFilesInSync( string $command ): bool
     {
         if ( ! config( 'cms.updates.verify_composer_lock_sync', true ) ) {
-            return;
+            return false;
         }
 
         // A host that has overridden `composer_install_command` to run
         // `composer update` has deliberately opted into re-resolving the tree,
         // and a lock that disagrees with composer.json is precisely what
-        // `update` exists to reconcile. Only `install` needs the guard.
+        // `update` exists to reconcile. Only `install` reads the lock as fixed.
         if ( ! preg_match( '/(?:^|\s)install(?:\s|$)/', $command ) ) {
-            return;
+            return false;
         }
 
         $jsonPath = base_path( 'composer.json' );
         $lockPath = base_path( 'composer.lock' );
 
         if ( ! is_file( $jsonPath ) ) {
-            return;
+            return false;
         }
 
         if ( ! is_file( $lockPath ) ) {
@@ -1655,31 +1664,32 @@ class ApplicationUpdateManager
                 'lock_path' => $lockPath,
             ] );
 
-            return;
+            return false;
         }
 
         $expectedHash = $this->composerContentHash( $jsonPath );
         if ( null === $expectedHash ) {
-            return;
+            return false;
         }
 
         $lock = json_decode( (string) @file_get_contents( $lockPath ), true );
         if ( ! is_array( $lock ) || ! is_string( $lock['content-hash'] ?? null ) ) {
-            return;
+            return false;
         }
 
         if ( $lock['content-hash'] === $expectedHash ) {
-            return;
+            return false;
         }
 
-        Log::error( 'composer.json and composer.lock are out of sync after extraction.', [
-            'expected_content_hash' => $expectedHash,
-            'lock_content_hash'     => $lock['content-hash'],
-        ] );
-
-        throw UpdateException::composerFilesOutOfSync(
-            'the lock file records a different set of dependency constraints than composer.json declares.',
+        Log::warning(
+            'composer.json and composer.lock are out of sync after extraction; composer will install from the lock and abort only if it cannot satisfy composer.json.',
+            [
+                'expected_content_hash' => $expectedHash,
+                'lock_content_hash'     => $lock['content-hash'],
+            ],
         );
+
+        return true;
     }
 
     /**

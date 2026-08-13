@@ -128,39 +128,40 @@ class UpdateException extends CMSFrameworkException
     /**
      * Composer install failed.
      *
+     * When the pre-flight sync check detected that `composer.json` and
+     * `composer.lock` had diverged, the message appends the framework's own
+     * diagnosis. `composer install` installs from the lock despite a stale
+     * `content-hash` and hard-fails only when the lock cannot satisfy
+     * `composer.json` — a required package missing from the lock, or a
+     * constraint it violates. At that point composer's own "incorrectly merged
+     * or manually edited" guess sends the operator hunting for a merge conflict
+     * that never happened, when the real cause in the updater is nearly always a
+     * release that shipped no `composer.lock`, or a host whose
+     * `exclude_from_update` override still excludes it. The divergence is
+     * reported here, wrapping composer's *own* failure, rather than pre-empting
+     * an install composer would have completed.
+     *
      * @since 1.0.0
+     *
+     * @param  string  $output                 Composer's own error output.
+     * @param  bool    $composerFilesDiverged  Whether the pre-flight check found the lock out of sync.
      */
-    public static function composerInstallFailed( string $output ): self
+    public static function composerInstallFailed( string $output, bool $composerFilesDiverged = false ): self
     {
-        return new self( "Composer install failed. Output:\n{$output}" );
-    }
+        $message = "Composer install failed. Output:\n{$output}";
 
-    /**
-     * The on-disk `composer.json` and `composer.lock` disagree, so
-     * `composer install` cannot succeed.
-     *
-     * Raised *before* composer is invoked, because composer's own diagnosis of
-     * this state — "This usually happens when composer files are incorrectly
-     * merged or the composer.json file is manually edited" — sends the operator
-     * hunting for a merge conflict or a hand-edit that never happened. In the
-     * updater's case the cause is nearly always a release that shipped no
-     * `composer.lock`, or a host whose `exclude_from_update` override still
-     * excludes it.
-     *
-     * @since 2.7.1
-     *
-     * @param  string  $reason  Which half of the pair is at fault.
-     */
-    public static function composerFilesOutOfSync( string $reason ): self
-    {
-        return new self(
-            "composer.json and composer.lock are out of sync after extraction: {$reason} "
-            . '`composer install` only ever reads a lock file — it never writes one — so it cannot '
-            . 'reconcile this. Confirm the release archive ships a committed `composer.lock` that '
-            . 'matches its `composer.json`, and that `cms.updates.exclude_from_update` does not list '
-            . '`composer.lock` (it is not in the framework default). This is not a merge conflict or '
-            . 'a hand-edited `composer.json`, whatever composer would have told you.',
-        );
+        if ( $composerFilesDiverged ) {
+            $message .= "\n\nBefore this run, composer.json and composer.lock were detected out of sync: "
+                . 'the lock records a different set of dependency constraints than composer.json declares. '
+                . 'composer installs from the lock despite that, so this failure most likely means the lock '
+                . 'cannot satisfy composer.json — a required package missing from the lock, or a constraint it '
+                . 'violates. Confirm the release archive ships a committed `composer.lock` that matches its '
+                . '`composer.json`, and that `cms.updates.exclude_from_update` does not list `composer.lock` '
+                . '(it is not in the framework default). This is not a merge conflict or a hand-edited '
+                . '`composer.json`, whatever composer reported above.';
+        }
+
+        return new self( $message );
     }
 
     /**
