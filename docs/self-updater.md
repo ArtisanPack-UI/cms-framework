@@ -22,9 +22,13 @@ use Illuminate\Support\Facades\Gate;
 Route::post( '/admin/updates/perform', function () {
     Gate::authorize( UpdateCapability::PERFORM );
 
-    return app( ApplicationUpdateManager::class )->performUpdate();
+    app( ApplicationUpdateManager::class )->dispatchUpdate();
+
+    return response()->noContent();
 } )->middleware( ['web', 'auth', 'throttle:2,60'] );
 ```
+
+Note the endpoint **dispatches** and returns rather than calling `performUpdate()` and blocking — see [Queued updates](#queued-updates-280). `dispatchUpdate()` performs no authorization of its own either: queueing a job that will overwrite PHP files and run `composer install` is the same remote-code-execution channel as running it inline.
 
 ### The default is deny
 
@@ -43,7 +47,7 @@ Route::post( '/admin/updates/perform', function () {
 
 ### Gate the route, not just the ability
 
-Authorization is necessary and not sufficient. An HTTP-triggered update occupies a PHP-FPM worker for the whole run and keeps occupying it after the caller disconnects (see [Long-running updates](#long-running-updates-and-interrupted-processes)), so the route wants a rate limiter and CSRF protection as well, and the UI wants the button disabled while `updateState()` reports `in_progress`.
+Authorization is necessary and not sufficient. The route wants a rate limiter and CSRF protection as well, and the UI wants the button disabled while `updateState()` reports `queued` or `in_progress`. A route that calls `performUpdate()` inline rather than dispatching also occupies a PHP-FPM worker for the whole run and keeps occupying it after the caller disconnects (see [Long-running updates](#long-running-updates-and-interrupted-processes)), which makes it a cheap way to exhaust the worker pool if the guards above are missing.
 
 ## Integrity verification (fail-closed by default)
 
@@ -280,13 +284,101 @@ A run interrupted during download or extraction is not resumable — the applica
 
 The marker is a flat JSON file rather than a cache entry on purpose: step 8 runs `cache:clear`, and the database cache driver is unavailable while step 7's migrations are mid-flight. `storage/` is in `exclude_from_update`, so it survives extraction of the new release.
 
-> **Note:** the supported path for a slow host remains `php artisan update:perform` from the CLI, where `max_execution_time` is `0` and there is no gateway timeout to hit. The guards above make the HTTP path safe to *fail*; they don't make it a good place to run a multi-minute job.
+> **Note:** the guards above make the HTTP path safe to *fail*; they don't make it a good place to run a multi-minute job. Run updates from the CLI with `php artisan update:perform`, where `max_execution_time` is `0` and there is no gateway timeout to hit — or, when the trigger has to be an HTTP request, dispatch to a queue worker with [`dispatchUpdate()`](#queued-updates-280).
 
-### Two consequences worth knowing about
+### Keep `performUpdate()` behind admin authorization
 
-**Keep `performUpdate()` behind admin authorization** — `Gate::authorize( UpdateCapability::PERFORM )`, per [Authorization](#authorization-280). Lifting `max_execution_time` and setting `ignore_user_abort( true )` means an HTTP-triggered update now occupies a PHP-FPM worker for as long as the update takes, and keeps occupying it even if the caller disconnects. The individual phases stay bounded (`download_timeout`, `composer_timeout`), so the total is bounded in practice — but an update endpoint reachable without authorization would be a much cheaper way to exhaust the worker pool than it was at 30 seconds. This has always been an operator responsibility; the guards raise the cost of getting it wrong.
+`Gate::authorize( UpdateCapability::PERFORM )`, per [Authorization](#authorization-280). Lifting `max_execution_time` and setting `ignore_user_abort( true )` means an inline HTTP-triggered update occupies a PHP-FPM worker for as long as the update takes, and keeps occupying it even if the caller disconnects. The individual phases stay bounded (`download_timeout`, `composer_timeout`), so the total is bounded in practice — but an update endpoint reachable without authorization would be a much cheaper way to exhaust the worker pool than it was at 30 seconds. This has always been an operator responsibility; the guards raise the cost of getting it wrong.
 
-**Nothing serializes concurrent updates.** Two overlapping `performUpdate()` calls will fight over the same application tree and the same state marker; the second `begin()` overwrites the first. That was true before this change too, but the longer window makes an overlap easier to hit. If your admin UI can dispatch an update more than once, gate it — disable the button while `updateState()` reports `in_progress`, or take a lock around the call.
+## Queued updates (2.8.0)
+
+The guards above make an HTTP-triggered update *survivable*. They do not make it *appropriate*. An update run inline from a POST handler still:
+
+- occupies a PHP-FPM worker for the full run, and keeps occupying it after the caller disconnects;
+- is subject to gateway timeouts — nginx's `proxy_read_timeout`, load balancers, Cloudflare's 100s — that no userland call can override;
+- is subject to FPM's `request_terminate_timeout`, which `set_time_limit()` cannot override;
+- gives the operator no feedback beyond polling the state file.
+
+`ApplicationUpdateManager::dispatchUpdate()` is the supported answer. It pushes a `PerformUpdateJob` onto a queue and returns immediately; the endpoint polls `updateState()` for progress:
+
+```php
+$manager = app( ApplicationUpdateManager::class );
+
+Gate::authorize( UpdateCapability::PERFORM );
+
+$manager->dispatchUpdate();              // latest
+$manager->dispatchUpdate( '2.9.0' );     // pinned
+$manager->dispatchUpdate( '2.6.0', true ); // pinned, downgrade opted in
+
+$manager->updateState();                 // poll this — status goes queued → in_progress → completed/failed
+```
+
+`php artisan update:perform --queue` does the same thing from the console, after the usual confirmation prompt.
+
+**`performUpdate()` is unchanged and still supported as a direct call.** Integrators calling it inline are unaffected by this job existing; the job simply calls it on a worker instead of in a request.
+
+### The `sync` driver is refused, not tolerated
+
+Dispatching to the `sync` driver executes the job inline in the dispatching process — the exact multi-minute blocking request queueing exists to avoid, reintroduced silently while the feature looks from the outside like it works. `dispatchUpdate()` therefore inspects the resolved connection's driver first and **throws** `UpdateException::updateQueueUnusable()` rather than degrading:
+
+| Driver | Behavior |
+|--------|----------|
+| Any real driver (`database`, `redis`, `sqs`, …) | Dispatched. |
+| `sync` | Refused, unless `cms.updates.queue.allow_sync` is `true` — then it warns and proceeds. |
+| `null` | Refused. It discards every job it is given, so the update would never run. `allow_sync` does not rescue it. |
+| Unconfigured connection | Refused, naming `cms.updates.queue.connection`. |
+
+What the guard **cannot** detect is a perfectly well-configured connection with no worker consuming it — that is not knowable from config. That case shows up as a record stuck at `queued`, which `update:status` names explicitly and answers with the `queue:work` invocation to run.
+
+### Raise `retry_after` — this is the one you have to set by hand
+
+The job's own `$timeout` defaults to `download_timeout` + `composer_timeout` + a 900s buffer for the steps that have no timeout of their own (backup, extraction, migrations) — 1,800s with the shipped values. Override it with `cms.updates.queue.timeout`.
+
+That timeout travels with the job and **takes precedence over the worker's `--timeout`**: `Worker::timeoutForJob()` is `$job->timeout() ?? $options->timeout`, so the worker flag is only a fallback for jobs that carry no timeout. A worker started with a short `--timeout` will not cut an update short.
+
+**`retry_after` is the setting that will bite you.** It is the queue's "this reserved job must have died, hand it to someone else" timer, and Laravel ships **90 seconds** for the `database`, `redis` and `beanstalkd` connections — far shorter than any real update. Left alone, the queue redelivers the update 90 seconds in while the first worker is still running `composer install`.
+
+`$tries = 1` does not save you from that; it is what makes it land badly. The duplicate exceeds max attempts, so the worker fails it *without* ever calling `handle()` — it goes straight to `failed()` carrying a `MaxAttemptsExceededException` against a run that is perfectly healthy.
+
+So `dispatchUpdate()` refuses to dispatch when `retry_after` is not greater than the job timeout, with `UpdateException::updateQueueRetryTooShort()` naming both numbers:
+
+```php
+// config/queue.php
+'database' => [
+    'driver'      => 'database',
+    'retry_after' => 1900,   // above cms.updates.queue.timeout
+],
+```
+
+```bash
+php artisan queue:work --queue=updates --tries=1
+```
+
+Only connections that actually carry the setting are checked; SQS expresses the same idea as a queue-side visibility timeout that is not readable from the app.
+
+### Concurrency, and what happens when a queued update dies
+
+- **A second dispatch is refused loudly.** `dispatchUpdate()` takes the job's unique lock itself rather than leaving it to `PerformUpdateJob::dispatch()`, which takes the same lock and then *silently returns* when it cannot get it — the caller would be told the update was queued and nothing would ever run it. A double-clicked admin button gets `UpdateException::updateAlreadyQueued()` instead.
+- **A `queued` record stops blocking once it is older than the job timeout**, so a host that dispatched before starting a worker is not wedged by its own first attempt.
+- **`$tries` is 1 and not configurable.** A retry would restart the update at step 1 over a tree the previous attempt had already partly overwritten — extracting a second release over a half-extracted first one, which is the interleaving the `flock` sentinel exists to prevent, reintroduced by the queue rather than by a concurrent caller.
+- **The `flock` sentinel is still the real guarantee.** The job's `ShouldBeUnique` lock lives in the cache, and step 8 of the update runs `cache:clear` — so it is dropped near the end of every successful run. The [concurrency guard](#concurrent-updates-271) inside `performUpdate()` is unaffected by any cache flush.
+- **A killed job does not leave the site down.** `PerformUpdateJob::failed()` reconciles the persisted record: a run killed by the worker timeout is stamped `interrupted` and maintenance mode is lifted (honoring `cms.updates.lift_maintenance_on_interrupt`), and a job that failed before the update started is stamped `failed` rather than left claiming `queued` forever. A run that already recorded its own outcome is left alone, so the real error is never replaced by the worker's generic one.
+- **Reconciliation only ever touches its own run.** A failing job can be handed a record it does not own — losing the `flock` race throws `updateAlreadyRunning` before `performUpdate()`'s bookkeeping starts, and a `retry_after` redelivery arrives having done no work at all. Both would otherwise mark a healthy in-flight run `interrupted` and run `artisan up` on a site that is mid-extraction. `failed()` checks the recorded PID for liveness first and leaves other processes' runs alone.
+- **`update:status --clear` really resets.** The record lives in `storage/` and the dispatch lock lives in the cache, so they can desynchronise. Clearing the record releases the lock too — otherwise clearing a stuck `queued` record left dispatch refusing with "an update is already queued" while `update:status` reported that none had ever been recorded, recoverable only by `cache:clear` or by waiting out the TTL.
+
+### Wiring the admin UI
+
+Dispatch, then poll `updateState()`. The `status` field moves through:
+
+| Status | Meaning |
+|--------|---------|
+| `queued` | On the queue, no worker has claimed it. Nothing on the installation has changed. |
+| `in_progress` | Running. `step` / `step_number` / `step_label` name the step in flight. |
+| `completed` | Finished. |
+| `failed` | The updater caught the error; `rolled_back` says what became of the snapshot. |
+| `interrupted` | The process died before the catch block could run. |
+
+A run dispatched through the queue also carries `queued_at`, `queue_connection` and `queue_name`, and keeps them for the whole run — "which worker is meant to be running this" stays the operative question until it finishes. Disable the update button while `status` is `queued` or `in_progress`.
 
 ## Cached update info and out-of-band version bumps
 
@@ -312,6 +404,10 @@ When the host's installed version changes *out-of-band* (a manual `composer inst
 | `cms.updates.lift_maintenance_on_interrupt` | Whether the shutdown guard lifts maintenance mode when an update dies mid-flight. Default `true`. Env: `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT`. |
 | `cms.updates.allow_insecure_transport` | Permit downloading a release archive over plaintext http, including via redirect. Default `false`. Env: `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT`. |
 | `cms.updates.backup_path` | Where snapshots are written. Relative paths resolve against `storage_path()`. Also bounds which archives `update:rollback` will restore without `--allow-external`. |
+| `cms.updates.queue.connection` | Connection a queued update is dispatched to. Null uses `queue.default`. Env: `CMS_UPDATES_QUEUE_CONNECTION`. |
+| `cms.updates.queue.queue` | Queue name to push onto. Null uses the connection's default queue. Env: `CMS_UPDATES_QUEUE`. |
+| `cms.updates.queue.timeout` | Seconds the worker allows the job. Null derives it from `download_timeout` + `composer_timeout` + 900s. Env: `CMS_UPDATES_QUEUE_TIMEOUT`. |
+| `cms.updates.queue.allow_sync` | Opt in to dispatching onto the `sync` driver, which runs the update inline and blocks the caller. Default `false`. Env: `CMS_UPDATES_QUEUE_ALLOW_SYNC`. |
 
 Environment variables:
 
@@ -323,12 +419,16 @@ Environment variables:
 | `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT` | Boolean; set `false` to leave the site in maintenance mode when an update dies mid-flight. |
 | `CMS_UPDATES_VERIFY_LOCK_SYNC` | Boolean; set `false` to skip the `composer.json`/`composer.lock` sync pre-flight check. |
 | `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT` | Boolean; set `true` to allow plaintext-http downloads on a trusted air-gapped mirror. |
+| `CMS_UPDATES_QUEUE_CONNECTION` | Queue connection a queued update is dispatched to. |
+| `CMS_UPDATES_QUEUE` | Queue name a queued update is pushed onto. |
+| `CMS_UPDATES_QUEUE_TIMEOUT` | Seconds the worker allows a queued update before killing it. |
+| `CMS_UPDATES_QUEUE_ALLOW_SYNC` | Boolean; set `true` to permit dispatching onto the blocking `sync` driver. |
 
 ## Command reference
 
 | Command | Purpose |
 |---------|---------|
 | `php artisan update:check` | Report whether an update is available. |
-| `php artisan update:perform` | Run the ten-step update. `--target-version=x.y.z` pins a release; `--allow-downgrade` permits a target that is not newer than the installed version. |
+| `php artisan update:perform` | Run the ten-step update. `--target-version=x.y.z` pins a release; `--allow-downgrade` permits a target that is not newer than the installed version; `--queue` dispatches it to a worker instead of running it here. |
 | `php artisan update:rollback` | Restore a snapshot. Takes an optional path; defaults to the newest archive in `backup_path`. `--allow-external` permits a path outside that directory; `--force` skips the confirmation prompt. |
-| `php artisan update:status` | Report the most recent run. Exits non-zero when it failed or was interrupted, in **both** output modes. `--json` emits the raw record; `--clear` discards it after reporting. |
+| `php artisan update:status` | Report the most recent run, including a queued run that no worker has claimed. Exits non-zero when it failed or was interrupted, in **both** output modes. `--json` emits the raw record; `--clear` discards it after reporting. |
