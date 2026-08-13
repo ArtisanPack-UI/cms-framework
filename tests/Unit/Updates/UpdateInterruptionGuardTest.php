@@ -6,6 +6,7 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
@@ -110,6 +111,104 @@ class UpdateInterruptionGuardTest extends TestCase
             $this->assertSame( 1, ignore_user_abort() );
         } finally {
             ignore_user_abort( 1 === $original );
+        }
+    }
+
+    /**
+     * TEST-6: `performUpdate()` must call `raiseExecutionLimits()` at its entry
+     * point. The two direct-call tests above prove the guard works in
+     * isolation, but neither would fail if the call were deleted from
+     * `performUpdate()` — and that call is the entire #256 fix: without it PHP's
+     * 30s `max_execution_time` kills the update long before composer's own
+     * budget, and the resulting shutdown-time fatal bypasses the catch block so
+     * nothing rolls back.
+     *
+     * Asserts the observable effect rather than spying on the method, so the
+     * test survives refactors. `ignore_user_abort()` is the anchor because it is
+     * never disabled; `max_execution_time` is checked too where `set_time_limit`
+     * is effective, so the test tightens on a normal host without ever skipping
+     * outright.
+     *
+     * @since 2.8.0
+     */
+    public function test_perform_update_raises_execution_limits_at_its_entry_point(): void
+    {
+        $originalAbort     = ignore_user_abort();
+        $originalTimeLimit = ini_get( 'max_execution_time' );
+
+        try {
+            ignore_user_abort( false );
+            ini_set( 'max_execution_time', '30' );
+
+            $manager = $this->managerWithUpdateAvailable();
+
+            $this->assertTrue( $manager->performUpdate() );
+
+            $this->assertSame(
+                1,
+                ignore_user_abort(),
+                'performUpdate() must lift connection-abort handling via raiseExecutionLimits() before running any step.',
+            );
+
+            if ( $this->setTimeLimitIsEffective() ) {
+                $this->assertSame(
+                    '0',
+                    ini_get( 'max_execution_time' ),
+                    'performUpdate() must lift max_execution_time via raiseExecutionLimits() — the load-bearing half of the #256 fix.',
+                );
+            }
+        } finally {
+            ignore_user_abort( 1 === $originalAbort );
+            ini_set( 'max_execution_time', false === $originalTimeLimit ? '0' : $originalTimeLimit );
+        }
+    }
+
+    /**
+     * TEST-6: `rollback()` must call `raiseExecutionLimits()` at its entry point
+     * too — a rollback re-runs `composer install`, so it faces the same
+     * execution-time ceiling as the update itself when invoked over HTTP.
+     *
+     * Pointing it at a missing backup exercises the call site without a real
+     * restore: `raiseExecutionLimits()` runs before the backup-existence check,
+     * so the guard has fired by the time `rollback()` throws `rollbackFailed`,
+     * and nothing on disk is touched.
+     *
+     * @since 2.8.0
+     */
+    public function test_rollback_raises_execution_limits_at_its_entry_point(): void
+    {
+        $originalAbort     = ignore_user_abort();
+        $originalTimeLimit = ini_get( 'max_execution_time' );
+
+        try {
+            ignore_user_abort( false );
+            ini_set( 'max_execution_time', '30' );
+
+            $manager = new RecordingApplicationUpdateManager;
+
+            try {
+                $manager->rollback( '/nonexistent/backup-' . uniqid() . '.zip' );
+                $this->fail( 'rollback() must throw when the backup is missing.' );
+            } catch ( UpdateException $e ) {
+                $this->assertStringContainsString( 'Backup not found', $e->getMessage() );
+            }
+
+            $this->assertSame(
+                1,
+                ignore_user_abort(),
+                'rollback() must lift connection-abort handling via raiseExecutionLimits() before it does any work.',
+            );
+
+            if ( $this->setTimeLimitIsEffective() ) {
+                $this->assertSame(
+                    '0',
+                    ini_get( 'max_execution_time' ),
+                    'rollback() must lift max_execution_time via raiseExecutionLimits() before restoring the backup.',
+                );
+            }
+        } finally {
+            ignore_user_abort( 1 === $originalAbort );
+            ini_set( 'max_execution_time', false === $originalTimeLimit ? '0' : $originalTimeLimit );
         }
     }
 
@@ -702,5 +801,28 @@ class UpdateInterruptionGuardTest extends TestCase
         $manager->setUpdateChecker( $checker );
 
         return $manager;
+    }
+
+    /**
+     * Whether `set_time_limit()` actually moves `max_execution_time` in this
+     * environment. Shared hosts routinely list it in `disable_functions`, where
+     * `raiseExecutionLimits()` logs a warning and moves on — so the
+     * execution-time assertions are gated on this rather than skipping the whole
+     * test, keeping the `ignore_user_abort()` half of the behaviour covered
+     * everywhere.
+     *
+     * @since 2.8.0
+     *
+     * @return bool True when `set_time_limit()` is callable and not disabled.
+     */
+    protected function setTimeLimitIsEffective(): bool
+    {
+        if ( ! function_exists( 'set_time_limit' ) ) {
+            return false;
+        }
+
+        $disabled = array_map( 'trim', explode( ',', (string) ini_get( 'disable_functions' ) ) );
+
+        return ! in_array( 'set_time_limit', $disabled, true );
     }
 }
