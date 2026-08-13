@@ -1448,9 +1448,9 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * `composer install` only ever *reads* a lock file — it never writes one —
      * so excluding the lock while letting `composer.json` be overwritten leaves
-     * the pair out of sync and aborts step 6 on every release that changes a
-     * dependency constraint. The `vendor` entry stays, because that directory
-     * genuinely is rebuilt by `composer install`.
+     * the pair out of sync, and composer fails step 6 on any release that adds a
+     * dependency the stale lock cannot satisfy. The `vendor` entry stays,
+     * because that directory genuinely is rebuilt by `composer install`.
      *
      * @since 2.7.1
      */
@@ -1572,7 +1572,8 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * The sync check must accept the composer-generated fixture pair as-is —
      * an end-to-end pass over `verifyComposerFilesInSync()` against files real
-     * composer produced, rather than hand-built JSON.
+     * composer produced, rather than hand-built JSON. A real pair is in sync,
+     * so no divergence is reported.
      *
      * @since 2.7.1
      */
@@ -1594,9 +1595,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer install --no-dev' );
-
-            $this->assertTrue( true ); // No exception means the real pair was accepted.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'A real composer pair is in sync, so no divergence is reported.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1604,15 +1606,61 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
-     * Regression for #255 (Fix C): a positively-detected desync must abort with
-     * a message naming the real cause, rather than letting composer emit its
-     * "incorrectly merged or manually edited" guess.
+     * Regression for #264: a stale `content-hash` must no longer pre-empt the
+     * update. Composer installs from the lock despite a stale hash, so when the
+     * lock still satisfies `composer.json` the install runs and succeeds — the
+     * false-positive abort (and its full rollback) is gone.
      *
-     * @since 2.7.1
+     * @since 2.8.0
      */
-    public function test_verify_composer_files_in_sync_throws_when_lock_is_stale(): void
+    public function test_stale_lock_no_longer_aborts_when_composer_succeeds(): void
     {
         Process::fake();
+
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall();
+
+            $this->assertTrue( true ); // No exception: composer adjudicated, not the pre-flight check.
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'install' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Regression for #264 (the valuable half of #255): when composer itself
+     * fails over a stale lock, the thrown message wraps composer's own output
+     * with the framework's accurate diagnosis, rather than leaving composer's
+     * "incorrectly merged or manually edited" guess to reach the operator.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_enriches_composer_failure_message(): void
+    {
+        Process::fake( [
+            '*' => Process::result(
+                '',
+                'Required package "psr/container" is not present in the lock file. '
+                . 'This usually happens when composer files are incorrectly merged.',
+                4,
+            ),
+        ] );
 
         $target = $this->makeComposerPair(
             '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
@@ -1636,14 +1684,13 @@ class ApplicationUpdateManagerTest extends TestCase
                 $manager->callRunComposerInstall();
             } catch ( UpdateException $e ) {
                 $threw = true;
+                $this->assertStringContainsString( 'Composer install failed', $e->getMessage() );
                 $this->assertStringContainsString( 'out of sync', $e->getMessage() );
-                $this->assertStringContainsString( 'never writes one', $e->getMessage() );
+                $this->assertStringContainsString( 'cannot satisfy composer.json', $e->getMessage() );
                 $this->assertStringContainsString( 'not a merge conflict', $e->getMessage() );
             }
 
-            $this->assertTrue( $threw, 'A stale lock must abort the update before composer runs.' );
-
-            Process::assertNothingRan();
+            $this->assertTrue( $threw, 'A composer failure over a stale lock must surface the enriched diagnosis.' );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1651,7 +1698,64 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
-     * The happy path: an in-sync pair passes the check and composer is invoked.
+     * The enrichment is scoped to a detected divergence. A composer failure over
+     * an in-sync pair must abort with composer's own output alone, not be dressed
+     * up as a lock-sync problem it isn't.
+     *
+     * @since 2.8.0
+     */
+    public function test_composer_failure_without_divergence_is_not_dressed_as_a_sync_problem(): void
+    {
+        Process::fake( [
+            '*' => Process::result( '', 'Some unrelated composer failure.', 1 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            null,
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+
+                public function contentHashFor( string $path ): ?string
+                {
+                    return $this->composerContentHash( $path );
+                }
+            };
+
+            $hash = $manager->contentHashFor( $target . '/composer.json' );
+            file_put_contents(
+                $target . '/composer.lock',
+                json_encode( ['content-hash' => $hash, 'packages' => []] ),
+            );
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'Composer install failed', $e->getMessage() );
+                $this->assertStringNotContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'A composer failure must still abort the update.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The happy path: an in-sync pair reports no divergence.
      *
      * @since 2.7.1
      */
@@ -1681,9 +1785,11 @@ class ApplicationUpdateManagerTest extends TestCase
 
             $method = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
-            $method->invoke( $manager, 'composer install --no-dev' );
 
-            $this->assertTrue( true ); // No exception means the pair was accepted.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'A matching hash reports no divergence.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1717,9 +1823,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer install --no-dev' );
-
-            $this->assertTrue( true ); // No exception means the check failed open.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'An inconclusive lock reports no divergence and is left for composer.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1767,9 +1874,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer install --no-dev' );
-
-            $this->assertTrue( true ); // No exception means the check was skipped.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'A disabled check reports no divergence.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1780,7 +1888,8 @@ class ApplicationUpdateManagerTest extends TestCase
      * A host that has overridden `composer_install_command` to run `composer
      * update` has deliberately opted into re-resolving the tree, and a lock
      * that disagrees with `composer.json` is exactly what `update` reconciles.
-     * The guard must not abort those hosts.
+     * The guard reports no divergence for those hosts — but the same stale pair
+     * is a positive divergence for an `install`.
      *
      * @since 2.7.1
      */
@@ -1800,13 +1909,15 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer update --no-dev --no-interaction' );
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer update --no-dev --no-interaction' ),
+                'The guard stands down for update commands.',
+            );
 
-            $this->assertTrue( true ); // No exception means the guard stood down.
-
-            // ...but the same stale pair must still abort an `install`.
-            $this->expectException( UpdateException::class );
-            $method->invoke( $manager, 'composer install --no-dev' );
+            $this->assertTrue(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'The same stale pair is reported as diverged for an install.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );

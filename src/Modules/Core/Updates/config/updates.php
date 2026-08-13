@@ -259,11 +259,11 @@ return [
     |
     | `composer.lock` is deliberately NOT excluded. `composer install` only ever
     | *reads* a lock file — it never writes one — so excluding the lock while
-    | letting `composer.json` be overwritten leaves the two out of sync and
-    | aborts step 6 on every release that changes a dependency constraint. The
-    | release's lock must land alongside its `composer.json` so the host
-    | installs the exact dependency set the release was built and tested
-    | against. See `verify_composer_lock_sync` below.
+    | letting `composer.json` be overwritten leaves the two out of sync, and
+    | composer will fail step 6 on any release that adds a dependency the stale
+    | lock cannot satisfy. The release's lock must land alongside its
+    | `composer.json` so the host installs the exact dependency set the release
+    | was built and tested against. See `verify_composer_lock_sync` below.
     |
     | (The `vendor` comment below is correct as written — that directory really
     | is rebuilt by `composer install`.)
@@ -283,26 +283,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Composer Lock Sync Pre-Flight Check
+    | Composer Lock Sync Diagnostic
     |--------------------------------------------------------------------------
     |
-    | Before invoking composer, verify that the on-disk `composer.lock` is in
-    | sync with the on-disk `composer.json` by comparing the lock's
+    | Before invoking composer, compare the on-disk `composer.lock`'s
     | `content-hash` against a hash computed from `composer.json` using
-    | composer's own algorithm.
+    | composer's own algorithm, to detect whether the two have diverged.
     |
-    | When they diverge, composer aborts with "This usually happens when
-    | composer files are incorrectly merged or the composer.json file is
-    | manually edited" — which sends the operator hunting for a merge conflict
-    | or a hand-edit that never happened. The real cause is almost always a
-    | release that shipped no `composer.lock`, or a host whose
-    | `exclude_from_update` override still excludes it. This check names that
-    | cause instead.
+    | This is a *diagnostic*, not a gate. `composer install` installs from the
+    | lock despite a stale `content-hash` — it only warns — and hard-fails solely
+    | when the lock cannot satisfy `composer.json` (a required package missing
+    | from the lock, or a constraint it violates). So the updater no longer
+    | aborts on divergence: composer adjudicates. When composer *does* fail, its
+    | own "incorrectly merged or manually edited" guess sends the operator
+    | hunting for a merge conflict or a hand-edit that never happened — the real
+    | cause is almost always a release that shipped no `composer.lock`, or a host
+    | whose `exclude_from_update` override still excludes it. A detected
+    | divergence lets the updater wrap composer's failure with that accurate
+    | diagnosis instead.
     |
     | The check fails *open*: a missing `composer.json`, a missing or
     | unparseable `composer.lock`, or a lock without a `content-hash` key is
-    | left for composer itself to adjudicate. Only a positively-detected
-    | mismatch aborts.
+    | left for composer itself to adjudicate, with no divergence recorded.
     |
     | Set to `false` to skip the check entirely — for instance if a future
     | composer release changes the content-hash algorithm and the framework has

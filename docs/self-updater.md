@@ -223,11 +223,13 @@ For the `auto_archive` GitLab strategy this is free — the archive is the repos
 
 The pre-update snapshot includes `composer.lock` for the same reason, so a rollback restores the old `composer.json` and old lock together.
 
-### Lock-sync pre-flight check
+### Lock-sync diagnostic
 
-Before invoking composer, the framework compares the on-disk `composer.lock`'s `content-hash` against a hash computed from `composer.json` using composer's own algorithm. On a mismatch it aborts with `UpdateException::composerFilesOutOfSync` naming the real cause.
+Before invoking composer, the framework compares the on-disk `composer.lock`'s `content-hash` against a hash computed from `composer.json` using composer's own algorithm, to detect whether the two have diverged. This is a **diagnostic, not a gate**: it does not abort the update.
 
-This exists because composer's own diagnosis of that state is actively misleading:
+`composer install` installs from the lock even when the `content-hash` is stale — it only emits a warning — and hard-fails solely when the lock cannot satisfy `composer.json` (a required package missing from the lock, or a constraint it violates). An earlier version (2.7.1, #255) aborted step 6 and triggered a full rollback on *any* divergence, which turned a release that shipped an old-but-satisfying lock into a failed update composer would have installed cleanly (#264). It no longer pre-empts composer.
+
+What it keeps is the *diagnosis*. When composer itself fails over a genuinely unsatisfiable lock, its own message is actively misleading:
 
 ```
 - Required package "artisanpack-ui/cms-framework" is in the lock file as "2.5.4" but that
@@ -235,9 +237,9 @@ This exists because composer's own diagnosis of that state is actively misleadin
   incorrectly merged or the composer.json file is manually edited.
 ```
 
-Nothing was merged and nothing was hand-edited — but that sentence sends the operator hunting for both. The remaining ways to reach this state are a release that shipped no lock, or a host whose `exclude_from_update` override still lists `composer.lock`; the framework's message says so.
+Nothing was merged and nothing was hand-edited — but that sentence sends the operator hunting for both. The remaining ways to reach this state are a release that shipped no lock, or a host whose `exclude_from_update` override still lists `composer.lock`. When a divergence was detected, `UpdateException::composerInstallFailed` wraps composer's own output with that accurate explanation — but only after composer, not the framework, has decided the update cannot proceed.
 
-The check **fails open**: a missing `composer.json`, a missing or unparseable `composer.lock`, or a lock carrying no `content-hash` is left for composer to adjudicate. Only a positively-detected mismatch aborts, so a false alarm can't block an update that would otherwise have installed cleanly. Set `cms.updates.verify_composer_lock_sync` to `false` (env `CMS_UPDATES_VERIFY_LOCK_SYNC`) to skip it entirely — for instance if a future composer release changes the content-hash algorithm before the framework catches up.
+The check **fails open**: a missing `composer.json`, a missing or unparseable `composer.lock`, or a lock carrying no `content-hash` records no divergence and is left for composer to adjudicate. Set `cms.updates.verify_composer_lock_sync` to `false` (env `CMS_UPDATES_VERIFY_LOCK_SYNC`) to skip it entirely — for instance if a future composer release changes the content-hash algorithm before the framework catches up.
 
 ## Long-running updates and interrupted processes
 
