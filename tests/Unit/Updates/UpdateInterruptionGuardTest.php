@@ -328,6 +328,186 @@ class UpdateInterruptionGuardTest extends TestCase
     }
 
     /**
+     * Test that the step-aware policy keeps the site down when the update died
+     * inside one of the tree/schema-mutating steps (5-7). This is the core
+     * #265 behaviour: a half-extracted tree or half-run migration set must not
+     * go back on the public internet.
+     *
+     * @since 2.8.0
+     */
+    public function test_step_aware_policy_keeps_site_down_in_the_danger_zone(): void
+    {
+        foreach ( [UpdateStep::Extract, UpdateStep::ComposerInstall, UpdateStep::Migrations] as $dangerStep ) {
+            Log::spy();
+
+            config( ['cms.updates.lift_maintenance_on_interrupt' => 'step_aware'] );
+
+            $manager = new RecordingApplicationUpdateManager;
+            $manager->simulateInFlight( $dangerStep );
+
+            $manager->handleInterruptedUpdate();
+
+            $this->assertNotContains(
+                'disable',
+                $manager->calls,
+                "A death in {$dangerStep->value} must keep the site in maintenance mode under the step-aware policy.",
+            );
+
+            $state = $manager->updateState();
+
+            $this->assertIsArray( $state );
+            $this->assertSame( UpdateRunStatus::Interrupted->value, $state['status'] );
+        }
+    }
+
+    /**
+     * Test that the step-aware policy lifts maintenance mode when the update
+     * died before it touched the application tree (steps 1-4). Nothing on disk
+     * changed, so the site is fine.
+     *
+     * @since 2.8.0
+     */
+    public function test_step_aware_policy_lifts_before_the_tree_is_touched(): void
+    {
+        foreach ( [UpdateStep::EnableMaintenanceMode, UpdateStep::Backup, UpdateStep::Download, UpdateStep::VerifyChecksum] as $safeStep ) {
+            config( ['cms.updates.lift_maintenance_on_interrupt' => 'step_aware'] );
+
+            $manager = new RecordingApplicationUpdateManager;
+            $manager->simulateInFlight( $safeStep );
+
+            $manager->handleInterruptedUpdate();
+
+            $this->assertContains(
+                'disable',
+                $manager->calls,
+                "A death in {$safeStep->value} left the tree untouched, so the step-aware policy must lift maintenance mode.",
+            );
+        }
+    }
+
+    /**
+     * Test that the step-aware policy lifts maintenance mode when the update
+     * died after the code and schema were fully applied (steps 8-10). The
+     * install is whole, so there is nothing to protect the visitor from.
+     *
+     * @since 2.8.0
+     */
+    public function test_step_aware_policy_lifts_after_the_update_is_fully_applied(): void
+    {
+        foreach ( [UpdateStep::ClearCaches, UpdateStep::Cleanup, UpdateStep::DisableMaintenanceMode] as $safeStep ) {
+            config( ['cms.updates.lift_maintenance_on_interrupt' => 'step_aware'] );
+
+            $manager = new RecordingApplicationUpdateManager;
+            $manager->simulateInFlight( $safeStep );
+
+            $manager->handleInterruptedUpdate();
+
+            $this->assertContains(
+                'disable',
+                $manager->calls,
+                "A death in {$safeStep->value} runs after the update is applied, so the step-aware policy must lift maintenance mode.",
+            );
+        }
+    }
+
+    /**
+     * Test that `true` still lifts unconditionally, even inside the danger
+     * zone — the pre-2.8 always-lift behaviour remains available for hosts that
+     * prefer availability over a possibly half-applied install.
+     *
+     * @since 2.8.0
+     */
+    public function test_true_policy_lifts_even_in_the_danger_zone(): void
+    {
+        config( ['cms.updates.lift_maintenance_on_interrupt' => true] );
+
+        $manager = new RecordingApplicationUpdateManager;
+        $manager->simulateInFlight( UpdateStep::Extract );
+
+        $manager->handleInterruptedUpdate();
+
+        $this->assertContains( 'disable', $manager->calls );
+    }
+
+    /**
+     * Test that an unrecognized policy value — a near-miss typo an operator who
+     * meant to opt into the safe policy might write — fails toward step-aware
+     * rather than the least-safe always-lift, so a misconfiguration cannot put
+     * a half-applied tree back online.
+     *
+     * @since 2.8.0
+     */
+    public function test_unrecognized_policy_value_fails_safe_to_step_aware(): void
+    {
+        Log::spy();
+
+        config( ['cms.updates.lift_maintenance_on_interrupt' => 'step-aware'] );
+
+        $manager = new RecordingApplicationUpdateManager;
+        $manager->simulateInFlight( UpdateStep::Extract );
+
+        $manager->handleInterruptedUpdate();
+
+        $this->assertNotContains(
+            'disable',
+            $manager->calls,
+            'A typo must not degrade to always-lift; the danger zone must keep the site down.',
+        );
+
+        Log::shouldHaveReceived( 'warning' );
+    }
+
+    /**
+     * Test that the `'step_aware'` token is matched after trimming and
+     * lower-casing, so a value carrying stray whitespace or capitalisation from
+     * an `.env` file still selects the safe policy rather than the
+     * unrecognized-value fallback.
+     *
+     * @since 2.8.0
+     */
+    public function test_step_aware_token_is_matched_case_insensitively_and_trimmed(): void
+    {
+        config( ['cms.updates.lift_maintenance_on_interrupt' => '  STEP_AWARE  '] );
+
+        $manager = new RecordingApplicationUpdateManager;
+        $manager->simulateInFlight( UpdateStep::Migrations );
+
+        $manager->handleInterruptedUpdate();
+
+        $this->assertNotContains(
+            'disable',
+            $manager->calls,
+            'A `step_aware` value with whitespace/caps must still gate the danger zone.',
+        );
+    }
+
+    /**
+     * Test that the step-aware policy keeps the site down when the step the
+     * update died on cannot be identified. Fail closed: an unknown step is no
+     * evidence the tree is clean.
+     *
+     * @since 2.8.0
+     */
+    public function test_step_aware_policy_stays_down_when_the_step_is_unknown(): void
+    {
+        Log::spy();
+
+        config( ['cms.updates.lift_maintenance_on_interrupt' => 'step_aware'] );
+
+        // Maintenance mode is active but no step was ever recorded.
+        $manager = new RecordingApplicationUpdateManager;
+        $manager->forceMaintenanceModeActive();
+
+        $manager->handleInterruptedUpdate();
+
+        $this->assertNotContains(
+            'disable',
+            $manager->calls,
+            'An unidentifiable death step must fail closed under the step-aware policy.',
+        );
+    }
+
+    /**
      * Test that when `artisan up` itself fails — typical when the process is
      * shutting down after an out-of-memory fatal and there is no headroom to
      * boot a console command — the guard falls back to removing the

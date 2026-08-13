@@ -93,6 +93,33 @@ enum UpdateStep: string
     }
 
     /**
+     * Whether an interruption *during* this step can leave the application
+     * partially applied — a half-extracted tree, a half-built vendor
+     * directory, or a half-run migration set — such that serving public
+     * traffic from it is unsafe.
+     *
+     * True for the three tree/schema-mutating steps (extract, composer
+     * install, migrations). Before them nothing on disk has changed; after
+     * them the code and schema are fully applied. This is the gate the
+     * `step_aware` `lift_maintenance_on_interrupt` policy uses to decide
+     * whether to keep the site in maintenance mode for an operator. Its upper
+     * bound is the same Migrations step above which `handleUpdateFailure()`
+     * stops rolling back (past migrations a restore would discard a
+     * fully-applied update); the two only share that upper bound — a rollback
+     * is still appropriate through steps 1-4, which are nonetheless safe to
+     * lift here because they never touched the tree.
+     *
+     * @since 2.8.0
+     *
+     * @return bool True when a death in this step leaves the site unsafe to serve.
+     */
+    public function interruptionLeavesSiteUnsafe(): bool
+    {
+        return $this->number() >= self::Extract->number()
+            && $this->number() <= self::Migrations->number();
+    }
+
+    /**
      * Steps that had not been reached when the update stopped at this step.
      *
      * The step itself is included: an interrupted update was *in* this step
