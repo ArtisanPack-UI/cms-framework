@@ -393,7 +393,10 @@ class ApplicationUpdateManager
             $this->state()->markStatus( UpdateRunStatus::Interrupted, $message );
 
             if ( $this->maintenanceModeActive || null !== $step ) {
-                $this->liftMaintenanceModeAfterFailure( 'the failed queued update job' );
+                $this->liftMaintenanceModeAfterFailure(
+                    'the failed queued update job',
+                    null !== $step ? UpdateStep::tryFrom( $step ) : null,
+                );
             }
 
             return;
@@ -523,7 +526,7 @@ class ApplicationUpdateManager
             );
         }
 
-        $this->liftMaintenanceModeAfterFailure( 'the update shutdown guard' );
+        $this->liftMaintenanceModeAfterFailure( 'the update shutdown guard', $this->currentStep );
     }
 
     /**
@@ -2318,15 +2321,40 @@ class ApplicationUpdateManager
      * hook, which face the same situation from different angles: a run that
      * stopped somewhere between step 1 and step 10, with the site still down.
      *
+     * Honours the three `cms.updates.lift_maintenance_on_interrupt` policies:
+     *
+     * - `false` — fail closed. Never lift; leave the site down for an operator.
+     * - `true` — always lift, whatever step the update died on.
+     * - `'step_aware'` (the default) — lift only when the death step left the
+     *   application whole. A death in steps 5-7 (extract, composer install,
+     *   migrations) leaves a half-applied tree or schema that must not go back
+     *   on the public internet, so the site stays down; a death anywhere else
+     *   is lifted as before.
+     *
      * @since 2.8.0
      *
      * @param  string  $liftedBy  What is doing the lifting, for the log line.
+     * @param  UpdateStep|null  $step  Step the update was in when it died, or null when unknown.
      */
-    protected function liftMaintenanceModeAfterFailure( string $liftedBy ): void
+    protected function liftMaintenanceModeAfterFailure( string $liftedBy, ?UpdateStep $step = null ): void
     {
-        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
+        $mode = $this->resolveLiftPolicy( config( 'cms.updates.lift_maintenance_on_interrupt', 'step_aware' ) );
+
+        if ( 'never' === $mode ) {
             Log::critical(
                 'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
+            );
+
+            return;
+        }
+
+        if ( 'step_aware' === $mode && $this->interruptLeftSiteUnsafe( $step ) ) {
+            Log::critical(
+                sprintf(
+                    'cms-framework: the update was interrupted during a step that leaves the application partially applied (%s), so %s kept the site in maintenance mode rather than serve a half-applied install. Restore the pre-update snapshot or finish the update by hand, then run `php artisan up`. Run `php artisan update:status` to see what remains.',
+                    $step?->label() ?? __( 'an unknown step' ),
+                    $liftedBy,
+                ),
             );
 
             return;
@@ -2343,6 +2371,68 @@ class ApplicationUpdateManager
 
             $this->forceLiftMaintenanceMode();
         }
+    }
+
+    /**
+     * Normalise a `lift_maintenance_on_interrupt` config value to one of the
+     * three canonical modes: `'always'`, `'never'`, or `'step_aware'`.
+     *
+     * The mapping fails *safe*. The boolean `true` is `'always'`; any falsy
+     * value (`false`, `0`, `''`, `null`) is `'never'`, preserving the pre-2.8
+     * `! config(...)` fail-closed semantics; the `'step_aware'` token —
+     * matched case-insensitively and trimmed so an `.env` value survives stray
+     * whitespace or capitalisation — is `'step_aware'`. Any other unrecognized
+     * non-empty value (a typo such as `step-aware`, or an unexpected truthy
+     * scalar) is treated as `'step_aware'` rather than `'always'`, with a
+     * warning: a misconfiguration must never be the reason a possibly
+     * half-applied tree goes back on the public internet.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $policy  Configured policy value.
+     *
+     * @return string One of `'always'`, `'never'`, or `'step_aware'`.
+     */
+    protected function resolveLiftPolicy( mixed $policy ): string
+    {
+        if ( is_string( $policy ) && 'step_aware' === strtolower( trim( $policy ) ) ) {
+            return 'step_aware';
+        }
+
+        if ( true === $policy ) {
+            return 'always';
+        }
+
+        if ( ! $policy ) {
+            return 'never';
+        }
+
+        Log::warning(
+            sprintf(
+                'cms-framework: unrecognized cms.updates.lift_maintenance_on_interrupt value %s; defaulting to the step-aware policy. Set it to true, false, or "step_aware".',
+                var_export( $policy, true ),
+            ),
+        );
+
+        return 'step_aware';
+    }
+
+    /**
+     * Whether a death in the given step left the site unsafe to serve, for the
+     * step-aware lift policy.
+     *
+     * An interruption whose step cannot be identified is treated as unsafe:
+     * step-aware mode fails closed rather than assume the tree is clean.
+     *
+     * @since 2.8.0
+     *
+     * @param  UpdateStep|null  $step  Step the update was in when it died, or null when unknown.
+     *
+     * @return bool True when the site should stay in maintenance mode.
+     */
+    protected function interruptLeftSiteUnsafe( ?UpdateStep $step ): bool
+    {
+        return null === $step || $step->interruptionLeavesSiteUnsafe();
     }
 
     /**

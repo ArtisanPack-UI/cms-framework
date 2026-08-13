@@ -223,19 +223,30 @@ return [
     | step 10, so maintenance mode is never disabled and the site serves 503 to
     | every visitor until somebody notices and runs `php artisan up`.
     |
-    | When enabled (the default), a shutdown handler lifts maintenance mode in
-    | that case and logs a `critical` entry naming the step it died on. The
-    | install may be half-applied, which is a real trade-off — but an
-    | unattended outage the operator may not notice for hours is worse, and
-    | `php artisan update:status` reports exactly what is outstanding.
+    | Three policies are supported:
     |
-    | Set to `false` to fail closed and keep the site down until an operator
-    | has verified the install by hand.
+    | - `'step_aware'` (the default) — a shutdown handler lifts maintenance mode
+    |   only when the step it died on left the application whole. Steps 1-4
+    |   (maintenance, backup, download, checksum) have not touched the tree, and
+    |   steps 8-10 (cache clear, cleanup, `up`) run after the code and schema are
+    |   fully applied, so both are lifted. Steps 5-7 (extract, composer install,
+    |   migrations) leave a half-extracted tree or a half-run migration set — a
+    |   partial extraction can put new controllers and routes alongside old
+    |   middleware or policies, silently disabling authorization — so the site is
+    |   kept in maintenance mode for an operator. A `critical` entry names the
+    |   step either way, and `php artisan update:status` reports what remains.
+    |
+    | - `true` — always lift, whatever step the update died on. The install may
+    |   be half-applied, which is a real trade-off, but an unattended outage the
+    |   operator may not notice for hours is avoided in every case.
+    |
+    | - `false` — fail closed. Keep the site down after any interruption until an
+    |   operator has verified the install by hand.
     |
     | Note this cannot help against `kill -9`, which runs no shutdown handlers.
     |
     */
-    'lift_maintenance_on_interrupt' => env( 'CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT', true ),
+    'lift_maintenance_on_interrupt' => env( 'CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT', 'step_aware' ),
 
     /*
     |--------------------------------------------------------------------------

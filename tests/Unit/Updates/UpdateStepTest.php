@@ -92,6 +92,39 @@ class UpdateStepTest extends TestCase
     }
 
     /**
+     * Test that only the three tree/schema-mutating steps (extract, composer
+     * install, migrations) report an interruption as leaving the site unsafe.
+     * This is the boundary the `step_aware` lift policy gates on, so it must
+     * match the 5-7 window exactly.
+     *
+     * @since 2.8.0
+     */
+    public function test_interruption_leaves_site_unsafe_only_for_the_mutating_steps(): void
+    {
+        $unsafe = array_values( array_filter(
+            UpdateStep::cases(),
+            fn ( UpdateStep $step ): bool => $step->interruptionLeavesSiteUnsafe(),
+        ) );
+
+        $this->assertSame(
+            [
+                UpdateStep::Extract,
+                UpdateStep::ComposerInstall,
+                UpdateStep::Migrations,
+            ],
+            $unsafe,
+        );
+
+        foreach ( [UpdateStep::EnableMaintenanceMode, UpdateStep::Backup, UpdateStep::Download, UpdateStep::VerifyChecksum] as $safeBefore ) {
+            $this->assertFalse( $safeBefore->interruptionLeavesSiteUnsafe() );
+        }
+
+        foreach ( [UpdateStep::ClearCaches, UpdateStep::Cleanup, UpdateStep::DisableMaintenanceMode] as $safeAfter ) {
+            $this->assertFalse( $safeAfter->interruptionLeavesSiteUnsafe() );
+        }
+    }
+
+    /**
      * Test which run statuses warrant operator attention.
      *
      * @since 2.7.1

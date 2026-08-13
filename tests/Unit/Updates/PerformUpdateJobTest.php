@@ -377,12 +377,15 @@ class PerformUpdateJobTest extends TestCase
 
     /**
      * Test a job killed mid-run — the worker timeout — is recorded as
-     * interrupted and the site is taken back out of maintenance mode.
+     * interrupted and, under the always-lift policy, the site is taken back out
+     * of maintenance mode.
      *
      * @since 2.8.0
      */
     public function test_a_failure_mid_run_is_recorded_as_interrupted_and_lifts_maintenance_mode(): void
     {
+        config( ['cms.updates.lift_maintenance_on_interrupt' => true] );
+
         $store = new UpdateStateStore;
         $store->markQueued( '2.0.0', '1.0.0', 'database', null );
         $store->begin( '2.0.0', '1.0.0' );
@@ -399,6 +402,96 @@ class PerformUpdateJobTest extends TestCase
         $this->assertSame( 'The job timed out.', $state['error'] );
         $this->assertSame( UpdateStep::ComposerInstall->value, $state['step'] );
         $this->assertSame( ['up'], $artisan->calls, 'The site must be taken back out of maintenance mode.' );
+    }
+
+    /**
+     * Test that under the step-aware default a job killed inside a
+     * tree/schema-mutating step (5-7) is recorded as interrupted but the site
+     * is left down — the recorded step travels to the worker's `failed()` hook,
+     * so the queued path is step-aware too, not just the in-process guard.
+     *
+     * @since 2.8.0
+     */
+    public function test_a_failure_in_the_danger_zone_leaves_the_site_down_under_the_step_aware_default(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( '2.0.0', '1.0.0', 'database', null );
+        $store->begin( '2.0.0', '1.0.0' );
+        $store->markStep( UpdateStep::Extract );
+
+        $artisan = $this->swapArtisan();
+
+        $manager = new ApplicationUpdateManager;
+        $manager->handleFailedUpdateJob( new RuntimeException( 'The job timed out.' ) );
+
+        $state = $manager->updateState();
+
+        $this->assertSame( UpdateRunStatus::Interrupted->value, $state['status'] );
+        $this->assertSame( UpdateStep::Extract->value, $state['step'] );
+        $this->assertSame(
+            [],
+            $artisan->calls,
+            'A half-extracted tree must be left in maintenance mode under the step-aware default.',
+        );
+    }
+
+    /**
+     * Test that under the step-aware default a job killed before the tree was
+     * touched (steps 1-4) still lifts maintenance mode — nothing on disk
+     * changed, so the outage is the only failure worth avoiding.
+     *
+     * @since 2.8.0
+     */
+    public function test_a_failure_before_the_tree_is_touched_lifts_under_the_step_aware_default(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( '2.0.0', '1.0.0', 'database', null );
+        $store->begin( '2.0.0', '1.0.0' );
+        $store->markStep( UpdateStep::Download );
+
+        $artisan = $this->swapArtisan();
+
+        $manager = new ApplicationUpdateManager;
+        $manager->handleFailedUpdateJob( new RuntimeException( 'The job timed out.' ) );
+
+        $state = $manager->updateState();
+
+        $this->assertSame( UpdateRunStatus::Interrupted->value, $state['status'] );
+        $this->assertSame( UpdateStep::Download->value, $state['step'] );
+        $this->assertSame( ['up'], $artisan->calls, 'A death before the tree is touched must lift maintenance mode.' );
+    }
+
+    /**
+     * Test that an unrecognized recorded step string leaves the site down under
+     * the step-aware default. The recorded step is the only thing the worker's
+     * `failed()` hook has to go on, so a corrupt or unknown value
+     * (`UpdateStep::tryFrom()` returns null) must fail closed rather than lift.
+     *
+     * @since 2.8.0
+     */
+    public function test_an_unknown_recorded_step_leaves_the_site_down_under_the_step_aware_default(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( '2.0.0', '1.0.0', 'database', null );
+        $store->begin( '2.0.0', '1.0.0' );
+
+        // A step value no `UpdateStep` case maps to — a truncated write, or a
+        // record left by a newer framework version.
+        $state         = $store->read();
+        $state['step'] = 'not_a_real_step';
+        file_put_contents( $this->statePath, (string) json_encode( $state ) );
+
+        $artisan = $this->swapArtisan();
+
+        $manager = new ApplicationUpdateManager;
+        $manager->handleFailedUpdateJob( new RuntimeException( 'The job timed out.' ) );
+
+        $this->assertSame( UpdateRunStatus::Interrupted->value, $manager->updateState()['status'] );
+        $this->assertSame(
+            [],
+            $artisan->calls,
+            'An unidentifiable recorded step must fail closed under the step-aware default.',
+        );
     }
 
     /**
