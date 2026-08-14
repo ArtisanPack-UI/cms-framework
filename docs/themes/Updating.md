@@ -100,6 +100,10 @@ cannot hide every other theme's available update.
 ### REST endpoints
 
 Both sit behind the same `auth:sanctum` group as the rest of the themes API.
+Since 2.8.0, the mutating routes (`POST /v1/themes/{slug}/update`, as well as
+`POST /v1/themes/{slug}/activate` and the upload endpoint) additionally require
+the `manage-themes` permission — deny-by-default and seeded to the `admin` role.
+`GET /v1/themes/updates` stays auth-only.
 
 ```
 GET  /v1/themes/updates
@@ -128,9 +132,11 @@ types:
 ```
 
 `POST /v1/themes/{slug}/update` returns `updated: false` when the theme is
-already current, 404 when it is not installed, and a `ValidationException`
-error bag (HTTP 422, keyed `slug`) when the update fails — so host apps using
-Inertia get a working error bag instead of an unhandled response.
+already current, and a `ValidationException` error bag (HTTP 422, keyed `slug`)
+both when the slug is not installed and when the update itself fails — so host
+apps using Inertia get a working error bag instead of an unhandled response.
+The unknown-slug case matches `activate()` and the plugin module: the slug is
+form input there, not a resource path.
 
 ## What happens during an update
 

@@ -9,10 +9,12 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ArchiveChecksum;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\UpdateStateStore;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Composer\InstalledVersions;
 use Illuminate\Bus\UniqueLock;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
@@ -205,12 +207,19 @@ class ApplicationUpdateManager
         try {
             $updateInfo = $this->checkForUpdate();
 
-            if ( ! $updateInfo->hasUpdate() ) {
-                throw UpdateException::noUpdateAvailable();
-            }
-
             // Use specified version or latest
             $targetVersion = $version ?? $updateInfo->latestVersion;
+
+            // `hasUpdate()` compares *latest* against current, so it only
+            // answers "is there something newer to move to." That gate is
+            // right when no target was pinned, but a pinned target is checked
+            // directly below in both directions (guarded by $allowDowngrade) —
+            // letting the latest-only gate run first made a pinned downgrade
+            // off a bad *latest* release unreachable, since `noUpdateAvailable`
+            // fired before the downgrade comparison was ever reached.
+            if ( null === $version && ! $updateInfo->hasUpdate() ) {
+                throw UpdateException::noUpdateAvailable();
+            }
 
             // `hasUpdate()` is only ever consulted against *latest*, never
             // against the requested target, so `performUpdate( '1.0.0' )` on a
@@ -220,6 +229,8 @@ class ApplicationUpdateManager
             if ( ! $allowDowngrade && ! version_compare( $targetVersion, $updateInfo->resolveCurrentVersion(), '>' ) ) {
                 throw UpdateException::downgradeNotAllowed( $targetVersion, $updateInfo->resolveCurrentVersion() );
             }
+
+            $this->assertHostSatisfiesRequirements( $updateInfo );
 
             return $this->runUpdateSteps( $targetVersion, $updateInfo );
         } finally {
@@ -621,7 +632,18 @@ class ApplicationUpdateManager
         // it was empirically confirmed safe against traversal — `..` and
         // absolute paths stripped, symlink entries written as regular files,
         // permission bits discarded. Only the exclusion filter was missing.
-        $zip->extractTo( base_path(), $restore );
+        //
+        // Its return value is checked: `extractTo()` returns false on a
+        // mid-extraction failure (disk full, permission error), and swallowing
+        // that would let `update:status` report "the snapshot was restored
+        // successfully" over a half-restored tree — the exact false reassurance
+        // the `rolled_back` field exists to prevent.
+        if ( true !== $zip->extractTo( base_path(), $restore ) ) {
+            $zip->close();
+
+            throw UpdateException::rollbackFailed( 'backup extraction failed partway' );
+        }
+
         $zip->close();
 
         // Before invoking composer install, verify the resolved binary is
@@ -646,6 +668,97 @@ class ApplicationUpdateManager
     public function clearCache(): void
     {
         $this->getUpdateChecker()->clearCache();
+    }
+
+    /**
+     * Remove extraction additions the persisted ledger recorded, for a manual
+     * rollback in a fresh process.
+     *
+     * `handleUpdateFailure()` still has the in-memory ledger and calls
+     * {@see removeExtractionAdditions()} directly. The manual
+     * `update:rollback` path runs in a new process where that ledger is empty,
+     * so this reloads it from the state file (written by `extractUpdate()`)
+     * before removing — turning the automatic-only #272 cleanup into one the
+     * manual path performs too. Every path is re-validated by
+     * `removeExtractionAdditions()` (exclusion list, regular-file check,
+     * containment), so a stale or tampered ledger entry is safe to process.
+     *
+     * @since 2.8.0
+     */
+    public function removeOrphanedExtractionAdditions(): void
+    {
+        if ( empty( $this->extractionAdditions ) ) {
+            $persisted = $this->updateState()['extraction_additions'] ?? null;
+
+            if ( is_array( $persisted ) ) {
+                $this->extractionAdditions = array_values( array_filter( $persisted, 'is_string' ) );
+            }
+        }
+
+        $this->removeExtractionAdditions();
+    }
+
+    /**
+     * Refuse a release the host cannot run before any file is touched.
+     *
+     * `UpdateInfo` parses, caches, and rehydrates `minPhpVersion` /
+     * `minFrameworkVersion` but nothing checked them, so a release declaring
+     * `min_php_version: 8.4` installed on 8.2 and only failed once the new code
+     * hit a syntax it could not parse — after the tree had already been
+     * overwritten. Checking here fails closed before the first step runs.
+     *
+     * @since 2.8.0
+     *
+     * @param  UpdateInfo  $updateInfo  Resolved update metadata.
+     *
+     * @throws UpdateException When the host does not meet a declared minimum.
+     */
+    protected function assertHostSatisfiesRequirements( UpdateInfo $updateInfo ): void
+    {
+        $minPhp = $updateInfo->minPhpVersion;
+
+        if ( is_string( $minPhp ) && '' !== $minPhp && version_compare( PHP_VERSION, $minPhp, '<' ) ) {
+            throw UpdateException::incompatiblePhpVersion( $minPhp, PHP_VERSION );
+        }
+
+        $minFramework = $updateInfo->minFrameworkVersion;
+
+        if ( ! is_string( $minFramework ) || '' === $minFramework ) {
+            return;
+        }
+
+        $currentFramework = $this->installedFrameworkVersion();
+
+        // Only compare when the installed version reads as a numeric version.
+        // A `dev-main` / branch alias install (CI, path repos) has no ordering
+        // against a release constraint, so skip the check rather than refuse.
+        if ( null !== $currentFramework
+            && 1 === preg_match( '/^\d+\.\d+/', $currentFramework )
+            && version_compare( $currentFramework, $minFramework, '<' ) ) {
+            throw UpdateException::incompatibleFrameworkVersion( $minFramework, $currentFramework );
+        }
+    }
+
+    /**
+     * The installed cms-framework version, or null when it cannot be resolved.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Pretty version with any leading `v` stripped.
+     */
+    protected function installedFrameworkVersion(): ?string
+    {
+        if ( ! class_exists( InstalledVersions::class ) ) {
+            return null;
+        }
+
+        try {
+            $version = InstalledVersions::getPrettyVersion( 'artisanpack-ui/cms-framework' );
+        } catch ( Throwable ) {
+            return null;
+        }
+
+        return is_string( $version ) ? ltrim( $version, 'vV' ) : null;
     }
 
     /**
@@ -776,6 +889,16 @@ class ApplicationUpdateManager
         $handle = @fopen( $path, 'cb' );
 
         if ( false === $handle ) {
+            // The file lock is unavailable, but the state marker still records
+            // whether another run is live. Consult it before proceeding: an
+            // unwritable lock file must not become a licence to run a second
+            // concurrent update over the same tree.
+            $recordedPid = $this->runningUpdatePid();
+
+            if ( null !== $recordedPid ) {
+                throw UpdateException::updateAlreadyRunning( $recordedPid );
+            }
+
             // An unwritable state directory already degrades the step marker
             // to best-effort; it must not also block updates outright.
             Log::warning( 'cms-framework: could not open the update lock file; proceeding without concurrency protection.', [
@@ -858,7 +981,16 @@ class ApplicationUpdateManager
             return $pid;
         }
 
-        return posix_kill( $pid, 0 ) ? $pid : null;
+        if ( posix_kill( $pid, 0 ) ) {
+            return $pid;
+        }
+
+        // `posix_kill` returns false both for a dead process (ESRCH) and for a
+        // live process this user may not signal (EPERM = 1) — the exact case
+        // of a root `auto_update` cron run versus a `www-data` queue worker.
+        // Only ESRCH means the run is gone; EPERM proves it still exists, so
+        // reconciliation must treat it as alive and leave the healthy run be.
+        return 1 === posix_get_last_error() ? $pid : null;
     }
 
     /**
@@ -882,10 +1014,16 @@ class ApplicationUpdateManager
             throw UpdateException::noUpdateUrlConfigured();
         }
 
+        // The slug keys the update-check cache and identifies the application
+        // to the source. It is configurable rather than the product-specific
+        // literal it used to be, so this generic framework does not hard-code a
+        // single downstream product's name. Changing it invalidates any
+        // existing `cms.application.<old-slug>.update_check` cache entry, which
+        // simply forces one fresh check.
         $this->checker = UpdateCheckerFactory::buildUpdateChecker(
             url: $updateUrl,
             type: UpdateType::Application,
-            slug: 'digital-shopfront-cms',
+            slug: (string) config( 'cms.updates.application_slug', 'application' ),
         );
 
         return $this->checker;
@@ -1162,9 +1300,14 @@ class ApplicationUpdateManager
      */
     protected function verifyChecksum( string $zipPath, string $expectedHash ): void
     {
-        $actualHash = hash_file( 'sha256', $zipPath );
+        // Normalize through the shared helper so an uppercase or padded digest
+        // (e.g. from a custom JSON feed) verifies rather than failing as a
+        // spurious "checksum mismatch", and a malformed value fails closed. The
+        // theme and plugin managers verify through the same helper.
+        $expected   = ArchiveChecksum::normalize( $expectedHash );
+        $actualHash = (string) hash_file( 'sha256', $zipPath );
 
-        if ( $actualHash !== $expectedHash ) {
+        if ( null === $expected || ! hash_equals( $expected, $actualHash ) ) {
             throw UpdateException::checksumMismatch( $expectedHash, $actualHash );
         }
     }
@@ -1468,6 +1611,13 @@ class ApplicationUpdateManager
         }
 
         $zip->close();
+
+        // Persist the additions ledger once the extraction is complete, so a
+        // manual `update:rollback` in a fresh process (the Interrupted case)
+        // can still remove the files this extraction added — the in-memory
+        // ledger dies with the process, and a snapshot restore alone leaves
+        // those additions orphaned (#272).
+        $this->state()->recordExtractionAdditions( $this->extractionAdditions );
     }
 
     /**
@@ -2982,19 +3132,21 @@ class ApplicationUpdateManager
                 continue;
             }
 
-            try {
-                File::delete( $fullPath );
-                $removed++;
-            } catch ( Throwable $e ) {
-                // A file that cannot be removed is logged, not fatal: the
-                // rollback of the backed-up files has already succeeded, and
-                // aborting here would turn a partial cleanup into a reported
-                // rollback failure.
+            // `File::delete()` reports failure by returning false, not by
+            // throwing, so the count has to consult the return value — the old
+            // try/catch treated a failed unlink as a successful removal. A file
+            // that cannot be removed is logged, not fatal: the rollback of the
+            // backed-up files has already succeeded, and aborting here would
+            // turn a partial cleanup into a reported rollback failure.
+            if ( ! File::delete( $fullPath ) ) {
                 Log::warning( 'cms-framework: could not remove a file the rolled-back update had added; it remains on disk.', [
-                    'path'      => $relativePath,
-                    'exception' => $e->getMessage(),
+                    'path' => $relativePath,
                 ] );
+
+                continue;
             }
+
+            $removed++;
         }
 
         if ( $removed > 0 ) {
@@ -3023,15 +3175,11 @@ class ApplicationUpdateManager
             'line'      => $exception->getLine(),
         ] );
 
-        // Attempt to disable maintenance mode
-        try {
-            $this->disableMaintenanceMode();
-        } catch ( Throwable $e ) {
-            Log::error(
-                'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
-                ['exception' => $e->getMessage()],
-            );
-        }
+        // Maintenance mode is deliberately NOT lifted up front. Lifting before
+        // the rollback would serve public traffic from a half-applied tree
+        // (and, with backups on, run `composer install` over live requests
+        // during the restore). Each branch below decides when — and whether —
+        // the site may go back up.
 
         // Only roll back while a rollback can still help. Steps 8-10
         // (`cache:clear`, cleanup, `up`) run *after* the code and the schema
@@ -3046,7 +3194,18 @@ class ApplicationUpdateManager
                 ['step' => $this->currentStep->value],
             );
 
-            $this->state()->markRollback( null );
+            $this->state()->markFinishForward();
+
+            // The code and schema are already in place, so the site can serve
+            // the new version. Bring it back up (best-effort, as before).
+            try {
+                $this->disableMaintenanceMode();
+            } catch ( Throwable $e ) {
+                Log::error(
+                    'Failed to disable maintenance mode after a finish-forward update failure; host may remain in maintenance mode.',
+                    ['exception' => $e->getMessage()],
+                );
+            }
 
             return;
         }
@@ -3076,18 +3235,29 @@ class ApplicationUpdateManager
                 // messages to the caller, but `update:status` reads the state
                 // file, and without this the file still says the run merely
                 // "failed" with the original error — the rollback failure, the
-                // thing that actually needs a human, would never reach it.
+                // thing that actually needs a human, would never reach it. The
+                // site is left in maintenance mode: a failed rollback means the
+                // tree is in an unknown state that must not serve traffic.
                 $this->state()->markRollback( false, $combined->getMessage() );
 
                 throw $combined;
             }
 
+            // Only now that the pre-update snapshot is back in place is it safe
+            // to lift maintenance — and only per the `lift_maintenance_on_interrupt`
+            // policy, exactly as the interruption path does.
+            $this->liftMaintenanceModeAfterFailure( 'the update failure handler', $this->currentStep );
+
             return;
         }
 
         // No snapshot to restore: backups disabled, or the run failed before
-        // `createBackup()` got that far. Either way the operator must not be
-        // told the tree was restored.
+        // `createBackup()` got that far. The tree may be half-applied and
+        // cannot be restored, so the lift policy governs whether it goes back
+        // on the public internet — rather than lifting unconditionally and
+        // serving a mix of old and new code.
         $this->state()->markRollback( null );
+
+        $this->liftMaintenanceModeAfterFailure( 'the update failure handler', $this->currentStep );
     }
 }

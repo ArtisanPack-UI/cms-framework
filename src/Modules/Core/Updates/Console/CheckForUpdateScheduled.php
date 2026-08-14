@@ -7,7 +7,6 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use Exception;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -48,9 +47,6 @@ class CheckForUpdateScheduled extends Command
             $updateInfo = $manager->checkForUpdate();
 
             if ( $updateInfo->hasUpdate() ) {
-                // Store in cache for admin panel notification
-                Cache::put( 'cms.update_available', $updateInfo, now()->addDays( 1 ) );
-
                 // Log the available update
                 Log::info( 'Update available', [
                     'current_version' => $updateInfo->resolveCurrentVersion(),
@@ -62,29 +58,22 @@ class CheckForUpdateScheduled extends Command
                 if ( config( 'cms.updates.auto_update_enabled', false ) ) {
                     $this->info( 'Auto-update is enabled. Starting update process...' );
 
-                    $success = $manager->performUpdate();
+                    // `performUpdate()` returns true or throws — a false return
+                    // is not a reachable outcome, so there is no failure branch
+                    // here; a thrown failure is handled by the catch below.
+                    $manager->performUpdate();
 
-                    if ( $success ) {
-                        Log::info( 'Auto-update completed successfully', [
-                            'version' => $updateInfo->latestVersion,
-                        ] );
+                    Log::info( 'Auto-update completed successfully', [
+                        'version' => $updateInfo->latestVersion,
+                    ] );
 
-                        $this->info( 'Auto-update completed successfully!' );
+                    $this->info( 'Auto-update completed successfully!' );
 
-                        return self::SUCCESS;
-                    }
-
-                    Log::error( 'Auto-update failed' );
-                    $this->error( 'Auto-update failed' );
-
-                    return self::FAILURE;
+                    return self::SUCCESS;
                 }
 
                 $this->info( "Update available: {$updateInfo->latestVersion}" );
             } else {
-                // Clear cache if no update available
-                Cache::forget( 'cms.update_available' );
-
                 $this->info( 'No updates available' );
             }
 

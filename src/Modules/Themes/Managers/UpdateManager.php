@@ -13,11 +13,12 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
-use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeUpdateException;
 use Exception;
@@ -53,6 +54,8 @@ use ZipArchive;
  */
 class UpdateManager
 {
+    use ManagesExtensionUpdates;
+
     /**
      * Constructs the UpdateManager instance.
      *
@@ -334,6 +337,30 @@ class UpdateManager
     }
 
     /**
+     * The log noun for theme update messages.
+     *
+     * @since 2.8.0
+     *
+     * @return string Always `theme`.
+     */
+    protected function updateLogNoun(): string
+    {
+        return 'theme';
+    }
+
+    /**
+     * The config prefix for the themes module.
+     *
+     * @since 2.8.0
+     *
+     * @return string Always `cms.themes`.
+     */
+    protected function updateConfigPrefix(): string
+    {
+        return 'cms.themes';
+    }
+
+    /**
      * Forget the cached update check for a theme.
      *
      * Forgets both this manager's normalized entry and the `UpdateChecker`'s
@@ -344,7 +371,7 @@ class UpdateManager
      *
      * @param  string  $slug  Theme slug.
      */
-    public function forgetUpdateCache( string $slug ): void
+    protected function forgetUpdateCache( string $slug ): void
     {
         Cache::forget( $this->updateCacheKey( $slug ) );
         Cache::forget( 'cms.' . UpdateType::Theme->value . ".{$slug}.update_check" );
@@ -371,10 +398,8 @@ class UpdateManager
             return $e;
         }
 
-        if ( $e instanceof UpdateException ) {
-            return ThemeUpdateException::updateFailed( $slug, $e->getMessage() );
-        }
-
+        // `UpdateException extends … extends Exception`, so the Exception check
+        // subsumes it — both wrap into the same theme-namespaced failure.
         if ( $e instanceof Exception ) {
             return ThemeUpdateException::updateFailed( $slug, $e->getMessage() );
         }
@@ -428,30 +453,6 @@ class UpdateManager
                 'error' => $e->getMessage(),
             ] );
         }
-    }
-
-    /**
-     * Pass an update-source URL through only when it is https.
-     *
-     * @since 2.8.0
-     *
-     * @param  string  $url  Declared source URL.
-     * @param  string  $slug  Theme slug, for the log line.
-     *
-     * @return string|null The URL, or null when it is not https.
-     */
-    protected function rejectInsecureSource( string $url, string $slug ): ?string
-    {
-        if ( str_starts_with( strtolower( $url ), 'https://' ) ) {
-            return $url;
-        }
-
-        logger()->warning( 'Ignoring theme update source: update sources must use https.', [
-            'theme' => $slug,
-            'url'   => $url,
-        ] );
-
-        return null;
     }
 
     /**
@@ -517,59 +518,6 @@ class UpdateManager
         }
 
         return $checker;
-    }
-
-    /**
-     * Resolve the access token for a theme's private update source.
-     *
-     * Tokens are keyed by theme slug in config rather than read from the
-     * manifest ( which ships inside the distributed ZIP ) and are deliberately
-     * not global: a single shared token would be sent to whatever host any
-     * installed theme names in its manifest.
-     *
-     * @since 2.8.0
-     *
-     * @param  string  $slug  Theme slug.
-     *
-     * @return string|null Token, or null when the source is public.
-     */
-    protected function resolveUpdateToken( string $slug ): ?string
-    {
-        $tokens = config( 'cms.themes.updateTokens', [] );
-
-        if ( ! is_array( $tokens ) ) {
-            return null;
-        }
-
-        return $this->nonEmptyString( $tokens[ $slug ] ?? null );
-    }
-
-    /**
-     * Flatten an `UpdateInfo` onto the array shape the themes update API
-     * returns.
-     *
-     * Keys match the plugin endpoint's payload so a host admin UI can render
-     * both extension types through one component.
-     *
-     * @since 2.8.0
-     *
-     * @param  UpdateInfo  $updateInfo  Value object from the update source.
-     * @param  string  $currentVersion  Installed theme version.
-     *
-     * @return array<string, mixed> Serialized update info.
-     */
-    protected function serializeUpdateInfo( UpdateInfo $updateInfo, string $currentVersion ): array
-    {
-        return [
-            'version'      => $updateInfo->latestVersion,
-            'download_url' => $updateInfo->downloadUrl,
-            'current'      => $currentVersion,
-            'changelog'    => $updateInfo->changelog,
-            'release_date' => $updateInfo->releaseDate,
-            'sha256'       => $updateInfo->sha256,
-            'file_size'    => $updateInfo->fileSize,
-            'metadata'     => $updateInfo->metadata,
-        ];
     }
 
     /**
@@ -652,11 +600,37 @@ class UpdateManager
                 return;
             }
 
+            // Checked before the live directory is removed: a tampered backup
+            // carrying an absolute or `..` path is a reason to leave the failed
+            // update in place rather than delete it and extract the archive.
+            if ( null !== ExtensionArchive::firstUnsafeEntry( $zip ) ) {
+                $zip->close();
+
+                logger()->critical( 'Theme backup archive contains an unsafe path; refusing to restore. Manual intervention required.', [
+                    'theme'  => $slug,
+                    'backup' => $backupPath,
+                ] );
+
+                return;
+            }
+
             if ( File::exists( $themePath ) ) {
                 File::deleteDirectory( $themePath );
             }
 
-            $zip->extractTo( $themePath );
+            // A partial restore (disk full, permission error mid-extract) must
+            // not be mistaken for a clean rollback.
+            if ( true !== $zip->extractTo( $themePath ) ) {
+                $zip->close();
+
+                logger()->critical( 'Theme backup extraction failed partway; the theme directory may be incomplete. Manual intervention required.', [
+                    'theme'  => $slug,
+                    'backup' => $backupPath,
+                ] );
+
+                return;
+            }
+
             $zip->close();
         } catch ( Exception $e ) {
             logger()->critical( 'Failed to restore theme from backup after a failed update. Manual intervention required.', [
@@ -710,48 +684,6 @@ class UpdateManager
     }
 
     /**
-     * Verify a downloaded archive against the digest its source advertised.
-     *
-     * Mirrors `ApplicationUpdateManager::maybeVerifyChecksum()`: honors
-     * `cms.updates.verify_checksum` and fails closed when no digest is
-     * published unless `cms.updates.allow_unverified_updates` is set.
-     *
-     * @since 2.8.0
-     *
-     * @param  string  $zipPath  Path to the downloaded archive.
-     * @param  mixed  $expectedHash  Digest advertised by the source, if any.
-     * @param  string  $version  Version being installed.
-     *
-     * @throws UpdateException On mismatch, or when no digest is available and unverified updates are disallowed.
-     */
-    protected function verifyArchiveChecksum( string $zipPath, mixed $expectedHash, string $version ): void
-    {
-        if ( ! config( 'cms.updates.verify_checksum', true ) ) {
-            return;
-        }
-
-        $expected = $this->nonEmptyString( $expectedHash );
-
-        if ( null !== $expected ) {
-            $actual = (string) hash_file( 'sha256', $zipPath );
-
-            if ( ! hash_equals( strtolower( $expected ), $actual ) ) {
-                throw UpdateException::checksumMismatch( $expected, $actual );
-            }
-
-            return;
-        }
-
-        if ( ! config( 'cms.updates.allow_unverified_updates', false ) ) {
-            throw UpdateException::checksumRequired( $version );
-        }
-
-        logger()->warning( 'Skipping theme update integrity verification: update source did not advertise a SHA-256 checksum.', [
-            'version' => $version,
-        ] );
-    }
-
-    /**
      * The cache key holding a theme's normalized update-check result.
      *
      * @since 2.8.0
@@ -763,40 +695,5 @@ class UpdateManager
     protected function updateCacheKey( string $slug ): string
     {
         return "theme.update.{$slug}";
-    }
-
-    /**
-     * Narrow a mixed manifest/config value to a trimmed non-empty string.
-     *
-     * @since 2.8.0
-     *
-     * @param  mixed  $value  Value to narrow.
-     *
-     * @return string|null Trimmed string, or null when unusable.
-     */
-    protected function nonEmptyString( mixed $value ): ?string
-    {
-        if ( ! is_string( $value ) ) {
-            return null;
-        }
-
-        $trimmed = trim( $value );
-
-        return '' === $trimmed ? null : $trimmed;
-    }
-
-    /**
-     * Compare version numbers.
-     *
-     * @since 2.8.0
-     *
-     * @param  string  $current  Current version.
-     * @param  string  $available  Available version.
-     *
-     * @return bool True if an update is available.
-     */
-    protected function isUpdateAvailable( string $current, string $available ): bool
-    {
-        return version_compare( $available, $current, '>' );
     }
 }

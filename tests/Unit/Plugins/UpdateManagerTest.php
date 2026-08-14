@@ -4,10 +4,10 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach( function (): void {
@@ -118,17 +118,15 @@ describe( 'Update Checking', function (): void {
             ] ),
         ] );
 
-        // First call
-        $this->updateManager->checkPluginUpdate( 'test-plugin' );
+        // First call performs the check and caches it; the second is served
+        // from cache without a second HTTP round-trip.
+        $first  = $this->updateManager->checkPluginUpdate( 'test-plugin' );
+        $second = $this->updateManager->checkPluginUpdate( 'test-plugin' );
 
-        // Second call should use cache
-        Cache::shouldReceive( 'remember' )
-            ->once()
-            ->andReturn( ['version' => '2.0.0'] );
+        expect( $first )->toBeArray()
+            ->and( $second )->toBe( $first );
 
-        $updateInfo = $this->updateManager->checkPluginUpdate( 'test-plugin' );
-
-        expect( $updateInfo )->toBeArray();
+        Http::assertSentCount( 1 );
     } );
 } );
 
@@ -593,12 +591,56 @@ describe( 'Update Archive Download', function (): void {
             [
                 'version'      => '2.0.0',
                 'download_url' => 'https://example.com/downloads/test-plugin.zip',
+                // The legacy path now enforces the same checksum gate as the
+                // source-backed one; a matching digest lets it through.
+                'sha256'       => hash( 'sha256', 'fake-zip-content' ),
             ],
         ] );
 
         expect( file_get_contents( $path ) )->toBe( 'fake-zip-content' );
 
         unlink( $path );
+    } );
+
+    it( 'refuses a legacy update_url download over http', function (): void {
+        $plugin = new Plugin( [
+            'slug'    => 'test-plugin',
+            'name'    => 'Test Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update_url' => 'https://example.com/updates/test-plugin'],
+        ] );
+
+        expect( fn () => invokeMethod( $this->updateManager, 'downloadUpdateArchive', [
+            $plugin,
+            [
+                'version'      => '2.0.0',
+                'download_url' => 'http://example.com/downloads/test-plugin.zip',
+                'sha256'       => hash( 'sha256', 'fake-zip-content' ),
+            ],
+        ] ) )->toThrow( PluginUpdateException::class );
+    } );
+
+    it( 'refuses a legacy update_url download with no digest when unverified updates are disallowed', function (): void {
+        config()->set( 'cms.updates.allow_unverified_updates', false );
+
+        $plugin = new Plugin( [
+            'slug'    => 'test-plugin',
+            'name'    => 'Test Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update_url' => 'https://example.com/updates/test-plugin'],
+        ] );
+
+        Http::fake( [
+            'https://example.com/downloads/test-plugin.zip' => Http::response( 'fake-zip-content' ),
+        ] );
+
+        expect( fn () => invokeMethod( $this->updateManager, 'downloadUpdateArchive', [
+            $plugin,
+            [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/test-plugin.zip',
+            ],
+        ] ) )->toThrow( UpdateException::class );
     } );
 
     it( 'deletes the streamed archive when verification rejects it', function (): void {

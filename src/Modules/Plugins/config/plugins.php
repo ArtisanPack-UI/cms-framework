@@ -43,6 +43,12 @@ return [
         'application/x-zip-compressed',
     ],
 
+    // Ceiling on the *uncompressed* size of an extracted plugin archive
+    // (install, update, and restore). The compressed-size check says nothing
+    // about what the archive expands to; this caps a zip-bomb before it fills
+    // the disk mid-extraction.
+    'maxUncompressedSize' => 100 * 1024 * 1024, // 100MB in bytes
+
     /*
     |--------------------------------------------------------------------------
     | Update Settings

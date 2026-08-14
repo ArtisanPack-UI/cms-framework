@@ -193,6 +193,40 @@ class UpdateStateStore
     }
 
     /**
+     * Record that the run finished forward rather than rolling back.
+     *
+     * A failure after the code and schema were already applied does not restore
+     * the snapshot — the tree is whole and the correct recovery is forward. This
+     * marks that decision distinctly so `update:status` renders it as the benign
+     * case rather than the alarming "no rollback was attempted / partial update"
+     * one, which describes a genuinely half-applied tree.
+     *
+     * @since 2.8.0
+     */
+    public function markFinishForward(): void
+    {
+        $this->merge( ['finish_forward' => true, 'rolled_back' => null] );
+    }
+
+    /**
+     * Persist the ledger of files the current extraction added.
+     *
+     * The in-memory ledger dies with the process, so an update killed during
+     * or after extraction (the Interrupted case) loses it — and a later manual
+     * `update:rollback` would restore the snapshot but leave the extraction's
+     * added files orphaned (#272). Persisting it lets the manual path remove
+     * them too.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<int, string>  $additions  Base-relative paths the extraction created.
+     */
+    public function recordExtractionAdditions( array $additions ): void
+    {
+        $this->merge( ['extraction_additions' => array_values( $additions )] );
+    }
+
+    /**
      * Read the persisted state, or `null` when no update has been recorded or
      * the file is unreadable/corrupt.
      *

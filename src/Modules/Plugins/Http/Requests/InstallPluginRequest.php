@@ -12,83 +12,63 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
+use ArtisanPackUI\CMSFramework\Modules\Core\Http\Requests\ZipUploadRequest;
 
 /**
  * Form request for installing a plugin from a ZIP archive.
  *
- * Front-loading these rules into a form request means a malformed upload
- * fails as a `ValidationException` — a 422 carrying an `errors` bag keyed by
- * `plugin_zip` — which is the shape Inertia's error bag and pure-API consumers
- * both understand.
+ * Authorization requires the `manage-plugins` ability; see
+ * {@see ZipUploadRequest} for the deny-by-default rationale.
  *
  * @since 2.8.0
  */
-class InstallPluginRequest extends FormRequest
+class InstallPluginRequest extends ZipUploadRequest
 {
     /**
-     * Determines if the user is authorized to make this request.
-     *
-     * Authorization is handled by the route's `auth` middleware; the framework
-     * grants no plugin-specific ability of its own.
+     * The multipart field name carrying the uploaded archive.
      *
      * @since 2.8.0
      *
-     * @return bool True if the user is authorized, false otherwise.
+     * @return string The upload field name.
      */
-    public function authorize(): bool
+    protected function fieldName(): string
     {
-        return true;
+        return 'plugin_zip';
     }
 
     /**
-     * Gets the validation rules that apply to the request.
+     * The config key (in bytes) capping the upload size.
      *
      * @since 2.8.0
      *
-     * @return array<string, mixed> The validation rules.
+     * @return string The size config key.
      */
-    public function rules(): array
+    protected function sizeConfigKey(): string
     {
-        return [
-            'plugin_zip' => [
-                'required',
-                'file',
-                'mimes:zip',
-                'max:' . $this->maxUploadKilobytes(),
-            ],
-        ];
+        return 'cms.plugins.maxUploadSize';
     }
 
     /**
-     * Gets custom messages for validator errors.
+     * The Gate ability required to install a plugin.
      *
      * @since 2.8.0
      *
-     * @return array<string, string> The custom error messages.
+     * @return string The ability name.
      */
-    public function messages(): array
+    protected function ability(): string
     {
-        return [
-            'plugin_zip.required' => __( 'A plugin ZIP archive is required.' ),
-            'plugin_zip.file'     => __( 'The plugin upload must be a file.' ),
-            'plugin_zip.mimes'    => __( 'The plugin upload must be a ZIP archive.' ),
-            'plugin_zip.max'      => __( 'The plugin ZIP archive may not be larger than :max kilobytes.' ),
-        ];
+        return 'manage-plugins';
     }
 
     /**
-     * Gets the upload size ceiling in kilobytes.
-     *
-     * `cms.plugins.maxUploadSize` is expressed in bytes; Laravel's `max` rule
-     * for files is expressed in kilobytes.
+     * The lowercase noun used in validation messages.
      *
      * @since 2.8.0
      *
-     * @return int The maximum upload size in kilobytes.
+     * @return string The message noun.
      */
-    private function maxUploadKilobytes(): int
+    protected function noun(): string
     {
-        return intdiv( (int) config( 'cms.plugins.maxUploadSize', 10 * 1024 * 1024 ), 1024 );
+        return 'plugin';
     }
 }

@@ -109,9 +109,12 @@ final class HookAliases
 	 * the identical alias in its own `HookAliases` so old-name subscribers
 	 * keep resolving in installs that do not have this package — the same
 	 * defensive cross-package declaration it already makes for
-	 * `ap.icons.register-icon-sets`. `deprecateHook()` is idempotent per
-	 * (old, new) pair, so both declarations are safe together
-	 * (issue #245).
+	 * `ap.icons.register-icon-sets`. `deprecateHook()` is *intended* to be
+	 * idempotent per (old, new) pair so both declarations are safe together
+	 * (issue #245); until artisanpack-ui/hooks#16 ships, the underlying
+	 * `HookDeprecations::alias()` does not dedup, so a subscriber registered
+	 * on the old name *before* the aliases are declared can fire twice when
+	 * both packages declare this alias.
 	 *
 	 * @since 2.5.0
 	 *

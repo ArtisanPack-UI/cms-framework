@@ -5,7 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.8.0] - 2026-08-14
+
+### Security
+
+- **Plugin, theme, and AI mutation endpoints now enforce authorization, not just authentication** — the plugin `install` / `activate` / `deactivate` / `update` / `destroy` routes and `UploadThemeRequest` / `InstallPluginRequest` gate deny-by-default on `manage-plugins` / `manage-themes`; the theme `upload` / `activate` / `update` routes gate on `manage-themes`; and both AI trigger surfaces (`/api/v1/cms/ai/*` and the `AiTools` Livewire component) gate on a new `cms.ai.use` ability. All three abilities are registered deny-by-default in their module service providers and seeded by `PermissionsTableSeeder` (granted to `admin`), so a host that never seeds them is closed rather than open. **Breaking for API consumers:** a plausibly-privileged but ungranted authenticated user now receives `403` from these endpoints. Installing a plugin or activating a theme runs attacker-supplied PHP, so authentication alone was insufficient.
+- **Plugin ZIP extraction gained the zip-slip and single-slug guards the theme extractor already had** — `PluginManager::extractZip()` and the plugin update/restore extraction paths now reject absolute and `..` entries, require every entry to live under the derived slug directory (so a sibling top-level folder can no longer overwrite a *different* trusted plugin), validate the derived slug, and check `extractTo()`'s return value. Shared with the theme module through `Core\Updates\Support\ExtensionArchive` so the two cannot drift.
+- **Theme and plugin archive extraction now caps the uncompressed size** (`cms.themes.maxUncompressedSize` / `cms.plugins.maxUncompressedSize`, 100MB default) before extracting, closing a zip-bomb / disk-exhaustion vector the compressed-size checks did not cover.
+- **The legacy plugin `update_url` download path now enforces https and the same checksum gate as the source-backed path** — a plaintext feed is refused, and a feed advertising no digest is rejected unless `cms.updates.allow_unverified_updates` is set, rather than silently extracting and executing an unverified archive.
+- **Admin menu `label` / `title` / `menuTitle` are coerced to plain strings**, closing the `Htmlable` escaping bypass `NavUrl` already closed for `url`; and `NavUrl` now refuses protocol-relative `//host` (and `/\host`) URLs that navigate off-origin.
+- **Re-seeding scopes the `admin` grant to the framework's own permission slugs** rather than every permission in the table, so a re-seed no longer sweeps in third-party/consumer permissions.
+
+### Fixed
+
+- **A caught update failure restores the pre-update snapshot before lifting maintenance mode, and honours `lift_maintenance_on_interrupt`** — maintenance mode is no longer lifted up front, so the site never serves public traffic from a half-applied tree while the rollback (and its `composer install`) runs; a failure on a half-applied step keeps the site down under the default `step_aware` policy.
+- **A pinned downgrade (`--target-version` with `--allow-downgrade`) is reachable even when the install is already on the latest release** — the latest-only "no update available" gate no longer short-circuits an explicit pinned target, and `update:perform` no longer exits success while ignoring it.
+- **A release declaring a `min_php_version` / `min_framework_version` the host does not meet is refused before any file is touched**, rather than installed and only failing once the new code hits an unparseable syntax.
+- **A rollback whose extraction fails partway now throws instead of reporting a clean restore.**
+- **The extraction-additions ledger is persisted**, so a manual `update:rollback` in a fresh process removes the files an interrupted update added instead of leaving them orphaned alongside the restored snapshot.
+- **`runningUpdatePid()` treats `EPERM` as "alive"**, so reconciliation no longer marks another user's healthy update run as interrupted; the no-lock fallback in `acquireUpdateLock()` still refuses when a live run is recorded.
+- **Plugin update-check caching distinguishes "checked, no update" from "check failed"** — a transient rate-limit or 5xx is no longer cached as "no update" for 12 hours — invalidates its cache after a successful update, and re-compares versions so a stale cache cannot trigger a redundant re-install.
+- **Checksum comparison is normalized through one helper** (`Core\Updates\Support\ArchiveChecksum`) across the application, theme, and plugin managers, so an uppercase or padded digest verifies instead of failing as a spurious mismatch.
+- **A distinct finish-forward marker** stops `update:status` from rendering a deliberate finish-forward as the alarming "partial update" case.
+- **`ThemesController::update()` returns `422` keyed by `slug` for an unknown theme**, matching `activate()` and the plugin module, and the admin layout `<title>` no longer double-escapes an inline `@section('title', …)`.
+
+### Changed (this review pass)
+
+- **The theme and plugin `UpdateManager`s share one update pipeline** — the source-resolution, token, checksum, and version-comparison helpers now live in `Core\Managers\Concerns\ManagesExtensionUpdates`, and the two upload form requests share `Core\Http\Requests\ZipUploadRequest`, so a fix or hardening applied once can no longer miss the near-identical copy.
+- **The application updater's slug is configurable** (`cms.updates.application_slug`, default `application`) instead of a hard-coded product name, and `cms.updates.current_version_config_key` is now honoured.
 
 ### Added
 

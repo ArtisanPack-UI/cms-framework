@@ -12,83 +12,63 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Themes\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
+use ArtisanPackUI\CMSFramework\Modules\Core\Http\Requests\ZipUploadRequest;
 
 /**
  * Form request for uploading a theme ZIP archive.
  *
- * Front-loading these rules into a form request means a malformed upload
- * fails as a `ValidationException` — a 422 carrying an `errors` bag keyed by
- * `theme_zip` — which is the shape Inertia's error bag and pure-API consumers
- * both understand.
+ * Authorization requires the `manage-themes` ability; see
+ * {@see ZipUploadRequest} for the deny-by-default rationale.
  *
  * @since 2.8.0
  */
-class UploadThemeRequest extends FormRequest
+class UploadThemeRequest extends ZipUploadRequest
 {
     /**
-     * Determines if the user is authorized to make this request.
-     *
-     * Authorization is handled by the route's `auth:sanctum` middleware; the
-     * framework grants no theme-specific ability of its own.
+     * The multipart field name carrying the uploaded archive.
      *
      * @since 2.8.0
      *
-     * @return bool True if the user is authorized, false otherwise.
+     * @return string The upload field name.
      */
-    public function authorize(): bool
+    protected function fieldName(): string
     {
-        return true;
+        return 'theme_zip';
     }
 
     /**
-     * Gets the validation rules that apply to the request.
+     * The config key (in bytes) capping the upload size.
      *
      * @since 2.8.0
      *
-     * @return array<string, mixed> The validation rules.
+     * @return string The size config key.
      */
-    public function rules(): array
+    protected function sizeConfigKey(): string
     {
-        return [
-            'theme_zip' => [
-                'required',
-                'file',
-                'mimes:zip',
-                'max:' . $this->maxUploadKilobytes(),
-            ],
-        ];
+        return 'cms.themes.maxUploadSize';
     }
 
     /**
-     * Gets custom messages for validator errors.
+     * The Gate ability required to upload a theme.
      *
      * @since 2.8.0
      *
-     * @return array<string, string> The custom error messages.
+     * @return string The ability name.
      */
-    public function messages(): array
+    protected function ability(): string
     {
-        return [
-            'theme_zip.required' => __( 'A theme ZIP archive is required.' ),
-            'theme_zip.file'     => __( 'The theme upload must be a file.' ),
-            'theme_zip.mimes'    => __( 'The theme upload must be a ZIP archive.' ),
-            'theme_zip.max'      => __( 'The theme ZIP archive may not be larger than :max kilobytes.' ),
-        ];
+        return 'manage-themes';
     }
 
     /**
-     * Gets the upload size ceiling in kilobytes.
-     *
-     * `cms.themes.maxUploadSize` is expressed in bytes; Laravel's `max` rule
-     * for files is expressed in kilobytes.
+     * The lowercase noun used in validation messages.
      *
      * @since 2.8.0
      *
-     * @return int The maximum upload size in kilobytes.
+     * @return string The message noun.
      */
-    private function maxUploadKilobytes(): int
+    protected function noun(): string
     {
-        return intdiv( (int) config( 'cms.themes.maxUploadSize', 10 * 1024 * 1024 ), 1024 );
+        return 'theme';
     }
 }

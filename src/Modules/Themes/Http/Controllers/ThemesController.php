@@ -101,8 +101,11 @@ class ThemesController extends Controller
      *
      * A rejected update surfaces as a `ValidationException` keyed by `slug`
      * rather than a bare JSON error body, so host apps using Inertia get a
-     * working error bag instead of an unhandled response. An unexpected server
-     * fault is reported and returns 500, matching `upload()` and `activate()`.
+     * working error bag instead of an unhandled response. An unknown slug is
+     * reported the same way — a 422 keyed by `slug`, matching `activate()` and
+     * the plugin module, since the slug is form input rather than a route the
+     * client browsed to. An unexpected server fault is reported and returns
+     * 500, matching `upload()` and `activate()`.
      *
      * Endpoint: POST /v1/themes/{slug}/update
      *
@@ -110,7 +113,7 @@ class ThemesController extends Controller
      *
      * @param  string  $slug  Theme slug identifier.
      *
-     * @throws ValidationException If the update fails.
+     * @throws ValidationException If the update fails or the theme is unknown.
      *
      * @return JsonResponse JSON response reporting whether an update was installed.
      */
@@ -119,9 +122,9 @@ class ThemesController extends Controller
         try {
             $updated = $this->updateManager->updateTheme( $slug );
         } catch ( ThemeNotFoundException ) {
-            return response()->json( [
-                'message' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
-            ], 404 );
+            throw ValidationException::withMessages( [
+                'slug' => __( 'Theme ":slug" not found.', ['slug' => $slug] ),
+            ] );
         } catch ( ThemeUpdateException $e ) {
             // `UpdateManager` funnels every in-flight failure — corrupt archive,
             // checksum mismatch, failed swap — through this type, carrying the

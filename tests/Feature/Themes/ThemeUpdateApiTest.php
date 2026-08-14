@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
 beforeEach( function (): void {
-    $this->admin      = TestUser::factory()->create();
+    $this->admin      = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
     $this->themesPath = base_path( 'themes' );
     $this->tmpPath    = storage_path( 'app/theme-update-api-tmp' );
     $this->testSlugs  = [];
@@ -206,10 +206,14 @@ describe( 'POST /v1/themes/{slug}/update', function (): void {
         $response->assertOk()->assertJsonPath( 'updated', false );
     } );
 
-    it( 'returns 404 for a theme that is not installed', function (): void {
+    it( 'returns a 422 errors bag keyed by slug for a theme that is not installed', function (): void {
         $this->actingAs( $this->admin );
 
-        $this->postJson( '/v1/themes/api-ghost-theme/update' )->assertNotFound();
+        // Matches activate() and the plugin module: the slug is form input, so
+        // an unknown one is a 422 keyed by `slug`, not a 404.
+        $this->postJson( '/v1/themes/api-ghost-theme/update' )
+            ->assertStatus( 422 )
+            ->assertJsonValidationErrors( ['slug'] );
     } );
 
     it( 'returns a validation error bag when the update fails', function (): void {

@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
@@ -684,12 +685,51 @@ class PluginManager
             throw PluginInstallationException::extractionFailed( 'unknown' );
         }
 
-        // Get the first directory name (plugin slug)
+        // Get the first directory name (plugin slug). The first entry must live
+        // under a top-level directory so a slug can be derived; reject a ZIP
+        // whose first entry is a bare file.
         $firstEntry = $zip->getNameIndex( 0 );
-        $slug       = explode( '/', $firstEntry )[0];
+        if ( false === $firstEntry || ! str_contains( $firstEntry, '/' ) ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( 'unknown' );
+        }
 
-        // Extract to plugins directory
-        $extractPath = $this->getPluginsPath();
+        $slug = explode( '/', $firstEntry )[0];
+
+        // Run the derived slug through the same format check every other slug
+        // entry point uses, so a crafted directory name cannot reach the
+        // filesystem.
+        if ( ! $this->validateSlug( $slug ) ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        $extractPath     = $this->getPluginsPath();
+        $realExtractPath = realpath( $extractPath );
+
+        if ( false === $realExtractPath ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        // Zip-slip guard: reject absolute/`..` entries and any entry outside
+        // the derived slug directory. Without the slug check a plugin ZIP
+        // carrying a sibling top-level folder could overwrite a different,
+        // already-trusted plugin's files inside the plugins root.
+        if ( null !== ExtensionArchive::firstUnsafeEntry( $zip, $realExtractPath, $slug ) ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        // Zip-bomb guard: cap the uncompressed size before extracting, since
+        // the passed compressed-size check says nothing about what it expands
+        // to.
+        $maxUncompressed = (int) config( 'cms.plugins.maxUncompressedSize', 100 * 1024 * 1024 );
+        if ( ExtensionArchive::uncompressedSize( $zip ) > $maxUncompressed ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
         if ( ! $zip->extractTo( $extractPath ) ) {
             $zip->close();
             throw PluginInstallationException::extractionFailed( $slug );

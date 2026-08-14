@@ -100,6 +100,12 @@ The published file carries more keys than are shown here — upload limits,
 update settings and asset caching among them. See the shipped
 `src/Modules/Themes/config/themes.php` for the annotated full list.
 
+Since *2.8.0*, `cms.themes.maxUncompressedSize` (100MB default) is an
+uncompressed-size ceiling enforced *before* a theme archive is extracted — a
+zip-bomb guard that rejects an archive whose declared uncompressed size exceeds
+the limit, independently of the download and upload size ceilings. The plugin
+module has the equivalent `cms.plugins.maxUncompressedSize`.
+
 ### The default theme (`CMS_DEFAULT_THEME`)
 
 `cms.themes.default` is the slug the framework falls back to when the
@@ -257,24 +263,22 @@ This allows themes to provide increasingly specific templates for different cont
 
 ## REST API Endpoints
 
-All endpoints require authentication via Laravel Sanctum and are prefixed with `/v1`:
+All endpoints require authentication via Laravel Sanctum and are prefixed with `/v1`. Since *2.8.0*, the mutating routes additionally require the `manage-themes` permission (deny-by-default, seeded to the `admin` role); the `GET` routes stay auth-only:
 
 - `GET /themes` — List all available themes
-- `POST /themes` — Upload and install a theme from a ZIP
+- `POST /themes` — Upload and install a theme from a ZIP *(requires `manage-themes`)*
 - `GET /themes/updates` — List themes with an update available *(2.8.0)*
 - `GET /themes/{slug}` — Get specific theme details
-- `POST /themes/{slug}/activate` — Activate a theme
-- `POST /themes/{slug}/update` — Update a theme in place *(2.8.0)*
+- `POST /themes/{slug}/activate` — Activate a theme *(requires `manage-themes`)*
+- `POST /themes/{slug}/update` — Update a theme in place *(2.8.0, requires `manage-themes`)*
 
 ### Error shape
 
 Action endpoints (`POST /themes`, `POST /themes/{slug}/activate`, `POST /themes/{slug}/update`) surface failures as a Laravel `ValidationException` — `422` with an `errors` bag keyed by the field the failure belongs to (`theme_zip` for uploads, `slug` for actions taken against an installed theme). That is the shape Inertia's `usePage().props.errors` and `useForm().errors` read, so an admin UI can render field-level messages without an error-shape adapter, and a pure-API client gets a parseable `errors` object rather than a bare `message`.
 
-Since *2.8.0*, activating an unknown slug is one of those `422` responses rather than a `404` — the slug is form input there, not a resource path. `GET /themes/{slug}` still answers `404`, because there the slug *is* the resource path.
+Since *2.8.0*, an unknown slug on `POST /themes/{slug}/activate` and `POST /themes/{slug}/update` is one of those `422` responses rather than a `404` — the slug is form input there, not a resource path. `GET /themes/{slug}` still answers `404`, because there the slug *is* the resource path.
 
 The `422` covers request validation and the manager's own named rejections. An *unexpected* server fault is reported and returns `500` on every endpoint above.
-
-> **Known inconsistency:** `POST /themes/{slug}/update` still answers an unknown slug with `404` rather than joining `activate()` on `422`. Tracked in [#288](https://github.com/ArtisanPack-UI/cms-framework/issues/288).
 
 ## Service Registration
 

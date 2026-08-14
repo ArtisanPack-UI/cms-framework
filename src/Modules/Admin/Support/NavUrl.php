@@ -73,6 +73,14 @@ final class NavUrl
             return '#';
         }
 
+        // A single leading slash is a same-origin absolute path, but `//host`
+        // — and the `/\host` variant browsers normalize to it — is
+        // protocol-relative and navigates off-origin, which "same-origin
+        // relative" is not. Reject it before the single-slash acceptance below.
+        if ( str_starts_with( $trimmed, '//' ) || str_starts_with( $trimmed, '/\\' ) ) {
+            return '#';
+        }
+
         if ( str_starts_with( $trimmed, '/' ) || str_starts_with( $trimmed, '#' ) ) {
             return $trimmed;
         }

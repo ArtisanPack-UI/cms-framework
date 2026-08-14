@@ -63,11 +63,29 @@ function bindThrowingAgent( string $agentClass, callable $thrower ): void
 
 describe( 'AiController::runAgent()', function (): void {
     beforeEach( function (): void {
-        $this->user = TestUser::create( [
+        // Running an agent requires the `cms.ai.use` ability.
+        $this->user = grantPermissions( TestUser::create( [
             'name'     => 'AI Tester',
             'email'    => 'ai-tester@example.com',
             'password' => bcrypt( 'password' ),
+        ] ), 'cms.ai.use' );
+    } );
+
+    it( 'forbids an authenticated user without the cms.ai.use ability', function (): void {
+        $stranger = TestUser::create( [
+            'name'     => 'No AI',
+            'email'    => 'no-ai@example.com',
+            'password' => bcrypt( 'password' ),
         ] );
+
+        $response = $this->actingAs( $stranger, 'sanctum' )
+            ->postJson( '/api/v1/cms/ai/post-title', [ 'content' => str_repeat( 'word ', 40 ) ] );
+
+        $response->assertForbidden()
+            ->assertJson( [
+                'feature' => 'cms.post_title',
+                'error'   => 'forbidden',
+            ] );
     } );
 
     it( 'still answers with the JSON envelope when the agent cannot be built', function (): void {
@@ -119,6 +137,18 @@ describe( 'AiTools::run()', function (): void {
         // and boots fine without it, so the shared TestCase deliberately
         // leaves Livewire unregistered. Boot it just for this group.
         app()->register( LivewireServiceProvider::class );
+
+        // Running an agent requires the `cms.ai.use` ability; act as a
+        // privileged user so the exception-mapping cases are reachable.
+        $this->actingAs( grantPermissions( TestUser::factory()->create(), 'cms.ai.use' ) );
+    } );
+
+    it( 'dispatches a forbidden event for a user without the cms.ai.use ability', function (): void {
+        $this->actingAs( TestUser::factory()->create() );
+
+        Livewire::test( AiTools::class )
+            ->call( 'suggestPostTitles', str_repeat( 'word ', 40 ) )
+            ->assertDispatched( 'ap-cms-ai:cms.post_title:forbidden' );
     } );
 
     it( 'still dispatches an error event when the agent cannot be built', function (): void {

@@ -43,6 +43,7 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use ArtisanPackUI\CMSFramework\Support\HookAliases;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -81,6 +82,19 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         'cms.suggest_category',
         'cms.suggest_slug',
     ];
+
+    /**
+     * The Gate ability required to run any cms.* AI agent.
+     *
+     * Deny-by-default and checked in both trigger surfaces
+     * ({@see AiController::runAgent()} and {@see AiTools::run()}): running an
+     * agent consumes paid provider credits, so authentication alone is not
+     * enough. Resolves through RBAC when a permission whose slug matches this
+     * ability is seeded (see `PermissionsTableSeeder`).
+     *
+     * @since 2.8.0
+     */
+    public const AI_USE_ABILITY = 'cms.ai.use';
 
     /**
      * The agent class behind each cms.* AI feature.
@@ -297,6 +311,31 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     }
 
     /**
+     * The enabled state of every cms.* AI feature.
+     *
+     * The single source both trigger surfaces read — {@see Http\Controllers\Ai\AiController::features()}
+     * and {@see AiTools::enabledFeatures()}
+     * — so the toggle-resolution loop is spelled once.
+     *
+     * @since 2.8.0
+     *
+     * @return array<string, bool> Feature key to enabled flag.
+     */
+    public static function aiFeatureStateMap(): array
+    {
+        /** @var FeatureRegistry $registry */
+        $registry = app( FeatureRegistry::class );
+
+        $state = [];
+
+        foreach ( self::AI_FEATURE_KEYS as $key ) {
+            $state[ $key ] = null !== $registry->get( $key ) && $registry->isToggleOn( $key );
+        }
+
+        return $state;
+    }
+
+    /**
      * Registers the CMS AI trigger surfaces (Livewire component +
      * `/api/v1/cms/ai/*` REST endpoints).
      *
@@ -315,6 +354,18 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     {
         if ( ! interface_exists( FeatureRegistry::class ) ) {
             return;
+        }
+
+        // Deny-by-default ability guarding both AI trigger surfaces. Registered
+        // only when the AI package is present so the gate exists wherever the
+        // surfaces do. A seeded `cms.ai.use` permission (or a host
+        // `Gate::define`) resolves it through RBAC; the `Gate::has()` guard
+        // keeps a host's own early definition intact.
+        if ( ! Gate::has( self::AI_USE_ABILITY ) ) {
+            // The unused `$user` parameter is load-bearing: Gate reflects on
+            // the first parameter to decide whether an ability may be called
+            // for a guest, and an untyped one denies them.
+            Gate::define( self::AI_USE_ABILITY, fn ( $user ): bool => false );
         }
 
         if ( class_exists( Livewire::class ) ) {

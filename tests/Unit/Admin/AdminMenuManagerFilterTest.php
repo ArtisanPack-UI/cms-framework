@@ -165,6 +165,48 @@ describe( 'filter-injected URL sanitization', function (): void {
             ->and( $menu['evil']['url'] )->toBeString();
     } );
 
+    it( 'coerces non-string label/title/menuTitle so Blade escapes them', function (): void {
+        // `{{ $node['title'] }}` renders an Htmlable verbatim — the same
+        // escaping bypass the url coercion closes. The text fields must arrive
+        // as plain strings so `{{ }}` escapes them.
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
+            $menu['evil'] = [
+                'title'     => new Illuminate\Support\HtmlString( '<b>x</b>' ),
+                'label'     => new Illuminate\Support\HtmlString( '<i>y</i>' ),
+                'menuTitle' => new Illuminate\Support\HtmlString( '<u>z</u>' ),
+                'slug'      => 'evil',
+                'url'       => '/safe',
+                'order'     => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['evil']['title'] )->toBeString()->toBe( '<b>x</b>' )
+            ->and( $menu['evil']['label'] )->toBeString()->toBe( '<i>y</i>' )
+            ->and( $menu['evil']['menuTitle'] )->toBeString()->toBe( '<u>z</u>' );
+    } );
+
+    it( 'refuses a protocol-relative url that would navigate off-origin', function ( string $url ): void {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $url ): array {
+            $menu['evil'] = [
+                'title' => 'X',
+                'slug'  => 'evil',
+                'url'   => $url,
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        expect( $this->manager->getAdminMenu()['evil']['url'] )->toBe( '#' );
+    } )->with( [
+        'protocol-relative'      => '//evil.example/phish',
+        'backslash-protocol-rel' => '/\\evil.example/phish',
+    ] );
+
     it( 'leaves a safe URL on a route-less entry untouched', function (): void {
         addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
             $menu['docs'] = [

@@ -112,6 +112,13 @@ class RollbackUpdateCommand extends Command
 
             $manager->rollback( $backupPath );
 
+            // Restoring the snapshot puts back every file it captured, but a
+            // snapshot cannot restore a file that did not exist when it was
+            // taken. Remove the files the interrupted update *added*, read from
+            // the persisted ledger, so a manual rollback leaves the same clean
+            // tree the automatic path does (#272).
+            $manager->removeOrphanedExtractionAdditions();
+
             $this->newLine();
             $this->info( '✓ Rollback completed successfully!' );
             $this->line( 'Application restored from backup.' );

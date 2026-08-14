@@ -8,8 +8,8 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    // Create admin user with all permissions
-    $this->admin = TestUser::factory()->create();
+    // Privileged user: mutating plugin routes gate on `manage-plugins`.
+    $this->admin = grantPermissions( TestUser::factory()->create(), 'manage-plugins' );
 
     // Ensure plugins directory exists
     $this->pluginsPath = base_path( 'plugins' );
@@ -329,6 +329,23 @@ describe( 'Plugin API - Permission Checks', function (): void {
         foreach ( $endpoints as [$method, $uri] ) {
             $response = $this->json( $method, $uri );
             $response->assertStatus( 401 );
+        }
+    } );
+
+    it( 'forbids a non-privileged authenticated user from mutating plugins', function (): void {
+        // Authenticated, but without the `manage-plugins` ability.
+        $this->actingAs( TestUser::factory()->create() );
+
+        $mutating = [
+            ['POST', '/api/v1/plugins/install'],
+            ['POST', '/api/v1/plugins/valid-plugin/activate'],
+            ['POST', '/api/v1/plugins/valid-plugin/deactivate'],
+            ['POST', '/api/v1/plugins/valid-plugin/update'],
+            ['DELETE', '/api/v1/plugins/valid-plugin'],
+        ];
+
+        foreach ( $mutating as [$method, $uri] ) {
+            $this->json( $method, $uri )->assertForbidden();
         }
     } );
 } );

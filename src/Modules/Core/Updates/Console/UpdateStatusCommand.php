@@ -312,6 +312,16 @@ class UpdateStatusCommand extends Command
             return;
         }
 
+        // A deliberate finish-forward (the run failed after the code and schema
+        // were already applied) also records no rollback, but it is not the
+        // alarming "partial update" case — the tree is whole and the correct
+        // recovery is forward, not a restore.
+        if ( true === ( $state['finish_forward'] ?? false ) ) {
+            $this->info( __( 'The update failed after the code and schema were already applied, so the snapshot was deliberately NOT restored — finishing forward is the correct recovery, not a rollback.' ) );
+
+            return;
+        }
+
         $this->warn( __( 'No rollback was attempted — either backups are disabled, or the run failed before the snapshot was taken. The tree may still carry a partial update.' ) );
     }
 

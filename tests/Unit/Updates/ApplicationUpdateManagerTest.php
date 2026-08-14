@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
@@ -3206,6 +3207,345 @@ class ApplicationUpdateManagerTest extends TestCase
             $this->assertStringContainsString( 'not newer', $e->getMessage() );
             $this->assertStringContainsString( '--allow-downgrade', $e->getMessage() );
         }
+    }
+
+    /**
+     * H1: a caught update failure must restore the snapshot BEFORE it lifts
+     * maintenance mode. Lifting first would serve public traffic from a
+     * half-applied tree while the rollback (and its `composer install`) ran.
+     *
+     * @since 2.8.0
+     */
+    public function test_caught_failure_rolls_back_before_lifting_maintenance(): void
+    {
+        config()->set( 'cms.updates.lift_maintenance_on_interrupt', 'always' );
+
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-h1-' );
+        file_put_contents( $backup, 'stub' );
+
+        $manager = new class( $backup ) extends ApplicationUpdateManager {
+            /** @var array<int, string> */
+            public array $events = [];
+
+            public function __construct( string $backupPath )
+            {
+                $this->backupPath  = $backupPath;
+                $this->currentStep = UpdateStep::VerifyChecksum;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            public function rollback( string $backupPath ): void
+            {
+                $this->events[] = 'rollback';
+            }
+
+            protected function removeExtractionAdditions(): void
+            {
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                $this->events[] = 'lift';
+            }
+        };
+
+        $manager->callHandleFailure( new RuntimeException( 'boom' ) );
+
+        $this->assertSame(
+            ['rollback', 'lift'],
+            $manager->events,
+            'The snapshot must be restored before maintenance mode is lifted.',
+        );
+
+        @unlink( $backup );
+    }
+
+    /**
+     * H1: the caught-exception path must honour `lift_maintenance_on_interrupt`.
+     * Under the default `step_aware` policy a failure on a half-applied step
+     * (extract/composer/migrations) must leave the site in maintenance mode
+     * even after a successful rollback, rather than lifting unconditionally.
+     *
+     * @since 2.8.0
+     */
+    public function test_caught_failure_honours_step_aware_lift_policy_on_unsafe_steps(): void
+    {
+        config()->set( 'cms.updates.lift_maintenance_on_interrupt', 'step_aware' );
+
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-h1-' );
+        file_put_contents( $backup, 'stub' );
+
+        $manager = new class( $backup ) extends ApplicationUpdateManager {
+            /** @var array<int, string> */
+            public array $events = [];
+
+            public function __construct( string $backupPath )
+            {
+                $this->backupPath  = $backupPath;
+                $this->currentStep = UpdateStep::Extract;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            public function rollback( string $backupPath ): void
+            {
+                $this->events[] = 'rollback';
+            }
+
+            protected function removeExtractionAdditions(): void
+            {
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                $this->events[] = 'lift';
+            }
+        };
+
+        $manager->callHandleFailure( new RuntimeException( 'boom' ) );
+
+        $this->assertSame(
+            ['rollback'],
+            $manager->events,
+            'A step_aware policy must keep the site down after a failure on a half-applied step, even once the snapshot is restored.',
+        );
+
+        @unlink( $backup );
+    }
+
+    /**
+     * H2: a pinned downgrade must reach the update steps even when the install
+     * is already on the latest release. The latest-only "no update available"
+     * gate must not short-circuit an explicit `--target-version` +
+     * `--allow-downgrade`.
+     *
+     * @since 2.8.0
+     */
+    public function test_pinned_downgrade_off_latest_reaches_the_update_steps(): void
+    {
+        config()->set( 'app.version', '2.0.0' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public ?string $ranTarget = null;
+
+            public function checkForUpdate(): UpdateInfo
+            {
+                // Already at latest — hasUpdate() is false.
+                return new UpdateInfo(
+                    currentVersion: '2.0.0',
+                    latestVersion: '2.0.0',
+                    downloadUrl: 'https://example.test/app-2.0.0.zip',
+                );
+            }
+
+            protected function acquireUpdateLock()
+            {
+                return null;
+            }
+
+            protected function releaseUpdateLock( $handle ): void
+            {
+            }
+
+            protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
+            {
+                $this->ranTarget = $targetVersion;
+
+                return true;
+            }
+        };
+
+        $result = $manager->performUpdate( '1.0.0', allowDowngrade: true );
+
+        $this->assertTrue( $result );
+        $this->assertSame(
+            '1.0.0',
+            $manager->ranTarget,
+            'A pinned downgrade must reach the update steps rather than short-circuit on "no update available".',
+        );
+    }
+
+    /**
+     * M2: a rollback whose `extractTo()` fails partway must throw rather than
+     * report a clean restore. Pointing base_path() at a regular file makes
+     * `ZipArchive::extractTo()` return false.
+     *
+     * @since 2.8.0
+     */
+    public function test_rollback_throws_when_backup_extraction_fails_partway(): void
+    {
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-rb-' );
+        @unlink( $backup );
+        $backup .= '.zip';
+
+        $zip = new ZipArchive;
+        $zip->open( $backup, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'app/Foo.php', '<?php' );
+        $zip->close();
+
+        // A regular file, not a directory, so extraction into it fails.
+        $fileAsBase = (string) tempnam( sys_get_temp_dir(), 'cmsfw-notdir-' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function callRollback( string $backupPath ): void
+            {
+                $this->rollback( $backupPath );
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+        };
+
+        $original = base_path();
+        app()->setBasePath( $fileAsBase );
+
+        // A failed extraction must surface as a throw — never return normally
+        // and let the run be recorded as a clean rollback. Depending on the
+        // error handler it arrives either as our own `UpdateException` (the
+        // `extractTo()` return-value check) or as the warning-to-exception the
+        // failing syscall raises first; both are the correct "not silent"
+        // outcome.
+        $threw = false;
+
+        try {
+            $manager->callRollback( $backup );
+        } catch ( Throwable $e ) {
+            $threw = true;
+        } finally {
+            app()->setBasePath( $original );
+            @unlink( $backup );
+            @unlink( $fileAsBase );
+        }
+
+        $this->assertTrue( $threw, 'A rollback whose extraction fails must throw rather than report success.' );
+    }
+
+    /**
+     * M3: the extraction-additions ledger is persisted, so a manual rollback
+     * in a fresh process (where the in-memory ledger is gone) still removes
+     * the files the interrupted update added — not just restores the snapshot.
+     *
+     * @since 2.8.0
+     */
+    public function test_manual_rollback_removes_persisted_extraction_additions(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-m3-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0777, true );
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        // Persist the ledger to an absolute path so it survives the simulated
+        // process boundary regardless of where storage_path() resolves.
+        config()->set( 'cms.updates.state_path', $tempRoot . '/state.json' );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+
+            public function forgetInMemoryAdditions(): void
+            {
+                $this->extractionAdditions = [];
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+            $this->assertFileExists( $target . '/app/New.php' );
+
+            // Simulate the manual rollback running in a fresh process: the
+            // in-memory ledger is gone, only the persisted one remains.
+            $manager->forgetInMemoryAdditions();
+
+            $manager->removeOrphanedExtractionAdditions();
+
+            $this->assertFileDoesNotExist(
+                $target . '/app/New.php',
+                'A manual rollback must remove the persisted extraction additions.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @unlink( $tempRoot . '/state.json' );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * C3: a release declaring a `min_php_version` the host does not meet must
+     * be refused before any file is touched, rather than installed and only
+     * failing once the new code hits an unparseable syntax.
+     *
+     * @since 2.8.0
+     */
+    public function test_refuses_a_release_that_requires_a_newer_php_version(): void
+    {
+        config()->set( 'app.version', '1.0.0' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public bool $ranSteps = false;
+
+            public function checkForUpdate(): UpdateInfo
+            {
+                return new UpdateInfo(
+                    currentVersion: '1.0.0',
+                    latestVersion: '2.0.0',
+                    downloadUrl: 'https://example.test/app-2.0.0.zip',
+                    minPhpVersion: '99.0.0',
+                );
+            }
+
+            protected function acquireUpdateLock()
+            {
+                return null;
+            }
+
+            protected function releaseUpdateLock( $handle ): void
+            {
+            }
+
+            protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
+            {
+                $this->ranSteps = true;
+
+                return true;
+            }
+        };
+
+        $threw = false;
+
+        try {
+            $manager->performUpdate();
+        } catch ( UpdateException $e ) {
+            $threw = true;
+            $this->assertStringContainsString( 'requires PHP 99.0.0', $e->getMessage() );
+        }
+
+        $this->assertTrue( $threw, 'An unmet PHP requirement must abort the update.' );
+        $this->assertFalse( $manager->ranSteps, 'The update steps must not run when the host fails a declared requirement.' );
     }
 
     /**

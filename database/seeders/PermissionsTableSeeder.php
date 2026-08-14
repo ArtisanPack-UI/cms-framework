@@ -90,6 +90,13 @@ class PermissionsTableSeeder extends Seeder
                 'description' => 'Install and activate themes',
             ],
 
+            // AI permissions
+            [
+                'name'        => 'Use AI Features',
+                'slug'        => 'cms.ai.use',
+                'description' => 'Run the CMS AI agents (title, excerpt, tags, category, slug)',
+            ],
+
             // System permissions
             [
                 'name'        => 'Access Admin',
@@ -127,8 +134,8 @@ class PermissionsTableSeeder extends Seeder
             );
         }
 
-        // Assign permissions to roles
-        $this->assignPermissionsToRoles();
+        // Assign permissions to roles, scoped to the framework's own slugs.
+        $this->assignPermissionsToRoles( array_column( $permissions, 'slug' ) );
     }
 
     /**
@@ -137,7 +144,7 @@ class PermissionsTableSeeder extends Seeder
      *
      * @since 1.0.0
      */
-    protected function assignPermissionsToRoles(): void
+    protected function assignPermissionsToRoles( array $frameworkSlugs = [] ): void
     {
         // Use syncWithoutDetaching everywhere so re-running this opt-in
         // seeder against an environment that's already added consumer
@@ -145,11 +152,14 @@ class PermissionsTableSeeder extends Seeder
         // roles. The seeder is now non-destructive: it adds the default
         // assignments without removing anything an operator added.
 
-        // Admin gets all permissions.
+        // Admin gets every permission the framework itself defines — scoped to
+        // the framework's own slugs rather than `Permission::all()`, so a
+        // re-seed does not sweep in third-party/consumer permissions an
+        // operator granted deliberately (or deliberately withheld) from admin.
         $admin = Role::where( 'slug', 'admin' )->first();
         if ( $admin ) {
             $admin->permissions()->syncWithoutDetaching(
-                Permission::pluck( 'id' )->all(),
+                Permission::whereIn( 'slug', $frameworkSlugs )->pluck( 'id' )->all(),
             );
         }
 

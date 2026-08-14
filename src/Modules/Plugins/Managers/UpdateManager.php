@@ -4,11 +4,12 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
-use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
@@ -21,6 +22,8 @@ use ZipArchive;
 
 class UpdateManager
 {
+    use ManagesExtensionUpdates;
+
     /**
      * @param  PluginManager  $pluginManager  Used to deactivate and reactivate a plugin around an update.
      */
@@ -84,21 +87,37 @@ class UpdateManager
             return null;
         }
 
-        $cacheKey = "plugin.update.{$slug}";
+        $cacheKey = $this->updateCacheKey( $slug );
+        $cached   = Cache::get( $cacheKey );
 
-        return Cache::remember( $cacheKey, config( 'cms.plugins.updateCacheTtl' ), function () use ( $plugin, $sourceUrl ) {
-            try {
-                return null !== $sourceUrl
-                    ? $this->checkViaUpdateSource( $plugin )
-                    : $this->checkViaCustomFeed( $plugin );
-            } catch ( Exception $e ) {
-                logger()->error( "Failed to check update for plugin: {$plugin->slug}", [
-                    'exception' => $e->getMessage(),
-                ] );
-            }
+        // Deliberately not `Cache::remember()`: it treats a null return as a
+        // miss and re-runs the closure, so the common "no update available"
+        // answer would never be cached, and — worse — a *failed* check (a
+        // rate-limited or 5xx source) that returned null would be re-cached and
+        // served as "no update" for the whole TTL. An empty array caches the
+        // genuine "no update" answer; a thrown check caches nothing and retries.
+        if ( null !== $cached ) {
+            return is_array( $cached ) && [] !== $cached ? $cached : null;
+        }
+
+        try {
+            $updateInfo = null !== $sourceUrl
+                ? $this->checkViaUpdateSource( $plugin )
+                : $this->checkViaCustomFeed( $plugin );
+        } catch ( Exception $e ) {
+            // A transient failure must not be cached as "no update" — leaving
+            // it uncached means the next call retries rather than hiding a real
+            // update for twelve hours.
+            logger()->error( "Failed to check update for plugin: {$plugin->slug}", [
+                'exception' => $e->getMessage(),
+            ] );
 
             return null;
-        } );
+        }
+
+        Cache::put( $cacheKey, $updateInfo ?? [], config( 'cms.plugins.updateCacheTtl' ) );
+
+        return $updateInfo;
     }
 
     /**
@@ -174,6 +193,16 @@ class UpdateManager
             return false; // No update available
         }
 
+        // Re-compare against the *current* installed version. `checkPluginUpdate`
+        // is cached for 12h, so straight after an update the cache still
+        // advertises the version just installed; without this guard a second
+        // `POST /{slug}/update` would re-run the full backup → download →
+        // delete → extract → reactivate cycle for the already-installed
+        // version and fire `plugin.updating`/`plugin.updated` needlessly.
+        if ( ! $this->isUpdateAvailable( $plugin->version, (string) $updateInfo['version'] ) ) {
+            return false;
+        }
+
         $wasActive              = $plugin->is_active;
         $oldVersion             = $plugin->version;
         $oldMeta                = $plugin->meta;
@@ -194,15 +223,13 @@ class UpdateManager
             // 3. Download new version
             $zipPath = $this->downloadUpdateArchive( $plugin, $updateInfo );
 
-            // 4. Delete old files
-            $pluginPath = base_path( config( 'cms.plugins.directory' ) . '/' . $slug );
-            File::deleteDirectory( $pluginPath );
+            // 4. Extract the validated archive over the old files. The archive
+            //    is opened and guarded *before* the live directory is removed,
+            //    so a rejected update never destroys the installed plugin.
+            $pluginsRoot = base_path( config( 'cms.plugins.directory' ) );
+            $pluginPath  = $pluginsRoot . '/' . $slug;
 
-            // 5. Extract new version
-            $zip = new ZipArchive;
-            $zip->open( $zipPath );
-            $zip->extractTo( base_path( config( 'cms.plugins.directory' ) ) );
-            $zip->close();
+            $this->extractUpdateArchive( $zipPath, $pluginsRoot, $pluginPath, $slug );
 
             // 6. Update database
             $manifestPath = $pluginPath . '/plugin.json';
@@ -218,8 +245,10 @@ class UpdateManager
                 $this->pluginManager->activate( $slug );
             }
 
-            // 8. Cleanup
+            // 8. Cleanup. Forget the cached check so it no longer advertises
+            //    the version just installed for the rest of the TTL.
             File::delete( $zipPath );
+            Cache::forget( $this->updateCacheKey( $slug ) );
 
             doAction( 'ap.cmsFramework.plugin.updated', $slug, $updateInfo['version'] );
 
@@ -252,25 +281,39 @@ class UpdateManager
     }
 
     /**
-     * Pass an update-source URL through only when it is https.
+     * The log noun for plugin update messages.
      *
-     * @param  string  $url  Declared source URL.
-     * @param  string  $slug  Plugin slug, for the log line.
+     * @since 2.8.0
      *
-     * @return string|null The URL, or null when it is not https.
+     * @return string Always `plugin`.
      */
-    protected function rejectInsecureSource( string $url, string $slug ): ?string
+    protected function updateLogNoun(): string
     {
-        if ( str_starts_with( strtolower( $url ), 'https://' ) ) {
-            return $url;
-        }
+        return 'plugin';
+    }
 
-        logger()->warning( 'Ignoring plugin update source: update sources must use https.', [
-            'plugin' => $slug,
-            'url'    => $url,
-        ] );
+    /**
+     * The config prefix for the plugins module.
+     *
+     * @since 2.8.0
+     *
+     * @return string Always `cms.plugins`.
+     */
+    protected function updateConfigPrefix(): string
+    {
+        return 'cms.plugins';
+    }
 
-        return null;
+    /**
+     * The cache key holding a plugin's normalized update-check result.
+     *
+     * @param  string  $slug  Plugin slug.
+     *
+     * @return string Cache key.
+     */
+    protected function updateCacheKey( string $slug ): string
+    {
+        return "plugin.update.{$slug}";
     }
 
     /**
@@ -357,71 +400,6 @@ class UpdateManager
     }
 
     /**
-     * Resolve the access token for a plugin's private update source.
-     *
-     * Tokens are keyed by plugin slug in config rather than read from the
-     * manifest ( which ships inside the distributed ZIP ) and are deliberately
-     * not global: a single shared token would be sent to whatever host any
-     * installed plugin names in its manifest.
-     *
-     * @param  string  $slug  Plugin slug.
-     *
-     * @return string|null Token, or null when the source is public.
-     */
-    protected function resolveUpdateToken( string $slug ): ?string
-    {
-        $tokens = config( 'cms.plugins.updateTokens', [] );
-
-        if ( ! is_array( $tokens ) ) {
-            return null;
-        }
-
-        return $this->nonEmptyString( $tokens[ $slug ] ?? null );
-    }
-
-    /**
-     * Flatten an `UpdateInfo` onto the array shape the plugin update API has
-     * always returned, so normalizing internally does not change the payload at
-     * `GET /api/v1/plugins/updates`.
-     *
-     * @param  UpdateInfo  $updateInfo  Value object from the update source.
-     * @param  string  $currentVersion  Installed plugin version.
-     *
-     * @return array<string, mixed> Serialized update info.
-     */
-    protected function serializeUpdateInfo( UpdateInfo $updateInfo, string $currentVersion ): array
-    {
-        return [
-            'version'      => $updateInfo->latestVersion,
-            'download_url' => $updateInfo->downloadUrl,
-            'current'      => $currentVersion,
-            'changelog'    => $updateInfo->changelog,
-            'release_date' => $updateInfo->releaseDate,
-            'sha256'       => $updateInfo->sha256,
-            'file_size'    => $updateInfo->fileSize,
-            'metadata'     => $updateInfo->metadata,
-        ];
-    }
-
-    /**
-     * Narrow a mixed manifest/config value to a trimmed non-empty string.
-     *
-     * @param  mixed  $value  Value to narrow.
-     *
-     * @return string|null Trimmed string, or null when unusable.
-     */
-    protected function nonEmptyString( mixed $value ): ?string
-    {
-        if ( ! is_string( $value ) ) {
-            return null;
-        }
-
-        $trimmed = trim( $value );
-
-        return '' === $trimmed ? null : $trimmed;
-    }
-
-    /**
      * Reset the DB row to the pre-update version/manifest/service_provider so
      * a failed update doesn't leave the row pointing at a version whose files
      * were rolled back.
@@ -462,15 +440,22 @@ class UpdateManager
         $backupFile = $backupDir . '/' . $slug . '-' . $plugin->version . '-' . time() . '.zip';
 
         $zip = new ZipArchive;
-        $zip->open( $backupFile, ZipArchive::CREATE );
 
-        $files = File::allFiles( $pluginPath );
-        foreach ( $files as $file ) {
+        if ( true !== $zip->open( $backupFile, ZipArchive::CREATE | ZipArchive::OVERWRITE ) ) {
+            throw PluginUpdateException::updateFailed( $slug, 'The pre-update backup archive could not be created.' );
+        }
+
+        // `allFiles( $path, true )` includes dotfiles (`.env.example`,
+        // `.htaccess`); without the flag a plugin shipping them would lose them
+        // on rollback.
+        foreach ( File::allFiles( $pluginPath, true ) as $file ) {
             $relativePath = str_replace( $pluginPath . '/', '', $file->getPathname() );
             $zip->addFile( $file->getPathname(), $relativePath );
         }
 
-        $zip->close();
+        if ( ! $zip->close() ) {
+            throw PluginUpdateException::updateFailed( $slug, 'The pre-update backup archive could not be written.' );
+        }
 
         return $backupFile;
     }
@@ -492,15 +477,112 @@ class UpdateManager
 
         $pluginPath = base_path( config( 'cms.plugins.directory' ) . '/' . $slug );
 
+        $zip = new ZipArchive;
+
+        // Opened before the live directory is removed: a backup that cannot be
+        // read is a reason to leave the failed update in place, not to delete
+        // it and have nothing to put back.
+        if ( true !== $zip->open( $backupPath ) ) {
+            logger()->critical( 'Plugin update failed and its backup archive could not be opened. Manual intervention required.', [
+                'plugin' => $slug,
+                'backup' => $backupPath,
+            ] );
+
+            return;
+        }
+
+        // A tampered backup carrying an absolute or `..` path is a reason to
+        // abort the restore rather than write it over the plugins directory.
+        if ( null !== ExtensionArchive::firstUnsafeEntry( $zip ) ) {
+            $zip->close();
+
+            logger()->critical( 'Plugin backup archive contains an unsafe path; refusing to restore. Manual intervention required.', [
+                'plugin' => $slug,
+                'backup' => $backupPath,
+            ] );
+
+            return;
+        }
+
         // Delete failed update
         if ( File::exists( $pluginPath ) ) {
             File::deleteDirectory( $pluginPath );
         }
 
-        // Extract backup
+        if ( true !== $zip->extractTo( $pluginPath ) ) {
+            $zip->close();
+
+            logger()->critical( 'Plugin backup extraction failed partway; the plugin directory may be incomplete. Manual intervention required.', [
+                'plugin' => $slug,
+                'backup' => $backupPath,
+            ] );
+
+            return;
+        }
+
+        $zip->close();
+    }
+
+    /**
+     * Extract a validated update archive over an installed plugin's files.
+     *
+     * The archive is opened and fully guarded — zip-slip rejection, a required
+     * slug-directory top segment so a sibling folder cannot overwrite a
+     * different trusted plugin, and an uncompressed-size ceiling — *before* the
+     * live directory is removed, so a rejected update never destroys the
+     * installed plugin.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $zipPath  Path to the downloaded archive.
+     * @param  string  $pluginsRoot  Absolute path of the plugins directory.
+     * @param  string  $pluginPath  Absolute path of the plugin's own directory.
+     * @param  string  $slug  Plugin slug; every archive entry must live under it.
+     *
+     * @throws UpdateException When the archive is unopenable, unsafe, oversized, or extraction fails.
+     */
+    protected function extractUpdateArchive( string $zipPath, string $pluginsRoot, string $pluginPath, string $slug ): void
+    {
         $zip = new ZipArchive;
-        $zip->open( $backupPath );
-        $zip->extractTo( $pluginPath );
+
+        if ( true !== $zip->open( $zipPath ) ) {
+            throw new UpdateException( 'The downloaded plugin archive could not be opened.' );
+        }
+
+        $realPluginsRoot = realpath( $pluginsRoot );
+
+        if ( false === $realPluginsRoot ) {
+            $zip->close();
+
+            throw new UpdateException( 'The plugins directory could not be resolved.' );
+        }
+
+        $unsafe = ExtensionArchive::firstUnsafeEntry( $zip, $realPluginsRoot, $slug );
+
+        if ( null !== $unsafe ) {
+            $zip->close();
+
+            throw new UpdateException( "The update archive contains an unsafe path: {$unsafe}." );
+        }
+
+        $maxUncompressed = (int) config( 'cms.plugins.maxUncompressedSize', 100 * 1024 * 1024 );
+
+        if ( ExtensionArchive::uncompressedSize( $zip ) > $maxUncompressed ) {
+            $zip->close();
+
+            throw new UpdateException( 'The update archive expands beyond the permitted uncompressed size.' );
+        }
+
+        if ( File::exists( $pluginPath ) ) {
+            File::deleteDirectory( $pluginPath );
+        }
+
+        if ( true !== $zip->extractTo( $pluginsRoot ) ) {
+            $zip->close();
+
+            throw new UpdateException( 'Extraction of the update archive failed.' );
+        }
+
         $zip->close();
     }
 
@@ -523,12 +605,35 @@ class UpdateManager
     protected function downloadUpdateArchive( Plugin $plugin, array $updateInfo ): string
     {
         $checker = $this->makeUpdateChecker( $plugin );
+        $version = (string) ( $updateInfo['version'] ?? '' );
 
         if ( null === $checker ) {
-            return $this->downloadUpdate( $updateInfo['download_url'] );
+            // Legacy `update_url` feed. It bypasses the source abstraction, so
+            // the https and integrity guarantees have to be enforced here: an
+            // http download URL lets a network attacker choose the archive, and
+            // an unverified archive is extracted and its provider re-registered
+            // (arbitrary PHP execution). Require https up front, then run the
+            // same checksum gate as the source-backed path — a feed that
+            // advertises no digest is refused unless `allow_unverified_updates`.
+            $downloadUrl = $this->nonEmptyString( $updateInfo['download_url'] ?? null );
+
+            if ( null === $downloadUrl || null === $this->rejectInsecureSource( $downloadUrl, $plugin->slug ) ) {
+                throw PluginUpdateException::downloadFailed( $plugin->slug );
+            }
+
+            $zipPath = $this->downloadUpdate( $downloadUrl );
+
+            try {
+                $this->verifyArchiveChecksum( $zipPath, $updateInfo['sha256'] ?? null, $version );
+            } catch ( Throwable $e ) {
+                File::delete( $zipPath );
+
+                throw $e;
+            }
+
+            return $zipPath;
         }
 
-        $version = (string) $updateInfo['version'];
         $zipPath = $checker->downloadUpdate( $version );
 
         try {
@@ -542,50 +647,6 @@ class UpdateManager
         }
 
         return $zipPath;
-    }
-
-    /**
-     * Verify a downloaded archive against the digest its source advertised.
-     *
-     * Mirrors `ApplicationUpdateManager::maybeVerifyChecksum()`: honors
-     * `cms.updates.verify_checksum` and fails closed when no digest is
-     * published unless `cms.updates.allow_unverified_updates` is set.
-     *
-     * Only source-backed updates reach this. Legacy `update_url` feeds have
-     * never advertised a digest, so enforcing it there would break every
-     * existing custom-feed plugin.
-     *
-     * @param  string  $zipPath  Path to the downloaded archive.
-     * @param  mixed  $expectedHash  Digest advertised by the source, if any.
-     * @param  string  $version  Version being installed.
-     *
-     * @throws UpdateException On mismatch, or when no digest is available and unverified updates are disallowed.
-     */
-    protected function verifyArchiveChecksum( string $zipPath, mixed $expectedHash, string $version ): void
-    {
-        if ( ! config( 'cms.updates.verify_checksum', true ) ) {
-            return;
-        }
-
-        $expected = $this->nonEmptyString( $expectedHash );
-
-        if ( null !== $expected ) {
-            $actual = (string) hash_file( 'sha256', $zipPath );
-
-            if ( ! hash_equals( strtolower( $expected ), $actual ) ) {
-                throw UpdateException::checksumMismatch( $expected, $actual );
-            }
-
-            return;
-        }
-
-        if ( ! config( 'cms.updates.allow_unverified_updates', false ) ) {
-            throw UpdateException::checksumRequired( $version );
-        }
-
-        logger()->warning( 'Skipping plugin update integrity verification: update source did not advertise a SHA-256 checksum.', [
-            'version' => $version,
-        ] );
     }
 
     /**
@@ -607,18 +668,5 @@ class UpdateManager
         File::put( $tempPath, $response->body() );
 
         return $tempPath;
-    }
-
-    /**
-     * Compare version numbers.
-     *
-     * @param  string  $current  Current version
-     * @param  string  $available  Available version
-     *
-     * @return bool True if update available
-     */
-    protected function isUpdateAvailable( string $current, string $available ): bool
-    {
-        return version_compare( $available, $current, '>');
     }
 }

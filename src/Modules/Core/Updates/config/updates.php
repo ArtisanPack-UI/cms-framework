@@ -55,6 +55,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Application Slug
+    |--------------------------------------------------------------------------
+    |
+    | Identifies the application to the update source and keys its update-check
+    | cache (`cms.application.<slug>.update_check`). Override it to name your
+    | product; changing it invalidates the previous slug's cache entry, which
+    | just forces one fresh check.
+    |
+    */
+    'application_slug' => env( 'UPDATE_APPLICATION_SLUG', 'application' ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Current Version Detection
     |--------------------------------------------------------------------------
     |
@@ -390,7 +403,14 @@ return [
     | Update Check Schedule
     |--------------------------------------------------------------------------
     |
-    | How often to check for updates (used by scheduled task).
+    | Advisory cadence for the `update:check-scheduled` command. The framework
+    | registers the command but does NOT schedule it — a package cannot know a
+    | host's scheduling policy — so the host is responsible for wiring it into
+    | its own scheduler, e.g. in `routes/console.php`:
+    |
+    |     Schedule::command('update:check-scheduled')->daily();
+    |
+    | This value is a hint the host can read to honour the operator's choice.
     | Values: 'daily', 'twice_daily', 'weekly', 'disabled'
     |
     */

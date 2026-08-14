@@ -14,7 +14,6 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Http\Controllers\Ai;
 
 use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
-use ArtisanPackUI\Ai\Contracts\FeatureRegistry;
 use ArtisanPackUI\Ai\Exceptions\FeatureDisabledException;
 use ArtisanPackUI\Ai\Exceptions\FeatureError;
 use ArtisanPackUI\Ai\Exceptions\MissingCredentialsException;
@@ -31,6 +30,7 @@ use ArtisanPackUI\CMSFramework\Http\Requests\Ai\SuggestCategoryRequest;
 use ArtisanPackUI\CMSFramework\Http\Requests\Ai\SuggestSlugRequest;
 use ArtisanPackUI\CMSFramework\Http\Requests\Ai\SuggestTagsRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -62,15 +62,7 @@ class AiController
      */
     public function features(): JsonResponse
     {
-        /** @var FeatureRegistry $registry */
-        $registry = app( FeatureRegistry::class );
-
-        $state = [];
-        foreach ( CMSFrameworkServiceProvider::AI_FEATURE_KEYS as $key ) {
-            $state[ $key ] = null !== $registry->get( $key ) && $registry->isToggleOn( $key );
-        }
-
-        return new JsonResponse( [ 'features' => $state ] );
+        return new JsonResponse( [ 'features' => CMSFrameworkServiceProvider::aiFeatureStateMap() ] );
     }
 
     /**
@@ -183,6 +175,14 @@ class AiController
     private function runAgent( string $agentClass, mixed $input ): JsonResponse
     {
         $featureKey = AgentMeta::featureKey( $agentClass );
+
+        if ( Gate::denies( CMSFrameworkServiceProvider::AI_USE_ABILITY ) ) {
+            return new JsonResponse( [
+                'feature' => $featureKey,
+                'error'   => 'forbidden',
+                'message' => 'You are not authorized to use AI features.',
+            ], 403 );
+        }
 
         try {
             $output = $agentClass::for( $input )->run();

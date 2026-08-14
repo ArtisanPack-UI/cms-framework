@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
@@ -858,6 +859,15 @@ class ThemeManager
                 $zip->close();
                 throw ThemeInstallationException::pathTraversal( $entry );
             }
+        }
+
+        // Zip-bomb guard: the compressed-size check in validateZip() says
+        // nothing about what the archive expands to. Cap the uncompressed total
+        // before extracting so a small archive cannot exhaust the disk.
+        $maxUncompressed = (int) config( 'cms.themes.maxUncompressedSize', 100 * 1024 * 1024 );
+        if ( ExtensionArchive::uncompressedSize( $zip ) > $maxUncompressed ) {
+            $zip->close();
+            throw ThemeInstallationException::extractionFailed( $slug );
         }
 
         if ( ! $zip->extractTo( $baseDir ) ) {

@@ -119,6 +119,11 @@ return [
     'backupPath'     => 'theme-backups', // Relative to storage_path()
     'maxUpdateSize'  => 50 * 1024 * 1024, // 50MB in bytes
 
+    // Ceiling on the *uncompressed* size of an extracted theme archive. The
+    // compressed-size checks above say nothing about what the archive expands
+    // to; this caps a zip-bomb before it fills the disk mid-extraction.
+    'maxUncompressedSize' => 100 * 1024 * 1024, // 100MB in bytes
+
     /*
     |--------------------------------------------------------------------------
     | Theme Update Source Tokens

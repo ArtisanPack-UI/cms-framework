@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    $this->admin       = TestUser::factory()->create();
+    $this->admin       = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
     $this->themesPath  = base_path( 'themes' );
     $this->tmpPath     = storage_path( 'app/themes-upload-test' );
     $this->testSlugs   = [];
@@ -128,5 +128,20 @@ describe( 'POST /v1/themes (upload)', function (): void {
         $response = $this->postJson( '/v1/themes', [] );
 
         $response->assertStatus( 401 );
+    } );
+
+    it( 'forbids a non-privileged authenticated user from mutating themes', function (): void {
+        // Authenticated, but without the `manage-themes` ability.
+        $this->actingAs( TestUser::factory()->create() );
+
+        $mutating = [
+            ['POST', '/v1/themes'],
+            ['POST', '/v1/themes/some-theme/activate'],
+            ['POST', '/v1/themes/some-theme/update'],
+        ];
+
+        foreach ( $mutating as [$method, $uri] ) {
+            $this->json( $method, $uri )->assertForbidden();
+        }
     } );
 } );

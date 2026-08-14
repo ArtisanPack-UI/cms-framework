@@ -22,10 +22,13 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	{{-- Escaped rather than `@yield`: a page's title is the one section most
-	     likely to interpolate a record name or other stored value, and `<title>`
-	     never needs markup. --}}
-	<title>{{ trim( $__env->yieldContent( 'title', __( 'Admin' ) ) ) }} &middot; {{ config( 'app.name' ) }}</title>
+	{{-- `@yield` rather than `{{ yieldContent(...) }}`: the inline
+	     `@section('title', $value)` form Blade recommends already stores its
+	     value through `e()`, so wrapping it in `{{ }}` escaped a second time
+	     ("Posts & Pages" → "Posts &amp;amp; Pages"). `@yield` escapes it exactly
+	     once. Titles must use the inline/plain form — the block form renders
+	     raw, which is why the docblock above requires plain text. --}}
+	<title>@yield( 'title', __( 'Admin' ) ) &middot; {{ config( 'app.name' ) }}</title>
 	<style>
 		:root { color-scheme: light dark; }
 		body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; line-height: 1.5; }

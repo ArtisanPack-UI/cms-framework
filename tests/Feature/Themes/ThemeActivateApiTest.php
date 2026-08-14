@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    $this->admin      = TestUser::factory()->create();
+    $this->admin      = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
     $this->themesPath = base_path( 'themes' );
     $this->testSlugs  = [];
 

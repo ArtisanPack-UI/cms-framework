@@ -24,7 +24,10 @@ needs and points at the reference example under
 1. **Discovery** — The framework scans `base_path(config('cms.plugins.directory'))`
    ( default `plugins/` ) for directories containing a `plugin.json` manifest.
 2. **Install** — When a plugin is uploaded, `PluginManager::install()` validates
-   the manifest and inserts a row in the `plugins` table.
+   the manifest and inserts a row in the `plugins` table. Since *2.8.0*, the
+   archive's declared uncompressed size is checked against
+   `cms.plugins.maxUncompressedSize` (100MB default) before extraction, as a
+   zip-bomb guard; an archive that exceeds the ceiling is refused.
 3. **Activate** — On activation, the plugin's `service_provider` ( from
    `plugin.json` ) is registered with the container. This runs your
    `register()` and `boot()` methods, and any manifest-declared migrations.
@@ -409,8 +412,15 @@ This is an integrity check, not an authenticity check — the digest comes from
 the same release as the archive. It catches truncation and CDN corruption; it
 does not defend against a compromised release-editor account.
 
-Legacy `update_url` feeds are unaffected by this: they have never advertised a
-digest, and checksum enforcement does not apply to them.
+Since *2.8.0*, legacy `update_url` feeds are held to the same bar. The feed's
+`download_url` must be `https` — an `http` URL is refused up front, because it
+would let a network attacker choose the archive that gets extracted and its
+provider re-registered (arbitrary PHP execution) — and the downloaded archive
+runs through the same checksum gate as the source-backed path. A feed that
+advertises no digest is therefore refused with the shipped defaults, exactly
+like a source-backed release; the only escape is
+`cms.updates.allow_unverified_updates`. Add a `sha256` to your feed payload to
+clear the gate.
 
 ### Private repositories
 

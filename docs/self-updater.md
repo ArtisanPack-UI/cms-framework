@@ -113,6 +113,23 @@ php artisan update:perform --target-version=2.6.0                    # refused
 php artisan update:perform --target-version=2.6.0 --allow-downgrade   # explicit opt-in
 ```
 
+## Minimum-version preflight (2.8.0)
+
+`performUpdate()` refuses a release the host cannot run **before any file is
+touched**. A release advertising `min_php_version` / `min_framework_version` in
+its metadata is checked against the running host up front: an unmet PHP minimum
+throws `UpdateException::incompatiblePhpVersion` and an unmet framework minimum
+throws `UpdateException::incompatibleFrameworkVersion`, both before extraction,
+`composer install`, or migrations. Previously these fields were parsed and
+cached but never enforced, so a release declaring `min_php_version: 8.4`
+installed on 8.2 overwrote the tree first and only failed once the new code hit
+a syntax the interpreter could not parse.
+
+The framework-version check is **skipped when the installed version is a
+non-numeric dev/branch alias** (`dev-main`, a path-repo checkout): such a build
+has no meaningful ordering against a release constraint, so the updater proceeds
+rather than refusing. The PHP check always runs.
+
 ## Concurrent updates (2.7.1)
 
 `performUpdate()` takes an exclusive `flock` on a sentinel beside the state file
@@ -154,7 +171,7 @@ The download path still uses `Http::sink()` — it's shielded by a `withResponse
 
    Laravel Herd's bundled composer leads the list for the same reason the CLI PHP list leads with Herd's `php`: a host that uses Herd for both FPM and CLI stays on a single toolchain. Herd's composer is a `#!/usr/bin/env php` script rather than a standalone binary, which is fine — the command is built as `{CLI PHP} {binary} install ...` regardless. Both lists derive the Herd `bin/` directory from one `herdBinPath()` helper so they can't drift apart.
 
-   When discovery fails, the framework logs a structured `Log::warning` with the `is_file()`/`is_executable()` result for each candidate path, the current `php_sapi`, and a pointer at the fix. `UpdateException::composerBinaryNotFound()` renders the same per-candidate stat outcome in the exception message, so operators can distinguish a wrong-path failure from a PHP-FPM sandboxed-stat failure (macOS Herd Pro sandboxes `/opt/homebrew/*`; chrooted FPM pools and restrictive `open_basedir` behave the same way) without digging through the log.
+   When discovery fails, the framework logs a structured `Log::warning` with the `is_file()`/`is_executable()` result for each candidate path, the current `php_sapi`, and a pointer at the fix. When a resolved binary later fails to verify (the rollback probe below), the raised `UpdateException` — `configuredComposerBinaryMissing` for a configured path PHP cannot see, otherwise `composerVerificationFailed` with the resolved binary, PHP interpreter, exit code, and captured output — carries enough detail that operators can distinguish a wrong-path failure from a PHP-FPM sandboxed-stat failure (macOS Herd Pro sandboxes `/opt/homebrew/*`; chrooted FPM pools and restrictive `open_basedir` behave the same way) without digging through the log.
 
 4. **Bare `composer install ...`** — the pre-2.5.3 behavior, kept as a final fallback.
 
@@ -187,7 +204,7 @@ config()->set(
 
 When an update fails, the framework rolls back to the pre-update backup. Two behaviors matter for diagnostics:
 
-- **Before invoking rollback's `composer install`, the framework runs `{binary} --version` with a 10-second timeout.** If that fails, you get `UpdateException::composerBinaryNotFound` naming the paths inspected and the `COMPOSER_BINARY` override — not the vague "Manual intervention required".
+- **Before invoking rollback's `composer install`, the framework runs `{binary} --version` with a 10-second timeout** (`verifyComposerBinaryAvailable()`). If that fails, you get a specific `UpdateException` — `configuredComposerBinaryMissing` or `composerVerificationFailed`, as detailed below — naming the path inspected and the relevant `COMPOSER_BINARY` / `CMS_PHP_BINARY` override, not the vague "Manual intervention required".
 
 - **When that probe fails, the diagnosis depends on whether PHP can see the binary on disk.** If `is_file()` also reports false, you get `UpdateException::configuredComposerBinaryMissing` naming the configured path — such a path can only have come from `COMPOSER_BINARY` / `cms.updates.composer_binary`, since auto-discovery only ever returns a path it has already stat'd. Otherwise you get `composerVerificationFailed` as before, with its exit code, captured output, and `CMS_PHP_BINARY` hint. Previously every failure took the second form, blaming the PHP interpreter on hosts where the interpreter had resolved correctly and the composer path was the sole fault.
 
@@ -404,17 +421,20 @@ A run dispatched through the queue also carries `queued_at`, `queue_connection` 
 
 ## Cached update info and out-of-band version bumps
 
-`UpdateChecker::checkForUpdate()` caches the resolved `UpdateInfo` value object under `cms.{type}.{slug}.update_check` for `cms.updates.cache_ttl` seconds (default 43,200s / 12h). The cached object contains both the feed's `latestVersion` and a snapshot of `config('app.version')` taken when the cache was populated.
+`UpdateChecker::checkForUpdate()` caches the resolved `UpdateInfo` value object under `cms.{type}.{slug}.update_check` for `cms.updates.cache_ttl` seconds (default 43,200s / 12h). For the application updater, `{slug}` is `cms.updates.application_slug` (default `application`), so changing that slug keys the cache under a new entry and costs one fresh check. The cached object contains both the feed's `latestVersion` and a snapshot of the installed version taken when the cache was populated — read from `cms.updates.current_version_config_key` (default `app.version`), which `UpdateInfo::resolveCurrentVersion()` honours as of 2.8.0.
 
 When the host's installed version changes *out-of-band* (a manual `composer install` on a release zip, an unzip-over-site, a deploy script) the framework keeps the cached feed data honest in two ways:
 
-- **`UpdateChecker::checkForUpdate()` discards the cached `UpdateInfo` when the cached `currentVersion` snapshot no longer matches `config('app.version')`** and re-fetches from the source. No stale positive for up to 12h.
-- **`UpdateInfo::hasUpdate()` reads `config('app.version')` at call time** rather than comparing against its own frozen `currentVersion`, so any cached instance still returns the correct answer even if the invalidation branch above hasn't fired yet. Falls back to the constructor value when the container has no bound `config`.
+- **`UpdateChecker::checkForUpdate()` discards the cached `UpdateInfo` when the cached `currentVersion` snapshot no longer matches the installed version** (read from `cms.updates.current_version_config_key`, default `app.version`) and re-fetches from the source. No stale positive for up to 12h.
+- **`UpdateInfo::hasUpdate()` reads the installed version at call time** — via `resolveCurrentVersion()`, which honours `cms.updates.current_version_config_key` (default `app.version`) — rather than comparing against its own frozen `currentVersion`, so any cached instance still returns the correct answer even if the invalidation branch above hasn't fired yet. Falls back to the constructor value when the container has no bound `config`.
 
 ## Related config
 
 | Key | Purpose |
 |-----|---------|
+| `cms.updates.application_slug` | Identifies the application to the update source and keys its update-check cache (`cms.application.{slug}.update_check`). Default `'application'`, env `UPDATE_APPLICATION_SLUG`. Replaces the old hard-coded `digital-shopfront-cms` slug; changing it invalidates the previous slug's cache entry, costing one fresh check. |
+| `cms.updates.current_version_config_key` | Config key the updater reads the installed version from. Default `'app.version'`. As of *2.8.0* this is actually honoured by `UpdateInfo::resolveCurrentVersion()` — a host that stores its version elsewhere points this at that key. |
+| `cms.updates.check_frequency` | **Advisory** cadence string (default `'daily'`, env `UPDATE_CHECK_FREQUENCY`). The framework registers the `update:check-scheduled` command but does **not** schedule it — the host must wire it into its own scheduler, e.g. `Schedule::command('update:check-scheduled')->daily()` in `routes/console.php`. |
 | `cms.updates.composer_binary` | Absolute path to composer; priority-1 override, populated from `env('COMPOSER_BINARY')`. |
 | `cms.updates.composer_install_command` | Full command; overrides discovery when non-default. |
 | `cms.updates.composer_timeout` | Seconds to wait for composer install (default 600). |
@@ -436,6 +456,8 @@ Environment variables:
 
 | Var | Purpose |
 |-----|---------|
+| `UPDATE_APPLICATION_SLUG` | Slug identifying the application to the update source and keying its update-check cache. Default `application`. |
+| `UPDATE_CHECK_FREQUENCY` | Advisory cadence for `update:check-scheduled`; the host still has to schedule the command. Default `daily`. |
 | `COMPOSER_BINARY` | Absolute path to composer, exposed to `cms.updates.composer_binary` via `env()`. |
 | `CMS_PHP_BINARY` | Absolute path to a CLI PHP binary; overrides `PHP_BINARY` when the updater invokes composer. |
 | `CMS_UPDATES_ALLOW_UNVERIFIED` | Boolean; opts into warn-and-continue when the source omits a SHA-256 checksum. |

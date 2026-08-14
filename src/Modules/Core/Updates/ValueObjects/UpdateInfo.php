@@ -78,7 +78,13 @@ class UpdateInfo
     public function resolveCurrentVersion(): string
     {
         if ( Container::getInstance()->bound( 'config' ) ) {
-            $configured = config( 'app.version' );
+            // Honour `cms.updates.current_version_config_key` so a host that
+            // records its version somewhere other than `app.version` is not
+            // silently ignored; it defaults to `app.version`.
+            $key = config( 'cms.updates.current_version_config_key', 'app.version' );
+            $key = is_string( $key ) && '' !== $key ? $key : 'app.version';
+
+            $configured = config( $key );
 
             if ( is_string( $configured ) && '' !== $configured ) {
                 return $configured;

@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
 use Exception;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Schema;
 
@@ -49,6 +50,8 @@ class PluginsServiceProvider extends ServiceProvider
             __DIR__ . '/../config/plugins.php' => config_path( 'cms/plugins.php' ),
         ], [ 'cms-plugins-config', 'cms-framework-config' ] );
 
+        $this->registerPluginCapabilities();
+
         // Load API routes
         $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
 
@@ -68,6 +71,34 @@ class PluginsServiceProvider extends ServiceProvider
             // Silently fail during installation/migration
             logger()->debug( 'Plugin loading skipped: ' . $e->getMessage() );
         }
+    }
+
+    /**
+     * Register the `manage-plugins` Gate ability, deny-by-default.
+     *
+     * The plugin install/activate/update/delete routes gate on this ability.
+     * Installing and activating a plugin extracts and then executes
+     * attacker-supplied PHP (`app()->register( $plugin->service_provider )`),
+     * so an under-authorized trigger is total compromise — the shipped default
+     * must be closed.
+     *
+     * The ability resolves through RBAC when a permission whose slug matches
+     * `manage-plugins` is seeded (see `PermissionsTableSeeder`): rbac's
+     * `Gate::before` short-circuits this definition. A host that never seeds
+     * the permission — or defines its own ability — is left closed or wins,
+     * respectively. The `Gate::has()` guard covers a host that registered its
+     * own definition early.
+     */
+    protected function registerPluginCapabilities(): void
+    {
+        if ( Gate::has( 'manage-plugins' ) ) {
+            return;
+        }
+
+        // The unused `$user` parameter is load-bearing: Gate reflects on the
+        // first parameter to decide whether an ability may be called for a
+        // guest, and an untyped one denies them.
+        Gate::define( 'manage-plugins', fn ( $user ): bool => false );
     }
 
     /**

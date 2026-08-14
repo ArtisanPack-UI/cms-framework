@@ -9,7 +9,7 @@ use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 
 beforeEach( function (): void {
     $this->manager = app( PluginManager::class );
-    $this->admin   = TestUser::factory()->create();
+    $this->admin   = grantPermissions( TestUser::factory()->create(), 'manage-plugins' );
 } );
 
 it( 'refuses to activate a plugin requiring a newer host version', function (): void {

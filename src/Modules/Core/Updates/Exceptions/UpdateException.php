@@ -481,16 +481,6 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
-     * Permission denied.
-     *
-     * @since 1.0.0
-     */
-    public static function permissionDenied(): self
-    {
-        return new self( 'You do not have permission to perform core updates.' );
-    }
-
-    /**
      * Maintenance mode operation failed.
      *
      * @since 1.0.0

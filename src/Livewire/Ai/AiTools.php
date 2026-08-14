@@ -14,7 +14,6 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Livewire\Ai;
 
 use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
-use ArtisanPackUI\Ai\Contracts\FeatureRegistry;
 use ArtisanPackUI\Ai\Exceptions\FeatureDisabledException;
 use ArtisanPackUI\Ai\Exceptions\FeatureError;
 use ArtisanPackUI\Ai\Exceptions\MissingCredentialsException;
@@ -25,6 +24,7 @@ use ArtisanPackUI\CMSFramework\Ai\Agents\SlugSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\TagSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Support\AgentMeta;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
@@ -186,14 +186,7 @@ class AiTools extends Component
      */
     public function enabledFeatures(): array
     {
-        /** @var FeatureRegistry $registry */
-        $registry = app( FeatureRegistry::class );
-
-        $state = [];
-        foreach ( CMSFrameworkServiceProvider::AI_FEATURE_KEYS as $key ) {
-            $state[ $key ] = null !== $registry->get( $key ) && $registry->isToggleOn( $key );
-        }
-        return $state;
+        return CMSFrameworkServiceProvider::aiFeatureStateMap();
     }
 
     /**
@@ -236,6 +229,16 @@ class AiTools extends Component
     private function run( string $agentClass, mixed $input ): void
     {
         $featureKey = AgentMeta::featureKey( $agentClass );
+
+        if ( Gate::denies( CMSFrameworkServiceProvider::AI_USE_ABILITY ) ) {
+            $this->dispatch(
+                sprintf( 'ap-cms-ai:%s:forbidden', $featureKey ),
+                feature: $featureKey,
+                message: 'You are not authorized to use AI features.',
+            );
+
+            return;
+        }
 
         try {
             $output = $agentClass::for( $input )->run();

@@ -13,7 +13,7 @@ All routes are prefixed with `/api/cms` (configured in the consuming application
 ### Middleware
 
 - **Authentication**: Most routes require `auth:sanctum` middleware
-- **Authorization**: Enforced through Laravel policies in controllers
+- **Authorization**: Enforced through Laravel policies in controllers, and — since *2.8.0* — through `can:` permission middleware on the extension-management and AI routes. The plugin mutating routes require `manage-plugins`, the theme mutating routes require `manage-themes`, and the AI endpoints require `cms.ai.use`. All three are deny-by-default and seeded to the `admin` role; a non-privileged authenticated user gets `403`.
 
 ---
 
@@ -164,18 +164,18 @@ Standard RESTful resource routes for managing taxonomies (categories, tags, etc.
 ## Plugins Module (Experimental)
 
 **Base Path**: `/api/v1/plugins`
-**Middleware**: `auth`
+**Middleware**: `auth`. Since *2.8.0*, the mutating routes (`install`, `{slug}/activate`, `{slug}/deactivate`, `{slug}/update`, and `{slug}` DELETE) additionally require `can:manage-plugins`. The read routes (`index`, `updates`, `show`) stay auth-only.
 
-| Method | URI | Controller Method | Route Name | Description |
-|--------|-----|-------------------|------------|-------------|
-| GET | `/` | `PluginsController@index` | `api.plugins.index` | List all plugins |
-| GET | `/updates` | `PluginsController@checkUpdates` | `api.plugins.updates` | Check for plugin updates |
-| GET | `/{slug}` | `PluginsController@show` | `api.plugins.show` | Show specific plugin |
-| POST | `/install` | `PluginsController@install` | `api.plugins.install` | Install plugin (ZIP upload) |
-| POST | `/{slug}/activate` | `PluginsController@activate` | `api.plugins.activate` | Activate plugin |
-| POST | `/{slug}/deactivate` | `PluginsController@deactivate` | `api.plugins.deactivate` | Deactivate plugin |
-| POST | `/{slug}/update` | `PluginsController@update` | `api.plugins.update` | Update plugin |
-| DELETE | `/{slug}` | `PluginsController@destroy` | `api.plugins.destroy` | Delete plugin |
+| Method | URI | Controller Method | Route Name | Middleware | Description |
+|--------|-----|-------------------|------------|------------|-------------|
+| GET | `/` | `PluginsController@index` | `api.plugins.index` | `auth` | List all plugins |
+| GET | `/updates` | `PluginsController@checkUpdates` | `api.plugins.updates` | `auth` | Check for plugin updates |
+| GET | `/{slug}` | `PluginsController@show` | `api.plugins.show` | `auth` | Show specific plugin |
+| POST | `/install` | `PluginsController@install` | `api.plugins.install` | `auth`, `can:manage-plugins` | Install plugin (ZIP upload) |
+| POST | `/{slug}/activate` | `PluginsController@activate` | `api.plugins.activate` | `auth`, `can:manage-plugins` | Activate plugin |
+| POST | `/{slug}/deactivate` | `PluginsController@deactivate` | `api.plugins.deactivate` | `auth`, `can:manage-plugins` | Deactivate plugin |
+| POST | `/{slug}/update` | `PluginsController@update` | `api.plugins.update` | `auth`, `can:manage-plugins` | Update plugin |
+| DELETE | `/{slug}` | `PluginsController@destroy` | `api.plugins.destroy` | `auth`, `can:manage-plugins` | Delete plugin |
 
 **Error shape**: since *2.8.0*, every failing action endpoint returns `422` with Laravel's standard `errors` bag — keyed by `plugin_zip` for the install upload and by `slug` for the actions taken against an installed plugin — so Inertia consumers get field-level errors. The one exception is activating a plugin whose `min_host_version` the host does not satisfy, which keeps its dedicated `409` response and its structured `code` / `required_version` / `host_version` payload.
 
@@ -283,13 +283,20 @@ The Site Editor module exposes WP-shape endpoints for templates, parts, patterns
 ## Themes Upload *(2.0.0)*
 
 **Base Path**: `/api/v1/themes`
-**Middleware**: `auth:sanctum`
+**Middleware**: `auth:sanctum`. Since *2.8.0*, the mutating routes (`POST /` upload, `{slug}/activate`, `{slug}/update`) additionally require `can:manage-themes`. The read routes (`GET /themes`, `GET /themes/updates`, `GET /themes/{slug}`) stay auth-only.
 
-| Method | URI | Description |
-|--------|-----|-------------|
-| POST | `/` | Upload a theme ZIP archive (multipart `theme` field) |
+| Method | URI | Middleware | Description |
+|--------|-----|------------|-------------|
+| POST | `/` | `auth:sanctum`, `can:manage-themes` | Upload a theme ZIP archive (multipart `theme` field) |
+| POST | `/{slug}/activate` | `auth:sanctum`, `can:manage-themes` | Activate a theme |
+| POST | `/{slug}/update` | `auth:sanctum`, `can:manage-themes` | Update an installed theme in place *(2.8.0)* |
 
 See [[themes/Installing From Zip]] for usage and validation behavior.
+
+## AI Module *(2.3.0)*
+
+**Base Path**: `/api/v1/cms/ai`
+**Middleware**: `auth:sanctum`. Since *2.8.0*, every AI endpoint additionally requires `can:cms.ai.use` — a deny-by-default ability seeded to the `admin` role. The `AiTools` Livewire component enforces the same ability. See [[AI-Features]] for the endpoint listing.
 
 ---
 

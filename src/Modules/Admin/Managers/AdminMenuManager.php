@@ -11,6 +11,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Admin\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Throwable;
@@ -256,6 +257,26 @@ class AdminMenuManager
 
             if ( isset( $node['url'] ) ) {
                 $node['url'] = NavUrl::sanitizeValue( $node['url'], 'AdminMenuManager' );
+            }
+
+            // The menu Blade renders label/title/menuTitle through `{{ }}`,
+            // whose `e()` returns an `Htmlable` verbatim — the exact escaping
+            // bypass `NavUrl` coerces `url` against. Coerce the text fields to a
+            // plain string so `{{ }}` escapes them normally.
+            foreach ( ['label', 'title', 'menuTitle'] as $textKey ) {
+                if ( ! isset( $node[ $textKey ] ) || is_string( $node[ $textKey ] ) ) {
+                    continue;
+                }
+
+                $value = $node[ $textKey ];
+
+                if ( $value instanceof Htmlable ) {
+                    $node[ $textKey ] = $value->toHtml();
+                } elseif ( is_scalar( $value ) ) {
+                    $node[ $textKey ] = (string) $value;
+                } else {
+                    $node[ $textKey ] = '';
+                }
             }
 
             foreach ( ['items', 'subItems'] as $childKey ) {

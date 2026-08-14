@@ -5,8 +5,8 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
-use Exception;
 use Illuminate\Console\Command;
+use Throwable;
 
 /**
  * Perform Update Command
@@ -50,13 +50,20 @@ class PerformUpdateCommand extends Command
             // Check for updates first
             $updateInfo = $manager->checkForUpdate();
 
-            if ( ! $updateInfo->hasUpdate() ) {
+            $targetOption = $this->option( 'target-version' );
+
+            // "Already on latest" is only a reason to stop when the operator
+            // did not pin a target. A pinned `--target-version` (with
+            // `--allow-downgrade`) is a deliberate move to a specific release —
+            // including rolling off a bad latest — so it must reach
+            // `performUpdate()` rather than exit success here.
+            if ( ! $updateInfo->hasUpdate() && null === $targetOption ) {
                 $this->info( '✓ You are already running the latest version.' );
 
                 return self::SUCCESS;
             }
 
-            $version = $this->option( 'target-version' ) ?? $updateInfo->latestVersion;
+            $version = $targetOption ?? $updateInfo->latestVersion;
 
             // Show update information
             $this->newLine();
@@ -100,7 +107,7 @@ class PerformUpdateCommand extends Command
             $this->line( "Application updated to version {$version}" );
 
             return self::SUCCESS;
-        } catch ( Exception $e ) {
+        } catch ( Throwable $e ) {
             $this->newLine();
             $this->error( '✗ Update failed:' );
             $this->error( $e->getMessage() );
