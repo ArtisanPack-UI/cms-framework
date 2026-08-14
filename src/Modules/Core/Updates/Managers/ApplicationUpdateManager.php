@@ -89,6 +89,22 @@ class ApplicationUpdateManager
     protected ?string $backupPath = null;
 
     /**
+     * Relative paths, under `base_path()`, that the current extraction created
+     * and that did not exist beforehand.
+     *
+     * The backup can only restore files it captured, so a file the release
+     * *added* survives a snapshot restore untouched — leaving the tree a hybrid
+     * of the old version's files and an arbitrary subset of the new version's
+     * additions, migrations included. Recording exactly what extraction wrote
+     * lets rollback remove precisely those additions and nothing else.
+     *
+     * @since 2.8.0
+     *
+     * @var array<int, string>
+     */
+    protected array $extractionAdditions = [];
+
+    /**
      * Persisted step marker for the current update run.
      *
      * @since 2.7.1
@@ -646,6 +662,17 @@ class ApplicationUpdateManager
      */
     protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
     {
+        // Clear the additions ledger at the very start of the run, not just in
+        // `extractUpdate()`. The manager is a singleton ( see
+        // `CoreServiceProvider` ), so on a long-lived queue worker one instance
+        // drives many runs. A run that succeeds leaves its additions in the
+        // ledger, and a *later* run that fails before ever reaching the Extract
+        // step would otherwise inherit them — and `removeExtractionAdditions()`
+        // would delete the previous, successful update's files during this
+        // run's rollback. Resetting here means a run that never extracts has an
+        // empty ledger and removes nothing.
+        $this->extractionAdditions = [];
+
         $this->state()->begin( $targetVersion, $updateInfo->resolveCurrentVersion() );
 
         try {
@@ -1244,6 +1271,11 @@ class ApplicationUpdateManager
         $extractPath  = base_path();
         $excludePaths = config( 'cms.updates.exclude_from_update', [] );
 
+        // Start each extraction with an empty ledger. A manager instance can
+        // drive more than one run, and rollback removes exactly what *this*
+        // extraction added — never a previous run's additions.
+        $this->extractionAdditions = [];
+
         // Detect common root prefix by scanning all entry names
         $commonPrefix = $this->detectCommonRootPrefix( $zip, $excludePaths );
 
@@ -1374,6 +1406,13 @@ class ApplicationUpdateManager
             // so fetching content by name meant that with duplicate entry
             // names the file written for occurrence 2 got occurrence 1's
             // content and occurrence 2's permissions.
+            // Whether this path already existed decides what rollback owes it.
+            // An overwrite is restored from the backup; a brand-new file is
+            // not in the backup at all, so rollback has to delete it or it
+            // survives orphaned. Captured before the write because `fopen(
+            // …, 'wb' )` below creates the file either way.
+            $existedBeforeWrite = File::exists( $fullTargetPath );
+
             $entryStream = $zip->getStreamIndex( $i );
             if ( false === $entryStream ) {
                 Log::error( 'Failed to open ZIP entry stream during update extraction', [
@@ -1399,6 +1438,18 @@ class ApplicationUpdateManager
                     $filename,
                     "could not open target for writing: {$fullTargetPath}",
                 );
+            }
+
+            // Record the addition the moment `fopen` creates the file, before
+            // streaming — not after. If `streamEntryToDisk()` throws partway,
+            // it best-effort `@unlink`s the target, but should that unlink fail
+            // ( read-only parent, races ) a brand-new, half-written file would
+            // survive un-ledgered and neither rollback nor the backup could
+            // remove it. Ledgering here lets rollback delete it. A later
+            // successful overwrite of a path that existed before is still not
+            // recorded, because `$existedBeforeWrite` was captured pre-`fopen`.
+            if ( ! $existedBeforeWrite ) {
+                $this->extractionAdditions[] = $targetPath;
             }
 
             $this->streamEntryToDisk( $entryStream, $out, $filename, $fullTargetPath );
@@ -2679,6 +2730,80 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Remove the files the current extraction added, after the snapshot has
+     * been restored.
+     *
+     * `rollback()` puts back every file the pre-update snapshot captured, but a
+     * snapshot cannot restore a file that did not exist when it was taken.
+     * Without this, every path the extraction *added* survives the restore,
+     * leaving the tree a hybrid of the old version's files and an arbitrary
+     * subset of the new version's additions — migrations included, whose next
+     * `migrate` run would apply schema for a version that was rolled back.
+     *
+     * Only paths this extraction recorded as newly created are touched, and the
+     * exclusion list is honoured a second time so a rollback can never delete
+     * `storage/`, `.env`, or `vendor/` contents even if one slipped into the
+     * ledger.
+     *
+     * @since 2.8.0
+     */
+    protected function removeExtractionAdditions(): void
+    {
+        if ( empty( $this->extractionAdditions ) ) {
+            return;
+        }
+
+        $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+        $basePath     = base_path();
+        $removed      = 0;
+
+        foreach ( $this->extractionAdditions as $relativePath ) {
+            if ( $this->isPathExcluded( $relativePath, $excludePaths ) ) {
+                continue;
+            }
+
+            $fullPath = $basePath . DIRECTORY_SEPARATOR . $relativePath;
+
+            // The extraction only ever wrote regular files, so a symlink or a
+            // directory at this path is something else on disk — never follow
+            // or remove it. Also covers the case where restoring the backup
+            // already replaced the addition with something the snapshot owned.
+            if ( is_link( $fullPath ) || ! is_file( $fullPath ) ) {
+                continue;
+            }
+
+            // Defence in depth: resolve the path and confirm it still sits
+            // under base_path() before unlinking, mirroring the extraction
+            // guards. A file always resolves, so realpath() cannot fail here.
+            if ( ! $this->isPathWithinExtractRoot( $fullPath, $basePath ) ) {
+                continue;
+            }
+
+            try {
+                File::delete( $fullPath );
+                $removed++;
+            } catch ( Throwable $e ) {
+                // A file that cannot be removed is logged, not fatal: the
+                // rollback of the backed-up files has already succeeded, and
+                // aborting here would turn a partial cleanup into a reported
+                // rollback failure.
+                Log::warning( 'cms-framework: could not remove a file the rolled-back update had added; it remains on disk.', [
+                    'path'      => $relativePath,
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+
+        if ( $removed > 0 ) {
+            Log::info( 'cms-framework: removed files the rolled-back update had added.', [
+                'count' => $removed,
+            ] );
+        }
+
+        $this->extractionAdditions = [];
+    }
+
+    /**
      * Handle update failure and attempt rollback.
      *
      * @since 1.0.0
@@ -2727,6 +2852,14 @@ class ApplicationUpdateManager
         if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {
                 $this->rollback( $this->backupPath );
+
+                // The snapshot restore reinstated every backed-up file, but a
+                // snapshot cannot restore a file that did not exist when it
+                // was taken. Remove the files this extraction added so the
+                // tree matches the pre-update version rather than a hybrid of
+                // both — otherwise orphaned code and, worse, orphaned
+                // migrations are left behind.
+                $this->removeExtractionAdditions();
 
                 $this->state()->markRollback( true );
             } catch ( Throwable $e ) {

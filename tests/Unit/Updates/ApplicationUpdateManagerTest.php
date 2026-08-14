@@ -553,6 +553,315 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Regression for #272: `extractUpdate` must record the paths it *adds* —
+     * files that did not exist beforehand — and leave overwrites of existing
+     * files out of that ledger, since the backup restores overwrites but is the
+     * only thing that can delete additions.
+     *
+     * @since 2.8.0
+     */
+    public function test_extract_update_records_added_paths_but_not_overwrites(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-additions-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        // A file that already exists at version N — extraction overwrites it.
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/app/Old.php', "<?php\n// new-old\n" );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->addFromString( 'release-root/database/migrations/2026_01_01_000000_add.php', "<?php\n// migration\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $reflection = new ReflectionClass( ApplicationUpdateManager::class );
+            $property   = $reflection->getProperty( 'extractionAdditions' );
+            $property->setAccessible( true );
+            $additions = $property->getValue( $manager );
+
+            sort( $additions );
+
+            $this->assertSame(
+                ['app/New.php', 'database/migrations/2026_01_01_000000_add.php'],
+                $additions,
+                'Only newly-created paths belong in the additions ledger; the overwritten app/Old.php must be excluded.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: a failed update that rolls back must not leave the
+     * files the extraction added behind. Restoring the snapshot reinstates
+     * overwritten files but cannot remove additions — including migrations —
+     * so the manager has to delete them itself.
+     *
+     * @since 2.8.0
+     */
+    public function test_rollback_removes_files_the_extraction_added(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-additions-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        // Version N on disk.
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        // The pre-update snapshot: it captured only the files that existed at
+        // version N. Clean relative names so rollback's extractTo restores them.
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/Old.php', "<?php\n// old\n" );
+        $backup->close();
+
+        // The release: overwrites Old.php and adds two files N never had.
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/app/Old.php', "<?php\n// new-old\n" );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->addFromString( 'release-root/database/migrations/2026_01_01_000000_add.php', "<?php\n// migration\n" );
+        $zip->close();
+
+        $manager = new class( $backupPath ) extends ApplicationUpdateManager {
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+
+            protected function clearCaches(): void
+            {
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            // Sanity: the release landed before the (simulated) failure.
+            $this->assertFileExists( $target . '/app/New.php' );
+            $this->assertFileExists( $target . '/database/migrations/2026_01_01_000000_add.php' );
+
+            $manager->callHandleFailure( new RuntimeException( 'composer install failed' ) );
+
+            // The overwrite is restored from the snapshot.
+            $this->assertFileExists( $target . '/app/Old.php' );
+            $this->assertStringContainsString( '// old', (string) file_get_contents( $target . '/app/Old.php' ) );
+
+            // The additions — orphaned code and, critically, the migration —
+            // are gone.
+            $this->assertFileDoesNotExist( $target . '/app/New.php' );
+            $this->assertFileDoesNotExist( $target . '/database/migrations/2026_01_01_000000_add.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            @unlink( $backupPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: removing extraction additions on rollback must honour
+     * the exclusion list, so a rollback can never delete `storage/`, `.env`, or
+     * `vendor/` contents even if such a path reached the additions ledger.
+     *
+     * @since 2.8.0
+     */
+    public function test_remove_extraction_additions_honours_the_exclusion_list(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-additions-excluded-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+        mkdir( $target . '/storage/logs', 0755, true );
+
+        file_put_contents( $target . '/app/New.php', "<?php\n// added\n" );
+        file_put_contents( $target . '/storage/logs/laravel.log', "log\n" );
+
+        $manager = new class extends ApplicationUpdateManager {
+            /**
+             * @param  array<int, string>  $paths
+             */
+            public function seedAdditions( array $paths ): void
+            {
+                $this->extractionAdditions = $paths;
+            }
+
+            public function callRemove(): void
+            {
+                $this->removeExtractionAdditions();
+            }
+        };
+
+        $manager->seedAdditions( ['app/New.php', 'storage/logs/laravel.log'] );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+        config( ['cms.updates.exclude_from_update' => ['storage', '.env', 'vendor']] );
+
+        try {
+            $manager->callRemove();
+
+            $this->assertFileDoesNotExist( $target . '/app/New.php' );
+            $this->assertFileExists(
+                $target . '/storage/logs/laravel.log',
+                'An excluded path must survive rollback cleanup even when it is in the additions ledger.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: the manager is a singleton, so one instance drives
+     * many runs on a long-lived queue worker. A run that fails *before* the
+     * Extract step must not delete files a previous successful run added — the
+     * additions ledger has to be reset at the start of every run, not only in
+     * `extractUpdate()`. Without the run-start reset a stale ledger from a
+     * prior successful run would have its files unlinked during this run's
+     * rollback.
+     *
+     * @since 2.8.0
+     */
+    public function test_run_start_reset_prevents_a_later_failure_deleting_a_prior_runs_files(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-crossrun-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        // A file a previous, successful update added — now part of the current
+        // version and captured by this run's backup.
+        file_put_contents( $target . '/app/FromRun1.php', "<?php\n// installed by the prior run\n" );
+
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/FromRun1.php', "<?php\n// installed by the prior run\n" );
+        $backup->close();
+
+        $manager = new class( $backupPath ) extends ApplicationUpdateManager {
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            /**
+             * @param  array<int, string>  $paths
+             */
+            public function seedAdditions( array $paths ): void
+            {
+                $this->extractionAdditions = $paths;
+            }
+
+            public function runSteps( string $version, UpdateInfo $info ): void
+            {
+                $this->runUpdateSteps( $version, $info );
+            }
+
+            // Fail the run at step 1 — before extraction ever runs.
+            protected function enableMaintenanceMode(): void
+            {
+                throw new RuntimeException( 'simulated early failure before extraction' );
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+
+            protected function clearCaches(): void
+            {
+            }
+        };
+
+        // The stale ledger the prior successful run left on the singleton.
+        $manager->seedAdditions( ['app/FromRun1.php'] );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $info = new UpdateInfo(
+                currentVersion: '1.0.0',
+                latestVersion: '2.0.0',
+                downloadUrl: 'https://example.test/update.zip',
+            );
+
+            try {
+                $manager->runSteps( '2.0.0', $info );
+                $this->fail( 'Expected the simulated early failure to propagate.' );
+            } catch ( RuntimeException $e ) {
+                $this->assertStringContainsString( 'simulated early failure', $e->getMessage() );
+            }
+
+            $this->assertFileExists(
+                $target . '/app/FromRun1.php',
+                'A run that fails before extraction must not delete files a prior run added; the ledger has to reset at run start.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $backupPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
      * Regression for #225: `COMPOSER_BINARY` env var wins over both config and
      * discovery and is invoked via `PHP_BINARY` so the PHP-FPM pool's `PATH`
      * never has to resolve composer's shebang.
