@@ -1654,9 +1654,205 @@ class ApplicationUpdateManager
             ->path( base_path() )
             ->run( $command );
 
-        if ( ! $result->successful() ) {
-            throw UpdateException::composerInstallFailed( $result->errorOutput(), $composerFilesDiverged );
+        if ( $result->successful() ) {
+            return;
         }
+
+        // #273: when the install failed *because* the on-disk lock is merely
+        // the previous release's, a targeted `composer update` can re-resolve the
+        // flagged packages and land a lock that satisfies the new `composer.json`,
+        // rather than aborting into a rollback the operator can only escape with
+        // shell access. This keys off composer's *own* "Required package"
+        // diagnosis of an unsatisfiable lock — never pre-emptively — and so is
+        // independent of `verifyComposerFilesInSync()`'s content-hash check
+        // above, which only enriches the failure message. That independence is
+        // deliberate: an operator disables the hash check precisely when a
+        // future composer changes the hash algorithm, which is exactly when a
+        // stale lock is most likely and recovery most wanted.
+        if ( $this->attemptStaleLockRecovery( $result->errorOutput() ) ) {
+            return;
+        }
+
+        throw UpdateException::composerInstallFailed( $result->errorOutput(), $composerFilesDiverged );
+    }
+
+    /**
+     * Recover from a `composer install` that aborted because the extracted
+     * `composer.json` requires a dependency set the still-in-place, previous
+     * release's `composer.lock` cannot satisfy (#273).
+     *
+     * This is the escape from the chicken-and-egg #255 left behind: the fix for
+     * a broken lock ships *inside* the update the broken lock prevents from
+     * running, so an install on the affected line has no updater-reachable path
+     * to the fix. Where composer names the packages the lock cannot satisfy,
+     * the framework runs a **targeted** `composer update <packages>` — only the
+     * flagged packages and their dependencies are re-resolved; everything else
+     * stays pinned at the lock — writing a lock that matches `composer.json` and
+     * letting the update proceed instead of rolling back.
+     *
+     * It is deliberately conservative, and every guard below fails *toward* the
+     * original abort:
+     *
+     * - It runs only when composer's output names at least one unsatisfied
+     *   package — composer's own diagnosis of a lock that cannot satisfy
+     *   `composer.json`. An unrelated failure (network, a plugin error) names
+     *   none and is never "recovered", and a full-tree `composer update` — the
+     *   blast radius #255 argued against — is never triggered on a guess.
+     * - It declines when the composer command is an operator override that
+     *   cannot be safely rewritten into an `update`.
+     * - It is gated behind `cms.updates.recover_stale_lock` (default enabled),
+     *   because re-resolving on the operator's behalf is arguably not the
+     *   updater's call — an operator who wants the loud, safe rollback instead
+     *   sets the key to `false`.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $composerErrorOutput  The stderr from the failed install.
+     *
+     * @return bool True when a recovery `composer update` ran and succeeded.
+     */
+    protected function attemptStaleLockRecovery( string $composerErrorOutput ): bool
+    {
+        if ( ! config( 'cms.updates.recover_stale_lock', true ) ) {
+            return false;
+        }
+
+        $packages = $this->parseUnsatisfiedComposerPackages( $composerErrorOutput );
+        if ( empty( $packages ) ) {
+            return false;
+        }
+
+        $command = $this->resolveComposerRecoveryCommand( $packages );
+        if ( null === $command ) {
+            Log::warning(
+                'A stale composer.lock blocked the update, but the composer command is an operator override that cannot be rewritten into a targeted `composer update`; leaving the failure to roll back. Run `composer update ' . implode( ' ', $packages ) . ' --with-all-dependencies` on the host once, or clear the override.',
+                [ 'packages' => $packages ],
+            );
+
+            return false;
+        }
+
+        Log::warning(
+            'composer install aborted on a stale composer.lock; attempting a targeted `composer update` to reach the release the lock could not deliver (#273).',
+            [ 'packages' => $packages ],
+        );
+
+        $timeout = config( 'cms.updates.composer_timeout', 600 );
+
+        $result = Process::timeout( $timeout )
+            ->path( base_path() )
+            ->run( $command );
+
+        if ( $result->successful() ) {
+            Log::info(
+                'Stale composer.lock recovered: `composer update` re-resolved the flagged packages and the update is proceeding.',
+                [ 'packages' => $packages ],
+            );
+
+            return true;
+        }
+
+        Log::error(
+            'Stale composer.lock recovery failed: the targeted `composer update` could not resolve the flagged packages either; the update will roll back.',
+            [
+                'packages' => $packages,
+                'output'   => $result->errorOutput(),
+            ],
+        );
+
+        return false;
+    }
+
+    /**
+     * Extract the package names composer reported as unsatisfiable by the
+     * on-disk lock, from a failed `composer install`'s output.
+     *
+     * Composer names them in one of two shapes, both opening `Required package
+     * "vendor/name"`:
+     *
+     * ```
+     * Required package "artisanpack-ui/cms-framework" is in the lock file as
+     *   "2.5.4" but that does not satisfy your constraint "^2.7.1".
+     * Required package "psr/container" is not present in the lock file.
+     * ```
+     *
+     * Composer emits a third, `Required (in require-dev) package "..."` shape
+     * for dev requirements, deliberately not matched here: the shipped install
+     * runs `--no-dev`, so composer never reports a dev requirement, and any
+     * override that drops `--no-dev` makes recovery decline anyway (its command
+     * is no longer the default). If the install args ever stop passing
+     * `--no-dev`, revisit this pattern.
+     *
+     * Matches are filtered to well-formed composer package names before they
+     * are ever handed to a shelled-out `composer update`, so unparseable output
+     * yields an empty list (declining recovery) rather than passing junk — or
+     * anything crafted — to composer on this RCE-adjacent path.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $output  The failed install's stderr.
+     *
+     * @return array<int, string> Unique, validated package names; empty when none parse.
+     */
+    protected function parseUnsatisfiedComposerPackages( string $output ): array
+    {
+        if ( 0 === preg_match_all( '/Required package "([^"]+)"/', $output, $matches ) ) {
+            return [];
+        }
+
+        $packages = array_filter(
+            array_unique( $matches[1] ),
+            static fn ( string $name ): bool => 1 === preg_match(
+                '/^[a-z0-9]([_.-]?[a-z0-9]+)*\/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$/i',
+                $name,
+            ),
+        );
+
+        return array_values( $packages );
+    }
+
+    /**
+     * Build the targeted `composer update <packages>` command used to recover
+     * from a stale lock, mirroring `resolveComposerCommand()`'s binary
+     * discovery so recovery runs the same toolchain the install did.
+     *
+     * Returns `null` when the operator has overridden the full composer command
+     * string: an arbitrary command cannot be safely rewritten from `install`
+     * into `update`, so recovery declines rather than guess.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<int, string>  $packages  Validated package names to update.
+     *
+     * @return string|null The recovery command, or null when it cannot be derived.
+     */
+    protected function resolveComposerRecoveryCommand( array $packages ): ?string
+    {
+        // `--with-all-dependencies` (`-W`) so the flagged packages' own
+        // dependencies — including root requirements pinned by the stale lock —
+        // may move too. A bare `composer update <pkg>` leaves them at their
+        // locked versions and fails to resolve exactly when the new version of a
+        // flagged package needs a transitive bump, which is the case recovery
+        // exists to unstick.
+        $args = 'update ' . implode( ' ', array_map( 'escapeshellarg', $packages ) )
+            . ' --with-all-dependencies --no-dev --no-interaction --optimize-autoloader';
+
+        $envBinary = $this->envComposerBinary();
+        if ( null !== $envBinary ) {
+            return $this->buildComposerCommand( $envBinary, $args );
+        }
+
+        $configured = config( 'cms.updates.composer_install_command' );
+        if ( is_string( $configured ) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured ) {
+            return null;
+        }
+
+        $discovered = $this->discoverComposerBinary();
+        if ( null !== $discovered ) {
+            return $this->buildComposerCommand( $discovered, $args );
+        }
+
+        return 'composer ' . $args;
     }
 
     /**
@@ -2048,10 +2244,17 @@ class ApplicationUpdateManager
      * an FPM daemon binary (which prints usage and exits 64).
      *
      * @since 2.5.3
+     *
+     * @param  string  $binary  Absolute path to the composer PHAR.
+     * @param  string|null  $args  Composer sub-command and flags. Defaults to the
+     *                             install arguments; the stale-lock recovery path
+     *                             (#273) passes an `update <packages>` string.
      */
-    protected function buildComposerCommand( string $binary ): string
+    protected function buildComposerCommand( string $binary, ?string $args = null ): string
     {
-        return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . self::DEFAULT_COMPOSER_INSTALL_ARGS;
+        $args ??= self::DEFAULT_COMPOSER_INSTALL_ARGS;
+
+        return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . $args;
     }
 
     /**

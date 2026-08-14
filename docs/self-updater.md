@@ -241,6 +241,26 @@ Nothing was merged and nothing was hand-edited — but that sentence sends the o
 
 The check **fails open**: a missing `composer.json`, a missing or unparseable `composer.lock`, or a lock carrying no `content-hash` records no divergence and is left for composer to adjudicate. Set `cms.updates.verify_composer_lock_sync` to `false` (env `CMS_UPDATES_VERIFY_LOCK_SYNC`) to skip it entirely — for instance if a future composer release changes the content-hash algorithm before the framework catches up.
 
+### Stale-lock recovery (2.8.0)
+
+The lock-sync fix above has a reachability gap of its own (#273): it ships **inside** an update, and the broken lock it fixes is exactly what aborts that update. An install still on an affected line (≤ 2.7.0) therefore has no updater-reachable path to the fix — the population that needs it is precisely the population that cannot receive it. Recovery otherwise needs a shell on the server, which for a click-to-update product is the wrong failure mode.
+
+So when `composer install` aborts *because* the extracted `composer.json` requires a dependency set the still-in-place previous release's `composer.lock` cannot satisfy, the updater does not immediately roll back. It parses the packages composer named as unsatisfiable and runs a **targeted** `composer update <those packages> --with-all-dependencies`, re-resolving the flagged packages and their dependency closure (everything outside it stays pinned at the lock) so the resulting lock satisfies `composer.json` and the update proceeds. `--with-all-dependencies` is what lets a flagged package's new version pull the transitive bumps it needs; without it composer would leave those pinned and fail to resolve the very case recovery exists to unstick.
+
+Every guard fails *toward* the original safe rollback. The recovery runs only after composer itself has failed on an unsatisfiable lock — never pre-emptively — and only when composer named at least one package and `composer_install_command` is not an operator override that cannot be rewritten into an `update`. If the recovery `composer update` also fails, the update rolls back exactly as before.
+
+Recovery keys off composer's own "Required package" diagnosis, **not** the content-hash check above, so it is independent of `verify_composer_lock_sync`: disabling that hash check (only enriches the failure message) does not disable recovery. That is deliberate — the documented reason to disable the hash check is a future composer that changes the hash algorithm, which is exactly when a stale lock is most likely and recovery most wanted. `cms.updates.recover_stale_lock` is the only switch for recovery.
+
+This does mean the recovered packages land on a freshly resolved version rather than the one the release's lock pinned — the documented trade-off from unexcluding the lock, but scoped here to only the packages composer flagged. A host that treats the tested dependency set as inviolable, and would rather fail loudly than re-resolve any package on production at update time, sets `cms.updates.recover_stale_lock` to `false` (env `CMS_UPDATES_RECOVER_STALE_LOCK`) to keep the pre-#273 behavior.
+
+**Recovering an install by hand.** Recovery is automatic on 2.8.0+, but an install *arriving* at 2.8.0 from an affected line first has to run the update that carries it — and that first update is the one the stale lock can block, before 2.8.0's recovery code is in place to catch it. If the in-app updater aborts on a message like the one above, run this once on the host and then retry the update:
+
+```
+composer update artisanpack-ui/cms-framework --with-all-dependencies
+```
+
+On many hosts this resolves cleanly on its own, because a constraint like `^2.5.3` already admits 2.7.1+ — the lock was merely stale, not incompatible. `--with-all-dependencies` matches what the automatic recovery runs and lets any transitive bump the new version needs come along; drop it if you want to hold every other package at its locked version. After the install is on 2.8.0+, `recover_stale_lock` handles subsequent updates without the manual step.
+
 ## Long-running updates and interrupted processes
 
 A full update — download, extract, `composer install` across a real dependency tree, migrate — routinely runs for several minutes. PHP's `max_execution_time` defaults to **30 seconds** under PHP-FPM, which is the path the admin UI uses. Three guards keep that survivable:
@@ -402,6 +422,7 @@ When the host's installed version changes *out-of-band* (a manual `composer inst
 | `cms.updates.backup_enabled` | Whether to snapshot before updating. |
 | `cms.updates.exclude_from_update` | Paths preserved during extraction. Must **not** list `composer.lock` — see above. |
 | `cms.updates.verify_composer_lock_sync` | Whether to check `composer.json`/`composer.lock` agreement before invoking composer. Default `true`. Env: `CMS_UPDATES_VERIFY_LOCK_SYNC`. |
+| `cms.updates.recover_stale_lock` | Whether a `composer install` that aborts on a stale previous-release lock triggers a targeted `composer update` of the flagged packages instead of rolling back. Default `true`. Env: `CMS_UPDATES_RECOVER_STALE_LOCK`. |
 | `cms.updates.state_path` | Where the step marker is written. Relative paths resolve against `storage_path()`. Default `framework/cms-update-state.json`. |
 | `cms.updates.lift_maintenance_on_interrupt` | Whether the shutdown guard lifts maintenance mode when an update dies mid-flight. `'step_aware'` (default) lifts for steps 1-4 and 8-10 but stays down for the half-applied steps 5-7; `true` always lifts; `false` never lifts. Env: `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT`. |
 | `cms.updates.allow_insecure_transport` | Permit downloading a release archive over plaintext http, including via redirect. Default `false`. Env: `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT`. |
@@ -420,6 +441,7 @@ Environment variables:
 | `CMS_UPDATES_ALLOW_UNVERIFIED` | Boolean; opts into warn-and-continue when the source omits a SHA-256 checksum. |
 | `CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT` | `'step_aware'` (default), `true`, or `false`. Step-aware keeps the site down only for interruptions in the half-applied steps 5-7; `false` leaves it down after any interruption; `true` always lifts. |
 | `CMS_UPDATES_VERIFY_LOCK_SYNC` | Boolean; set `false` to skip the `composer.json`/`composer.lock` sync pre-flight check. |
+| `CMS_UPDATES_RECOVER_STALE_LOCK` | Boolean; set `false` to roll back rather than run a targeted `composer update` when a stale previous-release lock aborts the install. |
 | `CMS_UPDATES_ALLOW_INSECURE_TRANSPORT` | Boolean; set `true` to allow plaintext-http downloads on a trusted air-gapped mirror. |
 | `CMS_UPDATES_QUEUE_CONNECTION` | Queue connection a queued update is dispatched to. |
 | `CMS_UPDATES_QUEUE` | Queue name a queued update is pushed onto. |

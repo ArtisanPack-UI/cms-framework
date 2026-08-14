@@ -2064,6 +2064,406 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * #273: when `composer install` aborts because the previous release's lock
+     * cannot satisfy the incoming `composer.json`, the updater runs a targeted
+     * `composer update` of the flagged packages and lets the update proceed
+     * instead of rolling back into a state only a shell can escape.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_runs_targeted_composer_update_and_proceeds(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( 'Package operations: 1 update', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall(); // No exception: recovery succeeded.
+
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'update' )
+                && str_contains( $process->command, 'psr/container' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Recovery is opt-out. With `recover_stale_lock` disabled, a stale lock
+     * aborts and rolls back exactly as before — no `composer update` is run.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_is_skipped_when_disabled(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'       => false,
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( '', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'With recovery disabled a stale lock must still abort.' );
+            Process::assertNotRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Recovery declines when the composer command is an operator override: an
+     * arbitrary command string cannot be safely rewritten from `install` into
+     * `update`, so the update aborts rather than guess.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_declines_for_operator_override_command(): void
+    {
+        config( [
+            'cms.updates.composer_binary'          => null,
+            'cms.updates.composer_install_command' => 'composer install --no-dev',
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( '', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+            }
+
+            $this->assertTrue( $threw, 'An override that cannot be rewritten must leave the abort in place.' );
+            Process::assertNotRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * When the recovery `composer update` fails too, the update rolls back with
+     * the enriched stale-lock diagnosis, not the recovery's own output.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_that_also_fails_still_rolls_back(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( '', 'Your requirements could not be resolved.', 2 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'Composer install failed', $e->getMessage() );
+                $this->assertStringContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'A recovery that also fails must still abort the update.' );
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Recovery keys off composer's own "Required package" diagnosis, not the
+     * framework's content-hash check, so it still fires when
+     * `verify_composer_lock_sync` is disabled — the very scenario (a changed
+     * hash algorithm) where a stale lock is most likely and recovery most
+     * wanted.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_runs_even_when_lock_sync_check_is_disabled(): void
+    {
+        config( [
+            'cms.updates.verify_composer_lock_sync' => false,
+            'cms.updates.composer_install_command'  => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( 'Package operations: 1 update', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall(); // No exception: recovery ran despite the hash check being off.
+
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'update' )
+                && str_contains( $process->command, 'psr/container' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The parse gate is what scopes recovery: a composer failure that names no
+     * packages — even with a divergence detected — must not trigger a
+     * `composer update`, so an unrelated failure still aborts.
+     *
+     * @since 2.8.0
+     */
+    public function test_recovery_does_not_run_for_a_failure_that_names_no_packages(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        Process::fake( [
+            '*install*' => Process::result( '', 'Some unrelated composer failure with no package lines.', 1 ),
+            '*update*'  => Process::result( '', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+            }
+
+            $this->assertTrue( $threw, 'A failure naming no packages must still abort.' );
+            Process::assertNotRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The recovery command is built through the same binary discovery the
+     * install uses: a configured `composer_binary` yields the explicit
+     * `{php} {binary} update <pkgs> --no-dev …` form the PHP-FPM host of #233
+     * needs, not a bare `composer`.
+     *
+     * @since 2.8.0
+     */
+    public function test_recovery_command_uses_the_configured_composer_binary(): void
+    {
+        config( [
+            'cms.updates.composer_binary'          => '/opt/fake/bin/composer',
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( 'ok', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall();
+
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, '/opt/fake/bin/composer' )
+                && str_contains( $process->command, 'update' )
+                && str_contains( $process->command, 'psr/container' )
+                && str_contains( $process->command, '--with-all-dependencies' )
+                && str_contains( $process->command, '--no-dev' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The package parser reads both shapes composer uses for an unsatisfiable
+     * lock, dedupes, and filters anything that is not a well-formed package
+     * name so no junk — or crafted input — reaches the shelled-out `composer
+     * update`.
+     *
+     * @since 2.8.0
+     */
+    public function test_parse_unsatisfied_composer_packages_extracts_and_filters(): void
+    {
+        $manager = new class extends ApplicationUpdateManager {
+            /**
+             * @return array<int, string>
+             */
+            public function parseFor( string $output ): array
+            {
+                return $this->parseUnsatisfiedComposerPackages( $output );
+            }
+        };
+
+        $output = 'Required package "artisanpack-ui/cms-framework" is in the lock file as "2.5.4" '
+            . 'but that does not satisfy your constraint "^2.7.1".' . "\n"
+            . 'Required package "psr/container" is not present in the lock file.' . "\n"
+            . 'Required package "artisanpack-ui/cms-framework" mentioned twice.' . "\n"
+            . 'Required package "not a real name" should be filtered out.';
+
+        $this->assertSame(
+            ['artisanpack-ui/cms-framework', 'psr/container'],
+            $manager->parseFor( $output ),
+        );
+    }
+
+    /**
      * The happy path: an in-sync pair reports no divergence.
      *
      * @since 2.7.1
