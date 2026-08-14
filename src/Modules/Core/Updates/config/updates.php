@@ -326,6 +326,45 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Stale composer.lock Recovery
+    |--------------------------------------------------------------------------
+    |
+    | The fix for #255 (unexcluding `composer.lock`) ships *inside* an update,
+    | so an install still running an affected version cannot reach it: the
+    | broken lock aborts the very update that carries the fix. #273. Left alone,
+    | the only way out is a `composer update` at a shell — the wrong failure
+    | mode for a click-to-update product.
+    |
+    | With this enabled, when `composer install` aborts *because* the extracted
+    | `composer.json` requires a dependency set the still-in-place previous
+    | release's `composer.lock` cannot satisfy, the updater parses the packages
+    | composer named as unsatisfiable and runs a **targeted**
+    | `composer update <those packages>`. Only the flagged packages and their
+    | dependencies are re-resolved; everything else stays pinned at the lock, so
+    | the blast radius is far short of a full-tree `composer update`. The
+    | re-resolved lock then satisfies `composer.json` and the update proceeds
+    | rather than rolling back.
+    |
+    | It keys off composer's *own* "Required package" diagnosis, so it runs only
+    | *after* composer itself has failed on an unsatisfiable lock — never
+    | pre-emptively — and independently of `verify_composer_lock_sync` above,
+    | which only enriches the failure message. Disabling the hash check therefore
+    | does *not* disable recovery; this key is the only switch for it. Recovery
+    | declines (leaving the loud, safe rollback in place) when composer named no
+    | packages, or when `composer_install_command` is an operator override that
+    | cannot be rewritten into an `update`.
+    |
+    | Set to `false` to keep the pre-#273 behavior: abort and roll back on a
+    | stale lock, leaving the recovery `composer update` to the operator. This is
+    | the right choice for a host that treats the tested dependency set as
+    | inviolable and would rather fail loudly than re-resolve any package on
+    | production at update time.
+    |
+    */
+    'recover_stale_lock' => env( 'CMS_UPDATES_RECOVER_STALE_LOCK', true ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Settings
     |--------------------------------------------------------------------------
     |
