@@ -98,6 +98,24 @@ final class HookAliases
 	 * Plugin and theme install/activate/deactivate/delete/update events,
 	 * plus comment-related surfaces.
 	 *
+	 * `comments.form.action` is the one entry here whose fire site lives
+	 * outside this package — `artisanpack-ui/visual-editor` emits it from
+	 * its `post-comments-form` block. It is namespaced under
+	 * `ap.cmsFramework.*` anyway because comments are this package's
+	 * domain (the filter's default value is this package's
+	 * `POST /api/v1/comments` endpoint), following the same
+	 * emitter-is-not-owner precedent as `ap.rbac.roleRegistered`, which
+	 * this package fires under the RBAC namespace. visual-editor declares
+	 * the identical alias in its own `HookAliases` so old-name subscribers
+	 * keep resolving in installs that do not have this package — the same
+	 * defensive cross-package declaration it already makes for
+	 * `ap.icons.register-icon-sets`. `deprecateHook()` is *intended* to be
+	 * idempotent per (old, new) pair so both declarations are safe together
+	 * (issue #245); until artisanpack-ui/hooks#16 ships, the underlying
+	 * `HookDeprecations::alias()` does not dedup, so a subscriber registered
+	 * on the old name *before* the aliases are declared can fire twice when
+	 * both packages declare this alias.
+	 *
 	 * @since 2.5.0
 	 *
 	 * @return array<string, string>
@@ -138,6 +156,7 @@ final class HookAliases
 		$map['comments.store.defaultStatus']      = 'ap.cmsFramework.comments.store.defaultStatus';
 		$map['comments.rate-limit.guest']         = 'ap.cmsFramework.comments.rateLimit.guest';
 		$map['comments.rate-limit.authenticated'] = 'ap.cmsFramework.comments.rateLimit.authenticated';
+		$map['comments.form.action']              = 'ap.cmsFramework.comments.form.action';
 
 		return $map;
 	}

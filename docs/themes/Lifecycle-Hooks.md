@@ -4,7 +4,7 @@ title: Themes - Lifecycle Hooks
 
 # Theme Lifecycle Hooks
 
-The Themes module fires action hooks at four points in a theme's lifecycle — two on activation, two on installation. Hooks use the `artisanpack-ui/hooks` package (`doAction()` / `addAction()`).
+The Themes module fires action hooks at six points in a theme's lifecycle — two on activation, two on installation, and two on update. Hooks use the `artisanpack-ui/hooks` package (`doAction()` / `addAction()`).
 
 > **Added in 2.0.0.**
 
@@ -43,6 +43,27 @@ The Themes module fires action hooks at four points in a theme's lifecycle — t
 - **Arguments:** `(string $slug, array $manifest)`
 - **Listener may throw:** technically yes, but the install is already on disk; throwing won't roll it back.
 - **Typical uses:** run theme-shipped seeders, queue a thumbnail-generation job, notify the user, fire a webhook.
+
+## Update hooks
+
+`UpdateManager::updateTheme($slug)` fires these. See [[themes/Updating]] for the
+full update flow.
+
+> **Added in 2.8.0.**
+
+### `theme.updating`
+
+- **Fired:** after an update has been found, **before** anything is backed up or downloaded.
+- **Arguments:** `(string $slug, string $oldVersion, string $newVersion)`
+- **Listener may throw:** yes — a thrown exception aborts the update. Nothing has changed on disk at that point, so a veto costs nothing and needs no rollback.
+- **Typical uses:** pin a theme to a version, check a license server, refuse updates during a content freeze.
+
+### `theme.updated`
+
+- **Fired:** after the new files are swapped in and caches are refreshed.
+- **Arguments:** `(string $slug, string $newVersion, array $manifest)`
+- **Listener may throw:** it propagates to the caller, but it will **not** roll the update back. The new files are already validated and in place; reverting them because a notification listener failed would be worse than surfacing the error.
+- **Typical uses:** clear a CDN, rebuild assets, notify the user, fire a webhook.
 
 ## Registering listeners
 
@@ -93,6 +114,16 @@ installFromZip($zipPath):
   4. doAction('theme.installing', $slug, $manifest) ← may throw, rolls back
   5. move extracted directory into themes path
   6. doAction('theme.installed', $slug, $manifest)
+
+updateTheme($slug):
+  1. checkThemeUpdate($slug) → no update? return early, no hooks fire
+  2. doAction('theme.updating', $slug, $old, $new) ← may throw to abort
+  3. download + verify checksum ← may throw, nothing touched yet
+  4. extract + validate into themes/.updates/ ← may throw, nothing touched yet
+  5. back up the installed directory
+  6. swap staged directory into place ← may throw, restores from backup
+  7. refresh caches + view paths
+  8. doAction('theme.updated', $slug, $new, $manifest) ← throwing does NOT roll back
 ```
 
 ## Removing listeners

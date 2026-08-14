@@ -10,6 +10,8 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Admin\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Throwable;
@@ -202,6 +204,14 @@ class AdminMenuManager
 
         $menu = applyFilters( 'ap.cmsFramework.admin.menu', $menu );
 
+        // Decoration — and with it URL sanitization — runs before the filter,
+        // so a row a subscriber injects has never been checked. The framework
+        // now ships a renderer (`cms::admin.partials.menu`) that puts `url`
+        // straight into an `<a href>`, where Blade's escaping does nothing to
+        // stop a `javascript:` scheme, so every URL is re-checked here on the
+        // way out.
+        $menu = $this->sanitizeMenuUrls( $menu );
+
         // Defense-in-depth: re-apply capability filtering AFTER the filter
         // runs so plugin-injected entries can't bypass the Gate check that
         // native items go through above. Filter subscribers can push in new
@@ -222,6 +232,63 @@ class AdminMenuManager
     public function getPageBySlug( string $slug ): ?array
     {
         return $this->items[ $slug ] ?? null;
+    }
+
+    /**
+     * Recursively re-run every `url` in the menu through the scheme allow-list.
+     *
+     * Idempotent: a URL already sanitized during decoration passes through
+     * unchanged, so running this over the whole tree costs nothing but closes
+     * the gap for rows added by `ap.cmsFramework.admin.menu` subscribers,
+     * which the filter runs too late to have decorated.
+     *
+     * @since 2.8.0
+     *
+     * @param  array  $menu  The (post-filter) menu.
+     *
+     * @return array The menu with navigation-safe URLs.
+     */
+    protected function sanitizeMenuUrls( array $menu ): array
+    {
+        foreach ( $menu as $key => $node ) {
+            if ( ! is_array( $node ) ) {
+                continue;
+            }
+
+            if ( isset( $node['url'] ) ) {
+                $node['url'] = NavUrl::sanitizeValue( $node['url'], 'AdminMenuManager' );
+            }
+
+            // The menu Blade renders label/title/menuTitle through `{{ }}`,
+            // whose `e()` returns an `Htmlable` verbatim — the exact escaping
+            // bypass `NavUrl` coerces `url` against. Coerce the text fields to a
+            // plain string so `{{ }}` escapes them normally.
+            foreach ( ['label', 'title', 'menuTitle'] as $textKey ) {
+                if ( ! isset( $node[ $textKey ] ) || is_string( $node[ $textKey ] ) ) {
+                    continue;
+                }
+
+                $value = $node[ $textKey ];
+
+                if ( $value instanceof Htmlable ) {
+                    $node[ $textKey ] = $value->toHtml();
+                } elseif ( is_scalar( $value ) ) {
+                    $node[ $textKey ] = (string) $value;
+                } else {
+                    $node[ $textKey ] = '';
+                }
+            }
+
+            foreach ( ['items', 'subItems'] as $childKey ) {
+                if ( isset( $node[ $childKey ] ) && is_array( $node[ $childKey ] ) ) {
+                    $node[ $childKey ] = $this->sanitizeMenuUrls( $node[ $childKey ] );
+                }
+            }
+
+            $menu[ $key ] = $node;
+        }
+
+        return $menu;
     }
 
     /**
@@ -353,40 +420,21 @@ class AdminMenuManager
     }
 
     /**
-     * Allow only navigation-safe URL forms:
-     *   - Absolute http(s) URLs
-     *   - Same-origin relative URLs (starting with '/')
-     *   - Hash fragments (starting with '#')
+     * Reduce a plugin- or filter-supplied URL to a navigation-safe form.
      *
-     * Anything else (javascript:, data:, vbscript:, file:, etc.) collapses to
-     * '#'. Prevents plugin authors from injecting XSS vectors into the admin
-     * sidebar via `registerNavEntry(['external' => true, 'url' => ...])`.
+     * Delegates to {@see NavUrl::sanitize()}, which is also what
+     * `PluginServiceProvider::normalizeNavUrl()` calls — the rules used to be
+     * duplicated across the two, which is how one copy came to be hardened
+     * while the other kept storing the un-normalized value.
+     *
+     * @since 1.0.0
+     *
+     * @param  string  $url  The raw URL.
+     *
+     * @return string A URL safe to render into an `href`.
      */
     protected function sanitizeExternalUrl( string $url ): string
     {
-        $trimmed = trim( $url );
-        if ( '' === $trimmed ) {
-            return '#';
-        }
-
-        if ( str_starts_with( $trimmed, '/' ) || str_starts_with( $trimmed, '#' ) ) {
-            return $trimmed;
-        }
-
-        // Match absolute URLs with an explicit scheme.
-        if ( 1 === preg_match( '#^([a-zA-Z][a-zA-Z0-9+.\-]*):#', $trimmed, $matches ) ) {
-            $scheme = strtolower( $matches[1] );
-            if ( in_array( $scheme, ['http', 'https', 'mailto', 'tel'], true ) ) {
-                return $trimmed;
-            }
-
-            logger()->warning( "AdminMenuManager: refused unsafe URL scheme '{$scheme}' in nav entry." );
-
-            return '#';
-        }
-
-        // Scheme-less values that aren't obviously a path — treat as safe
-        // relative reference (e.g., 'docs/index.html').
-        return $trimmed;
+        return NavUrl::sanitize( $url, 'AdminMenuManager' );
     }
 }

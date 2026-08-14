@@ -5,6 +5,41 @@ declare( strict_types = 1 );
 return [
     /*
     |--------------------------------------------------------------------------
+    | Authorization (read this before wiring an admin UI)
+    |--------------------------------------------------------------------------
+    |
+    | `ApplicationUpdateManager` performs NO authorization of its own. It
+    | cannot: the five `update:*` commands run from the console with no
+    | authenticated user. Everything below configures *how* an update runs,
+    | never *who* may run one.
+    |
+    | The framework ships no HTTP or Livewire trigger for updates. If you add
+    | one, it is yours to gate. `performUpdate()` is by design a
+    | remote-code-execution channel — it overwrites PHP files and then runs
+    | `composer install`, which executes `post-install-cmd` scripts from the
+    | just-overwritten `composer.json` — so an unauthenticated or
+    | under-authorized endpoint is total compromise.
+    |
+    | Authorize against the abilities in `UpdateCapability`, which the
+    | framework registers and denies by default:
+    |
+    |   Gate::authorize( UpdateCapability::PERFORM );   // cms.updates.perform
+    |   Gate::authorize( UpdateCapability::ROLLBACK );  // cms.updates.rollback
+    |   Gate::authorize( UpdateCapability::VIEW );      // cms.updates.view
+    |
+    | Grant them by seeding an RBAC permission whose slug matches, or by
+    | defining the ability yourself in `AppServiceProvider::boot()`.
+    |
+    | Rate-limit and CSRF-protect the route as well. An update occupies a
+    | PHP-FPM worker for the whole run and keeps occupying it after the caller
+    | disconnects (`ignore_user_abort`), so a trigger reachable without those
+    | guards is a cheap way to exhaust the worker pool. See
+    | `docs/self-updater.md` for the full wiring.
+    |
+    */
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Update Source
     |--------------------------------------------------------------------------
     |
@@ -17,6 +52,19 @@ return [
     |
     */
     'update_source_url' => env( 'UPDATE_SOURCE_URL', null ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Application Slug
+    |--------------------------------------------------------------------------
+    |
+    | Identifies the application to the update source and keys its update-check
+    | cache (`cms.application.<slug>.update_check`). Override it to name your
+    | product; changing it invalidates the previous slug's cache entry, which
+    | just forces one fresh check.
+    |
+    */
+    'application_slug' => env( 'UPDATE_APPLICATION_SLUG', 'application' ),
 
     /*
     |--------------------------------------------------------------------------
@@ -120,6 +168,66 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Queued Updates
+    |--------------------------------------------------------------------------
+    |
+    | `ApplicationUpdateManager::dispatchUpdate()` pushes the update onto a
+    | queue instead of running it inline, which is the supported way to trigger
+    | one from an HTTP request: an inline `performUpdate()` occupies a PHP-FPM
+    | worker for several minutes, keeps occupying it after the caller
+    | disconnects, and is subject to gateway timeouts and FPM's
+    | `request_terminate_timeout` that no userland call can override.
+    |
+    | `connection` — the queue connection to dispatch to. Null uses
+    | `queue.default`.
+    |
+    | `queue` — the queue name to push onto. Null uses the connection's default
+    | queue. Give updates their own queue if your default queue is busy; an
+    | update that sits behind a thousand emails is an update that has not
+    | started.
+    |
+    | `timeout` — seconds the worker allows the job before killing it. Null
+    | derives it from `download_timeout` + `composer_timeout` + a 900s buffer
+    | for the steps that have no timeout of their own (backup, extraction,
+    | migrations). This value travels with the job and **takes precedence over
+    | the worker's `--timeout`** (`Worker::timeoutForJob()` falls back to the
+    | worker flag only when the job carries no timeout of its own), so a worker
+    | started with a short `--timeout` will not cut an update short.
+    |
+    | What does have to be set by hand is the connection's `retry_after` in
+    | config/queue.php. That is the queue's "this reserved job must have died"
+    | timer, and Laravel ships **90 seconds** for `database`, `redis` and
+    | `beanstalkd` — far shorter than any real update. Left alone, the queue
+    | hands the same update to a second worker 90 seconds in, while the first
+    | is still running `composer install`. `dispatchUpdate()` refuses to
+    | dispatch when `retry_after` is not greater than the timeout above, so
+    | raise it past this value:
+    |
+    |     'retry_after' => 1900,   // config/queue.php, above the job timeout
+    |
+    |     php artisan queue:work --queue=updates --tries=1
+    |
+    | `allow_sync` — dispatching to the `sync` driver runs the job inline in the
+    | dispatching process, which reintroduces exactly the blocking behavior
+    | queueing exists to avoid while looking from the outside like the feature
+    | works. `dispatchUpdate()` therefore refuses a `sync` connection unless
+    | this is set to `true`, in which case it warns and proceeds. It does not
+    | rescue the `null` driver or an unconfigured connection: neither ever runs
+    | the job, so there is nothing to opt in to.
+    |
+    | Nothing here affects a direct `performUpdate()` call, which remains
+    | supported and unchanged.
+    |
+    */
+    'queue' => [
+        'connection' => env( 'CMS_UPDATES_QUEUE_CONNECTION' ),
+        'queue'      => env( 'CMS_UPDATES_QUEUE' ),
+        'timeout'    => env( 'CMS_UPDATES_QUEUE_TIMEOUT' ),
+        'allow_sync' => env( 'CMS_UPDATES_QUEUE_ALLOW_SYNC', false ),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Lift Maintenance Mode On Interrupted Updates
     |--------------------------------------------------------------------------
     |
@@ -128,19 +236,30 @@ return [
     | step 10, so maintenance mode is never disabled and the site serves 503 to
     | every visitor until somebody notices and runs `php artisan up`.
     |
-    | When enabled (the default), a shutdown handler lifts maintenance mode in
-    | that case and logs a `critical` entry naming the step it died on. The
-    | install may be half-applied, which is a real trade-off — but an
-    | unattended outage the operator may not notice for hours is worse, and
-    | `php artisan update:status` reports exactly what is outstanding.
+    | Three policies are supported:
     |
-    | Set to `false` to fail closed and keep the site down until an operator
-    | has verified the install by hand.
+    | - `'step_aware'` (the default) — a shutdown handler lifts maintenance mode
+    |   only when the step it died on left the application whole. Steps 1-4
+    |   (maintenance, backup, download, checksum) have not touched the tree, and
+    |   steps 8-10 (cache clear, cleanup, `up`) run after the code and schema are
+    |   fully applied, so both are lifted. Steps 5-7 (extract, composer install,
+    |   migrations) leave a half-extracted tree or a half-run migration set — a
+    |   partial extraction can put new controllers and routes alongside old
+    |   middleware or policies, silently disabling authorization — so the site is
+    |   kept in maintenance mode for an operator. A `critical` entry names the
+    |   step either way, and `php artisan update:status` reports what remains.
+    |
+    | - `true` — always lift, whatever step the update died on. The install may
+    |   be half-applied, which is a real trade-off, but an unattended outage the
+    |   operator may not notice for hours is avoided in every case.
+    |
+    | - `false` — fail closed. Keep the site down after any interruption until an
+    |   operator has verified the install by hand.
     |
     | Note this cannot help against `kill -9`, which runs no shutdown handlers.
     |
     */
-    'lift_maintenance_on_interrupt' => env( 'CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT', true ),
+    'lift_maintenance_on_interrupt' => env( 'CMS_UPDATES_LIFT_MAINTENANCE_ON_INTERRUPT', 'step_aware' ),
 
     /*
     |--------------------------------------------------------------------------
@@ -164,11 +283,11 @@ return [
     |
     | `composer.lock` is deliberately NOT excluded. `composer install` only ever
     | *reads* a lock file — it never writes one — so excluding the lock while
-    | letting `composer.json` be overwritten leaves the two out of sync and
-    | aborts step 6 on every release that changes a dependency constraint. The
-    | release's lock must land alongside its `composer.json` so the host
-    | installs the exact dependency set the release was built and tested
-    | against. See `verify_composer_lock_sync` below.
+    | letting `composer.json` be overwritten leaves the two out of sync, and
+    | composer will fail step 6 on any release that adds a dependency the stale
+    | lock cannot satisfy. The release's lock must land alongside its
+    | `composer.json` so the host installs the exact dependency set the release
+    | was built and tested against. See `verify_composer_lock_sync` below.
     |
     | (The `vendor` comment below is correct as written — that directory really
     | is rebuilt by `composer install`.)
@@ -188,26 +307,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Composer Lock Sync Pre-Flight Check
+    | Composer Lock Sync Diagnostic
     |--------------------------------------------------------------------------
     |
-    | Before invoking composer, verify that the on-disk `composer.lock` is in
-    | sync with the on-disk `composer.json` by comparing the lock's
+    | Before invoking composer, compare the on-disk `composer.lock`'s
     | `content-hash` against a hash computed from `composer.json` using
-    | composer's own algorithm.
+    | composer's own algorithm, to detect whether the two have diverged.
     |
-    | When they diverge, composer aborts with "This usually happens when
-    | composer files are incorrectly merged or the composer.json file is
-    | manually edited" — which sends the operator hunting for a merge conflict
-    | or a hand-edit that never happened. The real cause is almost always a
-    | release that shipped no `composer.lock`, or a host whose
-    | `exclude_from_update` override still excludes it. This check names that
-    | cause instead.
+    | This is a *diagnostic*, not a gate. `composer install` installs from the
+    | lock despite a stale `content-hash` — it only warns — and hard-fails solely
+    | when the lock cannot satisfy `composer.json` (a required package missing
+    | from the lock, or a constraint it violates). So the updater no longer
+    | aborts on divergence: composer adjudicates. When composer *does* fail, its
+    | own "incorrectly merged or manually edited" guess sends the operator
+    | hunting for a merge conflict or a hand-edit that never happened — the real
+    | cause is almost always a release that shipped no `composer.lock`, or a host
+    | whose `exclude_from_update` override still excludes it. A detected
+    | divergence lets the updater wrap composer's failure with that accurate
+    | diagnosis instead.
     |
     | The check fails *open*: a missing `composer.json`, a missing or
     | unparseable `composer.lock`, or a lock without a `content-hash` key is
-    | left for composer itself to adjudicate. Only a positively-detected
-    | mismatch aborts.
+    | left for composer itself to adjudicate, with no divergence recorded.
     |
     | Set to `false` to skip the check entirely — for instance if a future
     | composer release changes the content-hash algorithm and the framework has
@@ -215,6 +336,45 @@ return [
     |
     */
     'verify_composer_lock_sync' => env( 'CMS_UPDATES_VERIFY_LOCK_SYNC', true ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Stale composer.lock Recovery
+    |--------------------------------------------------------------------------
+    |
+    | The fix for #255 (unexcluding `composer.lock`) ships *inside* an update,
+    | so an install still running an affected version cannot reach it: the
+    | broken lock aborts the very update that carries the fix. #273. Left alone,
+    | the only way out is a `composer update` at a shell — the wrong failure
+    | mode for a click-to-update product.
+    |
+    | With this enabled, when `composer install` aborts *because* the extracted
+    | `composer.json` requires a dependency set the still-in-place previous
+    | release's `composer.lock` cannot satisfy, the updater parses the packages
+    | composer named as unsatisfiable and runs a **targeted**
+    | `composer update <those packages>`. Only the flagged packages and their
+    | dependencies are re-resolved; everything else stays pinned at the lock, so
+    | the blast radius is far short of a full-tree `composer update`. The
+    | re-resolved lock then satisfies `composer.json` and the update proceeds
+    | rather than rolling back.
+    |
+    | It keys off composer's *own* "Required package" diagnosis, so it runs only
+    | *after* composer itself has failed on an unsatisfiable lock — never
+    | pre-emptively — and independently of `verify_composer_lock_sync` above,
+    | which only enriches the failure message. Disabling the hash check therefore
+    | does *not* disable recovery; this key is the only switch for it. Recovery
+    | declines (leaving the loud, safe rollback in place) when composer named no
+    | packages, or when `composer_install_command` is an operator override that
+    | cannot be rewritten into an `update`.
+    |
+    | Set to `false` to keep the pre-#273 behavior: abort and roll back on a
+    | stale lock, leaving the recovery `composer update` to the operator. This is
+    | the right choice for a host that treats the tested dependency set as
+    | inviolable and would rather fail loudly than re-resolve any package on
+    | production at update time.
+    |
+    */
+    'recover_stale_lock' => env( 'CMS_UPDATES_RECOVER_STALE_LOCK', true ),
 
     /*
     |--------------------------------------------------------------------------
@@ -243,7 +403,14 @@ return [
     | Update Check Schedule
     |--------------------------------------------------------------------------
     |
-    | How often to check for updates (used by scheduled task).
+    | Advisory cadence for the `update:check-scheduled` command. The framework
+    | registers the command but does NOT schedule it — a package cannot know a
+    | host's scheduling policy — so the host is responsible for wiring it into
+    | its own scheduler, e.g. in `routes/console.php`:
+    |
+    |     Schedule::command('update:check-scheduled')->daily();
+    |
+    | This value is a hint the host can read to honour the operator's choice.
     | Values: 'daily', 'twice_daily', 'weekly', 'disabled'
     |
     */

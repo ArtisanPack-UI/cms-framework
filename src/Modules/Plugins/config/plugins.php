@@ -43,6 +43,12 @@ return [
         'application/x-zip-compressed',
     ],
 
+    // Ceiling on the *uncompressed* size of an extracted plugin archive
+    // (install, update, and restore). The compressed-size check says nothing
+    // about what the archive expands to; this caps a zip-bomb before it fills
+    // the disk mid-extraction.
+    'maxUncompressedSize' => 100 * 1024 * 1024, // 100MB in bytes
+
     /*
     |--------------------------------------------------------------------------
     | Update Settings
@@ -52,6 +58,24 @@ return [
     'updateCheckTimeout' => 10, // HTTP request timeout in seconds
     'updateCacheTtl'     => 43200, // 12 hours in seconds
     'backupPath'         => 'plugin-backups', // Relative to storage_path()
+
+    /*
+    |--------------------------------------------------------------------------
+    | Plugin Update Source Tokens
+    |--------------------------------------------------------------------------
+    | Access tokens for plugins whose `update` manifest key points at a private
+    | repository, keyed by plugin slug:
+    |
+    |     'updateTokens' => [
+    |         'my-private-plugin' => env( 'MY_PRIVATE_PLUGIN_UPDATE_TOKEN' ),
+    |     ],
+    |
+    | Deliberately per-slug rather than one global token. A plugin names its own
+    | update host in its own manifest, so a shared token would be handed to
+    | whatever host any installed plugin asks for. Public repositories — the
+    | normal case — need no entry here.
+    */
+    'updateTokens' => [],
 
     /*
     |--------------------------------------------------------------------------

@@ -143,6 +143,89 @@ describe( 'migrations_path', function (): void {
     } );
 } );
 
+describe( 'update', function (): void {
+    it( 'accepts an owner/repo shorthand', function (): void {
+        $manifest = array_merge( $this->base, [
+            'update' => ['github' => 'ArtisanPack-UI/artisanpack-ui-plugin'],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'accepts a full github repository URL', function (): void {
+        $manifest = array_merge( $this->base, [
+            'update' => ['github' => 'https://github.com/ArtisanPack-UI/artisanpack-ui-plugin'],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'accepts a non-github url so other sources fall out of the same key', function (): void {
+        $manifest = array_merge( $this->base, [
+            'update' => ['url' => 'https://gitlab.com/owner/repo'],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a non-object value', function (): void {
+        $manifest = array_merge( $this->base, ['update' => 'ArtisanPack-UI/artisanpack-ui-plugin'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid update.' );
+    } );
+
+    it( 'rejects an object declaring neither github nor url', function (): void {
+        $manifest = array_merge( $this->base, ['update' => ['gitea' => 'owner/repo']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Must declare' );
+    } );
+
+    it( 'rejects a malformed github shorthand', function (): void {
+        $manifest = array_merge( $this->base, ['update' => ['github' => 'not-a-repo']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid update.github' );
+    } );
+
+    it( 'rejects dot-only shorthand segments', function ( string $shorthand ): void {
+        $manifest = array_merge( $this->base, ['update' => ['github' => $shorthand]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid update.github' );
+    } )->with( [
+        'traversal pair'  => '../..',
+        'dot owner'       => './repo',
+        'dot repo'        => 'owner/.',
+        'single dot pair' => './.',
+    ] );
+
+    it( 'still accepts dots inside otherwise-valid segments', function (): void {
+        $manifest = array_merge( $this->base, ['update' => ['github' => 'ArtisanPack-UI/cms.framework']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a plaintext http url', function (): void {
+        $manifest = array_merge( $this->base, ['update' => ['url' => 'http://example.com/updates.json']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid update.url' );
+    } );
+
+    it( 'rejects a plaintext http github url', function (): void {
+        $manifest = array_merge( $this->base, ['update' => ['github' => 'http://github.com/owner/repo']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid update.github' );
+    } );
+} );
+
 describe( 'Plugin model accessors', function (): void {
     it( 'exposes the new manifest fields ergonomically', function (): void {
         $plugin = new Plugin( [

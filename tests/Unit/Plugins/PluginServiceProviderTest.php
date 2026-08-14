@@ -3,9 +3,15 @@
 declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
+use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminPageManager;
+use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\HtmlString;
 
 beforeEach( function (): void {
     Gate::before( fn ( ?Illuminate\Contracts\Auth\Authenticatable $user, string $ability ) => true );
@@ -36,6 +42,33 @@ afterEach( function (): void {
     removeAllFilters( 'ap.plugins.federatedModules' );
 } );
 
+/**
+ * Bind an AdminPageManager that records what `AdminMenuManager::addPage()`
+ * hands it, so tests can assert on the route action without registering real
+ * routes.
+ */
+function capturingPageManager(): AdminPageManager
+{
+    $manager = new class extends AdminPageManager {
+        /** @var array<string,array{action:mixed,capability:?string}> */
+        public array $captured = [];
+
+        public function register( string $slug, mixed $action, ?string $capability ): void
+        {
+            $this->captured[ $slug ] = [
+                'action'     => $action,
+                'capability' => $capability,
+            ];
+
+            parent::register( $slug, $action, $capability );
+        }
+    };
+
+    app()->instance( AdminPageManager::class, $manager );
+
+    return $manager;
+}
+
 it( 'registers an admin page through the AdminMenuManager', function (): void {
     $provider = new class( app() ) extends PluginServiceProvider {
         public function boot(): void
@@ -59,6 +92,98 @@ it( 'registers an admin page through the AdminMenuManager', function (): void {
 
     expect( $menu )->toHaveKey( 'my-plugin' )
         ->and( $menu['my-plugin']['label'] )->toBe( 'My Plugin' );
+} );
+
+it( 'wraps a Blade view in a closure so the route action is valid', function (): void {
+    $pages = capturingPageManager();
+
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'my-plugin', [
+                'title'      => 'My Plugin',
+                'view'       => 'cms::admin.layouts.app',
+                'capability' => '',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'my-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    $action = $pages->captured['my-plugin']['action'];
+
+    // A view name handed to Route::get() throws `Invalid route action`; a
+    // closure returning the rendered view is what Laravel actually accepts.
+    expect( $action )->toBeInstanceOf( Closure::class );
+
+    $rendered = $action( Request::create( '/admin/my-plugin' ) );
+
+    expect( $rendered )->toBeInstanceOf( View::class )
+        ->and( $rendered->name() )->toBe( 'cms::admin.layouts.app' );
+} );
+
+it( 'renders a mount point for a federated component identifier', function (): void {
+    $pages = capturingPageManager();
+
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'my-plugin', [
+                'title'      => 'My Plugin',
+                'component'  => 'myPluginAdmin/Panel',
+                'capability' => '',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'my-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    // A component is never handed to Route::get() as a bare string (which it
+    // rejects, crashing route registration for the whole app). It resolves to
+    // a closure that renders a mount point the host front end hydrates.
+    $action = $pages->captured['my-plugin']['action'];
+
+    expect( $action )->toBeInstanceOf( Closure::class );
+
+    expect( (string) $action()->getContent() )
+        ->toContain( 'data-cms-federated-module="myPluginAdmin/Panel"' );
+} );
+
+it( 'returns a 501 for an admin page with neither a view nor a component', function (): void {
+    $pages = capturingPageManager();
+
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'broken-plugin', [
+                'title'      => 'Broken',
+                'capability' => '',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'broken-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    // A misconfigured page fails on its own route rather than throwing during
+    // route registration and taking every request down with it.
+    $response = $pages->captured['broken-plugin']['action']();
+
+    expect( $response->getStatusCode() )->toBe( 501 );
 } );
 
 it( 'injects a nav entry via the ap.cmsFramework.admin.menu filter', function (): void {
@@ -88,6 +213,48 @@ it( 'injects a nav entry via the ap.cmsFramework.admin.menu filter', function ()
         ->and( $menu['reports']['url'] )->toBe( '/admin/reports' )
         ->and( $menu['reports']['permission'] )->toBe( 'reports.view' )
         ->and( $menu['reports']['external'] )->toBeFalse();
+} );
+
+it( 'reduces a non-string nav url to # instead of raising a TypeError', function ( mixed $url ): void {
+    expect( NavUrl::sanitizeValue( $url ) )->toBe( '#' );
+} )->with( [
+    // Htmlable without __toString: not Stringable, so it cannot be coerced.
+    'non-stringable htmlable' => fn () => new class implements Htmlable {
+        public function toHtml(): string
+        {
+            return 'javascript:alert(1)';
+        }
+    },
+    // Stringable, but still not a string — strict_types rejected it too.
+    'html string' => fn () => new HtmlString( 'javascript:alert(1)' ),
+    'array'       => fn () => ['javascript:alert(1)'],
+    'integer'     => fn () => 42,
+] );
+
+it( 'stores # for a non-string nav url rather than dying in the plugin boot', function (): void {
+    // registerNavEntry takes a plugin-supplied array, and PluginServiceProvider
+    // runs under strict_types — a non-string `url` used to TypeError at
+    // normalizeNavUrl's parameter boundary inside boot(), taking the whole app
+    // down rather than taking the documented fallback.
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerNavEntry( [
+                'slug'  => 'docs',
+                'label' => 'Docs',
+                'url'   => new HtmlString( 'javascript:alert(1)' ),
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'docs-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    expect( app( PluginRegistry::class )->navEntries()['docs']['url'] )->toBe( '#' );
 } );
 
 it( 'sanitizes javascript: URLs in nav entries down to #', function (): void {

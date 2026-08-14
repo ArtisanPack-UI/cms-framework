@@ -20,6 +20,7 @@ use ArtisanPackUI\CMSFramework\Ai\Agents\ExcerptGenerationAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\PostTitleSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\SlugSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\TagSuggestionAgent;
+use ArtisanPackUI\CMSFramework\Ai\Support\AgentMeta;
 use ArtisanPackUI\CMSFramework\Livewire\Ai\AiTools;
 use ArtisanPackUI\CMSFramework\Modules\Admin\Providers\AdminServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\AdminWidgets\Providers\AdminWidgetServiceProvider;
@@ -42,6 +43,7 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use ArtisanPackUI\CMSFramework\Support\HookAliases;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
@@ -80,6 +82,42 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         'cms.suggest_category',
         'cms.suggest_slug',
     ];
+
+    /**
+     * The Gate ability required to run any cms.* AI agent.
+     *
+     * Deny-by-default and checked in both trigger surfaces
+     * ({@see AiController::runAgent()} and {@see AiTools::run()}): running an
+     * agent consumes paid provider credits, so authentication alone is not
+     * enough. Resolves through RBAC when a permission whose slug matches this
+     * ability is seeded (see `PermissionsTableSeeder`).
+     *
+     * @since 2.8.0
+     */
+    public const AI_USE_ABILITY = 'cms.ai.use';
+
+    /**
+     * The agent class behind each cms.* AI feature.
+     *
+     * {@see aiFeatures()} derives its whole map from this list, reading
+     * each agent's own `$featureKey` and `$package` rather than
+     * respelling them here — so a key is spelled in exactly two places:
+     * the agent that owns it, and {@see AI_FEATURE_KEYS} above. The
+     * `keeps AI_FEATURE_KEYS in step with the agents` test asserts those
+     * two agree, so they cannot drift silently.
+     *
+     * @since 2.8.0
+     *
+     * @var array<int, class-string>
+     */
+    public const AI_AGENTS = [
+        PostTitleSuggestionAgent::class,
+        ExcerptGenerationAgent::class,
+        TagSuggestionAgent::class,
+        CategorySuggestionAgent::class,
+        SlugSuggestionAgent::class,
+    ];
+
     /**
      * Permission slugs and human-readable names registered into
      * cms-framework's RBAC tables when visual-editor is detected.
@@ -113,34 +151,36 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      * cms-framework still boots without AI wiring, and the AI Livewire
      * component + REST endpoints stay unregistered.
      *
+     * Derived from {@see AI_AGENTS}: each agent already declares the
+     * `$featureKey` and `$package` this map needs, so respelling them
+     * here would be a third place to edit for a rename — and one with no
+     * compile-time link to the agent it describes.
+     *
+     * Metadata is read off the declared class ({@see AgentMeta}), not off
+     * a container-resolved instance. A host that binds a subclass over an
+     * agent — the pattern `docs/AI-Features.md` documents — would
+     * otherwise have the map keyed by the override's `$featureKey` while
+     * `'agent'` still named the original class and {@see AI_FEATURE_KEYS}
+     * still listed the original key, leaving three sources disagreeing.
+     * The AI package's guidance is that a host wanting the registry
+     * pointed at its subclass declares it in its own `aiFeatures()`.
+     *
      * @since 2.3.0
      *
      * @return array<string, array{ agent: class-string, package: string }>
      */
     public function aiFeatures(): array
     {
-        return [
-            'cms.post_title'       => [
-                'agent'   => PostTitleSuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.excerpt'          => [
-                'agent'   => ExcerptGenerationAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.suggest_tags'     => [
-                'agent'   => TagSuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.suggest_category' => [
-                'agent'   => CategorySuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-            'cms.suggest_slug'     => [
-                'agent'   => SlugSuggestionAgent::class,
-                'package' => 'artisanpack-ui/cms-framework',
-            ],
-        ];
+        $features = [];
+
+        foreach ( static::AI_AGENTS as $agentClass ) {
+            $features[ AgentMeta::featureKey( $agentClass ) ] = [
+                'agent'   => $agentClass,
+                'package' => AgentMeta::package( $agentClass ),
+            ];
+        }
+
+        return $features;
     }
 
     /**
@@ -160,14 +200,35 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         $this->mergeConfiguration();
         $this->validateConfiguration();
 
+        // The `cms` namespace is the framework's stable Blade surface — most
+        // notably `cms::admin.layouts.app`, the layout plugin admin pages
+        // extend. Registered here rather than in a module provider so the
+        // namespace exists for every consumer regardless of which modules a
+        // host has enabled.
+        $this->loadViewsFrom( __DIR__ . '/../resources/views', 'cms' );
+
         if ( $this->app->runningInConsole() ) {
+            // Every config file is tagged twice: once under its own specific
+            // tag, and once under the umbrella `cms-framework-config` tag the
+            // README documents. `vendor:publish` silently succeeds on an
+            // unregistered tag, so a consumer following the README got an
+            // empty config/ and no error. The per-module tags are kept so a
+            // consumer can still publish one module's config in isolation.
             $this->publishes( [
                 __DIR__ . '/../config/cms-framework.php' => config_path( 'artisanpack/cms-framework.php' ),
-            ], 'artisanpack-package-config' );
+            ], [ 'artisanpack-package-config', 'cms-framework-config' ] );
 
             $this->publishes( [
                 __DIR__ . '/../resources/types' => resource_path( 'types/cms-framework' ),
             ], 'cms-types' );
+
+            // Published views land where Laravel looks first for the `cms`
+            // namespace, so a host replacing the bundled admin layout with its
+            // own chrome does so without any plugin having to change the view
+            // it extends.
+            $this->publishes( [
+                __DIR__ . '/../resources/views' => resource_path( 'views/vendor/cms' ),
+            ], 'cms-views' );
         }
 
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
@@ -250,6 +311,31 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     }
 
     /**
+     * The enabled state of every cms.* AI feature.
+     *
+     * The single source both trigger surfaces read — {@see Http\Controllers\Ai\AiController::features()}
+     * and {@see AiTools::enabledFeatures()}
+     * — so the toggle-resolution loop is spelled once.
+     *
+     * @since 2.8.0
+     *
+     * @return array<string, bool> Feature key to enabled flag.
+     */
+    public static function aiFeatureStateMap(): array
+    {
+        /** @var FeatureRegistry $registry */
+        $registry = app( FeatureRegistry::class );
+
+        $state = [];
+
+        foreach ( self::AI_FEATURE_KEYS as $key ) {
+            $state[ $key ] = null !== $registry->get( $key ) && $registry->isToggleOn( $key );
+        }
+
+        return $state;
+    }
+
+    /**
      * Registers the CMS AI trigger surfaces (Livewire component +
      * `/api/v1/cms/ai/*` REST endpoints).
      *
@@ -268,6 +354,18 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     {
         if ( ! interface_exists( FeatureRegistry::class ) ) {
             return;
+        }
+
+        // Deny-by-default ability guarding both AI trigger surfaces. Registered
+        // only when the AI package is present so the gate exists wherever the
+        // surfaces do. A seeded `cms.ai.use` permission (or a host
+        // `Gate::define`) resolves it through RBAC; the `Gate::has()` guard
+        // keeps a host's own early definition intact.
+        if ( ! Gate::has( self::AI_USE_ABILITY ) ) {
+            // The unused `$user` parameter is load-bearing: Gate reflects on
+            // the first parameter to decide whether an ability may be called
+            // for a guest, and an untyped one denies them.
+            Gate::define( self::AI_USE_ABILITY, fn ( $user ): bool => false );
         }
 
         if ( class_exists( Livewire::class ) ) {
@@ -418,7 +516,7 @@ class CMSFrameworkServiceProvider extends ServiceProvider
             throw new InvalidArgumentException(
                 'The CMS Framework user_model configuration is not set. ' .
                 'Please publish the configuration file using: ' .
-                'php artisan vendor:publish --tag=artisanpack-package-config ' .
+                'php artisan vendor:publish --tag=cms-framework-config ' .
                 'Then set the user_model value in config/artisanpack/cms-framework.php to your User model class. ' .
                 'Example: \'user_model\' => \\App\\Models\\User::class',
             );

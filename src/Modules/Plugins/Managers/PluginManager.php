@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
@@ -27,6 +28,10 @@ class PluginManager
 
     private ClassLoader $classLoader;
 
+    /**
+     * Resolve Composer's runtime ClassLoader so discovered plugins can register
+     * their own PSR-4 prefixes.
+     */
     public function __construct()
     {
         // Get Composer's ClassLoader instance from registered autoloaders
@@ -403,6 +408,26 @@ class PluginManager
     }
 
     /**
+     * Whether a manifest `update` value passes the shared source rules.
+     *
+     * The boolean counterpart to {@see validateUpdateSourceManifestField()},
+     * mirroring `ThemeManager::isUsableUpdateSource()`. `UpdateManager` calls
+     * it to re-validate a value read back from an installed plugin's manifest,
+     * which was never re-run through `validateManifest()` after the update
+     * re-seated `meta` from the downloaded ZIP.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @return bool True when the value is a usable update source.
+     */
+    public function isUsableUpdateSource( mixed $update ): bool
+    {
+        return null === $this->checkUpdateSourceManifestField( $update );
+    }
+
+    /**
      * Run plugin migrations.
      *
      * @param  string  $slug  Plugin slug
@@ -584,6 +609,31 @@ class PluginManager
                 throw PluginValidationException::invalidManifest( 'Invalid migrations_path. Must be a relative path inside the plugin directory (no "..", no absolute paths).' );
             }
         }
+
+        if ( isset( $manifest['update'] ) ) {
+            $this->validateUpdateSourceManifestField( $manifest['update'] );
+        }
+    }
+
+    /**
+     * Validate the optional `update` manifest key, which declares the source
+     * `UpdateManager` resolves plugin updates from.
+     *
+     * The rules themselves live in `HasManifestParsing` so plugins and themes
+     * cannot drift on a key they deliberately spell identically; this wrapper
+     * only turns the shared failure reason into a plugin-namespaced exception.
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateUpdateSourceManifestField( mixed $update ): void
+    {
+        $reason = $this->checkUpdateSourceManifestField( $update );
+
+        if ( null !== $reason ) {
+            throw PluginValidationException::invalidManifest( $reason );
+        }
     }
 
     /**
@@ -655,12 +705,51 @@ class PluginManager
             throw PluginInstallationException::extractionFailed( 'unknown' );
         }
 
-        // Get the first directory name (plugin slug)
+        // Get the first directory name (plugin slug). The first entry must live
+        // under a top-level directory so a slug can be derived; reject a ZIP
+        // whose first entry is a bare file.
         $firstEntry = $zip->getNameIndex( 0 );
-        $slug       = explode( '/', $firstEntry )[0];
+        if ( false === $firstEntry || ! str_contains( $firstEntry, '/' ) ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( 'unknown' );
+        }
 
-        // Extract to plugins directory
-        $extractPath = $this->getPluginsPath();
+        $slug = explode( '/', $firstEntry )[0];
+
+        // Run the derived slug through the same format check every other slug
+        // entry point uses, so a crafted directory name cannot reach the
+        // filesystem.
+        if ( ! $this->validateSlug( $slug ) ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        $extractPath     = $this->getPluginsPath();
+        $realExtractPath = realpath( $extractPath );
+
+        if ( false === $realExtractPath ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        // Zip-slip guard: reject absolute/`..` entries and any entry outside
+        // the derived slug directory. Without the slug check a plugin ZIP
+        // carrying a sibling top-level folder could overwrite a different,
+        // already-trusted plugin's files inside the plugins root.
+        if ( null !== ExtensionArchive::firstUnsafeEntry( $zip, $realExtractPath, $slug ) ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        // Zip-bomb guard: cap the uncompressed size before extracting, since
+        // the passed compressed-size check says nothing about what it expands
+        // to.
+        $maxUncompressed = (int) config( 'cms.plugins.maxUncompressedSize', 100 * 1024 * 1024 );
+        if ( ExtensionArchive::uncompressedSize( $zip ) > $maxUncompressed ) {
+            $zip->close();
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
         if ( ! $zip->extractTo( $extractPath ) ) {
             $zip->close();
             throw PluginInstallationException::extractionFailed( $slug );

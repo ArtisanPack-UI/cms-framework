@@ -197,6 +197,61 @@ class UpdateCheckerTest extends TestCase
     }
 
     /**
+     * A plugin's `currentVersion` is its own semver, not the host's, so the
+     * `app.version` staleness heuristic never matches and would evict every
+     * plugin cache entry on its first read — writing a cache that is never
+     * served. Non-application types keep their cache.
+     *
+     * @since 2.8.0
+     */
+    public function test_check_for_update_serves_cache_for_plugin_type_regardless_of_app_version(): void
+    {
+        config( ['app.version' => '2.8.0'] );
+
+        $cacheKey = 'cms.' . UpdateType::Plugin->value . '.test-plugin.update_check';
+
+        Cache::put( $cacheKey, $this->cachedPayload( '1.0.0', '1.1.0' ), 3600 );
+
+        $source = new class implements UpdateSourceInterface {
+            public int $checkCount = 0;
+
+            public function supports( string $url ): bool
+            {
+                return true;
+            }
+
+            public function checkForUpdate(): UpdateInfo
+            {
+                $this->checkCount++;
+
+                return new UpdateInfo( '0.0.0', '0.0.0', '' );
+            }
+
+            public function downloadUpdate( string $version ): string
+            {
+                return '/tmp/noop.zip';
+            }
+
+            public function setAuthentication( string|array $credentials ): void
+            {
+            }
+
+            public function getName(): string
+            {
+                return 'Fake';
+            }
+        };
+
+        $checker = new UpdateChecker( $source, UpdateType::Plugin, 'test-plugin' );
+
+        $result = $checker->checkForUpdate();
+
+        $this->assertSame( 0, $source->checkCount, 'A plugin cache entry must not be evicted by app.version.' );
+        $this->assertSame( '1.0.0', $result->currentVersion );
+        $this->assertSame( '1.1.0', $result->latestVersion );
+    }
+
+    /**
      * Define environment setup.
      *
      * @since 2.5.3

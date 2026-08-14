@@ -93,6 +93,237 @@ describe( 'filter Gate re-check', function (): void {
     } );
 } );
 
+describe( 'filter-injected URL sanitization', function (): void {
+    it( 'collapses an unsafe scheme on an entry that carries no route', function (): void {
+        // The documented way to inject a nav row is a bare array with a `url`
+        // and no `route`. That shape skipped sanitization entirely, and
+        // `cms::admin.partials.menu` renders `url` into an `<a href>`.
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
+            $menu['evil'] = [
+                'title' => 'Docs',
+                'slug'  => 'evil',
+                'label' => 'Docs',
+                'url'   => 'javascript:alert(1)',
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['evil']['url'] )->toBe( '#' );
+    } );
+
+    it( 'collapses a scheme hidden behind characters the URL parser strips', function ( string $url ): void {
+        // The URL parser removes tab/CR/LF anywhere and leading C0 controls
+        // before resolving a scheme, and htmlspecialchars() leaves all of them
+        // alone — so each of these reaches the browser as `javascript:` unless
+        // the allow-list normalizes first.
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $url ): array {
+            $menu['evil'] = [
+                'title' => 'Docs',
+                'slug'  => 'evil',
+                'label' => 'Docs',
+                'url'   => $url,
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['evil']['url'] )->toBe( '#' );
+    } )->with( [
+        'tab'            => "java\tscript:alert(1)",
+        'newline'        => "java\nscript:alert(1)",
+        'carriage'       => "java\rscript:alert(1)",
+        'leading C0'     => "\x01javascript:alert(1)",
+        'mixed case'     => 'JaVaScRiPt:alert(1)',
+        'trailing space' => ' javascript:alert(1) ',
+    ] );
+
+    it( 'sanitizes a non-string url that Blade would render unescaped', function (): void {
+        // `e()` returns an Htmlable's toHtml() verbatim, so an unsanitized
+        // HtmlString would skip the allow-list AND the escaping.
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
+            $menu['evil'] = [
+                'title' => 'Docs',
+                'slug'  => 'evil',
+                'label' => 'Docs',
+                'url'   => new Illuminate\Support\HtmlString( 'javascript:alert(1)' ),
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['evil']['url'] )->toBe( '#' )
+            ->and( $menu['evil']['url'] )->toBeString();
+    } );
+
+    it( 'coerces non-string label/title/menuTitle so Blade escapes them', function (): void {
+        // `{{ $node['title'] }}` renders an Htmlable verbatim — the same
+        // escaping bypass the url coercion closes. The text fields must arrive
+        // as plain strings so `{{ }}` escapes them.
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
+            $menu['evil'] = [
+                'title'     => new Illuminate\Support\HtmlString( '<b>x</b>' ),
+                'label'     => new Illuminate\Support\HtmlString( '<i>y</i>' ),
+                'menuTitle' => new Illuminate\Support\HtmlString( '<u>z</u>' ),
+                'slug'      => 'evil',
+                'url'       => '/safe',
+                'order'     => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['evil']['title'] )->toBeString()->toBe( '<b>x</b>' )
+            ->and( $menu['evil']['label'] )->toBeString()->toBe( '<i>y</i>' )
+            ->and( $menu['evil']['menuTitle'] )->toBeString()->toBe( '<u>z</u>' );
+    } );
+
+    it( 'refuses a protocol-relative url that would navigate off-origin', function ( string $url ): void {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $url ): array {
+            $menu['evil'] = [
+                'title' => 'X',
+                'slug'  => 'evil',
+                'url'   => $url,
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        expect( $this->manager->getAdminMenu()['evil']['url'] )->toBe( '#' );
+    } )->with( [
+        'double-slash'            => '//evil.example/phish',
+        'slash-backslash'         => '/\\evil.example/phish',
+        'backslash-slash'         => '\\/evil.example/phish',
+        'double-backslash'        => '\\\\evil.example/phish',
+    ] );
+
+    it( 'leaves a safe URL on a route-less entry untouched', function (): void {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ): array {
+            $menu['docs'] = [
+                'title' => 'Docs',
+                'slug'  => 'docs',
+                'label' => 'Docs',
+                'url'   => 'https://example.com/docs',
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['docs']['url'] )->toBe( 'https://example.com/docs' );
+    } );
+
+    it( 'reaches a URL nested inside a section', function (): void {
+        $evil = [
+            'title' => 'Docs',
+            'slug'  => 'evil',
+            'label' => 'Docs',
+            'url'   => 'javascript:alert(1)',
+            'order' => 10,
+        ];
+
+        $items = ['evil' => $evil];
+
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $items ): array {
+            $menu['tools'] = [
+                'title' => 'Tools',
+                'order' => 10,
+                'items' => $items,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['tools']['items']['evil']['url'] )->toBe( '#' );
+    } );
+
+    it( 'reaches a URL nested two levels deep in subItems', function (): void {
+        $evil = [
+            'title' => 'Docs',
+            'slug'  => 'evil',
+            'label' => 'Docs',
+            'url'   => "java\tscript:alert(1)",
+            'order' => 10,
+        ];
+
+        $evilChild = ['evil' => $evil];
+
+        $monthly = [
+            'title'    => 'Monthly',
+            'slug'     => 'monthly',
+            'label'    => 'Monthly',
+            'url'      => '/admin/reports/monthly',
+            'order'    => 10,
+            'subItems' => $evilChild,
+        ];
+
+        $subItems = ['monthly' => $monthly];
+
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $subItems ): array {
+            $menu['reports'] = [
+                'title'    => 'Reports',
+                'slug'     => 'reports',
+                'label'    => 'Reports',
+                'url'      => '/admin/reports',
+                'order'    => 10,
+                'subItems' => $subItems,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['reports']['subItems']['monthly']['subItems']['evil']['url'] )->toBe( '#' )
+            ->and( $menu['reports']['subItems']['monthly']['url'] )->toBe( '/admin/reports/monthly' );
+    } );
+
+    it( 'keeps every navigation-safe URL form intact', function ( string $url ): void {
+        addFilter( 'ap.cmsFramework.admin.menu', function ( array $menu ) use ( $url ): array {
+            $menu['docs'] = [
+                'title' => 'Docs',
+                'slug'  => 'docs',
+                'label' => 'Docs',
+                'url'   => $url,
+                'order' => 10,
+            ];
+
+            return $menu;
+        } );
+
+        $menu = $this->manager->getAdminMenu();
+
+        expect( $menu['docs']['url'] )->toBe( $url );
+    } )->with( [
+        'absolute https' => 'https://example.com/docs',
+        'absolute http'  => 'http://example.com/docs',
+        'mailto'         => 'mailto:me@example.com',
+        'tel'            => 'tel:+15555555555',
+        'root relative'  => '/admin/reports',
+        'fragment'       => '#section',
+        'relative path'  => 'docs/index.html',
+        // An interior space is not a scheme delimiter to the URL parser
+        // either, so this stays a (harmless) relative reference.
+        'spaced path'    => 'docs/my file.html',
+    ] );
+} );
+
 describe( 'top-level slug with slashes', function (): void {
     it( 'stores a route name with slashes replaced by dots', function (): void {
         Gate::before( fn ( ?Illuminate\Contracts\Auth\Authenticatable $user, string $ability ) => true );

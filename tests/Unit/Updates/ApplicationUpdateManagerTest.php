@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Tests\Unit\Updates;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
@@ -547,6 +548,315 @@ class ApplicationUpdateManagerTest extends TestCase
             app()->setBasePath( $originalBase );
             @chmod( $lockedDir, 0755 );
             @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: `extractUpdate` must record the paths it *adds* —
+     * files that did not exist beforehand — and leave overwrites of existing
+     * files out of that ledger, since the backup restores overwrites but is the
+     * only thing that can delete additions.
+     *
+     * @since 2.8.0
+     */
+    public function test_extract_update_records_added_paths_but_not_overwrites(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-additions-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        // A file that already exists at version N — extraction overwrites it.
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        $zipPath = $tempRoot . '/update.zip';
+
+        $zip = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/app/Old.php', "<?php\n// new-old\n" );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->addFromString( 'release-root/database/migrations/2026_01_01_000000_add.php', "<?php\n// migration\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $reflection = new ReflectionClass( ApplicationUpdateManager::class );
+            $property   = $reflection->getProperty( 'extractionAdditions' );
+            $property->setAccessible( true );
+            $additions = $property->getValue( $manager );
+
+            sort( $additions );
+
+            $this->assertSame(
+                ['app/New.php', 'database/migrations/2026_01_01_000000_add.php'],
+                $additions,
+                'Only newly-created paths belong in the additions ledger; the overwritten app/Old.php must be excluded.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: a failed update that rolls back must not leave the
+     * files the extraction added behind. Restoring the snapshot reinstates
+     * overwritten files but cannot remove additions — including migrations —
+     * so the manager has to delete them itself.
+     *
+     * @since 2.8.0
+     */
+    public function test_rollback_removes_files_the_extraction_added(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-additions-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        // Version N on disk.
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        // The pre-update snapshot: it captured only the files that existed at
+        // version N. Clean relative names so rollback's extractTo restores them.
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/Old.php', "<?php\n// old\n" );
+        $backup->close();
+
+        // The release: overwrites Old.php and adds two files N never had.
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/app/Old.php', "<?php\n// new-old\n" );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->addFromString( 'release-root/database/migrations/2026_01_01_000000_add.php', "<?php\n// migration\n" );
+        $zip->close();
+
+        $manager = new class( $backupPath ) extends ApplicationUpdateManager {
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+
+            protected function clearCaches(): void
+            {
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            // Sanity: the release landed before the (simulated) failure.
+            $this->assertFileExists( $target . '/app/New.php' );
+            $this->assertFileExists( $target . '/database/migrations/2026_01_01_000000_add.php' );
+
+            $manager->callHandleFailure( new RuntimeException( 'composer install failed' ) );
+
+            // The overwrite is restored from the snapshot.
+            $this->assertFileExists( $target . '/app/Old.php' );
+            $this->assertStringContainsString( '// old', (string) file_get_contents( $target . '/app/Old.php' ) );
+
+            // The additions — orphaned code and, critically, the migration —
+            // are gone.
+            $this->assertFileDoesNotExist( $target . '/app/New.php' );
+            $this->assertFileDoesNotExist( $target . '/database/migrations/2026_01_01_000000_add.php' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            @unlink( $backupPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: removing extraction additions on rollback must honour
+     * the exclusion list, so a rollback can never delete `storage/`, `.env`, or
+     * `vendor/` contents even if such a path reached the additions ledger.
+     *
+     * @since 2.8.0
+     */
+    public function test_remove_extraction_additions_honours_the_exclusion_list(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-additions-excluded-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+        mkdir( $target . '/storage/logs', 0755, true );
+
+        file_put_contents( $target . '/app/New.php', "<?php\n// added\n" );
+        file_put_contents( $target . '/storage/logs/laravel.log', "log\n" );
+
+        $manager = new class extends ApplicationUpdateManager {
+            /**
+             * @param  array<int, string>  $paths
+             */
+            public function seedAdditions( array $paths ): void
+            {
+                $this->extractionAdditions = $paths;
+            }
+
+            public function callRemove(): void
+            {
+                $this->removeExtractionAdditions();
+            }
+        };
+
+        $manager->seedAdditions( ['app/New.php', 'storage/logs/laravel.log'] );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+        config( ['cms.updates.exclude_from_update' => ['storage', '.env', 'vendor']] );
+
+        try {
+            $manager->callRemove();
+
+            $this->assertFileDoesNotExist( $target . '/app/New.php' );
+            $this->assertFileExists(
+                $target . '/storage/logs/laravel.log',
+                'An excluded path must survive rollback cleanup even when it is in the additions ledger.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Regression for #272: the manager is a singleton, so one instance drives
+     * many runs on a long-lived queue worker. A run that fails *before* the
+     * Extract step must not delete files a previous successful run added — the
+     * additions ledger has to be reset at the start of every run, not only in
+     * `extractUpdate()`. Without the run-start reset a stale ledger from a
+     * prior successful run would have its files unlinked during this run's
+     * rollback.
+     *
+     * @since 2.8.0
+     */
+    public function test_run_start_reset_prevents_a_later_failure_deleting_a_prior_runs_files(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-crossrun-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        // A file a previous, successful update added — now part of the current
+        // version and captured by this run's backup.
+        file_put_contents( $target . '/app/FromRun1.php', "<?php\n// installed by the prior run\n" );
+
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/FromRun1.php', "<?php\n// installed by the prior run\n" );
+        $backup->close();
+
+        $manager = new class( $backupPath ) extends ApplicationUpdateManager {
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            /**
+             * @param  array<int, string>  $paths
+             */
+            public function seedAdditions( array $paths ): void
+            {
+                $this->extractionAdditions = $paths;
+            }
+
+            public function runSteps( string $version, UpdateInfo $info ): void
+            {
+                $this->runUpdateSteps( $version, $info );
+            }
+
+            // Fail the run at step 1 — before extraction ever runs.
+            protected function enableMaintenanceMode(): void
+            {
+                throw new RuntimeException( 'simulated early failure before extraction' );
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+
+            protected function clearCaches(): void
+            {
+            }
+        };
+
+        // The stale ledger the prior successful run left on the singleton.
+        $manager->seedAdditions( ['app/FromRun1.php'] );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $info = new UpdateInfo(
+                currentVersion: '1.0.0',
+                latestVersion: '2.0.0',
+                downloadUrl: 'https://example.test/update.zip',
+            );
+
+            try {
+                $manager->runSteps( '2.0.0', $info );
+                $this->fail( 'Expected the simulated early failure to propagate.' );
+            } catch ( RuntimeException $e ) {
+                $this->assertStringContainsString( 'simulated early failure', $e->getMessage() );
+            }
+
+            $this->assertFileExists(
+                $target . '/app/FromRun1.php',
+                'A run that fails before extraction must not delete files a prior run added; the ledger has to reset at run start.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $backupPath );
             $this->removeDirectory( $target );
             @rmdir( $tempRoot );
         }
@@ -1448,9 +1758,9 @@ class ApplicationUpdateManagerTest extends TestCase
      *
      * `composer install` only ever *reads* a lock file — it never writes one —
      * so excluding the lock while letting `composer.json` be overwritten leaves
-     * the pair out of sync and aborts step 6 on every release that changes a
-     * dependency constraint. The `vendor` entry stays, because that directory
-     * genuinely is rebuilt by `composer install`.
+     * the pair out of sync, and composer fails step 6 on any release that adds a
+     * dependency the stale lock cannot satisfy. The `vendor` entry stays,
+     * because that directory genuinely is rebuilt by `composer install`.
      *
      * @since 2.7.1
      */
@@ -1572,7 +1882,8 @@ class ApplicationUpdateManagerTest extends TestCase
     /**
      * The sync check must accept the composer-generated fixture pair as-is —
      * an end-to-end pass over `verifyComposerFilesInSync()` against files real
-     * composer produced, rather than hand-built JSON.
+     * composer produced, rather than hand-built JSON. A real pair is in sync,
+     * so no divergence is reported.
      *
      * @since 2.7.1
      */
@@ -1594,9 +1905,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer install --no-dev' );
-
-            $this->assertTrue( true ); // No exception means the real pair was accepted.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'A real composer pair is in sync, so no divergence is reported.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1604,15 +1916,61 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
-     * Regression for #255 (Fix C): a positively-detected desync must abort with
-     * a message naming the real cause, rather than letting composer emit its
-     * "incorrectly merged or manually edited" guess.
+     * Regression for #264: a stale `content-hash` must no longer pre-empt the
+     * update. Composer installs from the lock despite a stale hash, so when the
+     * lock still satisfies `composer.json` the install runs and succeeds — the
+     * false-positive abort (and its full rollback) is gone.
      *
-     * @since 2.7.1
+     * @since 2.8.0
      */
-    public function test_verify_composer_files_in_sync_throws_when_lock_is_stale(): void
+    public function test_stale_lock_no_longer_aborts_when_composer_succeeds(): void
     {
         Process::fake();
+
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall();
+
+            $this->assertTrue( true ); // No exception: composer adjudicated, not the pre-flight check.
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'install' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Regression for #264 (the valuable half of #255): when composer itself
+     * fails over a stale lock, the thrown message wraps composer's own output
+     * with the framework's accurate diagnosis, rather than leaving composer's
+     * "incorrectly merged or manually edited" guess to reach the operator.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_enriches_composer_failure_message(): void
+    {
+        Process::fake( [
+            '*' => Process::result(
+                '',
+                'Required package "psr/container" is not present in the lock file. '
+                . 'This usually happens when composer files are incorrectly merged.',
+                4,
+            ),
+        ] );
 
         $target = $this->makeComposerPair(
             '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
@@ -1636,14 +1994,13 @@ class ApplicationUpdateManagerTest extends TestCase
                 $manager->callRunComposerInstall();
             } catch ( UpdateException $e ) {
                 $threw = true;
+                $this->assertStringContainsString( 'Composer install failed', $e->getMessage() );
                 $this->assertStringContainsString( 'out of sync', $e->getMessage() );
-                $this->assertStringContainsString( 'never writes one', $e->getMessage() );
+                $this->assertStringContainsString( 'cannot satisfy composer.json', $e->getMessage() );
                 $this->assertStringContainsString( 'not a merge conflict', $e->getMessage() );
             }
 
-            $this->assertTrue( $threw, 'A stale lock must abort the update before composer runs.' );
-
-            Process::assertNothingRan();
+            $this->assertTrue( $threw, 'A composer failure over a stale lock must surface the enriched diagnosis.' );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1651,7 +2008,464 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
-     * The happy path: an in-sync pair passes the check and composer is invoked.
+     * The enrichment is scoped to a detected divergence. A composer failure over
+     * an in-sync pair must abort with composer's own output alone, not be dressed
+     * up as a lock-sync problem it isn't.
+     *
+     * @since 2.8.0
+     */
+    public function test_composer_failure_without_divergence_is_not_dressed_as_a_sync_problem(): void
+    {
+        Process::fake( [
+            '*' => Process::result( '', 'Some unrelated composer failure.', 1 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"artisanpack-ui/cms-framework":"^2.7.0"}}',
+            null,
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+
+                public function contentHashFor( string $path ): ?string
+                {
+                    return $this->composerContentHash( $path );
+                }
+            };
+
+            $hash = $manager->contentHashFor( $target . '/composer.json' );
+            file_put_contents(
+                $target . '/composer.lock',
+                json_encode( ['content-hash' => $hash, 'packages' => []] ),
+            );
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'Composer install failed', $e->getMessage() );
+                $this->assertStringNotContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'A composer failure must still abort the update.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * #273: when `composer install` aborts because the previous release's lock
+     * cannot satisfy the incoming `composer.json`, the updater runs a targeted
+     * `composer update` of the flagged packages and lets the update proceed
+     * instead of rolling back into a state only a shell can escape.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_runs_targeted_composer_update_and_proceeds(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( 'Package operations: 1 update', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall(); // No exception: recovery succeeded.
+
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'update' )
+                && str_contains( $process->command, 'psr/container' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Recovery is opt-out. With `recover_stale_lock` disabled, a stale lock
+     * aborts and rolls back exactly as before — no `composer update` is run.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_is_skipped_when_disabled(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'       => false,
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( '', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'With recovery disabled a stale lock must still abort.' );
+            Process::assertNotRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Recovery declines when the composer command is an operator override: an
+     * arbitrary command string cannot be safely rewritten from `install` into
+     * `update`, so the update aborts rather than guess.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_declines_for_operator_override_command(): void
+    {
+        config( [
+            'cms.updates.composer_binary'          => null,
+            'cms.updates.composer_install_command' => 'composer install --no-dev',
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( '', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+            }
+
+            $this->assertTrue( $threw, 'An override that cannot be rewritten must leave the abort in place.' );
+            Process::assertNotRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * When the recovery `composer update` fails too, the update rolls back with
+     * the enriched stale-lock diagnosis, not the recovery's own output.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_that_also_fails_still_rolls_back(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( '', 'Your requirements could not be resolved.', 2 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'Composer install failed', $e->getMessage() );
+                $this->assertStringContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'A recovery that also fails must still abort the update.' );
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * Recovery keys off composer's own "Required package" diagnosis, not the
+     * framework's content-hash check, so it still fires when
+     * `verify_composer_lock_sync` is disabled — the very scenario (a changed
+     * hash algorithm) where a stale lock is most likely and recovery most
+     * wanted.
+     *
+     * @since 2.8.0
+     */
+    public function test_stale_lock_recovery_runs_even_when_lock_sync_check_is_disabled(): void
+    {
+        config( [
+            'cms.updates.verify_composer_lock_sync' => false,
+            'cms.updates.composer_install_command'  => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( 'Package operations: 1 update', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall(); // No exception: recovery ran despite the hash check being off.
+
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, 'update' )
+                && str_contains( $process->command, 'psr/container' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The parse gate is what scopes recovery: a composer failure that names no
+     * packages — even with a divergence detected — must not trigger a
+     * `composer update`, so an unrelated failure still aborts.
+     *
+     * @since 2.8.0
+     */
+    public function test_recovery_does_not_run_for_a_failure_that_names_no_packages(): void
+    {
+        config( ['cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND] );
+
+        Process::fake( [
+            '*install*' => Process::result( '', 'Some unrelated composer failure with no package lines.', 1 ),
+            '*update*'  => Process::result( '', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $threw = false;
+
+            try {
+                $manager->callRunComposerInstall();
+            } catch ( UpdateException $e ) {
+                $threw = true;
+            }
+
+            $this->assertTrue( $threw, 'A failure naming no packages must still abort.' );
+            Process::assertNotRan( fn ( $process ): bool => str_contains( $process->command, 'update' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The recovery command is built through the same binary discovery the
+     * install uses: a configured `composer_binary` yields the explicit
+     * `{php} {binary} update <pkgs> --no-dev …` form the PHP-FPM host of #233
+     * needs, not a bare `composer`.
+     *
+     * @since 2.8.0
+     */
+    public function test_recovery_command_uses_the_configured_composer_binary(): void
+    {
+        config( [
+            'cms.updates.composer_binary'          => '/opt/fake/bin/composer',
+            'cms.updates.composer_install_command' => ApplicationUpdateManager::DEFAULT_COMPOSER_INSTALL_COMMAND,
+        ] );
+
+        Process::fake( [
+            '*install*' => Process::result(
+                '',
+                'Required package "psr/container" is in the lock file as "1.0.0" but that '
+                . 'does not satisfy your constraint "^2.0.0".',
+                4,
+            ),
+            '*update*' => Process::result( 'ok', '', 0 ),
+        ] );
+
+        $target = $this->makeComposerPair(
+            '{"require":{"psr/container":"^2.0.0"}}',
+            '{"content-hash":"0000000000000000stalehash0000000","packages":[]}',
+        );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager = new class extends ApplicationUpdateManager {
+                public function callRunComposerInstall(): void
+                {
+                    $this->runComposerInstall();
+                }
+            };
+
+            $manager->callRunComposerInstall();
+
+            Process::assertRan( fn ( $process ): bool => str_contains( $process->command, '/opt/fake/bin/composer' )
+                && str_contains( $process->command, 'update' )
+                && str_contains( $process->command, 'psr/container' )
+                && str_contains( $process->command, '--with-all-dependencies' )
+                && str_contains( $process->command, '--no-dev' ) );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+        }
+    }
+
+    /**
+     * The package parser reads both shapes composer uses for an unsatisfiable
+     * lock, dedupes, and filters anything that is not a well-formed package
+     * name so no junk — or crafted input — reaches the shelled-out `composer
+     * update`.
+     *
+     * @since 2.8.0
+     */
+    public function test_parse_unsatisfied_composer_packages_extracts_and_filters(): void
+    {
+        $manager = new class extends ApplicationUpdateManager {
+            /**
+             * @return array<int, string>
+             */
+            public function parseFor( string $output ): array
+            {
+                return $this->parseUnsatisfiedComposerPackages( $output );
+            }
+        };
+
+        $output = 'Required package "artisanpack-ui/cms-framework" is in the lock file as "2.5.4" '
+            . 'but that does not satisfy your constraint "^2.7.1".' . "\n"
+            . 'Required package "psr/container" is not present in the lock file.' . "\n"
+            . 'Required package "artisanpack-ui/cms-framework" mentioned twice.' . "\n"
+            . 'Required package "not a real name" should be filtered out.';
+
+        $this->assertSame(
+            ['artisanpack-ui/cms-framework', 'psr/container'],
+            $manager->parseFor( $output ),
+        );
+    }
+
+    /**
+     * The happy path: an in-sync pair reports no divergence.
      *
      * @since 2.7.1
      */
@@ -1681,9 +2495,11 @@ class ApplicationUpdateManagerTest extends TestCase
 
             $method = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
-            $method->invoke( $manager, 'composer install --no-dev' );
 
-            $this->assertTrue( true ); // No exception means the pair was accepted.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'A matching hash reports no divergence.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1717,9 +2533,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer install --no-dev' );
-
-            $this->assertTrue( true ); // No exception means the check failed open.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'An inconclusive lock reports no divergence and is left for composer.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1767,9 +2584,10 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer install --no-dev' );
-
-            $this->assertTrue( true ); // No exception means the check was skipped.
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'A disabled check reports no divergence.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -1780,7 +2598,8 @@ class ApplicationUpdateManagerTest extends TestCase
      * A host that has overridden `composer_install_command` to run `composer
      * update` has deliberately opted into re-resolving the tree, and a lock
      * that disagrees with `composer.json` is exactly what `update` reconciles.
-     * The guard must not abort those hosts.
+     * The guard reports no divergence for those hosts — but the same stale pair
+     * is a positive divergence for an `install`.
      *
      * @since 2.7.1
      */
@@ -1800,13 +2619,15 @@ class ApplicationUpdateManagerTest extends TestCase
             $method     = $reflection->getMethod( 'verifyComposerFilesInSync' );
             $method->setAccessible( true );
 
-            $method->invoke( $manager, 'composer update --no-dev --no-interaction' );
+            $this->assertFalse(
+                $method->invoke( $manager, 'composer update --no-dev --no-interaction' ),
+                'The guard stands down for update commands.',
+            );
 
-            $this->assertTrue( true ); // No exception means the guard stood down.
-
-            // ...but the same stale pair must still abort an `install`.
-            $this->expectException( UpdateException::class );
-            $method->invoke( $manager, 'composer install --no-dev' );
+            $this->assertTrue(
+                $method->invoke( $manager, 'composer install --no-dev' ),
+                'The same stale pair is reported as diverged for an install.',
+            );
         } finally {
             app()->setBasePath( $originalBase );
             $this->removeDirectory( $target );
@@ -2386,6 +3207,345 @@ class ApplicationUpdateManagerTest extends TestCase
             $this->assertStringContainsString( 'not newer', $e->getMessage() );
             $this->assertStringContainsString( '--allow-downgrade', $e->getMessage() );
         }
+    }
+
+    /**
+     * H1: a caught update failure must restore the snapshot BEFORE it lifts
+     * maintenance mode. Lifting first would serve public traffic from a
+     * half-applied tree while the rollback (and its `composer install`) ran.
+     *
+     * @since 2.8.0
+     */
+    public function test_caught_failure_rolls_back_before_lifting_maintenance(): void
+    {
+        config()->set( 'cms.updates.lift_maintenance_on_interrupt', 'always' );
+
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-h1-' );
+        file_put_contents( $backup, 'stub' );
+
+        $manager = new class( $backup ) extends ApplicationUpdateManager {
+            /** @var array<int, string> */
+            public array $events = [];
+
+            public function __construct( string $backupPath )
+            {
+                $this->backupPath  = $backupPath;
+                $this->currentStep = UpdateStep::VerifyChecksum;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            public function rollback( string $backupPath ): void
+            {
+                $this->events[] = 'rollback';
+            }
+
+            protected function removeExtractionAdditions(): void
+            {
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                $this->events[] = 'lift';
+            }
+        };
+
+        $manager->callHandleFailure( new RuntimeException( 'boom' ) );
+
+        $this->assertSame(
+            ['rollback', 'lift'],
+            $manager->events,
+            'The snapshot must be restored before maintenance mode is lifted.',
+        );
+
+        @unlink( $backup );
+    }
+
+    /**
+     * H1: the caught-exception path must honour `lift_maintenance_on_interrupt`.
+     * Under the default `step_aware` policy a failure on a half-applied step
+     * (extract/composer/migrations) must leave the site in maintenance mode
+     * even after a successful rollback, rather than lifting unconditionally.
+     *
+     * @since 2.8.0
+     */
+    public function test_caught_failure_honours_step_aware_lift_policy_on_unsafe_steps(): void
+    {
+        config()->set( 'cms.updates.lift_maintenance_on_interrupt', 'step_aware' );
+
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-h1-' );
+        file_put_contents( $backup, 'stub' );
+
+        $manager = new class( $backup ) extends ApplicationUpdateManager {
+            /** @var array<int, string> */
+            public array $events = [];
+
+            public function __construct( string $backupPath )
+            {
+                $this->backupPath  = $backupPath;
+                $this->currentStep = UpdateStep::Extract;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            public function rollback( string $backupPath ): void
+            {
+                $this->events[] = 'rollback';
+            }
+
+            protected function removeExtractionAdditions(): void
+            {
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                $this->events[] = 'lift';
+            }
+        };
+
+        $manager->callHandleFailure( new RuntimeException( 'boom' ) );
+
+        $this->assertSame(
+            ['rollback'],
+            $manager->events,
+            'A step_aware policy must keep the site down after a failure on a half-applied step, even once the snapshot is restored.',
+        );
+
+        @unlink( $backup );
+    }
+
+    /**
+     * H2: a pinned downgrade must reach the update steps even when the install
+     * is already on the latest release. The latest-only "no update available"
+     * gate must not short-circuit an explicit `--target-version` +
+     * `--allow-downgrade`.
+     *
+     * @since 2.8.0
+     */
+    public function test_pinned_downgrade_off_latest_reaches_the_update_steps(): void
+    {
+        config()->set( 'app.version', '2.0.0' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public ?string $ranTarget = null;
+
+            public function checkForUpdate(): UpdateInfo
+            {
+                // Already at latest — hasUpdate() is false.
+                return new UpdateInfo(
+                    currentVersion: '2.0.0',
+                    latestVersion: '2.0.0',
+                    downloadUrl: 'https://example.test/app-2.0.0.zip',
+                );
+            }
+
+            protected function acquireUpdateLock()
+            {
+                return null;
+            }
+
+            protected function releaseUpdateLock( $handle ): void
+            {
+            }
+
+            protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
+            {
+                $this->ranTarget = $targetVersion;
+
+                return true;
+            }
+        };
+
+        $result = $manager->performUpdate( '1.0.0', allowDowngrade: true );
+
+        $this->assertTrue( $result );
+        $this->assertSame(
+            '1.0.0',
+            $manager->ranTarget,
+            'A pinned downgrade must reach the update steps rather than short-circuit on "no update available".',
+        );
+    }
+
+    /**
+     * M2: a rollback whose `extractTo()` fails partway must throw rather than
+     * report a clean restore. Pointing base_path() at a regular file makes
+     * `ZipArchive::extractTo()` return false.
+     *
+     * @since 2.8.0
+     */
+    public function test_rollback_throws_when_backup_extraction_fails_partway(): void
+    {
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-rb-' );
+        @unlink( $backup );
+        $backup .= '.zip';
+
+        $zip = new ZipArchive;
+        $zip->open( $backup, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'app/Foo.php', '<?php' );
+        $zip->close();
+
+        // A regular file, not a directory, so extraction into it fails.
+        $fileAsBase = (string) tempnam( sys_get_temp_dir(), 'cmsfw-notdir-' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function callRollback( string $backupPath ): void
+            {
+                $this->rollback( $backupPath );
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+        };
+
+        $original = base_path();
+        app()->setBasePath( $fileAsBase );
+
+        // A failed extraction must surface as a throw — never return normally
+        // and let the run be recorded as a clean rollback. Depending on the
+        // error handler it arrives either as our own `UpdateException` (the
+        // `extractTo()` return-value check) or as the warning-to-exception the
+        // failing syscall raises first; both are the correct "not silent"
+        // outcome.
+        $threw = false;
+
+        try {
+            $manager->callRollback( $backup );
+        } catch ( Throwable $e ) {
+            $threw = true;
+        } finally {
+            app()->setBasePath( $original );
+            @unlink( $backup );
+            @unlink( $fileAsBase );
+        }
+
+        $this->assertTrue( $threw, 'A rollback whose extraction fails must throw rather than report success.' );
+    }
+
+    /**
+     * M3: the extraction-additions ledger is persisted, so a manual rollback
+     * in a fresh process (where the in-memory ledger is gone) still removes
+     * the files the interrupted update added — not just restores the snapshot.
+     *
+     * @since 2.8.0
+     */
+    public function test_manual_rollback_removes_persisted_extraction_additions(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-m3-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0777, true );
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        // Persist the ledger to an absolute path so it survives the simulated
+        // process boundary regardless of where storage_path() resolves.
+        config()->set( 'cms.updates.state_path', $tempRoot . '/state.json' );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+
+            public function forgetInMemoryAdditions(): void
+            {
+                $this->extractionAdditions = [];
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+            $this->assertFileExists( $target . '/app/New.php' );
+
+            // Simulate the manual rollback running in a fresh process: the
+            // in-memory ledger is gone, only the persisted one remains.
+            $manager->forgetInMemoryAdditions();
+
+            $manager->removeOrphanedExtractionAdditions();
+
+            $this->assertFileDoesNotExist(
+                $target . '/app/New.php',
+                'A manual rollback must remove the persisted extraction additions.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @unlink( $tempRoot . '/state.json' );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * C3: a release declaring a `min_php_version` the host does not meet must
+     * be refused before any file is touched, rather than installed and only
+     * failing once the new code hits an unparseable syntax.
+     *
+     * @since 2.8.0
+     */
+    public function test_refuses_a_release_that_requires_a_newer_php_version(): void
+    {
+        config()->set( 'app.version', '1.0.0' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public bool $ranSteps = false;
+
+            public function checkForUpdate(): UpdateInfo
+            {
+                return new UpdateInfo(
+                    currentVersion: '1.0.0',
+                    latestVersion: '2.0.0',
+                    downloadUrl: 'https://example.test/app-2.0.0.zip',
+                    minPhpVersion: '99.0.0',
+                );
+            }
+
+            protected function acquireUpdateLock()
+            {
+                return null;
+            }
+
+            protected function releaseUpdateLock( $handle ): void
+            {
+            }
+
+            protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
+            {
+                $this->ranSteps = true;
+
+                return true;
+            }
+        };
+
+        $threw = false;
+
+        try {
+            $manager->performUpdate();
+        } catch ( UpdateException $e ) {
+            $threw = true;
+            $this->assertStringContainsString( 'requires PHP 99.0.0', $e->getMessage() );
+        }
+
+        $this->assertTrue( $threw, 'An unmet PHP requirement must abort the update.' );
+        $this->assertFalse( $manager->ranSteps, 'The update steps must not run when the host fails a declared requirement.' );
     }
 
     /**

@@ -5,12 +5,14 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Tests\Feature\Updates;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Providers\CoreServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Queue;
 use Orchestra\Testbench\TestCase;
 
 /**
@@ -136,6 +138,54 @@ class UpdateFlowTest extends TestCase
             $definition->hasOption( 'version' ),
             'update:perform must not declare --version; it collides with the Symfony Application global flag.',
         );
+    }
+
+    /**
+     * Test `update:perform --queue` dispatches the job instead of running the
+     * update in the console process, and pins the version the operator just
+     * confirmed rather than leaving it to be resolved later.
+     *
+     * @since 2.8.0
+     */
+    public function test_update_perform_queue_option_dispatches_the_job(): void
+    {
+        Queue::fake();
+
+        $statePath = sys_get_temp_dir() . '/cmsfw-update-flow-' . uniqid() . '.json';
+
+        Config::set( [
+            'cms.updates.state_path'     => $statePath,
+            'queue.default'              => 'database',
+            'queue.connections.database' => ['driver' => 'database', 'table' => 'jobs', 'queue' => 'default'],
+            'app.version'                => '1.0.0',
+        ] );
+
+        $checker = $this->createMock( UpdateChecker::class );
+        $checker->method( 'checkForUpdate' )->willReturn( new UpdateInfo(
+            currentVersion: '1.0.0',
+            latestVersion: '2.0.0',
+            downloadUrl: 'https://example.com/update.zip',
+        ) );
+
+        // The command resolves the manager out of the container, so the checker
+        // has to be installed on the shared instance rather than a local one.
+        $manager = $this->app->make( ApplicationUpdateManager::class );
+        $manager->setUpdateChecker( $checker );
+
+        try {
+            $this->artisan( 'update:perform', ['--queue' => true, '--force' => true] )
+                ->expectsOutputToContain( 'Update queued.' )
+                ->assertSuccessful();
+
+            Queue::assertPushed( PerformUpdateJob::class, function ( PerformUpdateJob $job ): bool {
+                return '2.0.0' === $job->version;
+            } );
+
+            $this->assertSame( 'queued', $manager->updateState()['status'] );
+        } finally {
+            @unlink( $statePath );
+            @unlink( $statePath . '.lock' );
+        }
     }
 
     /**

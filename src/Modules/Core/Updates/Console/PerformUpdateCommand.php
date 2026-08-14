@@ -5,8 +5,8 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
-use Exception;
 use Illuminate\Console\Command;
+use Throwable;
 
 /**
  * Perform Update Command
@@ -27,6 +27,7 @@ class PerformUpdateCommand extends Command
     protected $signature = 'update:perform
                             {--target-version= : Specific version to update to (default: latest)}
                             {--allow-downgrade : Permit a target version that is not newer than the installed one}
+                            {--queue : Dispatch the update to a queue worker instead of running it here}
                             {--force : Skip confirmation prompt}';
 
     /**
@@ -49,13 +50,20 @@ class PerformUpdateCommand extends Command
             // Check for updates first
             $updateInfo = $manager->checkForUpdate();
 
-            if ( ! $updateInfo->hasUpdate() ) {
+            $targetOption = $this->option( 'target-version' );
+
+            // "Already on latest" is only a reason to stop when the operator
+            // did not pin a target. A pinned `--target-version` (with
+            // `--allow-downgrade`) is a deliberate move to a specific release —
+            // including rolling off a bad latest — so it must reach
+            // `performUpdate()` rather than exit success here.
+            if ( ! $updateInfo->hasUpdate() && null === $targetOption ) {
                 $this->info( '✓ You are already running the latest version.' );
 
                 return self::SUCCESS;
             }
 
-            $version = $this->option( 'target-version' ) ?? $updateInfo->latestVersion;
+            $version = $targetOption ?? $updateInfo->latestVersion;
 
             // Show update information
             $this->newLine();
@@ -72,6 +80,20 @@ class PerformUpdateCommand extends Command
                 }
             }
 
+            if ( $this->option( 'queue' ) ) {
+                // The resolved version rather than the raw option: the operator
+                // has just confirmed a prompt naming this version, so pinning it
+                // is what they agreed to. Leaving it null would let the job
+                // install whatever is latest by the time a worker picks it up.
+                $manager->dispatchUpdate( $version, (bool) $this->option( 'allow-downgrade' ) );
+
+                $this->newLine();
+                $this->info( '✓ Update queued.' );
+                $this->line( 'A queue worker will run it. Poll `php artisan update:status` for progress.' );
+
+                return self::SUCCESS;
+            }
+
             // Perform update
             $this->newLine();
             $this->warn( '⚠ Starting update process...' );
@@ -85,15 +107,41 @@ class PerformUpdateCommand extends Command
             $this->line( "Application updated to version {$version}" );
 
             return self::SUCCESS;
-        } catch ( Exception $e ) {
+        } catch ( Throwable $e ) {
             $this->newLine();
             $this->error( '✗ Update failed:' );
             $this->error( $e->getMessage() );
-            $this->newLine();
-            $this->warn( 'If a backup was created, you can restore it using:' );
-            $this->comment( 'php artisan update:rollback' );
+
+            // Suppressed only when nothing ever reached the application tree —
+            // a refused queue driver, say — because pointing the operator at
+            // `update:rollback` would send them to restore a snapshot over a
+            // healthy install. Gated on the recorded step rather than on
+            // `--queue`: with `cms.updates.queue.allow_sync` the dispatch runs
+            // the entire update inline, so a `--queue` failure can absolutely
+            // mean the tree was rewritten and a backup exists.
+            if ( $this->updateTouchedTheTree( $manager ) ) {
+                $this->newLine();
+                $this->warn( 'If a backup was created, you can restore it using:' );
+                $this->comment( 'php artisan update:rollback' );
+            }
 
             return self::FAILURE;
         }
+    }
+
+    /**
+     * Whether the failed run got far enough to modify the installation.
+     *
+     * @since 2.8.0
+     *
+     * @param  ApplicationUpdateManager  $manager  Update manager.
+     *
+     * @return bool True when a step was recorded as having started.
+     */
+    protected function updateTouchedTheTree( ApplicationUpdateManager $manager ): bool
+    {
+        $state = $manager->updateState();
+
+        return is_string( $state['step'] ?? null ) && '' !== $state['step'];
     }
 }

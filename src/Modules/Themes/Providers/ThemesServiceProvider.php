@@ -15,10 +15,12 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Providers;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Support\EnqueuedAssets;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Support\ThemeLoader;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -58,6 +60,11 @@ class ThemesServiceProvider extends ServiceProvider
             );
         } );
 
+        // Register the theme UpdateManager as a singleton.
+        $this->app->singleton( UpdateManager::class, function ( $app ) {
+            return new UpdateManager( $app->make( ThemeManager::class ) );
+        } );
+
         // Register ThemeLoader as singleton — one per-request boot pass.
         $this->app->singleton( ThemeLoader::class, function ( $app ) {
             return new ThemeLoader( $app->make( ThemeManager::class ) );
@@ -84,14 +91,18 @@ class ThemesServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Publish config
+        // Publish config. Also tagged `cms-framework-config` so the umbrella
+        // tag the README documents publishes every module's config in one
+        // command.
         $this->publishes( [
             __DIR__ . '/../config/themes.php' => config_path( 'cms/themes.php' ),
-        ], 'cms-themes-config' );
+        ], [ 'cms-themes-config', 'cms-framework-config' ] );
 
         // Register theme view paths early in the boot cycle
         $themeManager = $this->app->make( ThemeManager::class );
         $themeManager->registerThemeViewPath();
+
+        $this->registerThemeCapabilities();
 
         // Load routes
         $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
@@ -104,11 +115,14 @@ class ThemesServiceProvider extends ServiceProvider
 
         $this->registerThemeAssetBladeDirectives();
 
-        // Register default setting
+        // Register default setting. The registered default is what
+        // `SettingsManager::getSetting()` falls back to once the caller's own
+        // default is null, so it has to track `cms.themes.default` exactly —
+        // a literal here would reinstate the fallback the config removed.
         $settingsManager = $this->app->make( SettingsManager::class );
         $settingsManager->registerSetting(
             'themes.activeTheme',
-            config( 'cms.themes.default', 'digital-shopfront' ),
+            config( 'cms.themes.default' ),
             fn ( $value ) => is_string( $value ) ? sanitizeText( $value ) : '',
             SettingType::String,
         );
@@ -202,6 +216,35 @@ class ThemesServiceProvider extends ServiceProvider
      *
      * @since 2.5.0
      */
+    /**
+     * Register the `manage-themes` Gate ability, deny-by-default.
+     *
+     * The theme upload/activate/update routes gate on this ability. An
+     * activated theme's `Theme.php` and Blade templates execute on every
+     * request, so an under-authorized trigger is total compromise — the
+     * shipped default must be closed.
+     *
+     * The ability resolves through RBAC when a permission whose slug matches
+     * `manage-themes` is seeded (see `PermissionsTableSeeder`): rbac's
+     * `Gate::before` short-circuits this definition. A host that never seeds
+     * the permission — or defines its own ability — is left closed or wins,
+     * respectively. The `Gate::has()` guard covers a host that registered its
+     * own definition early.
+     *
+     * @since 2.8.0
+     */
+    protected function registerThemeCapabilities(): void
+    {
+        if ( Gate::has( 'manage-themes' ) ) {
+            return;
+        }
+
+        // The unused `$user` parameter is load-bearing: Gate reflects on the
+        // first parameter to decide whether an ability may be called for a
+        // guest, and an untyped one denies them.
+        Gate::define( 'manage-themes', fn ( $user ): bool => false );
+    }
+
     protected function registerThemeAssetBladeDirectives(): void
     {
         Blade::directive( 'themeFrontendStyles', function (): string {

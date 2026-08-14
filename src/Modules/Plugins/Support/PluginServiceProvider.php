@@ -5,6 +5,11 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Admin\Managers\AdminMenuManager;
+use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
+use Closure;
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
 use ReflectionClass;
@@ -35,6 +40,15 @@ abstract class PluginServiceProvider extends ServiceProvider
     /**
      * Register a Blade or Inertia admin page.
      *
+     * A `view` is wrapped in a closure before it reaches the route: Laravel's
+     * `Route::get( $uri, $action )` accepts a closure, a controller class, a
+     * `Class@method` string or an array — a Blade view name is none of those,
+     * and passing one through verbatim throws `Invalid route action`.
+     *
+     * A `component` is a Module Federation identifier that only the host's
+     * federation runtime can resolve, so it is still passed through as-is for
+     * the host to interpret.
+     *
      * @param  string  $slug  Route/URL slug for the admin page.
      * @param  array{title?:string,section?:string,view?:string,component?:string,capability?:string,icon?:string,order?:int}  $config
      */
@@ -47,7 +61,7 @@ abstract class PluginServiceProvider extends ServiceProvider
         $section = $config['section'] ?? null;
 
         $options = array_filter( [
-            'action'     => $config['view'] ?? $config['component'] ?? '',
+            'action'     => $this->resolveAdminPageAction( $config ),
             'capability' => $config['capability'] ?? 'access_admin_dashboard',
             'icon'       => $config['icon'] ?? 'fas.puzzle-piece',
             'order'      => $config['order'] ?? 50,
@@ -55,6 +69,54 @@ abstract class PluginServiceProvider extends ServiceProvider
         ], fn ( $value ) => null !== $value );
 
         $menu->addPage( $title, $slug, $section, $options );
+    }
+
+    /**
+     * Turn an admin-page config into something `Route::get()` will accept.
+     *
+     * Always returns a closure, never a bare string. Admin routes are
+     * registered from a `booted()` callback, so an action `Route::get()`
+     * rejects — a bare component identifier, or an empty string when the page
+     * declares neither a `view` nor a `component` — would throw during route
+     * registration and take *every* request down, not just the misconfigured
+     * page. Wrapping each outcome in a closure keeps the failure on the one
+     * route:
+     *
+     * - `view` → renders the Blade view, with the route's own parameters passed
+     *   through as view data so a page at `reports/{id}` can read `$id`.
+     * - `component` → a Module Federation identifier only the host's federation
+     *   runtime can resolve, returned as a mount-point element the host front
+     *   end hydrates.
+     * - neither → a 501, so the operator sees a clear "not configured" response
+     *   instead of a white-screened application.
+     *
+     * @since 2.8.0
+     *
+     * @param  array{view?:string,component?:string}  $config
+     *
+     * @return Closure The route action.
+     */
+    protected function resolveAdminPageAction( array $config ): Closure
+    {
+        $view = isset( $config['view'] ) ? ( string ) $config['view'] : '';
+
+        if ( '' !== $view ) {
+            return static fn ( Request $request ): View => view( $view, $request->route()?->parameters() ?? [] );
+        }
+
+        $component = isset( $config['component'] ) ? ( string ) $config['component'] : '';
+
+        if ( '' !== $component ) {
+            return static fn (): Response => response( sprintf(
+                '<div data-cms-federated-module="%s"></div>',
+                e( $component ),
+            ) );
+        }
+
+        return static fn (): Response => response(
+            __( 'This admin page is not configured: it declares neither a view nor a component.' ),
+            501,
+        );
     }
 
     /**
@@ -242,28 +304,29 @@ abstract class PluginServiceProvider extends ServiceProvider
      * Sanitize a plugin-supplied URL before it enters the nav registry.
      * Rejects unsafe schemes; falls back to '#' for anything not obviously a
      * navigation target. AdminMenuManager also sanitizes on render, but
-     * blocking at the ingress point keeps the registry itself clean.
+     * blocking at the ingress point keeps the registry itself clean — and the
+     * registry is a public surface in its own right, read by
+     * `PluginRegistry::navEntries()` and `Plugin::getNavEntriesAttribute()`
+     * rather than only through `getAdminMenu()`.
+     *
+     * Shares {@see NavUrl} with the render path: these rules were duplicated
+     * until 2.8.0, which is how the render copy came to be hardened against
+     * `java\tscript:` while this one kept storing the raw value.
+     *
+     * Takes `mixed` rather than `string`: the entry is a plugin-supplied array
+     * and this file declares `strict_types=1`, so a `url` that is anything but
+     * a string — an `HtmlString`, an int, an accidental array — raised a
+     * TypeError at the parameter boundary. That happens inside the plugin's
+     * `boot()`, which is the same whole-application failure mode as the route
+     * action bug this release fixes. Non-strings now take the documented '#'
+     * fallback instead.
+     *
+     * @param  mixed  $url  The plugin-supplied URL.
+     *
+     * @return string A URL safe to store and render.
      */
-    protected function normalizeNavUrl( string $url ): string
+    protected function normalizeNavUrl( mixed $url ): string
     {
-        $trimmed = trim( $url );
-        if ( '' === $trimmed ) {
-            return '#';
-        }
-
-        if ( str_starts_with( $trimmed, '/' ) || str_starts_with( $trimmed, '#' ) ) {
-            return $trimmed;
-        }
-
-        if ( 1 === preg_match( '#^([a-zA-Z][a-zA-Z0-9+.\-]*):#', $trimmed, $matches ) ) {
-            $scheme = strtolower( $matches[1] );
-            if ( in_array( $scheme, ['http', 'https', 'mailto', 'tel'], true ) ) {
-                return $trimmed;
-            }
-
-            return '#';
-        }
-
-        return $trimmed;
+        return NavUrl::sanitizeValue( $url, static::class );
     }
 }

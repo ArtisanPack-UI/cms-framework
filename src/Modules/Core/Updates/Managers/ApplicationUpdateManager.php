@@ -8,10 +8,16 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ArchiveChecksum;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\UpdateStateStore;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
+use Composer\InstalledVersions;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
@@ -85,6 +91,22 @@ class ApplicationUpdateManager
     protected ?string $backupPath = null;
 
     /**
+     * Relative paths, under `base_path()`, that the current extraction created
+     * and that did not exist beforehand.
+     *
+     * The backup can only restore files it captured, so a file the release
+     * *added* survives a snapshot restore untouched — leaving the tree a hybrid
+     * of the old version's files and an arbitrary subset of the new version's
+     * additions, migrations included. Recording exactly what extraction wrote
+     * lets rollback remove precisely those additions and nothing else.
+     *
+     * @since 2.8.0
+     *
+     * @var array<int, string>
+     */
+    protected array $extractionAdditions = [];
+
+    /**
      * Persisted step marker for the current update run.
      *
      * @since 2.7.1
@@ -146,6 +168,19 @@ class ApplicationUpdateManager
      *   dies anyway, maintenance mode is still lifted rather than leaving the
      *   site serving 503s indefinitely.
      *
+     * This method performs **no authorization** — it cannot, because the
+     * console commands that call it run with no authenticated user. A caller
+     * reached over HTTP must authorize first:
+     *
+     * ```php
+     * Gate::authorize( UpdateCapability::PERFORM );
+     * ```
+     *
+     * It matters more here than almost anywhere else in the framework: this
+     * pipeline overwrites PHP files and then runs `composer install`, which
+     * executes `post-install-cmd` scripts from the just-overwritten
+     * `composer.json`. See `UpdateCapability` and `docs/self-updater.md`.
+     *
      * @since 1.0.0
      *
      * @param  string|null  $version  Version to update to (null = latest)
@@ -172,12 +207,19 @@ class ApplicationUpdateManager
         try {
             $updateInfo = $this->checkForUpdate();
 
-            if ( ! $updateInfo->hasUpdate() ) {
-                throw UpdateException::noUpdateAvailable();
-            }
-
             // Use specified version or latest
             $targetVersion = $version ?? $updateInfo->latestVersion;
+
+            // `hasUpdate()` compares *latest* against current, so it only
+            // answers "is there something newer to move to." That gate is
+            // right when no target was pinned, but a pinned target is checked
+            // directly below in both directions (guarded by $allowDowngrade) —
+            // letting the latest-only gate run first made a pinned downgrade
+            // off a bad *latest* release unreachable, since `noUpdateAvailable`
+            // fired before the downgrade comparison was ever reached.
+            if ( null === $version && ! $updateInfo->hasUpdate() ) {
+                throw UpdateException::noUpdateAvailable();
+            }
 
             // `hasUpdate()` is only ever consulted against *latest*, never
             // against the requested target, so `performUpdate( '1.0.0' )` on a
@@ -188,10 +230,213 @@ class ApplicationUpdateManager
                 throw UpdateException::downgradeNotAllowed( $targetVersion, $updateInfo->resolveCurrentVersion() );
             }
 
+            $this->assertHostSatisfiesRequirements( $updateInfo );
+
             return $this->runUpdateSteps( $targetVersion, $updateInfo );
         } finally {
             $this->releaseUpdateLock( $lock );
         }
+    }
+
+    /**
+     * Push an update onto the queue instead of running it inline.
+     *
+     * **This is the supported entry point for an HTTP-triggered update.** The
+     * endpoint should authorize, call this, and then poll `updateState()` for
+     * progress; it must not call `performUpdate()` and block. An HTTP-triggered
+     * update occupies a PHP-FPM worker for the whole run and keeps occupying it
+     * after the caller disconnects, and it is subject to gateway timeouts
+     * (nginx `proxy_read_timeout`, load balancers, Cloudflare's 100s) and to
+     * FPM's `request_terminate_timeout` — none of which any userland call can
+     * override. The 2.7.1 guards make that failure *survivable*; they do not
+     * make it appropriate.
+     *
+     * Authorization is still the caller's job, exactly as it is for
+     * `performUpdate()` — dispatching a job that will overwrite PHP files and
+     * run `composer install` is the same remote-code-execution channel as
+     * running it inline:
+     *
+     * ```php
+     * Gate::authorize( UpdateCapability::PERFORM );
+     * $manager->dispatchUpdate();
+     * ```
+     *
+     * Refuses rather than degrades when the queue cannot actually run the job
+     * in the background — see `guardQueueDriver()`. A `sync` connection would
+     * reintroduce the exact blocking behavior this method exists to avoid,
+     * silently, which is the worst outcome available here.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $version  Version to install, or null for latest.
+     * @param  bool  $allowDowngrade  Permit a target that is not newer than the installed one.
+     *
+     * @throws UpdateException When the queue is unusable, or an update is already queued or running.
+     *
+     * @return PerformUpdateJob The dispatched job.
+     */
+    public function dispatchUpdate( ?string $version = null, bool $allowDowngrade = false ): PerformUpdateJob
+    {
+        $connection = $this->updateQueueConnection();
+        $queue      = $this->updateQueueName();
+
+        $this->guardQueueDriver( $connection );
+        $this->guardNoPendingUpdate();
+
+        $job = new PerformUpdateJob( $version, $allowDowngrade );
+        $job->onConnection( $connection );
+
+        if ( null !== $queue ) {
+            $job->onQueue( $queue );
+        }
+
+        // Acquired here rather than left to `PerformUpdateJob::dispatch()`,
+        // which takes the same lock from `PendingDispatch::__destruct()` and
+        // then *silently returns* when it cannot get it. Silence is the wrong
+        // answer for a double-clicked admin button: the caller would be told
+        // the update was queued, the state file would say `queued`, and
+        // nothing would ever run it.
+        $lock = new UniqueLock( app( CacheRepository::class ) );
+
+        if ( ! $lock->acquire( $job ) ) {
+            throw UpdateException::updateAlreadyQueued( $this->queuedAt() );
+        }
+
+        $this->state()->markQueued( $version, $this->installedVersion(), $connection, $queue );
+
+        try {
+            app( Dispatcher::class )->dispatch( $job );
+        } catch ( Throwable $e ) {
+            // A queue backend that is configured but unreachable — Redis down,
+            // a missing `jobs` table. Without this the record would sit at
+            // `queued` forever describing a job that was never accepted.
+            //
+            // Only when the push itself failed, though. Under `allow_sync` the
+            // dispatch *is* the whole update: `SyncQueue::handleException()`
+            // fails the job — releasing the lock and running
+            // `handleFailedUpdateJob()` — and only then rethrows. Re-stamping
+            // here would overwrite the outcome that reconciliation just
+            // settled, and release a lock that is already released. A record
+            // still sitting at `queued` is the signal that nothing ran.
+            $recorded = $this->updateState();
+            $recorded = is_string( $recorded['status'] ?? null ) ? $recorded['status'] : '';
+
+            if ( UpdateRunStatus::Queued === UpdateRunStatus::tryFrom( $recorded ) ) {
+                $lock->release( $job );
+
+                $this->state()->markStatus( UpdateRunStatus::Failed, $e->getMessage() );
+            }
+
+            throw $e;
+        }
+
+        Log::info( 'cms-framework: an application update was queued.', [
+            'target_version'   => $version,
+            'queue_connection' => $connection,
+            'queue_name'       => $queue,
+            'timeout'          => $job->timeout,
+        ] );
+
+        return $job;
+    }
+
+    /**
+     * Reconcile the persisted record after the queued update job failed.
+     *
+     * Called from `PerformUpdateJob::failed()`. The case this exists for is the
+     * worker timeout: the worker kills the run mid-step, so `performUpdate()`'s
+     * `catch` never marks the record and — under `kill -9`-style termination —
+     * the shutdown guard never lifts maintenance mode either. Left alone, the
+     * record would claim `in_progress` forever and the site would keep serving
+     * 503s, which is precisely the failure the interruption machinery exists to
+     * prevent, reintroduced through the queue.
+     *
+     * @since 2.8.0
+     *
+     * @param  Throwable|null  $exception  The failure, when there was one.
+     */
+    public function handleFailedUpdateJob( ?Throwable $exception = null ): void
+    {
+        $message = null !== $exception
+            ? $exception->getMessage()
+            : 'The queued update job failed without reporting an error.';
+
+        // The record this job failed against may not be its own. Two ways to
+        // arrive here holding someone else's:
+        //
+        // - `performUpdate()` takes the `flock` sentinel *before* its own try
+        //   block, so losing that race throws `updateAlreadyRunning` straight
+        //   past the bookkeeping and into the worker.
+        // - The queue redelivers a long-running job once `retry_after`
+        //   elapses. With `$tries = 1` the duplicate is failed without
+        //   `handle()` ever running, so it arrives here having done nothing.
+        //
+        // In both cases the live record belongs to a run that may still be
+        // extracting over `base_path()`. Marking it `Interrupted` would report
+        // a healthy run as dead, and lifting maintenance mode would serve
+        // traffic from a half-extracted tree — the exact outcome the whole
+        // interruption machinery exists to prevent, caused by the machinery
+        // itself. `runningUpdatePid()` is already the liveness probe for this.
+        $foreignPid = $this->runningUpdatePid();
+
+        if ( null !== $foreignPid ) {
+            Log::warning( 'cms-framework: a queued application update job failed against a run owned by another live process; leaving that run alone.', [
+                'running_pid' => $foreignPid,
+                'error'       => $message,
+            ] );
+
+            return;
+        }
+
+        $recorded = $this->updateState();
+        $status   = UpdateRunStatus::tryFrom(
+            is_string( $recorded['status'] ?? null ) ? $recorded['status'] : '',
+        );
+
+        if ( null !== $status && $status->isTerminal() ) {
+            // `performUpdate()` caught the error, rolled back, and recorded the
+            // real reason before rethrowing it into the worker. Overwriting
+            // that with the same message would be noise; overwriting a
+            // `Completed` record — a job that finished the update and then
+            // failed on the way out — would be a lie.
+            Log::error( 'cms-framework: the queued application update job failed after the run had already been recorded as finished.', [
+                'recorded_status' => $status->value,
+                'error'           => $message,
+            ] );
+
+            return;
+        }
+
+        $step = is_string( $recorded['step'] ?? null ) ? $recorded['step'] : null;
+
+        if ( UpdateRunStatus::InProgress === $status ) {
+            Log::critical( 'cms-framework: the queued application update was killed while it was running; the job is gone but the update never finished.', [
+                'step'       => $step,
+                'error'      => $message,
+                'state_file' => $this->state()->path(),
+                'hint'       => 'Run `php artisan update:status` to see how far it got and what remains.',
+            ] );
+
+            $this->state()->markStatus( UpdateRunStatus::Interrupted, $message );
+
+            if ( $this->maintenanceModeActive || null !== $step ) {
+                $this->liftMaintenanceModeAfterFailure(
+                    'the failed queued update job',
+                    null !== $step ? UpdateStep::tryFrom( $step ) : null,
+                );
+            }
+
+            return;
+        }
+
+        // Still `queued` (or no readable record at all): the job never reached
+        // `performUpdate()`'s own bookkeeping, so nothing else will record this.
+        Log::error( 'cms-framework: the queued application update failed before it started.', [
+            'recorded_status' => $status?->value,
+            'error'           => $message,
+        ] );
+
+        $this->state()->markStatus( UpdateRunStatus::Failed, $message );
     }
 
     /**
@@ -211,11 +456,29 @@ class ApplicationUpdateManager
     /**
      * Discard the persisted update state record.
      *
+     * Also releases the dispatch lock. The record and the lock live in
+     * different places — a file under `storage/` and the cache — so they can
+     * desynchronise, and clearing only the record would leave the operator
+     * unable to dispatch until the lock aged out: `guardNoPendingUpdate()`
+     * would pass (no record) and the lock acquire would then fail, reporting
+     * "an update is already queued" while `update:status` reported that none
+     * had ever been recorded. The lock key is Laravel-internal, so the only
+     * other way out was `cache:clear`. Discarding the record is the operator's
+     * reset button; it has to actually reset.
+     *
      * @since 2.7.1
      */
     public function clearUpdateState(): void
     {
         $this->state()->clear();
+
+        try {
+            ( new UniqueLock( app( CacheRepository::class ) ) )->release( new PerformUpdateJob );
+        } catch ( Throwable $e ) {
+            Log::warning( 'cms-framework: could not release the queued-update dispatch lock while clearing the update state.', [
+                'exception' => $e->getMessage(),
+            ] );
+        }
     }
 
     /**
@@ -290,25 +553,7 @@ class ApplicationUpdateManager
             );
         }
 
-        if ( ! config( 'cms.updates.lift_maintenance_on_interrupt', true ) ) {
-            Log::critical(
-                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
-            );
-
-            return;
-        }
-
-        try {
-            $this->disableMaintenanceMode();
-
-            Log::critical( 'cms-framework: maintenance mode was lifted by the update shutdown guard. The installation may be half-applied — run `php artisan update:status` before trusting it.' );
-        } catch ( Throwable $e ) {
-            Log::critical( 'cms-framework: the update shutdown guard could not lift maintenance mode via `artisan up`.', [
-                'exception' => $e->getMessage(),
-            ] );
-
-            $this->forceLiftMaintenanceMode();
-        }
+        $this->liftMaintenanceModeAfterFailure( 'the update shutdown guard', $this->currentStep );
     }
 
     /**
@@ -325,6 +570,12 @@ class ApplicationUpdateManager
 
     /**
      * Rollback to a previous backup.
+     *
+     * Performs no authorization, for the same reason `performUpdate()` does
+     * not. A caller reached over HTTP must first
+     * `Gate::authorize( UpdateCapability::ROLLBACK )` — restoring a snapshot
+     * reinstates its `composer.json` and `composer.lock` and then runs
+     * `composer install` against them.
      *
      * @since 1.0.0
      *
@@ -381,7 +632,18 @@ class ApplicationUpdateManager
         // it was empirically confirmed safe against traversal — `..` and
         // absolute paths stripped, symlink entries written as regular files,
         // permission bits discarded. Only the exclusion filter was missing.
-        $zip->extractTo( base_path(), $restore );
+        //
+        // Its return value is checked: `extractTo()` returns false on a
+        // mid-extraction failure (disk full, permission error), and swallowing
+        // that would let `update:status` report "the snapshot was restored
+        // successfully" over a half-restored tree — the exact false reassurance
+        // the `rolled_back` field exists to prevent.
+        if ( true !== $zip->extractTo( base_path(), $restore ) ) {
+            $zip->close();
+
+            throw UpdateException::rollbackFailed( 'backup extraction failed partway' );
+        }
+
         $zip->close();
 
         // Before invoking composer install, verify the resolved binary is
@@ -409,6 +671,97 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Remove extraction additions the persisted ledger recorded, for a manual
+     * rollback in a fresh process.
+     *
+     * `handleUpdateFailure()` still has the in-memory ledger and calls
+     * {@see removeExtractionAdditions()} directly. The manual
+     * `update:rollback` path runs in a new process where that ledger is empty,
+     * so this reloads it from the state file (written by `extractUpdate()`)
+     * before removing — turning the automatic-only #272 cleanup into one the
+     * manual path performs too. Every path is re-validated by
+     * `removeExtractionAdditions()` (exclusion list, regular-file check,
+     * containment), so a stale or tampered ledger entry is safe to process.
+     *
+     * @since 2.8.0
+     */
+    public function removeOrphanedExtractionAdditions(): void
+    {
+        if ( empty( $this->extractionAdditions ) ) {
+            $persisted = $this->updateState()['extraction_additions'] ?? null;
+
+            if ( is_array( $persisted ) ) {
+                $this->extractionAdditions = array_values( array_filter( $persisted, 'is_string' ) );
+            }
+        }
+
+        $this->removeExtractionAdditions();
+    }
+
+    /**
+     * Refuse a release the host cannot run before any file is touched.
+     *
+     * `UpdateInfo` parses, caches, and rehydrates `minPhpVersion` /
+     * `minFrameworkVersion` but nothing checked them, so a release declaring
+     * `min_php_version: 8.4` installed on 8.2 and only failed once the new code
+     * hit a syntax it could not parse — after the tree had already been
+     * overwritten. Checking here fails closed before the first step runs.
+     *
+     * @since 2.8.0
+     *
+     * @param  UpdateInfo  $updateInfo  Resolved update metadata.
+     *
+     * @throws UpdateException When the host does not meet a declared minimum.
+     */
+    protected function assertHostSatisfiesRequirements( UpdateInfo $updateInfo ): void
+    {
+        $minPhp = $updateInfo->minPhpVersion;
+
+        if ( is_string( $minPhp ) && '' !== $minPhp && version_compare( PHP_VERSION, $minPhp, '<' ) ) {
+            throw UpdateException::incompatiblePhpVersion( $minPhp, PHP_VERSION );
+        }
+
+        $minFramework = $updateInfo->minFrameworkVersion;
+
+        if ( ! is_string( $minFramework ) || '' === $minFramework ) {
+            return;
+        }
+
+        $currentFramework = $this->installedFrameworkVersion();
+
+        // Only compare when the installed version reads as a numeric version.
+        // A `dev-main` / branch alias install (CI, path repos) has no ordering
+        // against a release constraint, so skip the check rather than refuse.
+        if ( null !== $currentFramework
+            && 1 === preg_match( '/^\d+\.\d+/', $currentFramework )
+            && version_compare( $currentFramework, $minFramework, '<' ) ) {
+            throw UpdateException::incompatibleFrameworkVersion( $minFramework, $currentFramework );
+        }
+    }
+
+    /**
+     * The installed cms-framework version, or null when it cannot be resolved.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Pretty version with any leading `v` stripped.
+     */
+    protected function installedFrameworkVersion(): ?string
+    {
+        if ( ! class_exists( InstalledVersions::class ) ) {
+            return null;
+        }
+
+        try {
+            $version = InstalledVersions::getPrettyVersion( 'artisanpack-ui/cms-framework' );
+        } catch ( Throwable ) {
+            return null;
+        }
+
+        return is_string( $version ) ? ltrim( $version, 'vV' ) : null;
+    }
+
+    /**
      * Run the ten update steps under an already-held update lock.
      *
      * @since 2.7.1
@@ -422,6 +775,17 @@ class ApplicationUpdateManager
      */
     protected function runUpdateSteps( string $targetVersion, UpdateInfo $updateInfo ): bool
     {
+        // Clear the additions ledger at the very start of the run, not just in
+        // `extractUpdate()`. The manager is a singleton ( see
+        // `CoreServiceProvider` ), so on a long-lived queue worker one instance
+        // drives many runs. A run that succeeds leaves its additions in the
+        // ledger, and a *later* run that fails before ever reaching the Extract
+        // step would otherwise inherit them — and `removeExtractionAdditions()`
+        // would delete the previous, successful update's files during this
+        // run's rollback. Resetting here means a run that never extracts has an
+        // empty ledger and removes nothing.
+        $this->extractionAdditions = [];
+
         $this->state()->begin( $targetVersion, $updateInfo->resolveCurrentVersion() );
 
         try {
@@ -525,6 +889,16 @@ class ApplicationUpdateManager
         $handle = @fopen( $path, 'cb' );
 
         if ( false === $handle ) {
+            // The file lock is unavailable, but the state marker still records
+            // whether another run is live. Consult it before proceeding: an
+            // unwritable lock file must not become a licence to run a second
+            // concurrent update over the same tree.
+            $recordedPid = $this->runningUpdatePid();
+
+            if ( null !== $recordedPid ) {
+                throw UpdateException::updateAlreadyRunning( $recordedPid );
+            }
+
             // An unwritable state directory already degrades the step marker
             // to best-effort; it must not also block updates outright.
             Log::warning( 'cms-framework: could not open the update lock file; proceeding without concurrency protection.', [
@@ -607,7 +981,16 @@ class ApplicationUpdateManager
             return $pid;
         }
 
-        return posix_kill( $pid, 0 ) ? $pid : null;
+        if ( posix_kill( $pid, 0 ) ) {
+            return $pid;
+        }
+
+        // `posix_kill` returns false both for a dead process (ESRCH) and for a
+        // live process this user may not signal (EPERM = 1) — the exact case
+        // of a root `auto_update` cron run versus a `www-data` queue worker.
+        // Only ESRCH means the run is gone; EPERM proves it still exists, so
+        // reconciliation must treat it as alive and leave the healthy run be.
+        return 1 === posix_get_last_error() ? $pid : null;
     }
 
     /**
@@ -631,10 +1014,16 @@ class ApplicationUpdateManager
             throw UpdateException::noUpdateUrlConfigured();
         }
 
+        // The slug keys the update-check cache and identifies the application
+        // to the source. It is configurable rather than the product-specific
+        // literal it used to be, so this generic framework does not hard-code a
+        // single downstream product's name. Changing it invalidates any
+        // existing `cms.application.<old-slug>.update_check` cache entry, which
+        // simply forces one fresh check.
         $this->checker = UpdateCheckerFactory::buildUpdateChecker(
             url: $updateUrl,
             type: UpdateType::Application,
-            slug: 'digital-shopfront-cms',
+            slug: (string) config( 'cms.updates.application_slug', 'application' ),
         );
 
         return $this->checker;
@@ -911,9 +1300,14 @@ class ApplicationUpdateManager
      */
     protected function verifyChecksum( string $zipPath, string $expectedHash ): void
     {
-        $actualHash = hash_file( 'sha256', $zipPath );
+        // Normalize through the shared helper so an uppercase or padded digest
+        // (e.g. from a custom JSON feed) verifies rather than failing as a
+        // spurious "checksum mismatch", and a malformed value fails closed. The
+        // theme and plugin managers verify through the same helper.
+        $expected   = ArchiveChecksum::normalize( $expectedHash );
+        $actualHash = (string) hash_file( 'sha256', $zipPath );
 
-        if ( $actualHash !== $expectedHash ) {
+        if ( null === $expected || ! hash_equals( $expected, $actualHash ) ) {
             throw UpdateException::checksumMismatch( $expectedHash, $actualHash );
         }
     }
@@ -1019,6 +1413,11 @@ class ApplicationUpdateManager
 
         $extractPath  = base_path();
         $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+
+        // Start each extraction with an empty ledger. A manager instance can
+        // drive more than one run, and rollback removes exactly what *this*
+        // extraction added — never a previous run's additions.
+        $this->extractionAdditions = [];
 
         // Detect common root prefix by scanning all entry names
         $commonPrefix = $this->detectCommonRootPrefix( $zip, $excludePaths );
@@ -1150,6 +1549,13 @@ class ApplicationUpdateManager
             // so fetching content by name meant that with duplicate entry
             // names the file written for occurrence 2 got occurrence 1's
             // content and occurrence 2's permissions.
+            // Whether this path already existed decides what rollback owes it.
+            // An overwrite is restored from the backup; a brand-new file is
+            // not in the backup at all, so rollback has to delete it or it
+            // survives orphaned. Captured before the write because `fopen(
+            // …, 'wb' )` below creates the file either way.
+            $existedBeforeWrite = File::exists( $fullTargetPath );
+
             $entryStream = $zip->getStreamIndex( $i );
             if ( false === $entryStream ) {
                 Log::error( 'Failed to open ZIP entry stream during update extraction', [
@@ -1177,6 +1583,18 @@ class ApplicationUpdateManager
                 );
             }
 
+            // Record the addition the moment `fopen` creates the file, before
+            // streaming — not after. If `streamEntryToDisk()` throws partway,
+            // it best-effort `@unlink`s the target, but should that unlink fail
+            // ( read-only parent, races ) a brand-new, half-written file would
+            // survive un-ledgered and neither rollback nor the backup could
+            // remove it. Ledgering here lets rollback delete it. A later
+            // successful overwrite of a path that existed before is still not
+            // recorded, because `$existedBeforeWrite` was captured pre-`fopen`.
+            if ( ! $existedBeforeWrite ) {
+                $this->extractionAdditions[] = $targetPath;
+            }
+
             $this->streamEntryToDisk( $entryStream, $out, $filename, $fullTargetPath );
 
             // Preserve file permissions if available, clamped. setuid/setgid/
@@ -1193,6 +1611,13 @@ class ApplicationUpdateManager
         }
 
         $zip->close();
+
+        // Persist the additions ledger once the extraction is complete, so a
+        // manual `update:rollback` in a fresh process (the Interrupted case)
+        // can still remove the files this extraction added — the in-memory
+        // ledger dies with the process, and a snapshot restore alone leaves
+        // those additions orphaned (#272).
+        $this->state()->recordExtractionAdditions( $this->extractionAdditions );
     }
 
     /**
@@ -1371,7 +1796,7 @@ class ApplicationUpdateManager
     {
         $command = $this->resolveComposerCommand();
 
-        $this->verifyComposerFilesInSync( $command );
+        $composerFilesDiverged = $this->verifyComposerFilesInSync( $command );
 
         $timeout = config( 'cms.updates.composer_timeout', 600 );
 
@@ -1379,54 +1804,259 @@ class ApplicationUpdateManager
             ->path( base_path() )
             ->run( $command );
 
-        if ( ! $result->successful() ) {
-            throw UpdateException::composerInstallFailed( $result->errorOutput() );
+        if ( $result->successful() ) {
+            return;
         }
+
+        // #273: when the install failed *because* the on-disk lock is merely
+        // the previous release's, a targeted `composer update` can re-resolve the
+        // flagged packages and land a lock that satisfies the new `composer.json`,
+        // rather than aborting into a rollback the operator can only escape with
+        // shell access. This keys off composer's *own* "Required package"
+        // diagnosis of an unsatisfiable lock — never pre-emptively — and so is
+        // independent of `verifyComposerFilesInSync()`'s content-hash check
+        // above, which only enriches the failure message. That independence is
+        // deliberate: an operator disables the hash check precisely when a
+        // future composer changes the hash algorithm, which is exactly when a
+        // stale lock is most likely and recovery most wanted.
+        if ( $this->attemptStaleLockRecovery( $result->errorOutput() ) ) {
+            return;
+        }
+
+        throw UpdateException::composerInstallFailed( $result->errorOutput(), $composerFilesDiverged );
     }
 
     /**
-     * Verify the on-disk `composer.json` and `composer.lock` agree before
-     * handing them to composer.
+     * Recover from a `composer install` that aborted because the extracted
+     * `composer.json` requires a dependency set the still-in-place, previous
+     * release's `composer.lock` cannot satisfy (#273).
      *
-     * `composer install` only ever *reads* a lock file — it never writes one —
-     * and aborts when the lock disagrees with `composer.json`. Its own
-     * diagnosis of that state ("This usually happens when composer files are
-     * incorrectly merged or the composer.json file is manually edited") sends
-     * the operator hunting for a merge conflict or a hand-edit that never
-     * happened, when the real cause is a release that shipped no lock or a host
-     * whose `exclude_from_update` override still excludes it.
+     * This is the escape from the chicken-and-egg #255 left behind: the fix for
+     * a broken lock ships *inside* the update the broken lock prevents from
+     * running, so an install on the affected line has no updater-reachable path
+     * to the fix. Where composer names the packages the lock cannot satisfy,
+     * the framework runs a **targeted** `composer update <packages>` — only the
+     * flagged packages and their dependencies are re-resolved; everything else
+     * stays pinned at the lock — writing a lock that matches `composer.json` and
+     * letting the update proceed instead of rolling back.
      *
-     * Deliberately fails *open*. A missing `composer.json`, a missing or
-     * unparseable `composer.lock`, or a lock carrying no `content-hash` is left
-     * for composer to adjudicate — the framework only aborts on a positively
-     * detected mismatch, so a false alarm can never block an update that would
-     * otherwise have installed cleanly.
+     * It is deliberately conservative, and every guard below fails *toward* the
+     * original abort:
+     *
+     * - It runs only when composer's output names at least one unsatisfied
+     *   package — composer's own diagnosis of a lock that cannot satisfy
+     *   `composer.json`. An unrelated failure (network, a plugin error) names
+     *   none and is never "recovered", and a full-tree `composer update` — the
+     *   blast radius #255 argued against — is never triggered on a guess.
+     * - It declines when the composer command is an operator override that
+     *   cannot be safely rewritten into an `update`.
+     * - It is gated behind `cms.updates.recover_stale_lock` (default enabled),
+     *   because re-resolving on the operator's behalf is arguably not the
+     *   updater's call — an operator who wants the loud, safe rollback instead
+     *   sets the key to `false`.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $composerErrorOutput  The stderr from the failed install.
+     *
+     * @return bool True when a recovery `composer update` ran and succeeded.
+     */
+    protected function attemptStaleLockRecovery( string $composerErrorOutput ): bool
+    {
+        if ( ! config( 'cms.updates.recover_stale_lock', true ) ) {
+            return false;
+        }
+
+        $packages = $this->parseUnsatisfiedComposerPackages( $composerErrorOutput );
+        if ( empty( $packages ) ) {
+            return false;
+        }
+
+        $command = $this->resolveComposerRecoveryCommand( $packages );
+        if ( null === $command ) {
+            Log::warning(
+                'A stale composer.lock blocked the update, but the composer command is an operator override that cannot be rewritten into a targeted `composer update`; leaving the failure to roll back. Run `composer update ' . implode( ' ', $packages ) . ' --with-all-dependencies` on the host once, or clear the override.',
+                [ 'packages' => $packages ],
+            );
+
+            return false;
+        }
+
+        Log::warning(
+            'composer install aborted on a stale composer.lock; attempting a targeted `composer update` to reach the release the lock could not deliver (#273).',
+            [ 'packages' => $packages ],
+        );
+
+        $timeout = config( 'cms.updates.composer_timeout', 600 );
+
+        $result = Process::timeout( $timeout )
+            ->path( base_path() )
+            ->run( $command );
+
+        if ( $result->successful() ) {
+            Log::info(
+                'Stale composer.lock recovered: `composer update` re-resolved the flagged packages and the update is proceeding.',
+                [ 'packages' => $packages ],
+            );
+
+            return true;
+        }
+
+        Log::error(
+            'Stale composer.lock recovery failed: the targeted `composer update` could not resolve the flagged packages either; the update will roll back.',
+            [
+                'packages' => $packages,
+                'output'   => $result->errorOutput(),
+            ],
+        );
+
+        return false;
+    }
+
+    /**
+     * Extract the package names composer reported as unsatisfiable by the
+     * on-disk lock, from a failed `composer install`'s output.
+     *
+     * Composer names them in one of two shapes, both opening `Required package
+     * "vendor/name"`:
+     *
+     * ```
+     * Required package "artisanpack-ui/cms-framework" is in the lock file as
+     *   "2.5.4" but that does not satisfy your constraint "^2.7.1".
+     * Required package "psr/container" is not present in the lock file.
+     * ```
+     *
+     * Composer emits a third, `Required (in require-dev) package "..."` shape
+     * for dev requirements, deliberately not matched here: the shipped install
+     * runs `--no-dev`, so composer never reports a dev requirement, and any
+     * override that drops `--no-dev` makes recovery decline anyway (its command
+     * is no longer the default). If the install args ever stop passing
+     * `--no-dev`, revisit this pattern.
+     *
+     * Matches are filtered to well-formed composer package names before they
+     * are ever handed to a shelled-out `composer update`, so unparseable output
+     * yields an empty list (declining recovery) rather than passing junk — or
+     * anything crafted — to composer on this RCE-adjacent path.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $output  The failed install's stderr.
+     *
+     * @return array<int, string> Unique, validated package names; empty when none parse.
+     */
+    protected function parseUnsatisfiedComposerPackages( string $output ): array
+    {
+        if ( 0 === preg_match_all( '/Required package "([^"]+)"/', $output, $matches ) ) {
+            return [];
+        }
+
+        $packages = array_filter(
+            array_unique( $matches[1] ),
+            static fn ( string $name ): bool => 1 === preg_match(
+                '/^[a-z0-9]([_.-]?[a-z0-9]+)*\/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$/i',
+                $name,
+            ),
+        );
+
+        return array_values( $packages );
+    }
+
+    /**
+     * Build the targeted `composer update <packages>` command used to recover
+     * from a stale lock, mirroring `resolveComposerCommand()`'s binary
+     * discovery so recovery runs the same toolchain the install did.
+     *
+     * Returns `null` when the operator has overridden the full composer command
+     * string: an arbitrary command cannot be safely rewritten from `install`
+     * into `update`, so recovery declines rather than guess.
+     *
+     * @since 2.8.0
+     *
+     * @param  array<int, string>  $packages  Validated package names to update.
+     *
+     * @return string|null The recovery command, or null when it cannot be derived.
+     */
+    protected function resolveComposerRecoveryCommand( array $packages ): ?string
+    {
+        // `--with-all-dependencies` (`-W`) so the flagged packages' own
+        // dependencies — including root requirements pinned by the stale lock —
+        // may move too. A bare `composer update <pkg>` leaves them at their
+        // locked versions and fails to resolve exactly when the new version of a
+        // flagged package needs a transitive bump, which is the case recovery
+        // exists to unstick.
+        $args = 'update ' . implode( ' ', array_map( 'escapeshellarg', $packages ) )
+            . ' --with-all-dependencies --no-dev --no-interaction --optimize-autoloader';
+
+        $envBinary = $this->envComposerBinary();
+        if ( null !== $envBinary ) {
+            return $this->buildComposerCommand( $envBinary, $args );
+        }
+
+        $configured = config( 'cms.updates.composer_install_command' );
+        if ( is_string( $configured ) && self::DEFAULT_COMPOSER_INSTALL_COMMAND !== $configured ) {
+            return null;
+        }
+
+        $discovered = $this->discoverComposerBinary();
+        if ( null !== $discovered ) {
+            return $this->buildComposerCommand( $discovered, $args );
+        }
+
+        return 'composer ' . $args;
+    }
+
+    /**
+     * Check whether the on-disk `composer.json` and `composer.lock` agree,
+     * logging a warning when they positively disagree.
+     *
+     * This is a *diagnostic*, not a gate. `composer install` reads the lock and
+     * only ever *warns* about a stale `content-hash` — it installs from the lock
+     * regardless, and hard-fails solely when a required package is absent from
+     * the lock or violates one of `composer.json`'s constraints. An earlier
+     * version of this method aborted step 6 (and triggered a full backup
+     * rollback) on *any* divergence, turning a release that shipped an
+     * old-but-satisfying lock into a failed update composer would have installed
+     * cleanly. It no longer pre-empts composer.
+     *
+     * What it keeps is composer's *diagnosis*: when composer does fail on a
+     * genuinely unsatisfiable lock, its own message ("This usually happens when
+     * composer files are incorrectly merged or the composer.json file is
+     * manually edited") sends the operator hunting for a merge conflict or a
+     * hand-edit that never happened, when the real cause is a release that
+     * shipped no lock or a host whose `exclude_from_update` override still
+     * excludes it. The boolean returned here lets `runComposerInstall()` wrap
+     * composer's *own* failure with that accurate diagnosis — but only after
+     * composer, not this check, has decided the update cannot proceed.
+     *
+     * Fails *open*: a missing `composer.json`, a missing or unparseable
+     * `composer.lock`, or a lock carrying no `content-hash` returns `false` and
+     * is left for composer to adjudicate.
      *
      * @since 2.7.1
      *
      * @param  string  $command  The composer command about to be run.
      *
-     * @throws UpdateException When the two files positively disagree.
+     * @return bool True when the two files positively disagree, false otherwise.
      */
-    protected function verifyComposerFilesInSync( string $command ): void
+    protected function verifyComposerFilesInSync( string $command ): bool
     {
         if ( ! config( 'cms.updates.verify_composer_lock_sync', true ) ) {
-            return;
+            return false;
         }
 
         // A host that has overridden `composer_install_command` to run
         // `composer update` has deliberately opted into re-resolving the tree,
         // and a lock that disagrees with composer.json is precisely what
-        // `update` exists to reconcile. Only `install` needs the guard.
+        // `update` exists to reconcile. Only `install` reads the lock as fixed.
         if ( ! preg_match( '/(?:^|\s)install(?:\s|$)/', $command ) ) {
-            return;
+            return false;
         }
 
         $jsonPath = base_path( 'composer.json' );
         $lockPath = base_path( 'composer.lock' );
 
         if ( ! is_file( $jsonPath ) ) {
-            return;
+            return false;
         }
 
         if ( ! is_file( $lockPath ) ) {
@@ -1434,31 +2064,32 @@ class ApplicationUpdateManager
                 'lock_path' => $lockPath,
             ] );
 
-            return;
+            return false;
         }
 
         $expectedHash = $this->composerContentHash( $jsonPath );
         if ( null === $expectedHash ) {
-            return;
+            return false;
         }
 
         $lock = json_decode( (string) @file_get_contents( $lockPath ), true );
         if ( ! is_array( $lock ) || ! is_string( $lock['content-hash'] ?? null ) ) {
-            return;
+            return false;
         }
 
         if ( $lock['content-hash'] === $expectedHash ) {
-            return;
+            return false;
         }
 
-        Log::error( 'composer.json and composer.lock are out of sync after extraction.', [
-            'expected_content_hash' => $expectedHash,
-            'lock_content_hash'     => $lock['content-hash'],
-        ] );
-
-        throw UpdateException::composerFilesOutOfSync(
-            'the lock file records a different set of dependency constraints than composer.json declares.',
+        Log::warning(
+            'composer.json and composer.lock are out of sync after extraction; composer will install from the lock and abort only if it cannot satisfy composer.json.',
+            [
+                'expected_content_hash' => $expectedHash,
+                'lock_content_hash'     => $lock['content-hash'],
+            ],
         );
+
+        return true;
     }
 
     /**
@@ -1763,10 +2394,17 @@ class ApplicationUpdateManager
      * an FPM daemon binary (which prints usage and exits 64).
      *
      * @since 2.5.3
+     *
+     * @param  string  $binary  Absolute path to the composer PHAR.
+     * @param  string|null  $args  Composer sub-command and flags. Defaults to the
+     *                             install arguments; the stale-lock recovery path
+     *                             (#273) passes an `update <packages>` string.
      */
-    protected function buildComposerCommand( string $binary ): string
+    protected function buildComposerCommand( string $binary, ?string $args = null ): string
     {
-        return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . self::DEFAULT_COMPOSER_INSTALL_ARGS;
+        $args ??= self::DEFAULT_COMPOSER_INSTALL_ARGS;
+
+        return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . $args;
     }
 
     /**
@@ -2080,6 +2718,337 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Take the site back out of maintenance mode after an update that did not
+     * reach step 10, honouring `cms.updates.lift_maintenance_on_interrupt`.
+     *
+     * Shared by the in-process shutdown guard and by the queued job's `failed()`
+     * hook, which face the same situation from different angles: a run that
+     * stopped somewhere between step 1 and step 10, with the site still down.
+     *
+     * Honours the three `cms.updates.lift_maintenance_on_interrupt` policies:
+     *
+     * - `false` — fail closed. Never lift; leave the site down for an operator.
+     * - `true` — always lift, whatever step the update died on.
+     * - `'step_aware'` (the default) — lift only when the death step left the
+     *   application whole. A death in steps 5-7 (extract, composer install,
+     *   migrations) leaves a half-applied tree or schema that must not go back
+     *   on the public internet, so the site stays down; a death anywhere else
+     *   is lifted as before.
+     *
+     * @since 2.8.0
+     *
+     * @param  string  $liftedBy  What is doing the lifting, for the log line.
+     * @param  UpdateStep|null  $step  Step the update was in when it died, or null when unknown.
+     */
+    protected function liftMaintenanceModeAfterFailure( string $liftedBy, ?UpdateStep $step = null ): void
+    {
+        $mode = $this->resolveLiftPolicy( config( 'cms.updates.lift_maintenance_on_interrupt', 'step_aware' ) );
+
+        if ( 'never' === $mode ) {
+            Log::critical(
+                'cms-framework: cms.updates.lift_maintenance_on_interrupt is disabled, so the site is being left in maintenance mode. Run `php artisan up` once you have verified the install.',
+            );
+
+            return;
+        }
+
+        if ( 'step_aware' === $mode && $this->interruptLeftSiteUnsafe( $step ) ) {
+            Log::critical(
+                sprintf(
+                    'cms-framework: the update was interrupted during a step that leaves the application partially applied (%s), so %s kept the site in maintenance mode rather than serve a half-applied install. Restore the pre-update snapshot or finish the update by hand, then run `php artisan up`. Run `php artisan update:status` to see what remains.',
+                    $step?->label() ?? __( 'an unknown step' ),
+                    $liftedBy,
+                ),
+            );
+
+            return;
+        }
+
+        try {
+            $this->disableMaintenanceMode();
+
+            Log::critical( "cms-framework: maintenance mode was lifted by {$liftedBy}. The installation may be half-applied — run `php artisan update:status` before trusting it." );
+        } catch ( Throwable $e ) {
+            Log::critical( "cms-framework: {$liftedBy} could not lift maintenance mode via `artisan up`.", [
+                'exception' => $e->getMessage(),
+            ] );
+
+            $this->forceLiftMaintenanceMode();
+        }
+    }
+
+    /**
+     * Normalise a `lift_maintenance_on_interrupt` config value to one of the
+     * three canonical modes: `'always'`, `'never'`, or `'step_aware'`.
+     *
+     * The mapping fails *safe*. The boolean `true` is `'always'`; any falsy
+     * value (`false`, `0`, `''`, `null`) is `'never'`, preserving the pre-2.8
+     * `! config(...)` fail-closed semantics; the `'step_aware'` token —
+     * matched case-insensitively and trimmed so an `.env` value survives stray
+     * whitespace or capitalisation — is `'step_aware'`. Any other unrecognized
+     * non-empty value (a typo such as `step-aware`, or an unexpected truthy
+     * scalar) is treated as `'step_aware'` rather than `'always'`, with a
+     * warning: a misconfiguration must never be the reason a possibly
+     * half-applied tree goes back on the public internet.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $policy  Configured policy value.
+     *
+     * @return string One of `'always'`, `'never'`, or `'step_aware'`.
+     */
+    protected function resolveLiftPolicy( mixed $policy ): string
+    {
+        if ( is_string( $policy ) && 'step_aware' === strtolower( trim( $policy ) ) ) {
+            return 'step_aware';
+        }
+
+        if ( true === $policy ) {
+            return 'always';
+        }
+
+        if ( ! $policy ) {
+            return 'never';
+        }
+
+        Log::warning(
+            sprintf(
+                'cms-framework: unrecognized cms.updates.lift_maintenance_on_interrupt value %s; defaulting to the step-aware policy. Set it to true, false, or "step_aware".',
+                var_export( $policy, true ),
+            ),
+        );
+
+        return 'step_aware';
+    }
+
+    /**
+     * Whether a death in the given step left the site unsafe to serve, for the
+     * step-aware lift policy.
+     *
+     * An interruption whose step cannot be identified is treated as unsafe:
+     * step-aware mode fails closed rather than assume the tree is clean.
+     *
+     * @since 2.8.0
+     *
+     * @param  UpdateStep|null  $step  Step the update was in when it died, or null when unknown.
+     *
+     * @return bool True when the site should stay in maintenance mode.
+     */
+    protected function interruptLeftSiteUnsafe( ?UpdateStep $step ): bool
+    {
+        return null === $step || $step->interruptionLeavesSiteUnsafe();
+    }
+
+    /**
+     * Queue connection a queued update is dispatched to.
+     *
+     * `cms.updates.queue.connection` when set, otherwise the application
+     * default. Resolved eagerly rather than left null so the driver guard and
+     * the persisted record both name the connection the operator would have to
+     * run a worker against.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Connection name, or null when none is configured.
+     */
+    protected function updateQueueConnection(): ?string
+    {
+        $configured = config( 'cms.updates.queue.connection' );
+
+        if ( is_string( $configured ) && '' !== $configured ) {
+            return $configured;
+        }
+
+        $default = config( 'queue.default' );
+
+        return is_string( $default ) && '' !== $default ? $default : null;
+    }
+
+    /**
+     * Queue name a queued update is pushed onto, or null for the connection's
+     * default queue.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Queue name.
+     */
+    protected function updateQueueName(): ?string
+    {
+        $configured = config( 'cms.updates.queue.queue' );
+
+        return is_string( $configured ) && '' !== $configured ? $configured : null;
+    }
+
+    /**
+     * Refuse to queue an update onto a connection that will not run it in the
+     * background.
+     *
+     * Three connections are unusable, for two different reasons:
+     *
+     * - **`sync`** runs the job inline in the dispatching process. Dispatching
+     *   an update to it produces exactly the multi-minute blocking HTTP request
+     *   that queueing exists to avoid, while looking from the outside like the
+     *   feature works. Opt in with `cms.updates.queue.allow_sync` if that is
+     *   genuinely intended — a CLI caller, say — and the framework warns and
+     *   proceeds.
+     * - **`null`** discards the job. The site would simply never be updated.
+     * - **An unconfigured connection** cannot be dispatched to at all.
+     *
+     * The last two are not covered by `allow_sync`: neither ever runs the
+     * update, so there is nothing to opt in to.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $connection  Resolved connection name.
+     *
+     * @throws UpdateException When the connection cannot run a background job.
+     */
+    protected function guardQueueDriver( ?string $connection ): void
+    {
+        $driver = null === $connection ? null : config( "queue.connections.{$connection}.driver" );
+        $driver = is_string( $driver ) ? $driver : null;
+
+        if ( 'sync' === $driver && config( 'cms.updates.queue.allow_sync', false ) ) {
+            Log::warning( 'cms-framework: queueing an application update onto the sync driver, so it will run inline and block the caller for the whole update.', [
+                'queue_connection' => $connection,
+                'hint'             => 'This is opt-in via cms.updates.queue.allow_sync. Configure a real queue connection and run a worker to get the non-blocking behavior.',
+            ] );
+
+            return;
+        }
+
+        if ( null === $driver || 'sync' === $driver || 'null' === $driver ) {
+            throw UpdateException::updateQueueUnusable( $connection, $driver );
+        }
+
+        $this->guardQueueRetryAfter( $connection );
+    }
+
+    /**
+     * Refuse a connection that would redeliver the update before it finishes.
+     *
+     * `retry_after` is the queue's "this reserved job must have died" timer.
+     * Laravel ships 90 seconds for the `database`, `redis` and `beanstalkd`
+     * connections; a real update runs for minutes, so the stock configuration
+     * hands the same update to a second worker while the first is still
+     * running `composer install`.
+     *
+     * `$tries = 1` does not save this — it is what makes it land here. The
+     * duplicate exceeds max attempts, so the worker fails it *without* calling
+     * `handle()`, and it goes straight to `failed()` carrying a
+     * `MaxAttemptsExceededException` against a run that is perfectly healthy.
+     * (`handleFailedUpdateJob()`'s ownership check is the second line of
+     * defence for exactly that, but a spurious `failed_jobs` row and a
+     * `critical` log line on every long update is not something to ship.)
+     *
+     * Only connections that actually carry the setting are checked: SQS
+     * expresses the same idea as a queue-side visibility timeout that is not
+     * readable from here.
+     *
+     * @since 2.8.0
+     *
+     * @param  string|null  $connection  Resolved connection name.
+     *
+     * @throws UpdateException When redelivery would happen mid-update.
+     */
+    protected function guardQueueRetryAfter( ?string $connection ): void
+    {
+        $retryAfter = config( "queue.connections.{$connection}.retry_after" );
+
+        if ( ! is_numeric( $retryAfter ) ) {
+            return;
+        }
+
+        $retryAfter = (int) $retryAfter;
+        $timeout    = PerformUpdateJob::resolveTimeout();
+
+        if ( $retryAfter > $timeout ) {
+            return;
+        }
+
+        throw UpdateException::updateQueueRetryTooShort( $connection, $retryAfter, $timeout );
+    }
+
+    /**
+     * Refuse to queue an update while another one is still expected to run.
+     *
+     * A live in-progress run is refused outright. A `queued` record is refused
+     * only while it is young enough to plausibly still be waiting: a host with
+     * no worker running would otherwise be wedged permanently by its own first
+     * dispatch, with nothing to tell the operator that clearing the record is
+     * what unblocks it.
+     *
+     * @since 2.8.0
+     *
+     * @throws UpdateException When an update is already running or queued.
+     */
+    protected function guardNoPendingUpdate(): void
+    {
+        $runningPid = $this->runningUpdatePid();
+
+        if ( null !== $runningPid ) {
+            throw UpdateException::updateAlreadyRunning( $runningPid );
+        }
+
+        $state  = $this->updateState();
+        $status = UpdateRunStatus::tryFrom( is_string( $state['status'] ?? null ) ? $state['status'] : '' );
+
+        if ( UpdateRunStatus::Queued !== $status ) {
+            return;
+        }
+
+        $queuedAt = $this->queuedAt();
+
+        // Shares the window with the job's unique lock, so the two expire
+        // together and a retry that clears this guard is not then swallowed by
+        // a lock that has not.
+        if ( $this->state()->isStaleTimestamp( $queuedAt ) ) {
+            Log::warning( 'cms-framework: a previously queued application update was never picked up by a worker; queueing a new one over it.', [
+                'queued_at' => $queuedAt,
+                'hint'      => 'Check that a queue worker is running against the configured connection.',
+            ] );
+
+            return;
+        }
+
+        throw UpdateException::updateAlreadyQueued( $queuedAt );
+    }
+
+    /**
+     * When the recorded run was pushed onto the queue, or null.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null ISO-8601 timestamp.
+     */
+    protected function queuedAt(): ?string
+    {
+        $state    = $this->updateState();
+        $queuedAt = $state['queued_at'] ?? null;
+
+        return is_string( $queuedAt ) && '' !== $queuedAt ? $queuedAt : null;
+    }
+
+    /**
+     * The currently installed application version, recorded alongside a queued
+     * run so `update:status` can render it before the job resolves the target.
+     *
+     * Reads `config('app.version')` — the same source `UpdateInfo::resolveCurrentVersion()`
+     * consults — rather than asking the update checker, which would mean a
+     * network round-trip in the request doing the dispatching.
+     *
+     * @since 2.8.0
+     *
+     * @return string|null Installed version.
+     */
+    protected function installedVersion(): ?string
+    {
+        $version = config( 'app.version' );
+
+        return is_string( $version ) && '' !== $version ? $version : null;
+    }
+
+    /**
      * Last-ditch attempt to take the site out of maintenance mode by removing
      * the file-driver marker directly.
      *
@@ -2114,6 +3083,82 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Remove the files the current extraction added, after the snapshot has
+     * been restored.
+     *
+     * `rollback()` puts back every file the pre-update snapshot captured, but a
+     * snapshot cannot restore a file that did not exist when it was taken.
+     * Without this, every path the extraction *added* survives the restore,
+     * leaving the tree a hybrid of the old version's files and an arbitrary
+     * subset of the new version's additions — migrations included, whose next
+     * `migrate` run would apply schema for a version that was rolled back.
+     *
+     * Only paths this extraction recorded as newly created are touched, and the
+     * exclusion list is honoured a second time so a rollback can never delete
+     * `storage/`, `.env`, or `vendor/` contents even if one slipped into the
+     * ledger.
+     *
+     * @since 2.8.0
+     */
+    protected function removeExtractionAdditions(): void
+    {
+        if ( empty( $this->extractionAdditions ) ) {
+            return;
+        }
+
+        $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+        $basePath     = base_path();
+        $removed      = 0;
+
+        foreach ( $this->extractionAdditions as $relativePath ) {
+            if ( $this->isPathExcluded( $relativePath, $excludePaths ) ) {
+                continue;
+            }
+
+            $fullPath = $basePath . DIRECTORY_SEPARATOR . $relativePath;
+
+            // The extraction only ever wrote regular files, so a symlink or a
+            // directory at this path is something else on disk — never follow
+            // or remove it. Also covers the case where restoring the backup
+            // already replaced the addition with something the snapshot owned.
+            if ( is_link( $fullPath ) || ! is_file( $fullPath ) ) {
+                continue;
+            }
+
+            // Defence in depth: resolve the path and confirm it still sits
+            // under base_path() before unlinking, mirroring the extraction
+            // guards. A file always resolves, so realpath() cannot fail here.
+            if ( ! $this->isPathWithinExtractRoot( $fullPath, $basePath ) ) {
+                continue;
+            }
+
+            // `File::delete()` reports failure by returning false, not by
+            // throwing, so the count has to consult the return value — the old
+            // try/catch treated a failed unlink as a successful removal. A file
+            // that cannot be removed is logged, not fatal: the rollback of the
+            // backed-up files has already succeeded, and aborting here would
+            // turn a partial cleanup into a reported rollback failure.
+            if ( ! File::delete( $fullPath ) ) {
+                Log::warning( 'cms-framework: could not remove a file the rolled-back update had added; it remains on disk.', [
+                    'path' => $relativePath,
+                ] );
+
+                continue;
+            }
+
+            $removed++;
+        }
+
+        if ( $removed > 0 ) {
+            Log::info( 'cms-framework: removed files the rolled-back update had added.', [
+                'count' => $removed,
+            ] );
+        }
+
+        $this->extractionAdditions = [];
+    }
+
+    /**
      * Handle update failure and attempt rollback.
      *
      * @since 1.0.0
@@ -2130,15 +3175,20 @@ class ApplicationUpdateManager
             'line'      => $exception->getLine(),
         ] );
 
-        // Attempt to disable maintenance mode
-        try {
-            $this->disableMaintenanceMode();
-        } catch ( Throwable $e ) {
-            Log::error(
-                'Failed to disable maintenance mode during update rollback; host may remain in maintenance mode.',
-                ['exception' => $e->getMessage()],
-            );
-        }
+        // Persist whatever the extraction ledgered before it threw. A failure
+        // *during* `extractUpdate()` (a short write, a failed `fopen`/close)
+        // never reaches that method's end-of-loop persist, so without this the
+        // state file would carry no `extraction_additions` entry and a later
+        // manual `update:rollback` in a fresh process could not remove the
+        // files the partial extraction added (#272). The automatic path below
+        // still uses the in-memory ledger directly.
+        $this->state()->recordExtractionAdditions( $this->extractionAdditions );
+
+        // Maintenance mode is deliberately NOT lifted up front. Lifting before
+        // the rollback would serve public traffic from a half-applied tree
+        // (and, with backups on, run `composer install` over live requests
+        // during the restore). Each branch below decides when — and whether —
+        // the site may go back up.
 
         // Only roll back while a rollback can still help. Steps 8-10
         // (`cache:clear`, cleanup, `up`) run *after* the code and the schema
@@ -2153,7 +3203,18 @@ class ApplicationUpdateManager
                 ['step' => $this->currentStep->value],
             );
 
-            $this->state()->markRollback( null );
+            $this->state()->markFinishForward();
+
+            // The code and schema are already in place, so the site can serve
+            // the new version. Bring it back up (best-effort, as before).
+            try {
+                $this->disableMaintenanceMode();
+            } catch ( Throwable $e ) {
+                Log::error(
+                    'Failed to disable maintenance mode after a finish-forward update failure; host may remain in maintenance mode.',
+                    ['exception' => $e->getMessage()],
+                );
+            }
 
             return;
         }
@@ -2162,6 +3223,14 @@ class ApplicationUpdateManager
         if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {
                 $this->rollback( $this->backupPath );
+
+                // The snapshot restore reinstated every backed-up file, but a
+                // snapshot cannot restore a file that did not exist when it
+                // was taken. Remove the files this extraction added so the
+                // tree matches the pre-update version rather than a hybrid of
+                // both — otherwise orphaned code and, worse, orphaned
+                // migrations are left behind.
+                $this->removeExtractionAdditions();
 
                 $this->state()->markRollback( true );
             } catch ( Throwable $e ) {
@@ -2175,18 +3244,29 @@ class ApplicationUpdateManager
                 // messages to the caller, but `update:status` reads the state
                 // file, and without this the file still says the run merely
                 // "failed" with the original error — the rollback failure, the
-                // thing that actually needs a human, would never reach it.
+                // thing that actually needs a human, would never reach it. The
+                // site is left in maintenance mode: a failed rollback means the
+                // tree is in an unknown state that must not serve traffic.
                 $this->state()->markRollback( false, $combined->getMessage() );
 
                 throw $combined;
             }
 
+            // Only now that the pre-update snapshot is back in place is it safe
+            // to lift maintenance — and only per the `lift_maintenance_on_interrupt`
+            // policy, exactly as the interruption path does.
+            $this->liftMaintenanceModeAfterFailure( 'the update failure handler', $this->currentStep );
+
             return;
         }
 
         // No snapshot to restore: backups disabled, or the run failed before
-        // `createBackup()` got that far. Either way the operator must not be
-        // told the tree was restored.
+        // `createBackup()` got that far. The tree may be half-applied and
+        // cannot be restored, so the lift policy governs whether it goes back
+        // on the public internet — rather than lifting unconditionally and
+        // serving a mix of old and new code.
         $this->state()->markRollback( null );
+
+        $this->liftMaintenanceModeAfterFailure( 'the update failure handler', $this->currentStep );
     }
 }

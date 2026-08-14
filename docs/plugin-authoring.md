@@ -24,7 +24,10 @@ needs and points at the reference example under
 1. **Discovery** — The framework scans `base_path(config('cms.plugins.directory'))`
    ( default `plugins/` ) for directories containing a `plugin.json` manifest.
 2. **Install** — When a plugin is uploaded, `PluginManager::install()` validates
-   the manifest and inserts a row in the `plugins` table.
+   the manifest and inserts a row in the `plugins` table. Since *2.8.0*, the
+   archive's declared uncompressed size is checked against
+   `cms.plugins.maxUncompressedSize` (100MB default) before extraction, as a
+   zip-bomb guard; an archive that exceeds the ceiling is refused.
 3. **Activate** — On activation, the plugin's `service_provider` ( from
    `plugin.json` ) is registered with the container. This runs your
    `register()` and `boot()` methods, and any manifest-declared migrations.
@@ -93,6 +96,8 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
 | `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
 | `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
+| `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
+| `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
 
 ## Base `PluginServiceProvider`
 
@@ -162,7 +167,36 @@ $this->registerAdminPage( 'hello-world', [
 ```
 
 The `view` value is a namespaced Blade view; register it with `loadViewsFrom(
-$this->pluginPath('resources/views'), 'hello-world' )` in `boot()`.
+$this->pluginPath('resources/views'), 'hello-world' )` in `boot()`. The
+framework wraps it in a closure before it reaches the route, so you get a
+rendered page rather than Laravel's `Invalid route action` error.
+
+### The admin layout
+
+Extend `cms::admin.layouts.app` and fill its `title` and `content` sections:
+
+```blade
+@extends('cms::admin.layouts.app')
+
+@section('title', __('Hello World'))
+
+@section('content')
+    <h1>{{ __('Hello World') }}</h1>
+@endsection
+```
+
+The layout is deliberately plain — the framework is front-end agnostic and
+ships no CSS build. It renders the admin menu, yields your content, and
+exposes `styles` and `scripts` stacks. Host apps replace it with their own
+chrome by publishing it:
+
+```bash
+php artisan vendor:publish --tag=cms-views
+```
+
+That writes to `resources/views/vendor/cms/`, which Laravel resolves ahead of
+the package's copy — so a host swapping in its own chrome does not require any
+plugin to change the view it extends.
 
 Federated ( React ) version — same helper, use `component` instead of `view`:
 
@@ -176,6 +210,17 @@ $this->registerAdminPage( 'hello-world', [
 
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
+
+> **Note ( as of 2.8.0 ):** a `component`-only admin page resolves to a route
+> that renders a mount point — `<div data-cms-federated-module="…"></div>` —
+> for the host's Module Federation runtime to hydrate. It is no longer handed
+> to `Route::get()` as a bare string (which Laravel rejects as an invalid route
+> action; because admin routes register from a `booted()` callback, that once
+> surfaced on *every* request, not just the plugin's own page, taking the whole
+> application down). A page that declares neither a `view` nor a `component`
+> responds `501` on its own route instead of breaking route registration. How
+> the host binds that mount point to a concrete component is still being
+> settled — see [#296](https://github.com/ArtisanPack-UI/cms-framework/issues/296).
 
 ## Registering nav entries
 
@@ -319,6 +364,81 @@ Semver your plugin. Declare host-compatibility in `plugin.json`:
 
 `PluginManager::install()` refuses installation when the running framework
 version does not satisfy the `cms-framework` constraint.
+
+## Shipping updates
+
+Declare an update source in `plugin.json`. Publishing a new version is then
+`git tag` plus a GitHub Release — no hosted JSON feed, no manual ZIP upload:
+
+```json
+"update": {
+    "github": "ArtisanPack-UI/artisanpack-ui-plugin"
+}
+```
+
+`update` accepts either form:
+
+| Key      | Value | Notes |
+| -------- | ----- | ----- |
+| `github` | `owner/repo`, or a full `https://github.com/owner/repo` URL | Shorthand for the GitHub Releases source. |
+| `url`    | Absolute `https://` URL | Handed to the source detector as-is, so GitLab repository URLs and custom JSON endpoints work through the same key. |
+
+Both forms are https-only: the resolved archive is extracted into your
+`plugins/` directory and its PHP is executed by the host.
+
+`UpdateManager` walks your releases, skips prereleases, and picks the first
+release asset ending in `.zip` — falling back to GitHub's generated
+`zipball_url` when the release has no attached asset. **Attach a real ZIP.**
+The generated zipball's root directory is named for the repository and commit,
+not for your plugin slug, so extraction lands the plugin in the wrong
+directory.
+
+### Checksums
+
+The updater verifies the downloaded archive against a SHA-256 digest, resolved
+from either:
+
+- a release asset named `{your-asset}.zip.sha256`, or
+- a `SHA-256: <64 hex chars>` line in the release description.
+
+With the shipped defaults ( `cms.updates.verify_checksum = true`,
+`cms.updates.allow_unverified_updates = false` ) a release that publishes
+**neither** is refused. Add a sidecar step to your release workflow:
+
+```bash
+sha256sum my-plugin.zip | cut -d' ' -f1 > my-plugin.zip.sha256
+```
+
+This is an integrity check, not an authenticity check — the digest comes from
+the same release as the archive. It catches truncation and CDN corruption; it
+does not defend against a compromised release-editor account.
+
+Since *2.8.0*, legacy `update_url` feeds are held to the same bar. The feed's
+`download_url` must be `https` — an `http` URL is refused up front, because it
+would let a network attacker choose the archive that gets extracted and its
+provider re-registered (arbitrary PHP execution) — and the downloaded archive
+runs through the same checksum gate as the source-backed path. A feed that
+advertises no digest is therefore refused with the shipped defaults, exactly
+like a source-backed release; the only escape is
+`cms.updates.allow_unverified_updates`. Add a `sha256` to your feed payload to
+clear the gate.
+
+### Private repositories
+
+Public repositories need no credentials. For a private one, the host adds a
+token keyed by your plugin slug:
+
+```php
+// config/cms.php
+'plugins' => [
+    'updateTokens' => [
+        'my-private-plugin' => env( 'MY_PRIVATE_PLUGIN_UPDATE_TOKEN' ),
+    ],
+],
+```
+
+Tokens live in host config, never in `plugin.json` — the manifest ships inside
+the distributed ZIP.
 
 ## Testing your plugin
 

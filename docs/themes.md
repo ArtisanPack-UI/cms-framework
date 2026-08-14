@@ -20,6 +20,7 @@ The Themes module provides a flexible, WordPress‑inspired theme system with:
 - [Theme Manifest](Themes-Theme-Manifest) — The theme.json file format
 - [API Reference](Themes-Api-Reference) — REST endpoints and helper functions
 - [[themes/Installing From Zip]] — Upload a theme as a ZIP archive *(2.0.0)*
+- [[themes/Updating]] — Declare an `update` source and update an installed theme in place *(2.8.0)*
 - [[themes/Lifecycle Hooks]] — Listen to `theme.activating`, `theme.activated`, `theme.installing`, `theme.installed` *(2.0.0)*
 - [[themes/Theme Base Class]] — Optional `themes/{slug}/Theme.php` for per-request enqueues, image sizes, and REST/block registration *(2.5.0)*
 - [[themes/Editor Stylesheet]] — Ship a `themes/{slug}/editor.css` for canvas-only overrides *(2.5.0)*
@@ -57,34 +58,90 @@ if ($themeManager->templateExists('single-post')) {
 
 ## Configuration
 
-Configure themes in `config/cms.php` under the `themes` key:
+Theme settings live at `config/cms/themes.php` and are read under the
+`cms.themes` config key. Publish the file with either the umbrella tag or the
+themes-only tag:
+
+```bash
+php artisan vendor:publish --tag=cms-framework-config
+# or, themes config only:
+php artisan vendor:publish --tag=cms-themes-config
+```
+
+The published file returns the settings array directly — it is *not* wrapped in
+a `themes` key, since the module merges it under `cms.themes` for you:
 
 ```php
 return [
-    'themes' => [
-        // Directory where themes are stored (relative to base_path)
-        'directory' => 'themes',
+    // Directory where themes are stored (relative to base_path)
+    'directory' => 'themes',
 
-        // Default theme slug
-        'default' => 'digital-shopfront',
+    // Default theme slug — null unless you name one. See below.
+    'default' => env( 'CMS_DEFAULT_THEME' ),
 
-        // Required files for theme validation
-        'requiredFiles' => [
-            'theme.json',
-        ],
-
-        // Cache settings
-        'cacheEnabled' => env('THEMES_CACHE_ENABLED', true),
-        'cacheKey' => 'cms.themes.discovered',
-        'cacheTtl' => 3600, // 1 hour
-
-        // WordPress theme.json schema version used to validate the WP-shape
-        // subset of theme.json. Pinned to match the @wordpress/* package
-        // versions in artisanpack-ui/visual-editor.
-        'wpThemeJsonSchemaVersion' => '3',
+    // Required files for theme validation
+    'requiredFiles' => [
+        'theme.json',
     ],
+
+    // Cache settings
+    'cacheEnabled' => env( 'THEMES_CACHE_ENABLED', true ),
+    'cacheKey'     => 'cms.themes.discovered',
+    'cacheTtl'     => 3600, // 1 hour
+
+    // WordPress theme.json schema version used to validate the WP-shape
+    // subset of theme.json. Pinned to match the @wordpress/* package
+    // versions in artisanpack-ui/visual-editor.
+    'wpThemeJsonSchemaVersion' => '3',
 ];
 ```
+
+The published file carries more keys than are shown here — upload limits,
+update settings and asset caching among them. See the shipped
+`src/Modules/Themes/config/themes.php` for the annotated full list.
+
+Since *2.8.0*, `cms.themes.maxUncompressedSize` (100MB default) is an
+uncompressed-size ceiling enforced *before* a theme archive is extracted — a
+zip-bomb guard that rejects an archive whose declared uncompressed size exceeds
+the limit, independently of the download and upload size ceilings. The plugin
+module has the equivalent `cms.plugins.maxUncompressedSize`.
+
+### The default theme (`CMS_DEFAULT_THEME`)
+
+`cms.themes.default` is the slug the framework falls back to when the
+`themes.activeTheme` setting has never been written — a fresh install, or one
+whose settings table has not been seeded. It ships as `null`.
+
+The framework bundles no themes of its own, so it has no slug it could name
+here that would be right for every consumer. Left null, an install with no
+activated theme resolves cleanly to "no active theme":
+
+- `ThemeManager::getActiveTheme()` returns `null`.
+- `registerThemeViewPath()` early-returns, leaving the host application's own
+  view paths in place.
+- `markActiveTheme()` flags every discovered theme `is_active => false`, so
+  `GET /v1/themes` lists them all with nothing selected.
+- The site-editor resolvers (templates, template parts, menus, patterns,
+  global styles) each fall back to their theme-less path.
+
+Name a default by setting the env var:
+
+```dotenv
+CMS_DEFAULT_THEME=my-theme
+```
+
+Or by editing the published config directly. Either way the slug is only a
+fallback — the moment a theme is activated through
+`ThemeManager::activateTheme()` or `POST /v1/themes/{slug}/activate`, the
+stored `themes.activeTheme` setting wins and the default is no longer
+consulted.
+
+> **If you cache your config**, `env()` is evaluated once when the cache is
+> written and the result is baked in. Changing `CMS_DEFAULT_THEME` in `.env`
+> afterwards has no effect until you re-run `php artisan config:cache`. This is
+> standard Laravel behavior for every `env()` call in a config file, but it is
+> easy to miss here because the symptom — no active theme — looks identical to
+> not having set the variable at all.
 
 ## Theme Manifest
 
@@ -206,17 +263,28 @@ This allows themes to provide increasingly specific templates for different cont
 
 ## REST API Endpoints
 
-All endpoints require authentication via Laravel Sanctum and are prefixed with `/api/v1`:
+All endpoints require authentication via Laravel Sanctum and are prefixed with `/v1`. Since *2.8.0*, the mutating routes additionally require the `manage-themes` permission (deny-by-default, seeded to the `admin` role); the `GET` routes stay auth-only:
 
 - `GET /themes` — List all available themes
+- `POST /themes` — Upload and install a theme from a ZIP *(requires `manage-themes`)*
+- `GET /themes/updates` — List themes with an update available *(2.8.0)*
 - `GET /themes/{slug}` — Get specific theme details
-- `POST /themes/{slug}/activate` — Activate a theme
+- `POST /themes/{slug}/activate` — Activate a theme *(requires `manage-themes`)*
+- `POST /themes/{slug}/update` — Update a theme in place *(2.8.0, requires `manage-themes`)*
+
+### Error shape
+
+Action endpoints (`POST /themes`, `POST /themes/{slug}/activate`, `POST /themes/{slug}/update`) surface failures as a Laravel `ValidationException` — `422` with an `errors` bag keyed by the field the failure belongs to (`theme_zip` for uploads, `slug` for actions taken against an installed theme). That is the shape Inertia's `usePage().props.errors` and `useForm().errors` read, so an admin UI can render field-level messages without an error-shape adapter, and a pure-API client gets a parseable `errors` object rather than a bare `message`.
+
+Since *2.8.0*, an unknown slug on `POST /themes/{slug}/activate` and `POST /themes/{slug}/update` is one of those `422` responses rather than a `404` — the slug is form input there, not a resource path. `GET /themes/{slug}` still answers `404`, because there the slug *is* the resource path.
+
+The `422` covers request validation and the manager's own named rejections. An *unexpected* server fault is reported and returns `500` on every endpoint above.
 
 ## Service Registration
 
 The `ThemesServiceProvider` automatically:
 
-- Registers the `ThemeManager` as a singleton
+- Registers the `ThemeManager` and `UpdateManager` as singletons
 - Merges theme configuration
 - Registers the active theme's view path with Laravel
 - Loads theme API routes

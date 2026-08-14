@@ -13,7 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Http\Controllers\Ai;
 
-use ArtisanPackUI\Ai\Contracts\FeatureRegistry;
+use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
 use ArtisanPackUI\Ai\Exceptions\FeatureDisabledException;
 use ArtisanPackUI\Ai\Exceptions\FeatureError;
 use ArtisanPackUI\Ai\Exceptions\MissingCredentialsException;
@@ -22,6 +22,7 @@ use ArtisanPackUI\CMSFramework\Ai\Agents\ExcerptGenerationAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\PostTitleSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\SlugSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\TagSuggestionAgent;
+use ArtisanPackUI\CMSFramework\Ai\Support\AgentMeta;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use ArtisanPackUI\CMSFramework\Http\Requests\Ai\ExcerptRequest;
 use ArtisanPackUI\CMSFramework\Http\Requests\Ai\PostTitleRequest;
@@ -29,6 +30,7 @@ use ArtisanPackUI\CMSFramework\Http\Requests\Ai\SuggestCategoryRequest;
 use ArtisanPackUI\CMSFramework\Http\Requests\Ai\SuggestSlugRequest;
 use ArtisanPackUI\CMSFramework\Http\Requests\Ai\SuggestTagsRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -60,15 +62,7 @@ class AiController
      */
     public function features(): JsonResponse
     {
-        /** @var FeatureRegistry $registry */
-        $registry = app( FeatureRegistry::class );
-
-        $state = [];
-        foreach ( CMSFrameworkServiceProvider::AI_FEATURE_KEYS as $key ) {
-            $state[ $key ] = null !== $registry->get( $key ) && $registry->isToggleOn( $key );
-        }
-
-        return new JsonResponse( [ 'features' => $state ] );
+        return new JsonResponse( [ 'features' => CMSFrameworkServiceProvider::aiFeatureStateMap() ] );
     }
 
     /**
@@ -83,8 +77,8 @@ class AiController
     public function postTitle( PostTitleRequest $request ): JsonResponse
     {
         return $this->runAgent(
-            'cms.post_title',
-            fn () => PostTitleSuggestionAgent::for( $request->validated() )->run(),
+            PostTitleSuggestionAgent::class,
+            $request->validated(),
         );
     }
 
@@ -100,8 +94,8 @@ class AiController
     public function excerpt( ExcerptRequest $request ): JsonResponse
     {
         return $this->runAgent(
-            'cms.excerpt',
-            fn () => ExcerptGenerationAgent::for( $request->validated() )->run(),
+            ExcerptGenerationAgent::class,
+            $request->validated(),
         );
     }
 
@@ -117,8 +111,8 @@ class AiController
     public function suggestTags( SuggestTagsRequest $request ): JsonResponse
     {
         return $this->runAgent(
-            'cms.suggest_tags',
-            fn () => TagSuggestionAgent::for( $request->validated() )->run(),
+            TagSuggestionAgent::class,
+            $request->validated(),
         );
     }
 
@@ -134,8 +128,8 @@ class AiController
     public function suggestCategory( SuggestCategoryRequest $request ): JsonResponse
     {
         return $this->runAgent(
-            'cms.suggest_category',
-            fn () => CategorySuggestionAgent::for( $request->validated() )->run(),
+            CategorySuggestionAgent::class,
+            $request->validated(),
         );
     }
 
@@ -151,8 +145,8 @@ class AiController
     public function suggestSlug( SuggestSlugRequest $request ): JsonResponse
     {
         return $this->runAgent(
-            'cms.suggest_slug',
-            fn () => SlugSuggestionAgent::for( $request->validated() )->run(),
+            SlugSuggestionAgent::class,
+            $request->validated(),
         );
     }
 
@@ -160,17 +154,38 @@ class AiController
      * Shared wrapper — normalizes the four agent-exception categories
      * into consistent status codes + JSON envelopes.
      *
+     * The feature key is read off the agent class rather than passed in,
+     * so `AI_FEATURE_KEYS` and each agent's `$featureKey` stay the only
+     * places a key is spelled. Renaming one is a single-property edit.
+     *
+     * Takes the class and input rather than a built agent so that
+     * `for()` runs *inside* the try: it resolves through the container,
+     * and `docs/AI-Features.md` invites hosts to bind a subclass over an
+     * agent, so construction is a real throw site. Building it at the
+     * call site would let a failed binding escape this handler and lose
+     * the JSON error envelope entirely.
+     *
      * @since 2.3.0
      *
-     * @param  string    $featureKey  Feature key (for logging + envelope).
-     * @param  callable  $callback    Callable returning the agent output.
+     * @param  class-string<ArtisanPackAgent>  $agentClass  Agent to run; supplies its own feature key.
+     * @param  mixed                           $input       Validated input for the agent.
      *
      * @return JsonResponse
      */
-    private function runAgent( string $featureKey, callable $callback ): JsonResponse
+    private function runAgent( string $agentClass, mixed $input ): JsonResponse
     {
+        $featureKey = AgentMeta::featureKey( $agentClass );
+
+        if ( Gate::denies( CMSFrameworkServiceProvider::AI_USE_ABILITY ) ) {
+            return new JsonResponse( [
+                'feature' => $featureKey,
+                'error'   => 'forbidden',
+                'message' => 'You are not authorized to use AI features.',
+            ], 403 );
+        }
+
         try {
-            $output = $callback();
+            $output = $agentClass::for( $input )->run();
             return new JsonResponse( [
                 'feature' => $featureKey,
                 'output'  => $output,

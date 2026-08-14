@@ -2,6 +2,7 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
@@ -298,9 +299,51 @@ describe( 'File System Security', function (): void {
         expect( $this->manager->getPlugin( $slug ) )->toBeNull();
     } );
 
-    it( 'sanitizes file paths in ZIP extraction', function (): void {
-        // When extracting, paths should be validated
-        // This is tested implicitly through the ZIP extraction process
-        expect( true )->toBeTrue();
+    it( 'rejects a plugin ZIP whose entries escape the derived slug directory', function (): void {
+        // A pre-existing, trusted plugin the malicious archive tries to
+        // overwrite by shipping a sibling top-level directory.
+        $trustedPath = $this->pluginsPath . '/trusted-plugin';
+        File::ensureDirectoryExists( $trustedPath );
+        File::put( $trustedPath . '/plugin.json', '{"slug":"trusted-plugin"}' );
+
+        $zipPath = storage_path( 'app/malicious-plugin-' . uniqid() . '.zip' );
+        File::ensureDirectoryExists( dirname( $zipPath ) );
+
+        $zip = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        // First entry establishes the slug…
+        $zip->addFromString( 'legit-plugin/plugin.json', '{"slug":"legit-plugin"}' );
+        // …the sibling top-level directory would overwrite a different plugin.
+        $zip->addFromString( 'trusted-plugin/plugin.json', '{"slug":"trusted-plugin","pwned":true}' );
+        $zip->close();
+
+        expect( fn () => invokeMethod( $this->manager, 'extractZip', [$zipPath] ) )
+            ->toThrow( PluginInstallationException::class );
+
+        // The trusted plugin's manifest must be untouched, and the ZIP's own
+        // slug directory must never have been written.
+        expect( File::get( $trustedPath . '/plugin.json' ) )->toBe( '{"slug":"trusted-plugin"}' );
+        expect( File::exists( $this->pluginsPath . '/legit-plugin' ) )->toBeFalse();
+
+        File::delete( $zipPath );
+        File::deleteDirectory( $trustedPath );
+    } );
+
+    it( 'rejects a plugin ZIP entry containing a traversal segment', function (): void {
+        $zipPath = storage_path( 'app/traversal-plugin-' . uniqid() . '.zip' );
+        File::ensureDirectoryExists( dirname( $zipPath ) );
+
+        $zip = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'evil-plugin/plugin.json', '{"slug":"evil-plugin"}' );
+        $zip->addFromString( 'evil-plugin/../../escape.php', '<?php // escape' );
+        $zip->close();
+
+        expect( fn () => invokeMethod( $this->manager, 'extractZip', [$zipPath] ) )
+            ->toThrow( PluginInstallationException::class );
+
+        expect( File::exists( $this->pluginsPath . '/evil-plugin' ) )->toBeFalse();
+
+        File::delete( $zipPath );
     } );
 } );

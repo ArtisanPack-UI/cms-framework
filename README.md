@@ -37,11 +37,27 @@ You can install the CMS Framework package by running the following composer comm
 composer require artisanpack-ui/cms-framework
 ```
 
-After installation, publish the configuration file:
+After installation, publish the configuration files:
 
 ```bash
 php artisan vendor:publish --tag=cms-framework-config
 ```
+
+This umbrella tag publishes every one of the framework's config files in one
+command:
+
+| File | Config key | Also published by |
+|---|---|---|
+| `config/artisanpack/cms-framework.php` | `artisanpack.cms-framework` | `artisanpack-package-config` |
+| `config/cms/themes.php` | `cms.themes` | `cms-themes-config` |
+| `config/cms/plugins.php` | `cms.plugins` | `cms-plugins-config` |
+| `config/cms/updates.php` | `cms.updates` | `cms-updates-config` |
+
+The three `cms-*-config` tags each publish exactly the one file beside them, so
+you can take a single module's config in isolation. `artisanpack-package-config`
+is shared across the whole ArtisanPack UI ecosystem — it publishes this
+framework's config *and* the config of every other installed ArtisanPack UI
+package, so reach for `cms-framework-config` when you want this package alone.
 
 Run the migrations to set up the database tables:
 
@@ -345,6 +361,18 @@ The theme system allows customization of the CMS appearance.
 - No child theme support
 - Limited theme customization API
 - No theme preview functionality
+
+**Default Theme**
+
+`cms.themes.default` names the theme to fall back to before any theme has been activated. It defaults to `null`, because the framework ships no themes of its own and so has no slug that would be correct for every consumer. Left unset, an install with no activated theme resolves to "no active theme": `ThemeManager::getActiveTheme()` returns `null`, no theme view path is prepended, and every discovered theme is listed as inactive.
+
+Name one with the env var:
+
+```dotenv
+CMS_DEFAULT_THEME=my-theme
+```
+
+See [docs/themes.md](docs/themes.md#the-default-theme-cms_default_theme) for the full behavior.
 
 **Theme Lifecycle Hooks**
 

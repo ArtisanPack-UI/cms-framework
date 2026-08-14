@@ -42,6 +42,10 @@ Configure credentials on the AI package side. See the [AI package's Configuratio
 
 The same five agents are reachable through two independent transports, so the AI features work uniformly across Livewire, React, and Vue front-ends.
 
+### Authorization (2.8.0)
+
+Invoking any `cms.*` AI agent — through the REST endpoints or the `AiTools` Livewire component — requires the `cms.ai.use` ability. It is **deny-by-default** and seeded to the `admin` role (which receives every permission), so a fresh install grants it to admins and no one else. A non-privileged authenticated user is refused with `403`. Grant it to additional roles by attaching the `cms.ai.use` permission the same way you attach any other CMS permission.
+
 ### Livewire component
 
 `ArtisanPackUI\CMSFramework\Livewire\Ai\AiTools`, registered as `ap-cms-ai-tools`:
@@ -68,7 +72,7 @@ Status suffixes: `success`, `disabled`, `missing-credentials`, `invalid-input`, 
 
 ### REST endpoints
 
-Mounted at `/api/v1/cms/ai/*` and protected by `auth:sanctum` so React and Vue SPAs with bearer tokens can hit them directly:
+Mounted at `/api/v1/cms/ai/*` and protected by `auth:sanctum` plus `can:cms.ai.use` (see [Authorization](#authorization-280) above) so React and Vue SPAs with bearer tokens can hit them directly:
 
 | Method | Path                                | Body                                                                 |
 |--------|-------------------------------------|----------------------------------------------------------------------|

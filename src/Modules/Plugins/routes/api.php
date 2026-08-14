@@ -12,25 +12,45 @@ Route::prefix( 'api/v1' )
             // List all plugins
             Route::get( '/', [PluginsController::class, 'index'] )->name( 'api.plugins.index' );
 
-            // Check for updates
-            Route::get( 'updates', [PluginsController::class, 'checkUpdates'] )->name( 'api.plugins.updates' );
+            // Check for updates. Gated on `manage-plugins`: `checkUpdates()`
+            // makes one synchronous outbound HTTPS request per installed
+            // plugin, so it carries the same blast radius as the mutating
+            // routes and the same gate.
+            Route::get( 'updates', [PluginsController::class, 'checkUpdates'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.updates' );
 
             // Get specific plugin
             Route::get( '{slug}', [PluginsController::class, 'show'] )->name( 'api.plugins.show' );
 
+            // Mutating routes are gated deny-by-default on `manage-plugins`:
+            // an install/activate extracts and executes attacker-supplied PHP,
+            // so authentication alone is not enough. The `install` route also
+            // enforces the ability through InstallPluginRequest::authorize().
+
             // Install plugin (ZIP upload)
-            Route::post( 'install', [PluginsController::class, 'install'] )->name( 'api.plugins.install' );
+            Route::post( 'install', [PluginsController::class, 'install'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.install' );
 
             // Activate plugin
-            Route::post( '{slug}/activate', [PluginsController::class, 'activate'] )->name( 'api.plugins.activate' );
+            Route::post( '{slug}/activate', [PluginsController::class, 'activate'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.activate' );
 
             // Deactivate plugin
-            Route::post( '{slug}/deactivate', [PluginsController::class, 'deactivate'] )->name( 'api.plugins.deactivate' );
+            Route::post( '{slug}/deactivate', [PluginsController::class, 'deactivate'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.deactivate' );
 
             // Update plugin
-            Route::post( '{slug}/update', [PluginsController::class, 'update'] )->name( 'api.plugins.update' );
+            Route::post( '{slug}/update', [PluginsController::class, 'update'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.update' );
 
             // Delete plugin
-            Route::delete( '{slug}', [PluginsController::class, 'destroy'] )->name( 'api.plugins.destroy' );
+            Route::delete( '{slug}', [PluginsController::class, 'destroy'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.destroy' );
         } );
     } );

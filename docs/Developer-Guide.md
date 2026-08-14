@@ -739,7 +739,7 @@ public function handle($request, Closure $next, $maxAttempts = 5, $decayMinutes 
 Create environment-specific configurations:
 
 ```php
-// config/cms-framework.php
+// config/artisanpack/cms-framework.php
 return [
     'user_model' => env('CMS_USER_MODEL', \App\Models\User::class),
     'cache_permissions' => env('CMS_CACHE_PERMISSIONS', true),
