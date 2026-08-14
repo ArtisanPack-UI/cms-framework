@@ -64,4 +64,10 @@ describe( 'POST /v1/themes/{slug}/activate', function (): void {
     it( 'requires authentication', function (): void {
         $this->postJson( '/v1/themes/api-activate-theme/activate' )->assertStatus( 401 );
     } );
+
+    it( 'forbids an authenticated user without manage-themes from activating', function (): void {
+        $this->actingAs( TestUser::factory()->create() );
+
+        $this->postJson( '/v1/themes/api-activate-theme/activate' )->assertForbidden();
+    } );
 } );

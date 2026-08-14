@@ -127,7 +127,7 @@ it( 'wraps a Blade view in a closure so the route action is valid', function ():
         ->and( $rendered->name() )->toBe( 'cms::admin.layouts.app' );
 } );
 
-it( 'passes a federated component identifier through untouched', function (): void {
+it( 'renders a mount point for a federated component identifier', function (): void {
     $pages = capturingPageManager();
 
     $provider = new class( app() ) extends PluginServiceProvider {
@@ -148,7 +148,42 @@ it( 'passes a federated component identifier through untouched', function (): vo
 
     $provider->boot();
 
-    expect( $pages->captured['my-plugin']['action'] )->toBe( 'myPluginAdmin/Panel' );
+    // A component is never handed to Route::get() as a bare string (which it
+    // rejects, crashing route registration for the whole app). It resolves to
+    // a closure that renders a mount point the host front end hydrates.
+    $action = $pages->captured['my-plugin']['action'];
+
+    expect( $action )->toBeInstanceOf( Closure::class );
+
+    expect( (string) $action()->getContent() )
+        ->toContain( 'data-cms-federated-module="myPluginAdmin/Panel"' );
+} );
+
+it( 'returns a 501 for an admin page with neither a view nor a component', function (): void {
+    $pages = capturingPageManager();
+
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'broken-plugin', [
+                'title'      => 'Broken',
+                'capability' => '',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'broken-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    // A misconfigured page fails on its own route rather than throwing during
+    // route registration and taking every request down with it.
+    $response = $pages->captured['broken-plugin']['action']();
+
+    expect( $response->getStatusCode() )->toBe( 501 );
 } );
 
 it( 'injects a nav entry via the ap.cmsFramework.admin.menu filter', function (): void {

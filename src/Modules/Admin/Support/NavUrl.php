@@ -73,11 +73,13 @@ final class NavUrl
             return '#';
         }
 
-        // A single leading slash is a same-origin absolute path, but `//host`
-        // — and the `/\host` variant browsers normalize to it — is
-        // protocol-relative and navigates off-origin, which "same-origin
-        // relative" is not. Reject it before the single-slash acceptance below.
-        if ( str_starts_with( $trimmed, '//' ) || str_starts_with( $trimmed, '/\\' ) ) {
+        // A single leading slash is a same-origin absolute path, but a pair of
+        // leading slashes/backslashes is protocol-relative and navigates
+        // off-origin, which "same-origin relative" is not. Browsers normalize
+        // `\` to `/`, so all four combinations — `//`, `/\`, `\/`, `\\` —
+        // resolve to `//host`; reject every one before the single-slash
+        // acceptance below.
+        if ( 1 === preg_match( '#^[/\\\\]{2}#', $trimmed ) ) {
             return '#';
         }
 

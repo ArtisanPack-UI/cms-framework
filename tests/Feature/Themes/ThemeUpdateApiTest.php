@@ -246,4 +246,13 @@ describe( 'POST /v1/themes/{slug}/update', function (): void {
     it( 'requires authentication', function (): void {
         $this->postJson( '/v1/themes/api-update-theme/update' )->assertStatus( 401 );
     } );
+
+    it( 'forbids an authenticated user without manage-themes from updating or checking updates', function (): void {
+        // Authenticated, but without the `manage-themes` ability. Update
+        // discovery is gated too: it makes one outbound request per theme.
+        $this->actingAs( TestUser::factory()->create() );
+
+        $this->postJson( '/v1/themes/api-update-theme/update' )->assertForbidden();
+        $this->getJson( '/v1/themes/updates' )->assertForbidden();
+    } );
 } );

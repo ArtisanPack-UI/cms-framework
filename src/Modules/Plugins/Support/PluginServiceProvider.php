@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\Admin\Support\NavUrl;
 use Closure;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
 use ReflectionClass;
@@ -73,26 +74,49 @@ abstract class PluginServiceProvider extends ServiceProvider
     /**
      * Turn an admin-page config into something `Route::get()` will accept.
      *
-     * Blade pages arrive as a view name and are wrapped in a closure that
-     * renders it, with the route's own parameters passed through as view data
-     * so a page registered at `reports/{id}` can read `$id`. Federated pages
-     * keep their raw `component` identifier for the host to resolve.
+     * Always returns a closure, never a bare string. Admin routes are
+     * registered from a `booted()` callback, so an action `Route::get()`
+     * rejects — a bare component identifier, or an empty string when the page
+     * declares neither a `view` nor a `component` — would throw during route
+     * registration and take *every* request down, not just the misconfigured
+     * page. Wrapping each outcome in a closure keeps the failure on the one
+     * route:
+     *
+     * - `view` → renders the Blade view, with the route's own parameters passed
+     *   through as view data so a page at `reports/{id}` can read `$id`.
+     * - `component` → a Module Federation identifier only the host's federation
+     *   runtime can resolve, returned as a mount-point element the host front
+     *   end hydrates.
+     * - neither → a 501, so the operator sees a clear "not configured" response
+     *   instead of a white-screened application.
      *
      * @since 2.8.0
      *
      * @param  array{view?:string,component?:string}  $config
      *
-     * @return Closure|string The route action.
+     * @return Closure The route action.
      */
-    protected function resolveAdminPageAction( array $config ): Closure|string
+    protected function resolveAdminPageAction( array $config ): Closure
     {
-        if ( isset( $config['view'] ) ) {
-            $view = ( string ) $config['view'];
+        $view = isset( $config['view'] ) ? ( string ) $config['view'] : '';
 
+        if ( '' !== $view ) {
             return static fn ( Request $request ): View => view( $view, $request->route()?->parameters() ?? [] );
         }
 
-        return ( string ) ( $config['component'] ?? '' );
+        $component = isset( $config['component'] ) ? ( string ) $config['component'] : '';
+
+        if ( '' !== $component ) {
+            return static fn (): Response => response( sprintf(
+                '<div data-cms-federated-module="%s"></div>',
+                e( $component ),
+            ) );
+        }
+
+        return static fn (): Response => response(
+            __( 'This admin page is not configured: it declares neither a view nor a component.' ),
+            501,
+        );
     }
 
     /**

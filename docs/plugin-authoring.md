@@ -211,15 +211,16 @@ $this->registerAdminPage( 'hello-world', [
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
 
-> **Known limitation ( as of 2.8.0 ):** unlike `view`, a `component` is still
-> passed to `Route::get()` verbatim, and Laravel rejects it as an invalid route
-> action. Because admin routes are registered from a `booted()` callback, that
-> exception surfaces on *every* request, not just the plugin's own page — so a
-> `component`-only admin page currently takes the whole application down. Until
-> the framework settles on how a host mounts a federated page, register the
-> page with a `view` that renders your own mount point, and declare the
-> federated module separately with `registerFederatedModule()`. Tracked as
-> [#296](https://github.com/ArtisanPack-UI/cms-framework/issues/296).
+> **Note ( as of 2.8.0 ):** a `component`-only admin page resolves to a route
+> that renders a mount point — `<div data-cms-federated-module="…"></div>` —
+> for the host's Module Federation runtime to hydrate. It is no longer handed
+> to `Route::get()` as a bare string (which Laravel rejects as an invalid route
+> action; because admin routes register from a `booted()` callback, that once
+> surfaced on *every* request, not just the plugin's own page, taking the whole
+> application down). A page that declares neither a `view` nor a `component`
+> responds `501` on its own route instead of breaking route registration. How
+> the host binds that mount point to a concrete component is still being
+> settled — see [#296](https://github.com/ArtisanPack-UI/cms-framework/issues/296).
 
 ## Registering nav entries
 

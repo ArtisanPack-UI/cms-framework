@@ -3175,6 +3175,15 @@ class ApplicationUpdateManager
             'line'      => $exception->getLine(),
         ] );
 
+        // Persist whatever the extraction ledgered before it threw. A failure
+        // *during* `extractUpdate()` (a short write, a failed `fopen`/close)
+        // never reaches that method's end-of-loop persist, so without this the
+        // state file would carry no `extraction_additions` entry and a later
+        // manual `update:rollback` in a fresh process could not remove the
+        // files the partial extraction added (#272). The automatic path below
+        // still uses the in-memory ledger directly.
+        $this->state()->recordExtractionAdditions( $this->extractionAdditions );
+
         // Maintenance mode is deliberately NOT lifted up front. Lifting before
         // the rollback would serve public traffic from a half-applied tree
         // (and, with backups on, run `composer install` over live requests

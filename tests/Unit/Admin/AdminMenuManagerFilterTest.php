@@ -203,8 +203,10 @@ describe( 'filter-injected URL sanitization', function (): void {
 
         expect( $this->manager->getAdminMenu()['evil']['url'] )->toBe( '#' );
     } )->with( [
-        'protocol-relative'      => '//evil.example/phish',
-        'backslash-protocol-rel' => '/\\evil.example/phish',
+        'double-slash'            => '//evil.example/phish',
+        'slash-backslash'         => '/\\evil.example/phish',
+        'backslash-slash'         => '\\/evil.example/phish',
+        'double-backslash'        => '\\\\evil.example/phish',
     ] );
 
     it( 'leaves a safe URL on a route-less entry untouched', function (): void {

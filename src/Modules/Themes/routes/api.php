@@ -45,8 +45,13 @@ Route::middleware( ['auth:sanctum'] )
             ->name( 'themes.upload' );
 
         // Registered ahead of `/themes/{slug}` so the literal segment wins;
-        // otherwise "updates" is swallowed as a theme slug.
-        Route::get( '/themes/updates', [ThemesController::class, 'checkUpdates'] )->name( 'themes.updates' );
+        // otherwise "updates" is swallowed as a theme slug. Gated on
+        // `manage-themes`: `checkUpdates()` makes one synchronous outbound
+        // HTTPS request per installed theme, so it is an administrative action
+        // with the same blast radius as the mutating routes.
+        Route::get( '/themes/updates', [ThemesController::class, 'checkUpdates'] )
+            ->middleware( 'can:manage-themes' )
+            ->name( 'themes.updates' );
 
         Route::get( '/themes/{slug}', [ThemesController::class, 'show'] )->name( 'themes.show' );
         Route::post( '/themes/{slug}/activate', [ThemesController::class, 'activate'] )

@@ -342,6 +342,9 @@ describe( 'Plugin API - Permission Checks', function (): void {
             ['POST', '/api/v1/plugins/valid-plugin/deactivate'],
             ['POST', '/api/v1/plugins/valid-plugin/update'],
             ['DELETE', '/api/v1/plugins/valid-plugin'],
+            // Update discovery is gated too: it makes one outbound request per
+            // installed plugin, an administrative action.
+            ['GET', '/api/v1/plugins/updates'],
         ];
 
         foreach ( $mutating as [$method, $uri] ) {

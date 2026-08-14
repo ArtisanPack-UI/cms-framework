@@ -12,8 +12,13 @@ Route::prefix( 'api/v1' )
             // List all plugins
             Route::get( '/', [PluginsController::class, 'index'] )->name( 'api.plugins.index' );
 
-            // Check for updates
-            Route::get( 'updates', [PluginsController::class, 'checkUpdates'] )->name( 'api.plugins.updates' );
+            // Check for updates. Gated on `manage-plugins`: `checkUpdates()`
+            // makes one synchronous outbound HTTPS request per installed
+            // plugin, so it carries the same blast radius as the mutating
+            // routes and the same gate.
+            Route::get( 'updates', [PluginsController::class, 'checkUpdates'] )
+                ->middleware( 'can:manage-plugins' )
+                ->name( 'api.plugins.updates' );
 
             // Get specific plugin
             Route::get( '{slug}', [PluginsController::class, 'show'] )->name( 'api.plugins.show' );

@@ -408,6 +408,26 @@ class PluginManager
     }
 
     /**
+     * Whether a manifest `update` value passes the shared source rules.
+     *
+     * The boolean counterpart to {@see validateUpdateSourceManifestField()},
+     * mirroring `ThemeManager::isUsableUpdateSource()`. `UpdateManager` calls
+     * it to re-validate a value read back from an installed plugin's manifest,
+     * which was never re-run through `validateManifest()` after the update
+     * re-seated `meta` from the downloaded ZIP.
+     *
+     * @since 2.8.0
+     *
+     * @param  mixed  $update  Raw `update` value from the manifest.
+     *
+     * @return bool True when the value is a usable update source.
+     */
+    public function isUsableUpdateSource( mixed $update ): bool
+    {
+        return null === $this->checkUpdateSourceManifestField( $update );
+    }
+
+    /**
      * Run plugin migrations.
      *
      * @param  string  $slug  Plugin slug

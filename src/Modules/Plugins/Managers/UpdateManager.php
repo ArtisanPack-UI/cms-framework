@@ -151,6 +151,20 @@ class UpdateManager
             return null;
         }
 
+        // Re-run the shared manifest rules rather than assume they ever ran.
+        // `updatePlugin()` re-seats `meta` straight from the manifest inside the
+        // downloaded ZIP without re-running `PluginManager::validateManifest()`,
+        // so without this an `update.github` of `../../x` would be interpolated
+        // into a github.com URL and reach `GitHubUpdateSource::parseUrl()` as an
+        // owner/repo pair. Mirrors `ThemeManager::resolveUpdateSourceUrl()`.
+        if ( ! $this->pluginManager->isUsableUpdateSource( $update ) ) {
+            logger()->warning( 'Ignoring plugin update source: malformed `update` key in plugin.json.', [
+                'plugin' => $plugin->slug,
+            ] );
+
+            return null;
+        }
+
         $url = $this->nonEmptyString( $update['url'] ?? null );
 
         if ( null !== $url ) {
@@ -352,8 +366,19 @@ class UpdateManager
      */
     protected function checkViaCustomFeed( Plugin $plugin ): ?array
     {
+        // Enforce https on the feed URL before fetching. The feed response
+        // carries both the download URL and the `sha256` it is verified
+        // against, so a plaintext feed lets a network attacker choose both —
+        // verification would confirm the attacker's own archive. Same reason
+        // the source-backed and legacy download paths require https.
+        $feedUrl = $this->nonEmptyString( $plugin->meta['update_url'] ?? null );
+
+        if ( null === $feedUrl || null === $this->rejectInsecureSource( $feedUrl, $plugin->slug ) ) {
+            return null;
+        }
+
         $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
-            ->get( $plugin->meta['update_url'] );
+            ->get( $feedUrl );
 
         if ( ! $response->successful() ) {
             return null;
