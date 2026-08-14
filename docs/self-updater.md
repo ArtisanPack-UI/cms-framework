@@ -245,7 +245,7 @@ The check **fails open**: a missing `composer.json`, a missing or unparseable `c
 
 The lock-sync fix above has a reachability gap of its own (#273): it ships **inside** an update, and the broken lock it fixes is exactly what aborts that update. An install still on an affected line (≤ 2.7.0) therefore has no updater-reachable path to the fix — the population that needs it is precisely the population that cannot receive it. Recovery otherwise needs a shell on the server, which for a click-to-update product is the wrong failure mode.
 
-So when `composer install` aborts *because* the extracted `composer.json` requires a dependency set the still-in-place previous release's `composer.lock` cannot satisfy, the updater does not immediately roll back. It parses the packages composer named as unsatisfiable and runs a **targeted** `composer update <those packages>`, re-resolving only the flagged packages and their dependencies (everything else stays pinned at the lock) so the resulting lock satisfies `composer.json` and the update proceeds.
+So when `composer install` aborts *because* the extracted `composer.json` requires a dependency set the still-in-place previous release's `composer.lock` cannot satisfy, the updater does not immediately roll back. It parses the packages composer named as unsatisfiable and runs a **targeted** `composer update <those packages> --with-all-dependencies`, re-resolving the flagged packages and their dependency closure (everything outside it stays pinned at the lock) so the resulting lock satisfies `composer.json` and the update proceeds. `--with-all-dependencies` is what lets a flagged package's new version pull the transitive bumps it needs; without it composer would leave those pinned and fail to resolve the very case recovery exists to unstick.
 
 Every guard fails *toward* the original safe rollback. The recovery runs only after composer itself has failed on an unsatisfiable lock — never pre-emptively — and only when composer named at least one package and `composer_install_command` is not an operator override that cannot be rewritten into an `update`. If the recovery `composer update` also fails, the update rolls back exactly as before.
 
@@ -256,10 +256,10 @@ This does mean the recovered packages land on a freshly resolved version rather 
 **Recovering an install by hand.** Recovery is automatic on 2.8.0+, but an install *arriving* at 2.8.0 from an affected line first has to run the update that carries it — and that first update is the one the stale lock can block, before 2.8.0's recovery code is in place to catch it. If the in-app updater aborts on a message like the one above, run this once on the host and then retry the update:
 
 ```
-composer update artisanpack-ui/cms-framework
+composer update artisanpack-ui/cms-framework --with-all-dependencies
 ```
 
-On many hosts this resolves cleanly on its own, because a constraint like `^2.5.3` already admits 2.7.1+ — the lock was merely stale, not incompatible. After the install is on 2.8.0+, `recover_stale_lock` handles subsequent updates without the manual step.
+On many hosts this resolves cleanly on its own, because a constraint like `^2.5.3` already admits 2.7.1+ — the lock was merely stale, not incompatible. `--with-all-dependencies` matches what the automatic recovery runs and lets any transitive bump the new version needs come along; drop it if you want to hold every other package at its locked version. After the install is on 2.8.0+, `recover_stale_lock` handles subsequent updates without the manual step.
 
 ## Long-running updates and interrupted processes
 

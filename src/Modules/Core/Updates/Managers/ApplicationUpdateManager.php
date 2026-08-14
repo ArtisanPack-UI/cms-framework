@@ -1725,7 +1725,7 @@ class ApplicationUpdateManager
         $command = $this->resolveComposerRecoveryCommand( $packages );
         if ( null === $command ) {
             Log::warning(
-                'A stale composer.lock blocked the update, but the composer command is an operator override that cannot be rewritten into a targeted `composer update`; leaving the failure to roll back. Run `composer update ' . implode( ' ', $packages ) . '` on the host once, or clear the override.',
+                'A stale composer.lock blocked the update, but the composer command is an operator override that cannot be rewritten into a targeted `composer update`; leaving the failure to roll back. Run `composer update ' . implode( ' ', $packages ) . ' --with-all-dependencies` on the host once, or clear the override.',
                 [ 'packages' => $packages ],
             );
 
@@ -1828,8 +1828,14 @@ class ApplicationUpdateManager
      */
     protected function resolveComposerRecoveryCommand( array $packages ): ?string
     {
+        // `--with-all-dependencies` (`-W`) so the flagged packages' own
+        // dependencies — including root requirements pinned by the stale lock —
+        // may move too. A bare `composer update <pkg>` leaves them at their
+        // locked versions and fails to resolve exactly when the new version of a
+        // flagged package needs a transitive bump, which is the case recovery
+        // exists to unstick.
         $args = 'update ' . implode( ' ', array_map( 'escapeshellarg', $packages ) )
-            . ' --no-dev --no-interaction --optimize-autoloader';
+            . ' --with-all-dependencies --no-dev --no-interaction --optimize-autoloader';
 
         $envBinary = $this->envComposerBinary();
         if ( null !== $envBinary ) {

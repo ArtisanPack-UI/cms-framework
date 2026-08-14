@@ -2423,6 +2423,7 @@ class ApplicationUpdateManagerTest extends TestCase
             Process::assertRan( fn ( $process ): bool => str_contains( $process->command, '/opt/fake/bin/composer' )
                 && str_contains( $process->command, 'update' )
                 && str_contains( $process->command, 'psr/container' )
+                && str_contains( $process->command, '--with-all-dependencies' )
                 && str_contains( $process->command, '--no-dev' ) );
         } finally {
             app()->setBasePath( $originalBase );
