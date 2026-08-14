@@ -24,6 +24,7 @@
 /CONTRIBUTING.md    export-ignore
 /COVERAGE.md        export-ignore
 /SKIPPED_TESTS.md   export-ignore
+/RELEASE-2.8.0-REVIEW.md export-ignore
 
 # Code Quality
 /phpcs.xml          export-ignore
