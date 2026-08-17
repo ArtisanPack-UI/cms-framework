@@ -13,9 +13,9 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Pages\Database\Factories;
 
-use App\Models\User;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
+use ArtisanPackUI\CMSFramework\Modules\Users\Database\Factories\Concerns\ResolvesUserFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -30,6 +30,8 @@ use Illuminate\Support\Str;
  */
 class PageFactory extends Factory
 {
+    use ResolvesUserFactory;
+
     /**
      * The name of the factory's corresponding model.
      *
@@ -57,7 +59,7 @@ class PageFactory extends Factory
             'slug'         => Str::slug( $title ),
             'content'      => fake()->paragraphs( 3, true ),
             'excerpt'      => fake()->paragraph(),
-            'author_id'    => User::factory(),
+            'author_id'    => $this->resolveUserFactory(),
             'parent_id'    => null,
             'order'        => fake()->numberBetween( 0, 100 ),
             'template'     => 'default',

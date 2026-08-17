@@ -13,7 +13,6 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Users\Http\Controllers;
 
-use App\Models\User;
 use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationships;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Requests\BulkUserRequest;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
