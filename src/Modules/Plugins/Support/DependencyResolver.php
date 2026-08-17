@@ -194,13 +194,19 @@ class DependencyResolver
      *
      * @since 2.9.0
      *
-     * @param  string  $version  Installed version.
-     * @param  string  $constraint  Declared constraint (e.g. "^1.0", "*").
+     * @param  mixed  $version  Installed version (a non-string counts as unmet).
+     * @param  mixed  $constraint  Declared constraint (e.g. "^1.0", "*").
      *
      * @return bool True when the version satisfies the constraint.
      */
-    protected function satisfies( string $version, string $constraint ): bool
+    protected function satisfies( mixed $version, mixed $constraint ): bool
     {
+        // A graph entry missing a string version — allowed by the documented
+        // public graph contract — is an unmet requirement, not a TypeError.
+        if ( ! is_string( $version ) || ! is_string( $constraint ) ) {
+            return false;
+        }
+
         $normalized = ltrim( $version, 'vV' );
 
         try {

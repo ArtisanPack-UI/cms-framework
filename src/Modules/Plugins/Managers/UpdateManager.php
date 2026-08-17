@@ -275,7 +275,7 @@ class UpdateManager
             // Restore files AND DB so the plugin isn't stranded pointing at a
             // version whose files no longer exist.
             $this->restoreFromBackup( $slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw $e;
         } catch ( UpdateException $e ) {
@@ -284,13 +284,13 @@ class UpdateManager
             // detail an operator needs to tell a corrupted mirror apart from a
             // release that shipped without a `.sha256` sidecar.
             $this->restoreFromBackup( $slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( Exception $e ) {
             // Restore from backup on failure
             $this->restoreFromBackup( $slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::downloadFailed( $slug );
         }
@@ -432,13 +432,22 @@ class UpdateManager
      * were rolled back.
      *
      * @param  array|null  $oldMeta  Prior manifest snapshot.
+     * @param  bool  $wasActive  Activation state before the update began.
      */
-    protected function revertPluginRow( Plugin $plugin, string $oldVersion, ?array $oldMeta, ?string $oldServiceProvider ): void
+    protected function revertPluginRow( Plugin $plugin, string $oldVersion, ?array $oldMeta, ?string $oldServiceProvider, bool $wasActive ): void
     {
         try {
+            // Reload from the database first. Step 2's deactivate() flipped
+            // is_active to false on a *separate* model instance, so this
+            // instance's is_active is stale and save() would not write the
+            // restore. Refreshing gives save() an accurate baseline so setting
+            // is_active back to $wasActive is seen as dirty and persisted.
+            $plugin->refresh();
+
             $plugin->version          = $oldVersion;
             $plugin->meta             = $oldMeta;
             $plugin->service_provider = $oldServiceProvider;
+            $plugin->is_active        = $wasActive;
             $plugin->save();
         } catch ( Exception $e ) {
             logger()->error( "Failed reverting plugin row after failed update: {$plugin->slug}", [

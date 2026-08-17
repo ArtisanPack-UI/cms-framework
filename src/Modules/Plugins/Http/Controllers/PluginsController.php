@@ -357,6 +357,14 @@ class PluginsController extends Controller
     {
         $graph = $this->pluginManager->buildDependencyGraph();
 
+        // Unknown means present in neither the database (the graph) nor on disk.
+        // A DB-registered plugin with no files still legitimately has dependents.
+        if ( ! isset( $graph[ $slug ] ) && ! $this->pluginManager->getPlugin( $slug ) ) {
+            return response()->json( [
+                'message' => __( 'Plugin not found' ),
+            ], 404 );
+        }
+
         return response()->json( [
             'slug'           => $slug,
             'dependents'     => $this->pluginManager->getDependents( $slug, $graph ),

@@ -360,6 +360,15 @@ class PluginManager
         // deliberate teardown, and blocking it here would leave the plugin
         // half-removed. Dependents are surfaced by getDependents() for the UI.
         if ( $plugin->is_active ) {
+            // Record any still-active dependents so an operator can trace a
+            // later failure back to this forced removal.
+            $orphaned = $this->activeDependents( $slug );
+            if ( ! empty( $orphaned ) ) {
+                logger()->warning( "Deleting plugin '{$slug}' leaves active dependents unsatisfied.", [
+                    'dependents' => $orphaned,
+                ] );
+            }
+
             $this->deactivate( $slug, true );
         }
 
@@ -413,7 +422,11 @@ class PluginManager
     {
         $activePlugins = Plugin::active()->get()->keyBy( 'slug' );
 
-        foreach ( $this->activeLoadOrder( $activePlugins->keys()->all() ) as $slug ) {
+        // Build the graph once and thread it through the ordering so booting
+        // plugins costs a single Plugin::all() query rather than two.
+        $graph = $this->buildDependencyGraph();
+
+        foreach ( $this->activeLoadOrder( $activePlugins->keys()->all(), $graph ) as $slug ) {
             $plugin = $activePlugins->get( $slug );
 
             // Register autoloader
@@ -575,15 +588,16 @@ class PluginManager
      * @since 2.9.0
      *
      * @param  array<int,string>  $activeSlugs  Slugs of the active plugins.
+     * @param  array<string,array<string,mixed>>|null  $graph  Pre-built graph to reuse, or null to build one.
      *
      * @return array<int,string> The same slugs, dependencies first.
      */
-    protected function activeLoadOrder( array $activeSlugs ): array
+    protected function activeLoadOrder( array $activeSlugs, ?array $graph = null ): array
     {
         $active = array_fill_keys( $activeSlugs, true );
 
         try {
-            $resolved = $this->getActivationOrder( $activeSlugs );
+            $resolved = $this->getActivationOrder( $activeSlugs, $graph );
         } catch ( CircularDependencyException $e ) {
             logger()->warning( 'Circular plugin dependency detected while ordering active plugins for boot; falling back to unordered load.', [
                 'exception' => $e->getMessage(),
@@ -798,11 +812,11 @@ class PluginManager
         }
 
         if ( isset( $manifest['requires'] ) ) {
-            $this->validateRequiresManifestField( $manifest['requires'] );
+            $this->validateRequiresManifestField( $manifest['requires'], $manifest['slug'] );
         }
 
         if ( isset( $manifest['conflicts'] ) ) {
-            $this->validateConstraintMapManifestField( $manifest['conflicts'], 'conflicts' );
+            $this->validateConstraintMapManifestField( $manifest['conflicts'], 'conflicts', $manifest['slug'] );
         }
     }
 
@@ -816,9 +830,12 @@ class PluginManager
      *         "plugins": { "base-forms": "^1.5" }
      *     }
      *
+     * @param  mixed  $requires  Raw manifest value.
+     * @param  string  $ownSlug  The declaring plugin's own slug.
+     *
      * @throws PluginValidationException If the block is malformed.
      */
-    protected function validateRequiresManifestField( mixed $requires ): void
+    protected function validateRequiresManifestField( mixed $requires, string $ownSlug ): void
     {
         if ( ! is_array( $requires ) ) {
             throw PluginValidationException::invalidManifest( 'Invalid requires. Must be an object.' );
@@ -832,7 +849,7 @@ class PluginManager
         }
 
         if ( isset( $requires['plugins'] ) ) {
-            $this->validateConstraintMapManifestField( $requires['plugins'], 'requires.plugins' );
+            $this->validateConstraintMapManifestField( $requires['plugins'], 'requires.plugins', $ownSlug );
         }
     }
 
@@ -846,10 +863,11 @@ class PluginManager
      *
      * @param  mixed  $map  Raw manifest value.
      * @param  string  $field  Field name, used in error messages.
+     * @param  string  $ownSlug  The declaring plugin's own slug, rejected as a self-reference.
      *
      * @throws PluginValidationException If the map is malformed.
      */
-    protected function validateConstraintMapManifestField( mixed $map, string $field ): void
+    protected function validateConstraintMapManifestField( mixed $map, string $field, string $ownSlug ): void
     {
         if ( ! is_array( $map ) ) {
             throw PluginValidationException::invalidManifest( "Invalid {$field}. Must be an object mapping plugin slugs to version constraints." );
@@ -858,6 +876,12 @@ class PluginManager
         foreach ( $map as $slug => $constraint ) {
             if ( ! is_string( $slug ) || ! $this->validateSlug( $slug ) ) {
                 throw PluginValidationException::invalidManifest( "Invalid {$field}. Each key must be a valid plugin slug." );
+            }
+            // A plugin cannot require or conflict with itself. The resolver
+            // would otherwise report the plugin as its own inactive dependency,
+            // an activation that can never succeed.
+            if ( $slug === $ownSlug ) {
+                throw PluginValidationException::invalidManifest( "Invalid {$field}. A plugin cannot reference its own slug ('{$ownSlug}')." );
             }
             if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
                 throw PluginValidationException::invalidManifest( "Invalid {$field}['{$slug}']. Version constraint must be a non-empty string." );

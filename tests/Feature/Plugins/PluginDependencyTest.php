@@ -263,6 +263,13 @@ describe( 'Dependency API', function (): void {
             ->assertJsonPath( 'can_deactivate', false );
     } );
 
+    it( 'returns 404 from the dependents endpoint for an unknown plugin', function (): void {
+        $response = $this->actingAs( $this->admin )
+            ->getJson( '/api/v1/plugins/does-not-exist/dependents' );
+
+        $response->assertNotFound();
+    } );
+
     it( 'returns an activation order for a batch check', function (): void {
         makePlugin( 'google-oauth' );
         makePlugin( 'google-web-tools', [], ['requires' => ['plugins' => ['google-oauth' => '^1.0']]] );

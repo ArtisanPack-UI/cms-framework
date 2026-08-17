@@ -273,6 +273,13 @@ describe( 'requires', function (): void {
         expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
             ->toThrow( PluginValidationException::class, 'constraint' );
     } );
+
+    it( 'rejects a plugin requiring its own slug', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => ['plugins' => ['test-plugin' => '^1.0']]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'cannot reference its own slug' );
+    } );
 } );
 
 describe( 'conflicts', function (): void {
@@ -288,6 +295,13 @@ describe( 'conflicts', function (): void {
 
         expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
             ->toThrow( PluginValidationException::class, 'conflicts' );
+    } );
+
+    it( 'rejects a plugin conflicting with its own slug', function (): void {
+        $manifest = array_merge( $this->base, ['conflicts' => ['test-plugin' => '*']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'cannot reference its own slug' );
     } );
 } );
 
