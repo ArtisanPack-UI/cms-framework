@@ -229,9 +229,11 @@ class UpdateManager
             // 1. Backup current version
             $backupPath = $this->backupPlugin( $slug );
 
-            // 2. Deactivate if active
+            // 2. Deactivate if active. Forced past the dependents guard (#45):
+            //    this is a temporary deactivate/reactivate around an in-place
+            //    update, not a teardown, so active dependents must not abort it.
             if ( $wasActive ) {
-                $this->pluginManager->deactivate( $slug );
+                $this->pluginManager->deactivate( $slug, true );
             }
 
             // 3. Download new version

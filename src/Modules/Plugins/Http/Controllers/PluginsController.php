@@ -12,7 +12,10 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
@@ -23,6 +26,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use Dedoc\Scramble\Attributes\Group;
 use Exception;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\ValidationException;
 
@@ -150,6 +154,20 @@ class PluginsController extends Controller
                 'required_version' => $e->requiredVersion,
                 'host_version'     => $e->hostVersion,
             ], 409 );
+        } catch ( PluginConflictException $e ) {
+            return response()->json( [
+                'message'   => $e->getMessage(),
+                'code'      => 'plugin_conflict',
+                'plugin'    => $e->pluginSlug,
+                'conflicts' => $e->conflicts,
+            ], 409 );
+        } catch ( DependencyNotSatisfiedException $e ) {
+            return response()->json( [
+                'message'      => $e->getMessage(),
+                'code'         => 'plugin_dependencies_unsatisfied',
+                'plugin'       => $e->pluginSlug,
+                'dependencies' => $e->result?->toArray(),
+            ], 409 );
         } catch ( PluginNotFoundException $e ) {
             throw ValidationException::withMessages( [
                 'slug' => $e->getMessage(),
@@ -184,6 +202,13 @@ class PluginsController extends Controller
     {
         try {
             $this->pluginManager->deactivate( $slug );
+        } catch ( DependencyNotSatisfiedException $e ) {
+            return response()->json( [
+                'message'    => $e->getMessage(),
+                'code'       => 'plugin_has_active_dependents',
+                'plugin'     => $e->pluginSlug,
+                'dependents' => $e->dependents,
+            ], 409 );
         } catch ( PluginNotFoundException $e ) {
             throw ValidationException::withMessages( [
                 'slug' => $e->getMessage(),
@@ -285,6 +310,103 @@ class PluginsController extends Controller
                 ? __( 'Plugin updated successfully' )
                 : __( 'Plugin is already up to date.' ),
             'updated' => $updated,
+        ] );
+    }
+
+    /**
+     * Reports a plugin's declared dependencies and their current status.
+     *
+     * Endpoint: GET /api/v1/plugins/{slug}/dependencies
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug identifier.
+     *
+     * @return JsonResponse JSON response with the declared requires/conflicts and resolved status.
+     */
+    public function dependencies( string $slug ): JsonResponse
+    {
+        $plugin = $this->pluginManager->getPlugin( $slug );
+
+        if ( ! $plugin ) {
+            return response()->json( [
+                'message' => __( 'Plugin not found' ),
+            ], 404 );
+        }
+
+        return response()->json( [
+            'slug'      => $slug,
+            'requires'  => $plugin['manifest']['requires'] ?? [],
+            'conflicts' => $plugin['manifest']['conflicts'] ?? [],
+            'status'    => $this->pluginManager->checkDependencies( $slug )->toArray(),
+        ] );
+    }
+
+    /**
+     * Reports the installed plugins that depend on the given plugin.
+     *
+     * Endpoint: GET /api/v1/plugins/{slug}/dependents
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug identifier.
+     *
+     * @return JsonResponse JSON response listing dependent plugin slugs.
+     */
+    public function dependents( string $slug ): JsonResponse
+    {
+        $graph = $this->pluginManager->buildDependencyGraph();
+
+        return response()->json( [
+            'slug'           => $slug,
+            'dependents'     => $this->pluginManager->getDependents( $slug, $graph ),
+            'can_deactivate' => $this->pluginManager->canDeactivate( $slug, $graph ),
+        ] );
+    }
+
+    /**
+     * Checks dependencies for a batch of plugins and returns a suggested
+     * activation order.
+     *
+     * Accepts either `{"plugins": ["a", "b"]}` or a bare JSON array body.
+     *
+     * Endpoint: POST /api/v1/plugins/check-dependencies
+     *
+     * @since 2.9.0
+     *
+     * @param  Request  $request  Request carrying the plugin slugs to check.
+     *
+     * @return JsonResponse JSON response with per-plugin status and activation order.
+     */
+    public function checkDependencies( Request $request ): JsonResponse
+    {
+        $slugs = $request->input( 'plugins' );
+        if ( ! is_array( $slugs ) ) {
+            $all   = $request->all();
+            $slugs = array_is_list( $all ) ? $all : [];
+        }
+        $slugs = array_values( array_filter( $slugs, 'is_string' ) );
+
+        $graph   = $this->pluginManager->buildDependencyGraph();
+        $results = [];
+        foreach ( $slugs as $slug ) {
+            $results[ $slug ] = $this->pluginManager->checkDependencies( $slug, $graph )->toArray();
+        }
+
+        try {
+            $order = $this->pluginManager->getActivationOrder( $slugs, $graph );
+        } catch ( CircularDependencyException $e ) {
+            return response()->json( [
+                'message' => $e->getMessage(),
+                'code'    => 'circular_dependency',
+                'cycle'   => $e->cycle,
+                'results' => $results,
+            ], 422 );
+        }
+
+        return response()->json( [
+            'order'   => $order,
+            'results' => $results,
         ] );
     }
 }

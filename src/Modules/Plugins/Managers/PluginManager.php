@@ -6,11 +6,16 @@ namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
 use Exception;
@@ -194,6 +199,10 @@ class PluginManager
         // Host-version compatibility gate (#183). Runs before any state mutation.
         $this->assertHostVersionCompatible( $plugin );
 
+        // Plugin dependency + conflict gate (#45). Also runs before any state
+        // mutation so a plugin missing its dependencies never half-activates.
+        $this->assertDependenciesSatisfied( $plugin );
+
         doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
         $priorPsr4              = [];
@@ -283,15 +292,28 @@ class PluginManager
      * Note: Does NOT rollback migrations. Plugin handles cleanup via hooks.
      *
      * @param  string  $slug  Plugin slug
+     * @param  bool  $force  Skip the active-dependents guard (used by delete())
+     *
+     * @throws PluginNotFoundException If plugin doesn't exist
+     * @throws DependencyNotSatisfiedException If active plugins still depend on it and $force is false
      *
      * @return bool True on success
      */
-    public function deactivate( string $slug ): bool
+    public function deactivate( string $slug, bool $force = false ): bool
     {
         $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
         if ( ! $plugin ) {
             throw PluginNotFoundException::forSlug( $slug );
+        }
+
+        // Dependent-plugin guard (#45). Refuse to pull a dependency out from
+        // under still-active plugins unless the caller explicitly forces it.
+        if ( ! $force ) {
+            $activeDependents = $this->activeDependents( $slug );
+            if ( ! empty( $activeDependents ) ) {
+                throw DependencyNotSatisfiedException::hasActiveDependents( $slug, $activeDependents );
+            }
         }
 
         doAction( 'ap.cmsFramework.plugin.deactivating', $slug );
@@ -334,9 +356,11 @@ class PluginManager
             throw PluginNotFoundException::forSlug( $slug );
         }
 
-        // Deactivate if active
+        // Deactivate if active. Forced past the dependents guard: deletion is a
+        // deliberate teardown, and blocking it here would leave the plugin
+        // half-removed. Dependents are surfaced by getDependents() for the UI.
         if ( $plugin->is_active ) {
-            $this->deactivate( $slug );
+            $this->deactivate( $slug, true );
         }
 
         doAction( 'ap.cmsFramework.plugin.deleting', $slug );
@@ -381,13 +405,17 @@ class PluginManager
      * Load all active plugins during application boot.
      *
      * This method is called EARLY in the boot process by PluginsServiceProvider.
-     * It registers autoloaders and service providers for all active plugins.
+     * It registers autoloaders and service providers for all active plugins,
+     * dependencies first (#45) so a dependent's service provider never boots
+     * before the provider whose services it consumes.
      */
     public function loadActivePlugins(): void
     {
-        $activePlugins = Plugin::active()->get();
+        $activePlugins = Plugin::active()->get()->keyBy( 'slug' );
 
-        foreach ( $activePlugins as $plugin ) {
+        foreach ( $this->activeLoadOrder( $activePlugins->keys()->all() ) as $slug ) {
+            $plugin = $activePlugins->get( $slug );
+
             // Register autoloader
             if ( isset( $plugin->meta['autoload'] ) ) {
                 $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
@@ -408,6 +436,86 @@ class PluginManager
     }
 
     /**
+     * Check a plugin's dependencies, version constraints, and conflicts against
+     * the currently installed plugins (#45).
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug
+     * @param  array<string,array<string,mixed>>|null  $graph  Pre-built graph to reuse, or null to build one.
+     *
+     * @return DependencyResult The buckets of unmet requirements.
+     */
+    public function checkDependencies( string $slug, ?array $graph = null ): DependencyResult
+    {
+        $graph ??= $this->buildDependencyGraph();
+
+        // A plugin present on disk but not registered in the database has no
+        // graph entry; seed its declared requires/conflicts from the manifest
+        // so its status reflects what the manifest actually asks for, rather
+        // than resolving an empty target to "satisfied".
+        if ( ! isset( $graph[ $slug ] ) ) {
+            $manifestEntry = $this->manifestGraphEntry( $slug );
+            if ( null !== $manifestEntry ) {
+                $graph[ $slug ] = $manifestEntry;
+            }
+        }
+
+        return $this->dependencyResolver()->resolve(
+            $slug,
+            $graph,
+            $this->resolveHostFrameworkVersion(),
+        );
+    }
+
+    /**
+     * List the slugs of installed plugins that declare a requirement on $slug.
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  The depended-upon plugin.
+     * @param  array<string,array<string,mixed>>|null  $graph  Pre-built graph to reuse, or null to build one.
+     *
+     * @return array<int,string> Dependent plugin slugs.
+     */
+    public function getDependents( string $slug, ?array $graph = null ): array
+    {
+        return $this->dependencyResolver()->dependents( $slug, $graph ?? $this->buildDependencyGraph() );
+    }
+
+    /**
+     * Resolve a dependency-first activation order for the given slugs (#45).
+     *
+     * @since 2.9.0
+     *
+     * @param  array<int,string>  $slugs  Plugins the caller wants to activate.
+     * @param  array<string,array<string,mixed>>|null  $graph  Pre-built graph to reuse, or null to build one.
+     *
+     * @throws CircularDependencyException When a cycle exists.
+     *
+     * @return array<int,string> Slugs ordered dependencies-first.
+     */
+    public function getActivationOrder( array $slugs, ?array $graph = null ): array
+    {
+        return $this->dependencyResolver()->activationOrder( $slugs, $graph ?? $this->buildDependencyGraph() );
+    }
+
+    /**
+     * Whether a plugin can be deactivated without breaking active dependents.
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug
+     * @param  array<string,array<string,mixed>>|null  $graph  Pre-built graph to reuse, or null to build one.
+     *
+     * @return bool False when at least one active plugin depends on it.
+     */
+    public function canDeactivate( string $slug, ?array $graph = null ): bool
+    {
+        return empty( $this->activeDependents( $slug, $graph ) );
+    }
+
+    /**
      * Whether a manifest `update` value passes the shared source rules.
      *
      * The boolean counterpart to {@see validateUpdateSourceManifestField()},
@@ -425,6 +533,81 @@ class PluginManager
     public function isUsableUpdateSource( mixed $update ): bool
     {
         return null === $this->checkUpdateSourceManifestField( $update );
+    }
+
+    /**
+     * Build the normalized dependency graph from installed plugin records.
+     *
+     * Keyed by slug; each entry carries the version, activation state, and the
+     * declared requires/conflicts the resolver operates on. Public so callers
+     * that make several dependency queries in one request can build the graph
+     * once and pass it back in, avoiding a rebuild per call.
+     *
+     * @since 2.9.0
+     *
+     * @return array<string,array<string,mixed>>
+     */
+    public function buildDependencyGraph(): array
+    {
+        $graph = [];
+
+        foreach ( Plugin::all() as $plugin ) {
+            $graph[ $plugin->slug ] = [
+                'version'       => ( string ) $plugin->version,
+                'is_active'     => ( bool ) $plugin->is_active,
+                'requires'      => $plugin->required_plugins,
+                'requires_host' => $plugin->required_host_version,
+                'conflicts'     => $plugin->conflicting_plugins,
+            ];
+        }
+
+        return $graph;
+    }
+
+    /**
+     * Order active plugin slugs dependencies-first for boot registration.
+     *
+     * Falls back to the given order if a dependency cycle is detected, and
+     * appends any active slug the resolver omitted (its transitive deps may
+     * pull in inactive plugins, which are filtered out here) so every active
+     * plugin is still loaded exactly once.
+     *
+     * @since 2.9.0
+     *
+     * @param  array<int,string>  $activeSlugs  Slugs of the active plugins.
+     *
+     * @return array<int,string> The same slugs, dependencies first.
+     */
+    protected function activeLoadOrder( array $activeSlugs ): array
+    {
+        $active = array_fill_keys( $activeSlugs, true );
+
+        try {
+            $resolved = $this->getActivationOrder( $activeSlugs );
+        } catch ( CircularDependencyException $e ) {
+            logger()->warning( 'Circular plugin dependency detected while ordering active plugins for boot; falling back to unordered load.', [
+                'exception' => $e->getMessage(),
+            ] );
+
+            return $activeSlugs;
+        }
+
+        $ordered = [];
+        foreach ( $resolved as $slug ) {
+            if ( isset( $active[ $slug ] ) ) {
+                $ordered[]       = $slug;
+                $active[ $slug ] = false;
+            }
+        }
+
+        // Defensive: append any active slug the resolver never emitted.
+        foreach ( $activeSlugs as $slug ) {
+            if ( ! empty( $active[ $slug ] ) ) {
+                $ordered[] = $slug;
+            }
+        }
+
+        return $ordered;
     }
 
     /**
@@ -612,6 +795,73 @@ class PluginManager
 
         if ( isset( $manifest['update'] ) ) {
             $this->validateUpdateSourceManifestField( $manifest['update'] );
+        }
+
+        if ( isset( $manifest['requires'] ) ) {
+            $this->validateRequiresManifestField( $manifest['requires'] );
+        }
+
+        if ( isset( $manifest['conflicts'] ) ) {
+            $this->validateConstraintMapManifestField( $manifest['conflicts'], 'conflicts' );
+        }
+    }
+
+    /**
+     * Validate the optional `requires` manifest key introduced for plugin
+     * dependency management (#45).
+     *
+     * Shape:
+     *     "requires": {
+     *         "cms-framework": "^2.0",
+     *         "plugins": { "base-forms": "^1.5" }
+     *     }
+     *
+     * @throws PluginValidationException If the block is malformed.
+     */
+    protected function validateRequiresManifestField( mixed $requires ): void
+    {
+        if ( ! is_array( $requires ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid requires. Must be an object.' );
+        }
+
+        if ( isset( $requires['cms-framework'] ) ) {
+            $constraint = $requires['cms-framework'];
+            if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid requires.cms-framework. Must be a non-empty version constraint string.' );
+            }
+        }
+
+        if ( isset( $requires['plugins'] ) ) {
+            $this->validateConstraintMapManifestField( $requires['plugins'], 'requires.plugins' );
+        }
+    }
+
+    /**
+     * Validate a manifest field that maps plugin slugs to version constraints
+     * (`requires.plugins` and `conflicts`).
+     *
+     * An empty object is allowed. Each key must be a valid plugin slug and each
+     * value a non-empty constraint string; a JSON array (integer keys) is
+     * rejected because it cannot express slug-to-constraint pairs.
+     *
+     * @param  mixed  $map  Raw manifest value.
+     * @param  string  $field  Field name, used in error messages.
+     *
+     * @throws PluginValidationException If the map is malformed.
+     */
+    protected function validateConstraintMapManifestField( mixed $map, string $field ): void
+    {
+        if ( ! is_array( $map ) ) {
+            throw PluginValidationException::invalidManifest( "Invalid {$field}. Must be an object mapping plugin slugs to version constraints." );
+        }
+
+        foreach ( $map as $slug => $constraint ) {
+            if ( ! is_string( $slug ) || ! $this->validateSlug( $slug ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid {$field}. Each key must be a valid plugin slug." );
+            }
+            if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid {$field}['{$slug}']. Version constraint must be a non-empty string." );
+            }
         }
     }
 
@@ -840,6 +1090,90 @@ class PluginManager
                 ] );
             }
         }
+    }
+
+    /**
+     * Assert that a plugin's declared dependencies and conflicts are satisfied
+     * before activation (#45).
+     *
+     * Conflicts take precedence: a conflicting plugin is a harder stop than a
+     * merely-missing dependency, and its dedicated exception carries the
+     * offending versions the generic result cannot express as cleanly.
+     *
+     * @since 2.9.0
+     *
+     * @throws PluginConflictException When an installed plugin matches a declared conflict.
+     * @throws DependencyNotSatisfiedException When a dependency is missing, inactive, or version-mismatched.
+     */
+    protected function assertDependenciesSatisfied( Plugin $plugin ): void
+    {
+        $result = $this->checkDependencies( $plugin->slug );
+
+        if ( ! empty( $result->conflicts ) ) {
+            throw PluginConflictException::forConflicts( $plugin->slug, $result->conflicts );
+        }
+
+        if ( ! $result->isSatisfied() ) {
+            throw DependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+        }
+    }
+
+    /**
+     * Active plugins that declare a requirement on the given slug.
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  The depended-upon plugin.
+     * @param  array<string,array<string,mixed>>|null  $graph  Pre-built graph to reuse, or null to build one.
+     *
+     * @return array<int,string>
+     */
+    protected function activeDependents( string $slug, ?array $graph = null ): array
+    {
+        $graph ??= $this->buildDependencyGraph();
+
+        return array_values( array_filter(
+            $this->dependencyResolver()->dependents( $slug, $graph ),
+            static fn ( string $dependent ): bool => ! empty( $graph[ $dependent ]['is_active'] ),
+        ) );
+    }
+
+    /**
+     * Build a graph entry from a plugin's on-disk manifest for a plugin that
+     * exists on disk but has no database row yet.
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug.
+     *
+     * @return array<string,mixed>|null Graph entry, or null when no manifest is found.
+     */
+    protected function manifestGraphEntry( string $slug ): ?array
+    {
+        $plugin = $this->getPlugin( $slug );
+        if ( null === $plugin ) {
+            return null;
+        }
+
+        $model = new Plugin( ['meta' => $plugin['manifest']] );
+
+        return [
+            'version'       => ( string ) ( $plugin['version'] ?? '0.0.0' ),
+            'is_active'     => ( bool ) ( $plugin['is_active'] ?? false ),
+            'requires'      => $model->required_plugins,
+            'requires_host' => $model->required_host_version,
+            'conflicts'     => $model->conflicting_plugins,
+        ];
+    }
+
+    /**
+     * Resolve a stateless dependency resolver instance.
+     *
+     * @since 2.9.0
+     */
+    protected function dependencyResolver(): DependencyResolver
+    {
+        return new DependencyResolver;
     }
 
     /**
