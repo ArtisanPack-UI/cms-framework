@@ -78,6 +78,10 @@ class TemplatesController extends Controller
             return response()->json( ['message' => 'No active theme.'], 409 );
         }
 
+        if ( null !== ( $blocked = $this->rejectIfBlade( $request->validated()['slug'] ?? null ) ) ) {
+            return $blocked;
+        }
+
         try {
             $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
         } catch ( QueryException $e ) {
@@ -131,6 +135,10 @@ class TemplatesController extends Controller
                 'message' => 'Body slug does not match URL slug.',
                 'errors'  => ['slug' => ['Slug in the request body must match the URL slug.']],
             ], 422 );
+        }
+
+        if ( null !== ( $blocked = $this->rejectIfBlade( $slug ) ) ) {
+            return $blocked;
         }
 
         // Strip slug from the validated attributes — the route slug is
@@ -221,6 +229,37 @@ class TemplatesController extends Controller
         $theme = $this->themeManager->getActiveTheme();
 
         return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+    }
+
+    /**
+     * Reject a write against a Blade-backed template slug.
+     *
+     * Blade templates render at request time and are read-only in the site
+     * editor: the file→DB authority flip stays HTML-only, so a create/update
+     * that would spawn a DB override is rejected with a clear 422. Returns null
+     * — allowing the write to proceed — for every other slug (HTML theme files,
+     * existing DB rows, and unknown slugs). `resolve()` returns `isBlade` true
+     * only for a Blade theme file with no DB override, so an already-flipped DB
+     * row stays editable.
+     *
+     * @since 2.9.0
+     */
+    protected function rejectIfBlade( ?string $slug ): ?JsonResponse
+    {
+        if ( null === $slug ) {
+            return null;
+        }
+
+        $entity = $this->resolver->resolve( $slug );
+
+        if ( null === $entity || ! $entity->isBlade ) {
+            return null;
+        }
+
+        return response()->json( [
+            'message' => 'This template is a Blade file and is read-only in the site editor.',
+            'errors'  => ['slug' => ['Blade templates cannot be edited here. Author the template as a block-grammar HTML file to edit it in the site editor.']],
+        ], 422 );
     }
 
     /**

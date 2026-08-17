@@ -942,7 +942,56 @@ class ThemeManager
             return false;
         }
 
+        $this->warnOnBladeCustomTemplates( $themePath, $manifest );
+
         return true;
+    }
+
+    /**
+     * Warn when a `customTemplates` entry resolves to a Blade-only file.
+     *
+     * A `customTemplates` entry is offered to the block editor as an authorable
+     * page template, but Blade files carry no block grammar — the editor would
+     * open empty content. HTML wins over Blade in the resolver, so this only
+     * fires for an entry whose `templates/{name}.html` is absent while
+     * `templates/{name}.blade.php` exists. It warns rather than rejects so a
+     * single mismatched entry does not drop the whole theme from discovery.
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $themePath  Absolute path to the theme directory.
+     * @param  array  $manifest  Decoded theme.json contents.
+     */
+    protected function warnOnBladeCustomTemplates( string $themePath, array $manifest ): void
+    {
+        $customTemplates = $manifest['customTemplates'] ?? null;
+
+        if ( ! is_array( $customTemplates ) ) {
+            return;
+        }
+
+        foreach ( $customTemplates as $entry ) {
+            $name = is_array( $entry ) ? ( $entry['name'] ?? null ) : null;
+
+            if ( ! is_string( $name ) || '' === $name ) {
+                continue;
+            }
+
+            // Guard against path escapes in author-supplied names before touching
+            // the filesystem; a legitimate template name is a bare slug.
+            if ( str_contains( $name, '/' ) || str_contains( $name, '\\' ) || str_contains( $name, '..' ) ) {
+                continue;
+            }
+
+            $base = $themePath . '/templates/' . $name;
+
+            if ( ! File::exists( $base . '.html' ) && File::exists( $base . '.blade.php' ) ) {
+                Log::warning( 'Theme customTemplates entry maps to a Blade file; the block editor cannot edit it and would show empty content.', [
+                    'path' => $themePath,
+                    'name' => $name,
+                ] );
+            }
+        }
     }
 
     /**
