@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.9.0] - Unreleased
+
+### Fixed
+
+- **A failed plugin update no longer leaves a previously-active plugin disabled** — `UpdateManager::updatePlugin()` deactivates before swapping files, but the rollback paths (failed download, extraction, or reactivation) restored the version, manifest, and service provider without restoring `is_active`. Because the deactivation ran on a separate model instance, the in-memory row's `is_active` was stale and `save()` never wrote it back. The revert now refreshes the row and explicitly restores the pre-update activation state.
+
+### Added
+
+- **Plugin dependency management** ([#45](https://github.com/ArtisanPack-UI/cms-framework/issues/45)) — plugins can now declare hard dependencies on, and conflicts with, other plugins via a `requires.plugins` map and a `conflicts` map in `plugin.json`, each keyed by plugin slug to a semver constraint. `PluginManager::activate()` gates on them before any state mutation: activation is refused when a required plugin is missing, inactive, or fails its version constraint (`DependencyNotSatisfiedException`), or when a declared conflict is installed within range (`PluginConflictException`). `deactivate()` refuses to disable a plugin while active plugins still depend on it (`deactivate( $slug, force: true )` bypasses the guard; deletion and in-place updates force past it). Conflicts are enforced symmetrically, so they cannot be bypassed by activation order, and active plugins are loaded dependencies-first at boot so a dependent's service provider never boots before the provider it consumes. New public helpers `checkDependencies()`, `getDependents()`, `canDeactivate()`, and `getActivationOrder()` (a dependency-first topological sort that throws `CircularDependencyException` on a cycle) back three new read endpoints — `GET /api/v1/plugins/{slug}/dependencies`, `GET /api/v1/plugins/{slug}/dependents`, and `POST /api/v1/plugins/check-dependencies`. The resolution logic lives in a database-free `DependencyResolver` and reuses `composer/semver` for constraint matching. Motivated by splitting a monolithic Google integration into a reusable `google-oauth` plugin plus a dependent `google-web-tools` plugin.
+
 ## [2.8.0] - 2026-08-14
 
 ### Security

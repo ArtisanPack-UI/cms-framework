@@ -20,6 +20,15 @@ Route::prefix( 'api/v1' )
                 ->middleware( 'can:manage-plugins' )
                 ->name( 'api.plugins.updates' );
 
+            // Dependency inspection (#45). Read-only and non-mutating, so gated
+            // on `auth` alone like index/show rather than `manage-plugins`.
+            Route::post( 'check-dependencies', [PluginsController::class, 'checkDependencies'] )
+                ->name( 'api.plugins.checkDependencies' );
+            Route::get( '{slug}/dependencies', [PluginsController::class, 'dependencies'] )
+                ->name( 'api.plugins.dependencies' );
+            Route::get( '{slug}/dependents', [PluginsController::class, 'dependents'] )
+                ->name( 'api.plugins.dependents' );
+
             // Get specific plugin
             Route::get( '{slug}', [PluginsController::class, 'show'] )->name( 'api.plugins.show' );
 

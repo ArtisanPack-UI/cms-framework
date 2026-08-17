@@ -683,3 +683,35 @@ describe( 'Update Archive Download', function (): void {
         expect( $temporaryArchives() )->toBe( $before );
     } );
 } );
+
+describe( 'Row Revert', function (): void {
+    it( 'restores is_active when reverting after a failed update', function (): void {
+        $plugin = Plugin::create( [
+            'slug'             => 'revert-me',
+            'name'             => 'Revert Me',
+            'version'          => '2.0.0',
+            'is_active'        => true,
+            'meta'             => ['slug' => 'revert-me', 'new' => true],
+            'service_provider' => 'New\\Provider',
+        ] );
+
+        // Simulate step 2: deactivate() flips is_active on a *separate* model
+        // instance, leaving $plugin's in-memory is_active a stale `true`.
+        Plugin::where( 'slug', 'revert-me' )->update( ['is_active' => false] );
+
+        invokeMethod( $this->updateManager, 'revertPluginRow', [
+            $plugin,
+            '1.0.0',
+            ['slug' => 'revert-me', 'old' => true],
+            'Old\\Provider',
+            true,
+        ] );
+
+        $fresh = Plugin::where( 'slug', 'revert-me' )->first();
+
+        expect( $fresh->is_active )->toBeTrue()
+            ->and( $fresh->version )->toBe( '1.0.0' )
+            ->and( $fresh->service_provider )->toBe( 'Old\\Provider' )
+            ->and( $fresh->meta['old'] )->toBeTrue();
+    } );
+} );

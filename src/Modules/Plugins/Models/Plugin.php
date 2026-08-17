@@ -115,4 +115,60 @@ class Plugin extends Model
     {
         return ( bool ) ( $this->meta['rollback_migrations_on_delete'] ?? false );
     }
+
+    /**
+     * Plugin dependencies declared under `requires.plugins`.
+     *
+     * @return array<string,string> Map of dependency slug to version constraint.
+     */
+    public function getRequiredPluginsAttribute(): array
+    {
+        $requires = $this->meta['requires']['plugins'] ?? [];
+
+        return $this->normalizeConstraintMap( $requires );
+    }
+
+    /**
+     * Framework version constraint declared under `requires.cms-framework`.
+     */
+    public function getRequiredHostVersionAttribute(): ?string
+    {
+        $value = $this->meta['requires']['cms-framework'] ?? null;
+
+        return is_string( $value ) ? $value : null;
+    }
+
+    /**
+     * Conflicting plugins declared under `conflicts`.
+     *
+     * @return array<string,string> Map of conflicting slug to version constraint.
+     */
+    public function getConflictingPluginsAttribute(): array
+    {
+        return $this->normalizeConstraintMap( $this->meta['conflicts'] ?? [] );
+    }
+
+    /**
+     * Reduce a raw manifest constraint map to string-keyed, string-valued
+     * entries so downstream resolution never trips over malformed input.
+     *
+     * @param  mixed  $map  Raw value from the manifest.
+     *
+     * @return array<string,string>
+     */
+    private function normalizeConstraintMap( mixed $map ): array
+    {
+        if ( ! is_array( $map ) ) {
+            return [];
+        }
+
+        $normalized = [];
+        foreach ( $map as $slug => $constraint ) {
+            if ( is_string( $slug ) && is_string( $constraint ) ) {
+                $normalized[ $slug ] = $constraint;
+            }
+        }
+
+        return $normalized;
+    }
 }
