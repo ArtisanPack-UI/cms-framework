@@ -4,8 +4,10 @@
  * Template Part Resolver
  *
  * Resolves template-part entities for the active theme by merging DB-stored
- * parts with theme-file parts from `themes/{active}/parts/{slug}.html`.
- * DB rows win when present.
+ * parts with theme-file parts from `themes/{active}/parts/{slug}.html`,
+ * falling back to a Blade file at `themes/{active}/parts/{slug}.blade.php`
+ * when no HTML file exists. DB rows win over theme files; HTML wins over Blade.
+ * Blade files are read-only in the site editor.
  *
  * @since      2.0.0
  */
@@ -49,7 +51,7 @@ class TemplatePartResolver implements EntityResolver
         }
 
         $row          = TemplatePart::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
-        $themeFile    = $this->themeFilePath( $theme, $slug );
+        $themeFile    = $this->resolveThemeFile( $theme, $slug );
         $hasThemeFile = null !== $themeFile;
 
         if ( null !== $row ) {
@@ -64,6 +66,7 @@ class TemplatePartResolver implements EntityResolver
                 status       : $row->status,
                 hasThemeFile : $hasThemeFile,
                 isCustom     : (bool) $row->is_custom && ! $hasThemeFile,
+                isBlade      : false,
                 area         : $row->area,
                 model        : $row,
             );
@@ -73,7 +76,29 @@ class TemplatePartResolver implements EntityResolver
             return null;
         }
 
-        $markup = File::get( $themeFile );
+        // Blade theme files render at request time and are read-only in the
+        // site editor. They carry no block tree, so `raw` and `blocks` stay
+        // empty and the `isBlade` flag drives the editor's read-only affordance
+        // and the save-rejection guard in TemplatePartsController.
+        if ( $themeFile['isBlade'] ) {
+            return new ResolvedEntity(
+                slug         : $slug,
+                theme        : $theme,
+                source       : 'theme',
+                raw          : '',
+                blocks       : [],
+                title        : $this->humanizeSlug( $slug ),
+                description  : null,
+                status       : 'publish',
+                hasThemeFile : true,
+                isCustom     : false,
+                isBlade      : true,
+                area         : $this->guessAreaFromSlug( $slug ),
+                model        : null,
+            );
+        }
+
+        $markup = File::get( $themeFile['path'] );
 
         return new ResolvedEntity(
             slug         : $slug,
@@ -86,6 +111,7 @@ class TemplatePartResolver implements EntityResolver
             status       : 'publish',
             hasThemeFile : true,
             isCustom     : false,
+            isBlade      : false,
             area         : $this->guessAreaFromSlug( $slug ),
             model        : null,
         );
@@ -162,14 +188,28 @@ class TemplatePartResolver implements EntityResolver
     }
 
     /**
-     * @since 2.0.0
+     * Resolve the theme file backing a part slug, preferring block-grammar HTML
+     * over a Blade fallback. When both exist HTML wins. Returns the absolute
+     * path and whether it is a Blade file, or null when neither exists.
+     *
+     * @since 2.9.0
+     *
+     * @return array{path: string, isBlade: bool}|null
      */
-    protected function themeFilePath( string $theme, string $slug ): ?string
+    protected function resolveThemeFile( string $theme, string $slug ): ?array
     {
         $directory = config( 'cms.themes.directory', 'themes' );
-        $path      = base_path( $directory ) . '/' . $theme . '/parts/' . $slug . '.html';
+        $base      = base_path( $directory ) . '/' . $theme . '/parts/' . $slug;
 
-        return File::exists( $path ) ? $path : null;
+        if ( File::exists( $base . '.html' ) ) {
+            return ['path' => $base . '.html', 'isBlade' => false];
+        }
+
+        if ( File::exists( $base . '.blade.php' ) ) {
+            return ['path' => $base . '.blade.php', 'isBlade' => true];
+        }
+
+        return null;
     }
 
     /**
@@ -189,12 +229,19 @@ class TemplatePartResolver implements EntityResolver
         $slugs = [];
 
         foreach ( File::files( $dir ) as $file ) {
-            if ( 'html' === $file->getExtension() ) {
+            $name = $file->getFilename();
+
+            // `getFilenameWithoutExtension()` strips only the final extension,
+            // so `header.blade.php` would yield `header.blade`; match the
+            // compound `.blade.php` suffix explicitly before `.html`.
+            if ( str_ends_with( $name, '.blade.php' ) ) {
+                $slugs[] = substr( $name, 0, -strlen( '.blade.php' ) );
+            } elseif ( 'html' === $file->getExtension() ) {
                 $slugs[] = $file->getFilenameWithoutExtension();
             }
         }
 
-        return $slugs;
+        return array_values( array_unique( $slugs ) );
     }
 
     /**

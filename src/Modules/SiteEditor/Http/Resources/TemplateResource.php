@@ -59,6 +59,12 @@ final class TemplateResource
             'wp_id'          => $entity->wpId(),
             'has_theme_file' => $entity->hasThemeFile,
             'is_custom'      => $entity->isCustom,
+            // `is_blade` marks a template backed by a `{name}.blade.php` theme
+            // file: it renders at request time but is read-only in the site
+            // editor. `editable` is its inverse, surfaced so the editor can
+            // disable save affordances without re-deriving the rule.
+            'is_blade'       => $entity->isBlade,
+            'editable'       => ! $entity->isBlade,
             'author'         => null !== $entity->model ? (int) ( $entity->model->author_id ?? 0 ) : 0,
             'modified'       => null !== $entity->model
                 ? optional( $entity->model->updated_at )->toIso8601String()
