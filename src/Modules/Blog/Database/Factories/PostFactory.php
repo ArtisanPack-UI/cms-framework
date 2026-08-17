@@ -13,9 +13,9 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Database\Factories;
 
-use App\Models\User;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
+use ArtisanPackUI\CMSFramework\Modules\Users\Database\Factories\Concerns\ResolvesUserFactory;
 use DateTimeInterface;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -31,6 +31,8 @@ use Illuminate\Support\Str;
  */
 class PostFactory extends Factory
 {
+    use ResolvesUserFactory;
+
     /**
      * The name of the factory's corresponding model.
      *
@@ -58,7 +60,7 @@ class PostFactory extends Factory
             'slug'         => Str::slug( $title ),
             'content'      => fake()->paragraphs( 5, true ),
             'excerpt'      => fake()->paragraph(),
-            'author_id'    => User::factory(),
+            'author_id'    => $this->resolveUserFactory(),
             'status'       => ContentStatus::Published->value,
             'published_at' => now(),
             'metadata'     => [
