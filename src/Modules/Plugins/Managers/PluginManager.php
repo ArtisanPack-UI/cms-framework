@@ -146,6 +146,21 @@ class PluginManager
 
         $this->validateManifest( $manifest );
 
+        // `validateManifest()` already enforced that a non-empty, well-formed
+        // `slug` is present. Now make sure it matches the extracted directory
+        // name. The row's `slug` is derived from the directory while `meta` is
+        // seated verbatim from the manifest, so a divergence lets a plugin
+        // declare — and later, on uninstall, remove — permission rows namespaced
+        // under a different plugin's slug. Mirror the Themes module, which
+        // asserts the same match after extraction.
+        if ( $manifest['slug'] !== $slug ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw PluginValidationException::invalidManifest(
+                "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
+            );
+        }
+
         // Check if already installed
         if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
             throw PluginInstallationException::alreadyInstalled( $slug );
