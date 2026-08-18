@@ -26,9 +26,9 @@ php artisan migrate
 ```
 
 This creates three tables:
-- `notifications` — Stores notification data
-- `notification_user` — Pivot table tracking user-specific states (read, dismissed)
-- `notification_preferences` — User preferences for notification types
+- `cms_notifications` — Stores notification data
+- `cms_notification_user` — Pivot table tracking user-specific states (read, dismissed)
+- `cms_notification_preferences` — User preferences for notification types
 
 ## Add the Trait to Your User Model
 

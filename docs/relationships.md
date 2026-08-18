@@ -47,7 +47,7 @@ public function categories(): BelongsToMany
 **Pivot Tables:**
 - `role_user` - User-Role relationship
 - `permission_user` - User-Permission relationship
-- `notification_user` - User-Notification relationship with metadata (is_read, is_dismissed, read_at)
+- `cms_notification_user` - User-Notification relationship with metadata (is_read, is_dismissed, read_at)
 
 ### Role Model
 
@@ -187,7 +187,7 @@ Structure identical to Blog module with pages instead of posts:
 |--------|------|---------------|-------------|
 | `users()` | BelongsToMany | User | Users who received notification |
 
-**Pivot Table**: `notification_user`
+**Pivot Table**: `cms_notification_user`
 
 **Pivot Columns:**
 - `is_read` (boolean)
@@ -466,7 +466,7 @@ PostCategory ←→ PostCategory (hierarchical via parent_id)
 ### Notification System
 
 ```
-User ←→ Notification (many-to-many via notification_user)
+User ←→ Notification (many-to-many via cms_notification_user)
 User ←── NotificationPreference (one-to-many)
 ```
 

@@ -202,7 +202,7 @@ When you send a notification:
 2. **Merge Overrides** — Overrides are merged with defaults
 3. **Filter by Preferences** — Users who disabled this notification type are excluded
 4. **Create Notification** — A `Notification` record is created in the database
-5. **Attach Users** — Remaining users are attached via the `notification_user` pivot table
+5. **Attach Users** — Remaining users are attached via the `cms_notification_user` pivot table
 6. **Fire Hook** — The `ap.notifications.sendNotification` action fires
 7. **Queue Emails** — If `send_email` is true, emails are queued for users who haven't disabled email
 

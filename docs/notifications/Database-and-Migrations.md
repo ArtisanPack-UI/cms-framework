@@ -10,9 +10,11 @@ This guide explains the database schema used by the Notifications module and pro
 
 The Notifications module uses three database tables:
 
-1. **notifications** — Stores notification data
-2. **notification_user** — Pivot table linking notifications to users with read/dismissed state
-3. **notification_preferences** — User preferences for notification types
+1. **cms_notifications** — Stores notification data
+2. **cms_notification_user** — Pivot table linking notifications to users with read/dismissed state
+3. **cms_notification_preferences** — User preferences for notification types
+
+> **Renamed in 2.9.0.** These tables were previously named `notifications`, `notification_user`, and `notification_preferences`. The `notifications` name collided with the table Laravel's own `database` notification channel uses, so all three now carry a `cms_` prefix. On upgrade, a migration renames the existing tables in place — your data is preserved. Access notifications through the `Notification` and `NotificationPreference` models rather than the raw table names so this move is transparent.
 
 ## Running Migrations
 
@@ -27,7 +29,7 @@ The migrations are located in:
 src/Modules/Notifications/database/migrations/
 ```
 
-## Table: notifications
+## Table: cms_notifications
 
 Stores the core notification data shared across all recipients.
 
@@ -52,7 +54,7 @@ Stores the core notification data shared across all recipients.
 ### Migration
 
 ```php
-Schema::create('notifications', function (Blueprint $table) {
+Schema::create('cms_notifications', function (Blueprint $table) {
     $table->id();
     $table->enum('type', ['error', 'warning', 'success', 'info'])->default('info');
     $table->string('title');
@@ -84,7 +86,7 @@ Schema::create('notifications', function (Blueprint $table) {
 }
 ```
 
-## Table: notification_user
+## Table: cms_notification_user
 
 Pivot table linking notifications to users with user-specific state.
 
@@ -93,7 +95,7 @@ Pivot table linking notifications to users with user-specific state.
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint unsigned | No | — | Primary key |
-| `notification_id` | bigint unsigned | No | — | Foreign key to notifications |
+| `notification_id` | bigint unsigned | No | — | Foreign key to cms_notifications |
 | `user_id` | bigint unsigned | No | — | Foreign key to users |
 | `is_read` | boolean | No | false | Whether user has read this notification |
 | `read_at` | timestamp | Yes | NULL | When user marked as read |
@@ -104,7 +106,7 @@ Pivot table linking notifications to users with user-specific state.
 
 ### Foreign Keys
 
-- `notification_id` — References `notifications.id` with `CASCADE ON DELETE`
+- `notification_id` — References `cms_notifications.id` with `CASCADE ON DELETE`
 - `user_id` — References `users.id` with `CASCADE ON DELETE`
 
 ### Indexes
@@ -116,7 +118,7 @@ Pivot table linking notifications to users with user-specific state.
 ### Migration
 
 ```php
-Schema::create('notification_user', function (Blueprint $table) {
+Schema::create('cms_notification_user', function (Blueprint $table) {
     $table->id();
     $table->foreignId('notification_id')->constrained()->cascadeOnDelete();
     $table->foreignId('user_id')->constrained()->cascadeOnDelete();
@@ -149,7 +151,7 @@ In this example:
 - User 2 has read notification 123 but not dismissed it
 - User 3 has read and dismissed notification 123
 
-## Table: notification_preferences
+## Table: cms_notification_preferences
 
 Stores user preferences for notification types.
 
@@ -177,7 +179,7 @@ Stores user preferences for notification types.
 ### Migration
 
 ```php
-Schema::create('notification_preferences', function (Blueprint $table) {
+Schema::create('cms_notification_preferences', function (Blueprint $table) {
     $table->id();
     $table->foreignId('user_id')->constrained()->cascadeOnDelete();
     $table->string('notification_type');
@@ -215,7 +217,7 @@ In this example:
 // Many-to-many relationship with users
 public function users(): BelongsToMany
 {
-    return $this->belongsToMany(User::class, 'notification_user')
+    return $this->belongsToMany(User::class, 'cms_notification_user')
         ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
         ->withTimestamps();
 }
@@ -227,7 +229,7 @@ public function users(): BelongsToMany
 // All notifications for this user
 public function systemNotifications(): BelongsToMany
 {
-    return $this->belongsToMany(Notification::class, 'notification_user')
+    return $this->belongsToMany(Notification::class, 'cms_notification_user')
         ->withPivot(['is_read', 'read_at', 'is_dismissed', 'dismissed_at'])
         ->withTimestamps()
         ->orderByDesc('created_at');
@@ -265,13 +267,13 @@ When `apSendNotification()` is called:
 
 1. A record is created in `notifications`:
    ```sql
-   INSERT INTO notifications (type, title, content, metadata, send_email)
+   INSERT INTO cms_notifications (type, title, content, metadata, send_email)
    VALUES ('success', 'Post Published', 'Your post...', '{"post_id": 123}', true);
    ```
 
-2. Records are created in `notification_user` for each recipient:
+2. Records are created in `cms_notification_user` for each recipient:
    ```sql
-   INSERT INTO notification_user (notification_id, user_id, is_read, is_dismissed)
+   INSERT INTO cms_notification_user (notification_id, user_id, is_read, is_dismissed)
    VALUES (123, 1, false, false),
           (123, 2, false, false),
           (123, 3, false, false);
@@ -282,7 +284,7 @@ When `apSendNotification()` is called:
 When `markNotificationAsRead()` is called:
 
 ```sql
-UPDATE notification_user
+UPDATE cms_notification_user
 SET is_read = true, read_at = NOW(), updated_at = NOW()
 WHERE notification_id = 123 AND user_id = 1;
 ```
@@ -292,7 +294,7 @@ WHERE notification_id = 123 AND user_id = 1;
 When `dismissNotification()` is called:
 
 ```sql
-UPDATE notification_user
+UPDATE cms_notification_user
 SET is_dismissed = true, dismissed_at = NOW(), updated_at = NOW()
 WHERE notification_id = 123 AND user_id = 1;
 ```
@@ -303,7 +305,7 @@ WHERE notification_id = 123 AND user_id = 1;
 
 ```sql
 SELECT COUNT(*)
-FROM notification_user
+FROM cms_notification_user
 WHERE user_id = 1
   AND is_read = false
   AND is_dismissed = false;
@@ -313,8 +315,8 @@ WHERE user_id = 1
 
 ```sql
 SELECT n.*, nu.is_read, nu.read_at, nu.is_dismissed, nu.dismissed_at
-FROM notifications n
-INNER JOIN notification_user nu ON n.id = nu.notification_id
+FROM cms_notifications n
+INNER JOIN cms_notification_user nu ON n.id = nu.notification_id
 WHERE nu.user_id = 1
   AND nu.is_dismissed = false
 ORDER BY n.created_at DESC
@@ -325,7 +327,7 @@ LIMIT 10;
 
 ```sql
 SELECT *
-FROM notification_preferences
+FROM cms_notification_preferences
 WHERE user_id = 1;
 ```
 
@@ -335,17 +337,17 @@ WHERE user_id = 1;
 
 The migrations include strategic indexes for common queries:
 
-- **notifications.type** — Filter by type (error, warning, success, info)
-- **notifications.created_at** — Order by creation date
-- **notification_user(user_id, is_read)** — Query unread notifications
-- **notification_user(user_id, is_dismissed)** — Query non-dismissed notifications
-- **notification_user(notification_id, user_id)** — Join optimization
+- **cms_notifications.type** — Filter by type (error, warning, success, info)
+- **cms_notifications.created_at** — Order by creation date
+- **cms_notification_user(user_id, is_read)** — Query unread notifications
+- **cms_notification_user(user_id, is_dismissed)** — Query non-dismissed notifications
+- **cms_notification_user(notification_id, user_id)** — Join optimization
 
 ### Cascade Deletes
 
 Foreign keys use `cascadeOnDelete()` to automatically clean up:
-- Deleting a notification removes all `notification_user` records
-- Deleting a user removes all their `notification_user` and `notification_preferences` records
+- Deleting a notification removes all `cms_notification_user` records
+- Deleting a user removes all their `cms_notification_user` and `cms_notification_preferences` records
 
 ### Cleanup Strategy
 
@@ -375,7 +377,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('notifications', function (Blueprint $table) {
+        Schema::table('cms_notifications', function (Blueprint $table) {
             $table->string('action_url')->nullable()->after('content');
             $table->string('icon')->nullable()->after('type');
         });
@@ -383,7 +385,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('notifications', function (Blueprint $table) {
+        Schema::table('cms_notifications', function (Blueprint $table) {
             $table->dropColumn(['action_url', 'icon']);
         });
     }
@@ -409,7 +411,7 @@ Notification::created(function ($notification) {
 For specific query patterns, add custom indexes:
 
 ```php
-Schema::table('notifications', function (Blueprint $table) {
+Schema::table('cms_notifications', function (Blueprint $table) {
     $table->index(['type', 'created_at']);
 });
 ```
@@ -418,22 +420,22 @@ Schema::table('notifications', function (Blueprint $table) {
 
 Approximate storage per record:
 
-- **notifications**: ~500 bytes (varies with content length)
-- **notification_user**: ~50 bytes
-- **notification_preferences**: ~100 bytes
+- **cms_notifications**: ~500 bytes (varies with content length)
+- **cms_notification_user**: ~50 bytes
+- **cms_notification_preferences**: ~100 bytes
 
 For 10,000 active users receiving 100 notifications each:
-- notifications: 100 notifications × 500 bytes = ~50 KB
-- notification_user: 10,000 users × 100 notifications × 50 bytes = ~50 MB
-- notification_preferences: 10,000 users × 10 types × 100 bytes = ~10 MB
+- cms_notifications: 100 notifications × 500 bytes = ~50 KB
+- cms_notification_user: 10,000 users × 100 notifications × 50 bytes = ~50 MB
+- cms_notification_preferences: 10,000 users × 10 types × 100 bytes = ~10 MB
 
 ## Backup Considerations
 
 When backing up your database, consider:
 
-- **notifications**: Contains shared notification content
-- **notification_user**: Contains user-specific state (can be recreated if needed)
-- **notification_preferences**: Critical user preferences (must be backed up)
+- **cms_notifications**: Contains shared notification content
+- **cms_notification_user**: Contains user-specific state (can be recreated if needed)
+- **cms_notification_preferences**: Critical user preferences (must be backed up)
 
 ## Next Steps
 

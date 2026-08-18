@@ -8,7 +8,7 @@ This guide covers retrieving, reading, and dismissing notifications for users.
 
 ## Notification States
 
-Each user has their own state for every notification they receive, tracked in the `notification_user` pivot table:
+Each user has their own state for every notification they receive, tracked in the `cms_notification_user` pivot table:
 
 - **Unread** — `is_read = false, is_dismissed = false`
 - **Read** — `is_read = true, is_dismissed = false`
