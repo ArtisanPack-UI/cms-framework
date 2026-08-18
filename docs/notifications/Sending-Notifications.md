@@ -171,7 +171,7 @@ if (!$notification) {
 }
 ```
 
-Preference filtering requires your host `User` model to use the `HasNotifications` trait, which provides the `notificationPreferences()` relationship. If the model does not use it, sends still succeed — every recipient is treated as opted in, because there are no stored preferences to honour. Add the trait (see [Getting Started](Getting-Started)) to give users control over which notifications they receive.
+Preference filtering requires your host `User` model to use the `HasNotifications` trait, which provides the `notificationPreferences()` relationship. If the model does not use it, sends still succeed — every existing recipient is treated as opted in, because there are no stored preferences to honour. Add the trait (see [Getting Started](Getting-Started)) to give users control over which notifications they receive.
 
 See [Notification Preferences](Notification-Preferences) for details on how users control their preferences.
 

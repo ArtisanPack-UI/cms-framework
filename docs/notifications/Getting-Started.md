@@ -45,7 +45,7 @@ class User extends Authenticatable
 }
 ```
 
-`HasNotifications` also enables per-user preference filtering when sending notifications. If your `User` model omits it, sends still succeed and every recipient is treated as opted in — the module degrades gracefully rather than throwing.
+`HasNotifications` also enables per-user preference filtering when sending notifications. If your `User` model omits it, sends still succeed and every existing recipient is treated as opted in — the module degrades gracefully rather than throwing.
 
 To target users by role with `apSendNotificationByRole()`, your `User` model additionally needs the `HasRolesAndPermissions` trait, which provides the `roles()` relationship:
 
@@ -61,7 +61,7 @@ class User extends Authenticatable
 }
 ```
 
-Without it, `apSendNotificationByRole()` matches no users and returns `null` instead of fataling.
+Without it, `apSendNotificationByRole()` matches no users and returns `null` instead of throwing a fatal error.
 
 ## Register Your First Notification
 
