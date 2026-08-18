@@ -12,6 +12,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Exception;
 use Illuminate\Support\Facades\Cache;
@@ -129,10 +130,12 @@ class UpdateManager
      * fall out of the same key.
      *
      * The https requirement is re-checked here rather than trusted from
-     * install-time validation. `updatePlugin()` refreshes `meta` straight from
-     * the manifest inside the downloaded ZIP without re-running
-     * `PluginManager::validateManifest()`, so an update can seat a value that
-     * never passed validation. A plaintext source is not a cosmetic problem:
+     * install-time validation. `updatePlugin()` now re-runs
+     * `PluginManager::assertManifestValid()` before seating a new manifest
+     * (#283), but this method also reads `meta` seated by a pre-#283 framework
+     * version or edited in place on disk (which `discoverPlugins()` still loads
+     * unvalidated), so a value that never passed validation can still reach
+     * here. A plaintext source is not a cosmetic problem:
      * `CustomJsonUpdateSource` would fetch the update metadata over http, and
      * a network attacker rewriting that response chooses both the download URL
      * and the `sha256` it is checked against — the digest and the archive come
@@ -152,11 +155,12 @@ class UpdateManager
         }
 
         // Re-run the shared manifest rules rather than assume they ever ran.
-        // `updatePlugin()` re-seats `meta` straight from the manifest inside the
-        // downloaded ZIP without re-running `PluginManager::validateManifest()`,
-        // so without this an `update.github` of `../../x` would be interpolated
-        // into a github.com URL and reach `GitHubUpdateSource::parseUrl()` as an
-        // owner/repo pair. Mirrors `ThemeManager::resolveUpdateSourceUrl()`.
+        // `updatePlugin()` re-validates a new manifest before seating it (#283),
+        // but a value seated by a pre-#283 version or edited in place on disk
+        // can still reach here, so without this an `update.github` of `../../x`
+        // would be interpolated into a github.com URL and reach
+        // `GitHubUpdateSource::parseUrl()` as an owner/repo pair. Mirrors
+        // `ThemeManager::resolveUpdateSourceUrl()`.
         if ( ! $this->pluginManager->isUsableUpdateSource( $update ) ) {
             logger()->warning( 'Ignoring plugin update source: malformed `update` key in plugin.json.', [
                 'plugin' => $plugin->slug,
@@ -247,10 +251,23 @@ class UpdateManager
 
             $this->extractUpdateArchive( $zipPath, $pluginsRoot, $pluginPath, $slug );
 
-            // 6. Update database
+            // 5. Re-validate the new manifest before trusting it. Step 6 seats
+            //    `meta` straight from the manifest inside the downloaded ZIP, so
+            //    without this an update could install a manifest that would have
+            //    been refused at install — a `migrations_path` traversal, an
+            //    unprefixed permission, a malformed `update` source (#283). A
+            //    rejected manifest throws here and unwinds through the
+            //    backup-restore path below rather than leaving the value seated.
             $manifestPath = $pluginPath . '/plugin.json';
             $manifest     = json_decode( File::get( $manifestPath ), true );
 
+            if ( ! is_array( $manifest ) ) {
+                throw PluginValidationException::invalidManifest( 'The update archive manifest could not be parsed.' );
+            }
+
+            $this->pluginManager->assertManifestValid( $manifest );
+
+            // 6. Update database
             $plugin->version          = $updateInfo['version'];
             $plugin->meta             = $manifest;
             $plugin->service_provider = $manifest['service_provider'] ?? null;
@@ -283,6 +300,16 @@ class UpdateManager
             // failure, and collapsing it into `downloadFailed()` hides the one
             // detail an operator needs to tell a corrupted mirror apart from a
             // release that shipped without a `.sha256` sidecar.
+            $this->restoreFromBackup( $slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+
+            throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
+        } catch ( PluginValidationException $e ) {
+            // The new manifest failed re-validation (#283), so it is refused
+            // rather than seated. Unwind like any other post-extraction failure
+            // — restore the old files and revert the row — and surface the
+            // reason through the type the controller renders verbatim, instead
+            // of collapsing it into the generic `downloadFailed()`.
             $this->restoreFromBackup( $slug, $backupPath );
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 

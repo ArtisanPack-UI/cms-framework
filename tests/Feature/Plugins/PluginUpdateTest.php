@@ -32,7 +32,10 @@ afterEach( function (): void {
     }
 
     // Cleanup temp files
-    $tempFiles = File::glob( storage_path( 'app/temp-plugin-*.zip' ) );
+    $tempFiles = array_merge(
+        File::glob( storage_path( 'app/temp-plugin-*.zip' ) ),
+        File::glob( storage_path( 'app/test-update-*.zip' ) ),
+    );
     foreach ( $tempFiles as $tempFile ) {
         File::delete( $tempFile );
     }
@@ -299,6 +302,136 @@ describe( 'Update Hooks', function (): void {
         }
 
         expect( $hookFired )->toBeTrue();
+    } );
+} );
+
+describe( 'Manifest re-validation on update (#283)', function (): void {
+    // Build an update ZIP whose top-level directory is the plugin slug and
+    // whose plugin.json carries $manifestOverrides merged over a clean base.
+    // Returns [zipPath, sha256] so the caller can advertise the digest the
+    // download is verified against.
+    $buildUpdateZip = function ( array $manifestOverrides ): array {
+        $manifest = array_merge( [
+            'slug'        => 'valid-plugin',
+            'name'        => 'Valid Test Plugin',
+            'version'     => '2.0.0',
+            'description' => 'Updated plugin',
+            'author'      => 'Test Author',
+        ], $manifestOverrides );
+
+        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
+
+        $zip = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
+        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
+        $zip->close();
+
+        return [$zipPath, hash( 'sha256', File::get( $zipPath ) )];
+    };
+
+    // Install a clean valid-plugin at 1.0.0 wired to a legacy update feed.
+    $installPlugin = function (): void {
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+    };
+
+    it( 'rejects an update whose manifest declares a migrations_path traversal', function () use ( $buildUpdateZip, $installPlugin ): void {
+        $installPlugin->call( $this );
+        [$zipPath, $sha256] = $buildUpdateZip( [
+            'migrations_path' => '../../database/migrations',
+        ] );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class );
+
+        // Row rolled back: version, meta, and the traversal value never seated.
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' );
+        expect( $plugin->meta )->not->toHaveKey( 'migrations_path' );
+
+        // Files restored from backup: the on-disk manifest is the 1.0.0 original.
+        $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '1.0.0' );
+        expect( $onDisk )->not->toHaveKey( 'migrations_path' );
+
+        File::delete( $zipPath );
+    } );
+
+    it( 'rejects an update whose manifest declares an unprefixed permission', function () use ( $buildUpdateZip, $installPlugin ): void {
+        $installPlugin->call( $this );
+        [$zipPath, $sha256] = $buildUpdateZip( [
+            'permissions' => ['manage_users'],
+        ] );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class );
+
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' );
+        expect( $plugin->meta )->not->toHaveKey( 'permissions' );
+
+        File::delete( $zipPath );
+    } );
+
+    it( 'applies an update whose manifest passes validation', function () use ( $buildUpdateZip, $installPlugin ): void {
+        $installPlugin->call( $this );
+        [$zipPath, $sha256] = $buildUpdateZip( [
+            'migrations_path' => 'database/migrations',
+            'permissions'     => ['valid-plugin.manage'],
+        ] );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        $result = $this->updateManager->updatePlugin( 'valid-plugin' );
+
+        expect( $result )->toBeTrue();
+
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '2.0.0' );
+        expect( $plugin->meta['migrations_path'] )->toBe( 'database/migrations' );
+
+        File::delete( $zipPath );
     } );
 } );
 

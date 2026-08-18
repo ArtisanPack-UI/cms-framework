@@ -532,10 +532,11 @@ class PluginManager
      * Whether a manifest `update` value passes the shared source rules.
      *
      * The boolean counterpart to {@see validateUpdateSourceManifestField()},
-     * mirroring `ThemeManager::isUsableUpdateSource()`. `UpdateManager` calls
-     * it to re-validate a value read back from an installed plugin's manifest,
-     * which was never re-run through `validateManifest()` after the update
-     * re-seated `meta` from the downloaded ZIP.
+     * mirroring `ThemeManager::isUsableUpdateSource()`. `UpdateManager` calls it
+     * at the point of use to re-validate a value read back from an installed
+     * plugin's manifest — defense-in-depth against a manifest seated by a
+     * pre-#283 framework version, or edited in place on disk, that never passed
+     * through `validateManifest()`.
      *
      * @since 2.8.0
      *
@@ -546,6 +547,30 @@ class PluginManager
     public function isUsableUpdateSource( mixed $update ): bool
     {
         return null === $this->checkUpdateSourceManifestField( $update );
+    }
+
+    /**
+     * Re-run the install-time manifest rules against a manifest read back from
+     * an already-installed plugin.
+     *
+     * `UpdateManager::updatePlugin()` re-seats `meta` straight from the manifest
+     * inside a downloaded ZIP, and every security-relevant check in
+     * `validateManifest()` — the `migrations_path` traversal guard, the
+     * permission-prefix guard, the `update` source rules — otherwise runs only
+     * at install (#283). This is the public entry point that lets the update
+     * path, which lives in a separate class, enforce those same rules before it
+     * trusts the new manifest. Mirrors `isUsableUpdateSource()` exposing the
+     * shared source rules to `UpdateManager`.
+     *
+     * @since 2.9.0
+     *
+     * @param  array  $manifest  Parsed plugin.json from the downloaded update.
+     *
+     * @throws PluginValidationException If the manifest violates the schema rules.
+     */
+    public function assertManifestValid( array $manifest ): void
+    {
+        $this->validateManifest( $manifest );
     }
 
     /**
