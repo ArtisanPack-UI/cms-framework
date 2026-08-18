@@ -13,7 +13,7 @@ Notification preferences allow users to:
 - Disable email notifications while keeping in-app notifications
 - Maintain granular control over what they receive
 
-Preferences are stored in the `notification_preferences` table with two boolean flags:
+Preferences are stored in the `cms_notification_preferences` table with two boolean flags:
 - **is_enabled** — Whether to receive in-app notifications for this type
 - **email_enabled** — Whether to receive email notifications for this type
 

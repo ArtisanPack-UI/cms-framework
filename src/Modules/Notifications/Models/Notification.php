@@ -37,6 +37,18 @@ class Notification extends Model
     use HasFactory;
 
     /**
+     * The table associated with the model.
+     *
+     * Prefixed with `cms_` so it does not collide with the `notifications`
+     * table Laravel's own database notification channel uses.
+     *
+     * @since 2.9.0
+     *
+     * @var string
+     */
+    protected $table = 'cms_notifications';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @since 1.0.0
@@ -77,7 +89,7 @@ class Notification extends Model
     {
         return $this->belongsToMany(
             config( 'auth.providers.users.model' ),
-            'notification_user',
+            'cms_notification_user',
             'notification_id',
             'user_id',
         )

@@ -10,9 +10,9 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create( 'notification_user', function ( Blueprint $table ): void {
+        Schema::create( 'cms_notification_user', function ( Blueprint $table ): void {
             $table->id();
-            $table->foreignId( 'notification_id' )->constrained()->cascadeOnDelete();
+            $table->foreignId( 'notification_id' )->constrained( 'cms_notifications' )->cascadeOnDelete();
             $table->foreignId( 'user_id' )->constrained()->cascadeOnDelete();
             $table->boolean( 'is_read' )->default( false );
             $table->timestamp( 'read_at' )->nullable();
@@ -31,6 +31,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists( 'notification_user' );
+        Schema::dropIfExists( 'cms_notification_user' );
     }
 };

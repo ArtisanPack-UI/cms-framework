@@ -10,7 +10,7 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create( 'notifications', function ( Blueprint $table ): void {
+        Schema::create( 'cms_notifications', function ( Blueprint $table ): void {
             $table->id();
             $table->enum( 'type', ['error', 'warning', 'success', 'info'] )->default( 'info' );
             $table->string( 'title' );
@@ -29,6 +29,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists( 'notifications' );
+        Schema::dropIfExists( 'cms_notifications' );
     }
 };
