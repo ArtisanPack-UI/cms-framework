@@ -63,6 +63,8 @@ apSendNotificationByRole('post.pending_review', 'editor');
 apSendNotificationByRole('system.maintenance', 'administrator');
 ```
 
+Sending by role requires your host `User` model to use the `HasRolesAndPermissions` trait, which provides the `roles()` relationship the lookup depends on. If the model does not use it, the by-role helper matches no users and returns `null` rather than throwing — the notification is simply not sent. See [Roles and Permissions](../users/Roles-and-Permissions) for how to add the trait.
+
 ## Override Default Values
 
 Pass an `$overrides` array to customize the notification:
@@ -168,6 +170,8 @@ if (!$notification) {
     // No users received the notification (all opted out)
 }
 ```
+
+Preference filtering requires your host `User` model to use the `HasNotifications` trait, which provides the `notificationPreferences()` relationship. If the model does not use it, sends still succeed — every existing recipient is treated as opted in, because there are no stored preferences to honour. Add the trait (see [Getting Started](Getting-Started)) to give users control over which notifications they receive.
 
 See [Notification Preferences](Notification-Preferences) for details on how users control their preferences.
 

@@ -45,6 +45,24 @@ class User extends Authenticatable
 }
 ```
 
+`HasNotifications` also enables per-user preference filtering when sending notifications. If your `User` model omits it, sends still succeed and every existing recipient is treated as opted in — the module degrades gracefully rather than throwing.
+
+To target users by role with `apSendNotificationByRole()`, your `User` model additionally needs the `HasRolesAndPermissions` trait, which provides the `roles()` relationship:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Concerns\HasRolesAndPermissions;
+
+class User extends Authenticatable
+{
+    use HasNotifications;
+    use HasRolesAndPermissions;
+
+    // ... rest of your model
+}
+```
+
+Without it, `apSendNotificationByRole()` matches no users and returns `null` instead of throwing a fatal error.
+
 ## Register Your First Notification
 
 Register notification types during application boot (e.g., in a service provider):
