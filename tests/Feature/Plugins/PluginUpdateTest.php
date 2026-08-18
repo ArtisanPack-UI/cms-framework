@@ -433,6 +433,41 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
 
         File::delete( $zipPath );
     } );
+
+    it( 'rejects an update whose manifest slug differs from the plugin being updated (#315)', function () use ( $buildUpdateZip, $installPlugin ): void {
+        $installPlugin->call( $this );
+        // The archive's directory is still `valid-plugin` (so extraction lines
+        // up), but its manifest declares a different `slug` — with a permission
+        // namespace to match — the divergence this fix rejects.
+        [$zipPath, $sha256] = $buildUpdateZip( [
+            'slug'        => 'other-plugin',
+            'permissions' => ['other-plugin.manage'],
+        ] );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class );
+
+        // Row rolled back: version and the foreign slug/permissions never seated.
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' );
+        expect( $plugin->meta['slug'] )->toBe( 'valid-plugin' );
+        expect( $plugin->meta )->not->toHaveKey( 'permissions' );
+
+        // Files restored from backup: the on-disk manifest is the 1.0.0 original.
+        $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '1.0.0' );
+
+        File::delete( $zipPath );
+    } );
 } );
 
 // Helper function

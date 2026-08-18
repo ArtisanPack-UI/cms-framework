@@ -267,6 +267,20 @@ class UpdateManager
 
             $this->pluginManager->assertManifestValid( $manifest );
 
+            // The update archive must be an update *of this plugin*. Step 6
+            // seats `meta` straight from the manifest, and `meta['slug']` (with
+            // its permission namespace) is trusted downstream — so a manifest
+            // that declared a different `slug` than the plugin being updated
+            // would let it claim, and later remove, another plugin's permission
+            // rows. `assertManifestValid()` only checks the slug's *format*;
+            // this asserts its *identity*, the way the Themes module does after
+            // extraction. A mismatch unwinds through the backup-restore path.
+            if ( $manifest['slug'] !== $slug ) {
+                throw PluginValidationException::invalidManifest(
+                    "Update archive manifest declares slug '{$manifest['slug']}', but plugin '{$slug}' is being updated.",
+                );
+            }
+
             // 6. Update database
             $plugin->version          = $updateInfo['version'];
             $plugin->meta             = $manifest;
