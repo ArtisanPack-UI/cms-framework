@@ -173,7 +173,14 @@ class NotificationManager
     public function sendNotificationByRole( string $key, string $role, array $overrides = [] ): ?Notification
     {
         $userModel = config( 'auth.providers.users.model' );
-        $userIds   = $userModel::whereHas( 'roles', function ( $query ) use ( $role ): void {
+
+        // Without the roles relationship the host user model matches no role,
+        // so there is no recipient set to send to. Degrade instead of fataling.
+        if ( ! method_exists( $userModel, 'roles' ) ) {
+            return null;
+        }
+
+        $userIds = $userModel::whereHas( 'roles', function ( $query ) use ( $role ): void {
             $query->where( 'name', sanitizeText( $role ) );
         } )->pluck( 'id' )->toArray();
 
@@ -359,6 +366,17 @@ class NotificationManager
     {
         $userModel = config( 'auth.providers.users.model' );
 
+        // Without the notificationPreferences relationship there are no stored
+        // preferences to honour, so every candidate opts in. Still resolve the
+        // ids that exist so the recipient set matches the trait-present path
+        // (dropping unknown ids) rather than fataling, since this filter runs on
+        // every send.
+        if ( ! method_exists( $userModel, 'notificationPreferences' ) ) {
+            return $userModel::whereIn( 'id', $userIds )
+                ->pluck( 'id' )
+                ->toArray();
+        }
+
         return $userModel::whereIn( 'id', $userIds )
             ->whereDoesntHave( 'notificationPreferences', function ( $query ) use ( $notificationKey ): void {
                 $query->where( 'notification_type', sanitizeText( $notificationKey ) )
@@ -381,6 +399,15 @@ class NotificationManager
     protected function filterUsersForEmail( array $userIds, string $notificationKey ): array
     {
         $userModel = config( 'auth.providers.users.model' );
+
+        // Without the notificationPreferences relationship there is no email
+        // opt-out to honour, so every candidate remains eligible for email.
+        // Resolve the existing ids to mirror the trait-present path.
+        if ( ! method_exists( $userModel, 'notificationPreferences' ) ) {
+            return $userModel::whereIn( 'id', $userIds )
+                ->pluck( 'id' )
+                ->toArray();
+        }
 
         return $userModel::whereIn( 'id', $userIds )
             ->whereDoesntHave( 'notificationPreferences', function ( $query ) use ( $notificationKey ): void {

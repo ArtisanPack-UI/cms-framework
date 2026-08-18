@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`apSendNotification()` / `apSendNotificationByRole()` no longer fatal when the host `User` model lacks the notifications traits** ([#280](https://github.com/ArtisanPack-UI/cms-framework/issues/280)) — preference filtering runs on every send and previously called `notificationPreferences()` unconditionally, so a `User` model without `HasNotifications` hit an uncaught `Call to undefined method` even on a plain send with no roles involved; the by-role helper had the same failure against `roles()` without `HasRolesAndPermissions`. `NotificationManager` now guards both relationships with `method_exists()`: a model without `notificationPreferences()` treats every recipient as opted in (send succeeds, email path included), and a model without `roles()` matches no users so `sendNotificationByRole()` returns `null` rather than throwing. The notifications docs now state both trait requirements.
 - **A failed plugin update no longer leaves a previously-active plugin disabled** — `UpdateManager::updatePlugin()` deactivates before swapping files, but the rollback paths (failed download, extraction, or reactivation) restored the version, manifest, and service provider without restoring `is_active`. Because the deactivation ran on a separate model instance, the in-memory row's `is_active` was stale and `save()` never wrote it back. The revert now refreshes the row and explicitly restores the pre-update activation state.
 
 ### Added
