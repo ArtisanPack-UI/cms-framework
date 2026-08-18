@@ -47,7 +47,7 @@ public function categories(): BelongsToMany
 **Pivot Tables:**
 - `role_user` - User-Role relationship
 - `permission_user` - User-Permission relationship
-- `cms_notification_user` - User-Notification relationship with metadata (is_read, is_dismissed, read_at)
+- `cms_notification_user` - User-Notification relationship with metadata (is_read, is_dismissed, read_at, dismissed_at)
 
 ### Role Model
 

@@ -35,13 +35,19 @@ return new class extends Migration {
 
     /**
      * Reverse the migrations.
+     *
+     * Intentionally a no-op: this is a one-way compatibility bridge. `up()` is
+     * conditional — on a fresh install it renames nothing, because the `cms_`
+     * tables already exist — so `down()` cannot know whether a rename happened
+     * without state that does not survive between the separate `migrate` and
+     * `migrate:rollback` invocations. Renaming the `cms_` tables back to the
+     * legacy names here would strand them on a fresh-install rollback, where the
+     * create migrations only drop the `cms_`-prefixed tables. Leaving the tables
+     * under their `cms_` names is safe in every rollback path: the create
+     * migrations' own `down()` drops them by that name.
      */
     public function down(): void
     {
-        foreach ( $this->tables as $from => $to ) {
-            if ( Schema::hasTable( $to ) && ! Schema::hasTable( $from ) ) {
-                Schema::rename( $to, $from );
-            }
-        }
+        // No-op. See the method docblock for why this migration is irreversible.
     }
 };
