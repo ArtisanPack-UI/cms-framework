@@ -135,14 +135,14 @@ class MenuItemRequest extends FormRequest
     }
 
     /**
-     * Theme-scoped existence rule for the `menus` field. Falls back to
-     * an unscoped `exists` when no theme is active so the `exists` step
-     * still rejects truly nonexistent ids consistently — the controller
-     * will surface the no-active-theme case as 409 once validation
-     * reaches it.
+     * Theme-scoped existence rule for the `menus` field. When no theme is
+     * active there is no scope in which a menu can exist, so the rule fails
+     * closed: nothing validates as existing. This keeps the request and the
+     * controller — which returns 409 on a null theme — stating the same
+     * invariant, rather than widening here and relying on a downstream guard.
      *
      * Scoped existence prevents cross-theme leakage: `menus: <id>` for
-     * an id that lives in another theme now yields the same 422 as a
+     * an id that lives in another theme yields the same 422 as a
      * truly-nonexistent id, instead of distinguishing the two through
      * controller-level 404 vs validation-level 422.
      *
@@ -153,7 +153,9 @@ class MenuItemRequest extends FormRequest
         $themeSlug = $this->activeThemeSlug();
 
         if ( null === $themeSlug ) {
-            return 'exists:menus,id';
+            return Rule::exists( 'menus', 'id' )->where( static function ( $query ): void {
+                $query->whereRaw( '1 = 0' );
+            } );
         }
 
         return Rule::exists( 'menus', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
@@ -167,6 +169,9 @@ class MenuItemRequest extends FormRequest
      * active theme. The further "same menu" constraint runs in
      * {@see passedValidation()}.
      *
+     * When no theme is active the rule fails closed for the same reason
+     * as {@see menuExistsRule()}: with no scope, nothing can exist.
+     *
      * @since 2.0.0
      */
     protected function parentExistsRule(): mixed
@@ -174,7 +179,9 @@ class MenuItemRequest extends FormRequest
         $themeSlug = $this->activeThemeSlug();
 
         if ( null === $themeSlug ) {
-            return 'exists:menu_items,id';
+            return Rule::exists( 'menu_items', 'id' )->where( static function ( $query ): void {
+                $query->whereRaw( '1 = 0' );
+            } );
         }
 
         return Rule::exists( 'menu_items', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
