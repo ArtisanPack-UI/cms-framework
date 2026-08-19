@@ -237,7 +237,7 @@ returns its own route action:
 ```php
 addFilter(
     'ap.cmsFramework.admin.federatedPageAction',
-    function ( Closure $default, string $component, array $config ): Closure {
+    function ( \Closure $default, string $component, array $config ): \Closure {
         return static fn () => view( 'host::federated', ['module' => $component] );
     },
 );
