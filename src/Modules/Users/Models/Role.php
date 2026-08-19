@@ -93,7 +93,9 @@ class Role extends RbacRole
 
                 // Name first, slug fallback — same lookup order as
                 // rbac's HasRoles / HasPermissions helpers.
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $permission is Eloquent parameter-bound in the where('name', ...) lookup.
                 $resolved = $permissionModel::query()->where( 'name', $permission )->first()
+                    // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $permission is Eloquent parameter-bound in the where('slug', ...) fallback lookup.
                     ?? $permissionModel::query()->where( 'slug', $permission )->first();
 
                 return $resolved?->getKey();

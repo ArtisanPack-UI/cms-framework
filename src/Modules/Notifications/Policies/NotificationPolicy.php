@@ -43,7 +43,7 @@ class NotificationPolicy
     public function view( $user, Notification $notification ): bool
     {
         // User can only view notifications sent to them
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $user->id is a type-safe model id, Eloquent parameter-bound in the existence check.
         return $notification->users()->where( 'user_id', $user->id )->exists();
     }
 
@@ -70,7 +70,7 @@ class NotificationPolicy
     public function update( $user, Notification $notification ): bool
     {
         // User can update (mark as read/dismiss) their own notifications
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $user->id is a type-safe model id, Eloquent parameter-bound in the existence check.
         return $notification->users()->where( 'user_id', $user->id )->exists();
     }
 

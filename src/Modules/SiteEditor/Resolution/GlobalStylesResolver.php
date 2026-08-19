@@ -55,6 +55,7 @@ class GlobalStylesResolver
             return null;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme resolved from ThemeManager (internal config, not request input) and its slug is bound as an Eloquent query parameter.
         $row             = GlobalStyles::query()->where( 'theme', $theme['slug'] )->first();
         $variationSlug   = null !== $row && null !== $row->variation
             ? $row->variation
@@ -155,6 +156,7 @@ class GlobalStylesResolver
             return false;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme resolved from ThemeManager (internal config, not request input) and its slug is bound as an Eloquent query parameter.
         return GlobalStyles::query()->where( 'theme', $theme['slug'] )->delete() > 0;
     }
 

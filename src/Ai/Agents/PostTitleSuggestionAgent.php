@@ -119,6 +119,7 @@ PROMPT;
      */
     protected function execute( Credentials $credentials, string $model, string $instructions ): array
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input() is passed to normalizeInput(), which validates the array shape and trims content.
         $normalized = $this->normalizeInput( $this->input() );
 
         $prompter = app( AgentPrompter::class );
@@ -169,6 +170,7 @@ PROMPT;
 
         $count = 5;
         if ( isset( $input['count'] ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var(..., FILTER_VALIDATE_INT, range 3-5) is validation constraining count.
             $parsed = filter_var(
                 $input['count'],
                 FILTER_VALIDATE_INT,

@@ -388,6 +388,7 @@ class PluginsController extends Controller
      */
     public function checkDependencies( Request $request ): JsonResponse
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input('plugins') is is_array-checked then filtered to strings and used only as in-memory dependency-graph lookup keys, never persisted or echoed.
         $slugs = $request->input( 'plugins' );
         if ( ! is_array( $slugs ) ) {
             $all   = $request->all();

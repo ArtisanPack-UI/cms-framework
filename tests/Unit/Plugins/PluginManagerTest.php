@@ -163,7 +163,7 @@ describe( 'Author Name Resolution', function (): void {
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $pluginsPath . '/object-author-plugin' );
 
-        $plugins   = $this->manager->discoverPlugins();
+        $plugins    = $this->manager->discoverPlugins();
         $discovered = collect( $plugins )->firstWhere( 'slug', 'object-author-plugin' );
 
         expect( $discovered['author_name'] )->toBe( 'Jane Developer' )

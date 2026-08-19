@@ -112,6 +112,7 @@ PROMPT;
      */
     protected function execute( Credentials $credentials, string $model, string $instructions ): array
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input() is the agent-invocation payload immediately passed to normalizeInput(), which type-checks and rejects bad shapes before use.
         $normalized = $this->normalizeInput( $this->input() );
 
         $prompter = app( AgentPrompter::class );

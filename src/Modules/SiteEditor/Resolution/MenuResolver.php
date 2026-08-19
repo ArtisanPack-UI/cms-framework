@@ -64,6 +64,7 @@ class MenuResolver
         }
 
         $assignments = MenuLocationAssignment::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug from ThemeManager (internal config, not request input) and is bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
             ->with( ['menu', 'menu.items'] )
             ->get()

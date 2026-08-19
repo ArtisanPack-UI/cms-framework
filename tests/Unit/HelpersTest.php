@@ -135,6 +135,7 @@ test( 'helper functions use app container correctly', function (): void {
             public function addPermissionToRole( $roleSlug, $permissionSlug ): void
             {
                 $role       = Role::where( 'slug', sanitizeText( $roleSlug ) )->firstOrFail();
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- test code exercising the helper directly; $permissionSlug is a literal test value, Eloquent parameter-bound in the where().
                 $permission = Permission::where( 'slug', $permissionSlug )->firstOrFail();
                 $role->permissions()->syncWithoutDetaching( $permission->id );
             }

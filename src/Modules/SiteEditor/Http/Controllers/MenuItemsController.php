@@ -116,6 +116,7 @@ class MenuItemsController extends Controller
 
         $validated = $request->validated();
         $menu      = Menu::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the menu id is int-cast; both are Eloquent parameter-bound.
             ->where( 'theme', $theme )
             ->find( (int) $validated['menus'] );
 
@@ -123,6 +124,7 @@ class MenuItemsController extends Controller
             return response()->json( ['message' => 'Menu not found.'], 404 );
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- attributes come from the MenuItemRequest Form Request; Eloquent parameter-binds the create() values.
         $item = MenuItem::create( $this->mapPayload( $validated, $menu->id ) );
 
         return response()->json( MenuItemResource::toArray( $item ), 201 );
@@ -143,6 +145,7 @@ class MenuItemsController extends Controller
 
         $validated = $request->validated();
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- attributes come from the MenuItemRequest Form Request; Eloquent parameter-binds the update() values.
         $item->update( $this->mapPayload( $validated, (int) $item->menu_id, $item ) );
 
         return response()->json( MenuItemResource::toArray( $item->refresh() ) );
@@ -183,6 +186,7 @@ class MenuItemsController extends Controller
         }
 
         return MenuItem::query()->whereHas( 'menu', static function ( Builder $menu ) use ( $theme ): void {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter inside the whereHas scope.
             $menu->where( 'theme', $theme );
         } );
     }

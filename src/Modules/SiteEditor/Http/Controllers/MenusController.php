@@ -52,6 +52,7 @@ class MenusController extends Controller
         }
 
         $menus = Menu::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug from ThemeManager (not request input) and is bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
             ->with( 'locationAssignments' )
             ->orderBy( 'name' )
@@ -92,6 +93,7 @@ class MenusController extends Controller
         $validated = $request->validated();
 
         try {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- attributes come from the MenuRequest Form Request and $theme is the internal active-theme slug; Eloquent parameter-binds the create() values.
             $menu = Menu::create( $this->normalizeAttributes( $theme, $validated ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
@@ -178,9 +180,11 @@ class MenusController extends Controller
             return null;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter.
         $query = Menu::query()->where( 'theme', $theme )->with( 'locationAssignments' );
 
         if ( SlugValidator::isValid( $idOrSlug ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $idOrSlug is a route parameter guarded by SlugValidator::isValid() above and bound as an Eloquent query parameter.
             $bySlug = ( clone $query )->where( 'slug', $idOrSlug )->first();
 
             if ( null !== $bySlug ) {

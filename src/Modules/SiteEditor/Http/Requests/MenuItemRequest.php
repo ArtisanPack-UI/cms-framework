@@ -104,7 +104,9 @@ class MenuItemRequest extends FormRequest
             $merge['parent'] = null;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- object is read in prepareForValidation() only to normalize WP sentinel values before validation; not persisted or echoed.
         $object   = $this->input( 'object' );
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- object_id is read in prepareForValidation() only to normalize WP sentinel values before validation; not persisted or echoed.
         $objectId = $this->input( 'object_id' );
 
         if (
@@ -159,6 +161,7 @@ class MenuItemRequest extends FormRequest
         }
 
         return Rule::exists( 'menus', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $themeSlug is the internal active-theme slug used to build a scoped exists rule and bound as an Eloquent query parameter.
             $query->where( 'theme', $themeSlug );
         } );
     }
@@ -187,6 +190,7 @@ class MenuItemRequest extends FormRequest
         return Rule::exists( 'menu_items', 'id' )->where( static function ( $query ) use ( $themeSlug ): void {
             $query->whereIn(
                 'menu_id',
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $themeSlug is the internal active-theme slug used to build a scoped exists rule and bound as an Eloquent query parameter.
                 Menu::query()->where( 'theme', $themeSlug )->select( 'id' ),
             );
         } );
@@ -231,6 +235,7 @@ class MenuItemRequest extends FormRequest
         // (rather than in `rules()`) so we have both the validated parent
         // and the menu_id together, including the existing item's menu on
         // updates where `menus` is prohibited.
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- parent is read in passedValidation() after validation and only used for a parameter-bound MenuItem lookup.
         $parentId = $this->input( 'parent' );
 
         if ( null === $parentId ) {
@@ -266,6 +271,7 @@ class MenuItemRequest extends FormRequest
     protected function resolvedMenuId(): ?int
     {
         if ( $this->isMethod( 'post' ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- menus is read in resolvedMenuId(), is_numeric-checked and int-cast before use.
             $menuId = $this->input( 'menus' );
 
             return is_numeric( $menuId ) ? (int) $menuId : null;

@@ -153,7 +153,7 @@ class Notification extends Model
      */
     public function scopeOfType( Builder $query, NotificationType $type )
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Type-safe enum
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $type is a type-safe NotificationType enum, parameter-bound by Eloquent in the scope where().
         return $query->where( 'type', $type );
     }
 
