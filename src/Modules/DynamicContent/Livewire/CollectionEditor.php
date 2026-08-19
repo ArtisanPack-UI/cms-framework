@@ -74,16 +74,25 @@ class CollectionEditor extends Component
         $type    = DynamicContentType::with( 'fields' )->findOrFail( $this->typeId );
         $manager = app( DynamicContentRecordManager::class );
 
+        // Mirror DynamicContentRecordRequest so the Livewire editor enforces the
+        // same shape as the REST endpoint. `syncValues()` already discards keys
+        // that do not match a defined field on the type.
+        $this->validate( [
+            'editingLabel'    => [ 'nullable', 'string', 'max:255' ],
+            'editingValues'   => [ 'array' ],
+            'editingValues.*' => [ 'nullable' ],
+        ] );
+
         $data = [ 'label' => $this->editingLabel, 'values' => $this->editingValues ];
 
         if ( null === $this->editingRecordId ) {
             Gate::authorize( 'create', DynamicContentRecord::class );
-            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is built from validated Livewire server state and persisted via Eloquent create() behind a Gate::authorize('create', ...) check.
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is validated above (mirroring DynamicContentRecordRequest) and persisted via Eloquent create() behind a Gate::authorize('create', ...) check.
             $manager->create( $type, $data );
         } else {
             $record = DynamicContentRecord::findOrFail( $this->editingRecordId );
             Gate::authorize( 'update', $record );
-            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is built from validated Livewire server state and persisted via Eloquent update() behind a Gate::authorize('update', $record) check.
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is validated above (mirroring DynamicContentRecordRequest) and persisted via Eloquent update() behind a Gate::authorize('update', $record) check.
             $manager->update( $record, $data );
         }
 

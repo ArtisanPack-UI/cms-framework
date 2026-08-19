@@ -104,7 +104,7 @@ final class MetadataClient
 
         for ( $attempt = 0; $attempt < $attempts; $attempt++ ) {
             try {
-                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $url is a config-derived absolute update-server endpoint passed to a Guzzle HTTP GET, not a SQL or output sink.
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- the sniff matches the Guzzle client's request() method name, not Laravel's request() input helper; this is an outbound HTTP GET, not a user-input read.
                 $response = self::client()->request( 'GET', $url, [
                     'headers'         => $headers,
                     'timeout'         => $timeout,

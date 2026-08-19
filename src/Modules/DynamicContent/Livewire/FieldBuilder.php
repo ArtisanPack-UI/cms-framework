@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Managers\FieldTypeRegistry
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Models\DynamicContentType;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Validate;
 use Livewire\Component;
 
@@ -101,7 +102,23 @@ class FieldBuilder extends Component
 
     public function save(): void
     {
+        // Mirror DynamicContentTypeRequest so the Livewire builder enforces the
+        // same shape as the REST endpoint. The `#[Validate]` attributes cover the
+        // scalar props; `description` and the nested `fields.*` shape (including
+        // the registered-field-type allow-list) are validated explicitly here.
+        $fieldTypeSlugs = array_keys( app( FieldTypeRegistry::class )->all() );
+
         $this->validate();
+        $this->validate( [
+            'description'       => [ 'nullable', 'string' ],
+            'fields'            => [ 'array' ],
+            'fields.*.slug'     => [ 'required', 'string', 'max:64', 'regex:/^[a-z][a-z0-9_]*$/' ],
+            'fields.*.label'    => [ 'required', 'string', 'max:255' ],
+            'fields.*.type'     => [ 'required', 'string', Rule::in( $fieldTypeSlugs ) ],
+            'fields.*.options'  => [ 'nullable', 'array' ],
+            'fields.*.default'  => [ 'nullable' ],
+            'fields.*.required' => [ 'nullable', 'boolean' ],
+        ] );
 
         $data = [
             'slug'        => $this->slug,
@@ -119,7 +136,7 @@ class FieldBuilder extends Component
         } else {
             $type = DynamicContentType::findOrFail( $this->typeId );
             Gate::authorize( 'update', $type );
-            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is assembled after $this->validate() and persisted via the manager's Eloquent update().
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is fully validated above (slug/name/cardinality plus description and the nested fields.* shape, mirroring DynamicContentTypeRequest) before the manager persists it via Eloquent.
             $manager->update( $type, $data );
         }
 
