@@ -193,6 +193,144 @@ class PluginManager
     }
 
     /**
+     * Install a plugin that already exists on disk.
+     *
+     * The sibling to {@see installFromZip()} for a plugin scaffolded straight
+     * into the plugins directory — symlinked or copied during development, or
+     * shipped inside the host's own repository — which discovery finds but which
+     * has no `plugins` row and so can never be activated (#298). It runs the
+     * exact same gates the ZIP path runs after extraction — `validateManifest()`,
+     * the manifest/directory slug-match guard, and the already-installed guard —
+     * and fires the same `installing` / `installed` hooks, minus the ZIP
+     * validation and extraction steps. Host-version compatibility is enforced at
+     * {@see activate()} for both install paths, so a disk-installed plugin
+     * clears the same bar a ZIP-installed one does before it can go active.
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug (validated against the plugins directory).
+     *
+     * @throws PluginNotFoundException If no discoverable plugin exists for the slug.
+     * @throws PluginValidationException If the on-disk manifest is invalid.
+     * @throws PluginInstallationException If the plugin is already registered.
+     *
+     * @return Plugin The installed plugin model.
+     */
+    public function installFromDisk( string $slug ): Plugin
+    {
+        $discovered = $this->getPlugin( $slug );
+
+        if ( null === $discovered ) {
+            throw PluginNotFoundException::forSlug( $slug );
+        }
+
+        $manifest = $discovered['manifest'];
+
+        $this->validateManifest( $manifest );
+
+        // Same guard `installFromZip()` applies after extraction: the row's
+        // `slug` is derived from the directory while `meta` is seated verbatim
+        // from the manifest, so a divergence would let a plugin declare — and
+        // later, on uninstall, remove — permission rows namespaced under a
+        // different plugin's slug.
+        if ( $manifest['slug'] !== $slug ) {
+            throw PluginValidationException::invalidManifest(
+                "Manifest slug '{$manifest['slug']}' must match plugin directory slug '{$slug}'.",
+            );
+        }
+
+        if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
+            throw PluginInstallationException::alreadyInstalled( $slug );
+        }
+
+        doAction( 'ap.cmsFramework.plugin.installing', $slug );
+
+        $plugin = Plugin::create( [
+            'slug'             => $slug,
+            'name'             => $manifest['name'],
+            'version'          => $manifest['version'],
+            'is_active'        => false,
+            'service_provider' => $manifest['service_provider'] ?? null,
+            'meta'             => $manifest,
+            'installed_at'     => now(),
+        ] );
+
+        $this->clearCaches();
+
+        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
+
+        return $plugin;
+    }
+
+    /**
+     * Register every plugin discovered on disk into the database (#298).
+     *
+     * Walks {@see discoverPlugins()} and upserts a `plugins` row for each
+     * manifest, keyed on `slug`: a plugin with no row is installed through
+     * {@see installFromDisk()} so it clears the same gates and fires the same
+     * hooks as any other install; a plugin already registered has its manifest
+     * fields refreshed while its `is_active` state is left untouched, so a dev
+     * loop that re-runs the sync never flips an active plugin off or a
+     * deactivated one back on. Idempotent and safe to run repeatedly — the
+     * obvious fit for a deploy that ships plugins in the repo.
+     *
+     * @since 2.9.0
+     *
+     * @return array<int,array{slug:string,status:string,message:string}> One
+     *              result row per discovered plugin. `status` is one of
+     *              `installed`, `updated`, `unchanged`, or `failed`.
+     */
+    public function syncFromDisk(): array
+    {
+        $results = [];
+
+        foreach ( $this->discoverPlugins() as $discovered ) {
+            $slug     = $discovered['slug'];
+            $manifest = $discovered['manifest'];
+
+            try {
+                // Guard the directory/manifest slug match before any write so a
+                // mismatched manifest can't seat a row under the wrong slug on
+                // the refresh path. `installFromDisk()` re-checks this for the
+                // install path.
+                if ( ( $manifest['slug'] ?? null ) !== $slug ) {
+                    $results[] = [
+                        'slug'    => $slug,
+                        'status'  => 'failed',
+                        'message' => "Manifest slug '" . ( $manifest['slug'] ?? '' ) . "' must match plugin directory slug '{$slug}'.",
+                    ];
+
+                    continue;
+                }
+
+                $existing = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
+
+                if ( null === $existing ) {
+                    $this->installFromDisk( $slug );
+
+                    $results[] = [
+                        'slug'    => $slug,
+                        'status'  => 'installed',
+                        'message' => 'Registered from disk.',
+                    ];
+
+                    continue;
+                }
+
+                $results[] = $this->refreshInstalledPlugin( $existing, $manifest );
+            } catch ( PluginValidationException | PluginInstallationException $e ) {
+                $results[] = [
+                    'slug'    => $slug,
+                    'status'  => 'failed',
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
      * Activate a plugin.
      *
      * Process:
@@ -621,6 +759,53 @@ class PluginManager
         }
 
         return $graph;
+    }
+
+    /**
+     * Refresh an installed plugin's manifest fields from disk without touching
+     * its activation state (#298).
+     *
+     * Runs the same `validateManifest()` gate the install paths run before it
+     * trusts the manifest, then updates `name`, `version`, `service_provider`,
+     * and `meta` only when they actually changed. `is_active` and `installed_at`
+     * are never in the update set, so a sync preserves activation state.
+     *
+     * @since 2.9.0
+     *
+     * @param  Plugin  $existing  The already-registered plugin.
+     * @param  array  $manifest  The parsed manifest read from disk.
+     *
+     * @throws PluginValidationException If the on-disk manifest is invalid.
+     *
+     * @return array{slug:string,status:string,message:string}
+     */
+    protected function refreshInstalledPlugin( Plugin $existing, array $manifest ): array
+    {
+        $this->validateManifest( $manifest );
+
+        $existing->fill( [
+            'name'             => $manifest['name'],
+            'version'          => $manifest['version'],
+            'service_provider' => $manifest['service_provider'] ?? null,
+            'meta'             => $manifest,
+        ] );
+
+        if ( ! $existing->isDirty() ) {
+            return [
+                'slug'    => $existing->slug,
+                'status'  => 'unchanged',
+                'message' => 'Already registered; manifest unchanged.',
+            ];
+        }
+
+        $existing->save();
+        $this->clearCaches();
+
+        return [
+            'slug'    => $existing->slug,
+            'status'  => 'updated',
+            'message' => 'Registered manifest refreshed from disk.',
+        ];
     }
 
     /**
