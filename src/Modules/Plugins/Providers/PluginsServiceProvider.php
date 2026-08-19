@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Console\Commands\SyncPluginsCommand;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
@@ -49,6 +50,12 @@ class PluginsServiceProvider extends ServiceProvider
         $this->publishes( [
             __DIR__ . '/../config/plugins.php' => config_path( 'cms/plugins.php' ),
         ], [ 'cms-plugins-config', 'cms-framework-config' ] );
+
+        if ( $this->app->runningInConsole() ) {
+            $this->commands( [
+                SyncPluginsCommand::class,
+            ] );
+        }
 
         $this->registerPluginCapabilities();
 
