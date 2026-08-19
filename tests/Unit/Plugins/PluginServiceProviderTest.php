@@ -18,6 +18,7 @@ beforeEach( function (): void {
 
     removeAllFilters( 'ap.cmsFramework.admin.menu' );
     removeAllFilters( 'ap.plugins.federatedModules' );
+    removeAllFilters( 'ap.cmsFramework.admin.federatedPageAction' );
 
     $this->app->singleton( AdminMenuManager::class, fn () => new AdminMenuManager );
     $this->app->singleton( PluginRegistry::class );
@@ -40,6 +41,7 @@ beforeEach( function (): void {
 afterEach( function (): void {
     removeAllFilters( 'ap.cmsFramework.admin.menu' );
     removeAllFilters( 'ap.plugins.federatedModules' );
+    removeAllFilters( 'ap.cmsFramework.admin.federatedPageAction' );
 } );
 
 /**
@@ -127,7 +129,7 @@ it( 'wraps a Blade view in a closure so the route action is valid', function ():
         ->and( $rendered->name() )->toBe( 'cms::admin.layouts.app' );
 } );
 
-it( 'renders a mount point for a federated component identifier', function (): void {
+it( 'renders the federated shell for a component identifier', function (): void {
     $pages = capturingPageManager();
 
     $provider = new class( app() ) extends PluginServiceProvider {
@@ -150,13 +152,91 @@ it( 'renders a mount point for a federated component identifier', function (): v
 
     // A component is never handed to Route::get() as a bare string (which it
     // rejects, crashing route registration for the whole app). It resolves to
-    // a closure that renders a mount point the host front end hydrates.
+    // a closure rendering the framework's federated mount-point shell inside
+    // the admin chrome for the host front end to hydrate.
     $action = $pages->captured['my-plugin']['action'];
 
     expect( $action )->toBeInstanceOf( Closure::class );
 
-    expect( (string) $action()->getContent() )
-        ->toContain( 'data-cms-federated-module="myPluginAdmin/Panel"' );
+    $rendered = $action();
+
+    expect( $rendered )->toBeInstanceOf( View::class )
+        ->and( $rendered->name() )->toBe( 'cms::admin.layouts.federated' )
+        ->and( $rendered->getData() )->toMatchArray( [
+            'component' => 'myPluginAdmin/Panel',
+            'title'     => 'My Plugin',
+        ] );
+} );
+
+it( 'lets a federation host override the component action via the filter', function (): void {
+    $pages = capturingPageManager();
+
+    // A host swaps the shipped shell for its own mount strategy. The filter
+    // receives the default action, the component identifier and the config.
+    addFilter(
+        'ap.cmsFramework.admin.federatedPageAction',
+        function ( Closure $default, string $component, array $config ): Closure {
+            return static fn () => 'host-mounted: ' . $component;
+        },
+    );
+
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'my-plugin', [
+                'title'      => 'My Plugin',
+                'component'  => 'myPluginAdmin/Panel',
+                'capability' => '',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'my-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    $action = $pages->captured['my-plugin']['action'];
+
+    expect( $action )->toBeInstanceOf( Closure::class )
+        ->and( $action() )->toBe( 'host-mounted: myPluginAdmin/Panel' );
+} );
+
+it( 'falls back to the default action when the filter returns a non-closure', function (): void {
+    $pages = capturingPageManager();
+
+    // A misbehaving subscriber returns something that is not a route action;
+    // the framework must not hand it to Route::get(). It keeps the default.
+    addFilter(
+        'ap.cmsFramework.admin.federatedPageAction',
+        fn ( Closure $default, string $component, array $config ): string => 'not-a-closure',
+    );
+
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'my-plugin', [
+                'title'      => 'My Plugin',
+                'component'  => 'myPluginAdmin/Panel',
+                'capability' => '',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'my-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    $action = $pages->captured['my-plugin']['action'];
+
+    expect( $action )->toBeInstanceOf( Closure::class )
+        ->and( $action() )->toBeInstanceOf( View::class )
+        ->and( $action()->name() )->toBe( 'cms::admin.layouts.federated' );
 } );
 
 it( 'returns a 501 for an admin page with neither a view nor a component', function (): void {

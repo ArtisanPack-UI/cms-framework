@@ -46,8 +46,11 @@ abstract class PluginServiceProvider extends ServiceProvider
      * and passing one through verbatim throws `Invalid route action`.
      *
      * A `component` is a Module Federation identifier that only the host's
-     * federation runtime can resolve, so it is still passed through as-is for
-     * the host to interpret.
+     * federation runtime can resolve. The framework wraps it in a closure that
+     * renders the `cms::admin.layouts.federated` mount-point shell by default;
+     * a federation host overrides that through the
+     * `ap.cmsFramework.admin.federatedPageAction` filter. See
+     * {@see resolveAdminPageAction()}.
      *
      * @param  string  $slug  Route/URL slug for the admin page.
      * @param  array{title?:string,section?:string,view?:string,component?:string,capability?:string,icon?:string,order?:int}  $config
@@ -85,14 +88,19 @@ abstract class PluginServiceProvider extends ServiceProvider
      * - `view` → renders the Blade view, with the route's own parameters passed
      *   through as view data so a page at `reports/{id}` can read `$id`.
      * - `component` → a Module Federation identifier only the host's federation
-     *   runtime can resolve, returned as a mount-point element the host front
-     *   end hydrates.
+     *   runtime can resolve. The shipped default renders the framework-owned
+     *   `cms::admin.layouts.federated` shell, which emits a mount-point element
+     *   inside the admin chrome for the host front end to hydrate. A federation
+     *   host that mounts components its own way overrides the default through
+     *   the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
+     *   the default action, the component identifier, and the page config and
+     *   returns its own route action.
      * - neither → a 501, so the operator sees a clear "not configured" response
      *   instead of a white-screened application.
      *
      * @since 2.8.0
      *
-     * @param  array{view?:string,component?:string}  $config
+     * @param  array{title?:string,view?:string,component?:string}  $config
      *
      * @return Closure The route action.
      */
@@ -107,10 +115,21 @@ abstract class PluginServiceProvider extends ServiceProvider
         $component = isset( $config['component'] ) ? ( string ) $config['component'] : '';
 
         if ( '' !== $component ) {
-            return static fn (): Response => response( sprintf(
-                '<div data-cms-federated-module="%s"></div>',
-                e( $component ),
-            ) );
+            $title = isset( $config['title'] ) ? ( string ) $config['title'] : null;
+
+            $default = static fn (): View => view( 'cms::admin.layouts.federated', [
+                'component' => $component,
+                'title'     => $title,
+            ] );
+
+            $action = applyFilters(
+                'ap.cmsFramework.admin.federatedPageAction',
+                $default,
+                $component,
+                $config,
+            );
+
+            return $action instanceof Closure ? $action : $default;
         }
 
         return static fn (): Response => response(

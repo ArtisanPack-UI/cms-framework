@@ -218,16 +218,32 @@ $this->registerAdminPage( 'hello-world', [
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
 
-> **Note ( as of 2.8.0 ):** a `component`-only admin page resolves to a route
-> that renders a mount point — `<div data-cms-federated-module="…"></div>` —
-> for the host's Module Federation runtime to hydrate. It is no longer handed
-> to `Route::get()` as a bare string (which Laravel rejects as an invalid route
-> action; because admin routes register from a `booted()` callback, that once
-> surfaced on *every* request, not just the plugin's own page, taking the whole
-> application down). A page that declares neither a `view` nor a `component`
-> responds `501` on its own route instead of breaking route registration. How
-> the host binds that mount point to a concrete component is still being
-> settled — see [#296](https://github.com/ArtisanPack-UI/cms-framework/issues/296).
+A `component`-only admin page renders the framework-owned
+`cms::admin.layouts.federated` shell, which emits a mount point —
+`<div data-cms-federated-module="…"></div>` — inside the admin chrome for the
+host's Module Federation runtime to hydrate. It is never handed to
+`Route::get()` as a bare string (which Laravel rejects as an invalid route
+action; because admin routes register from a `booted()` callback, that once
+surfaced on *every* request, not just the plugin's own page, taking the whole
+application down). A page that declares neither a `view` nor a `component`
+responds `501` on its own route instead of breaking route registration.
+
+A federation host that mounts components its own way — a different mount
+element, a server-rendered island, an Inertia response — overrides the default
+through the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
+the default route action, the component identifier and the page config, and
+returns its own route action:
+
+```php
+addFilter(
+    'ap.cmsFramework.admin.federatedPageAction',
+    function ( \Closure $default, string $component, array $config ): \Closure {
+        return static fn () => view( 'host::federated', ['module' => $component] );
+    },
+);
+```
+
+Returning anything other than a closure falls back to the shipped shell.
 
 ## Registering nav entries
 
