@@ -43,14 +43,11 @@ whichever flavor fits its stack.
    `plugins` table with `is_active = 1`.
 3. Navigate to `/admin/hello-world`. The Blade page renders.
 4. In a Module Federation host: build a federated module from the
-   `helloWorldAdmin` entry and let the host load the React panel.
-
-   > **Do not swap the admin page's `view` for a `component` yet.** As of
-   > 2.8.0 a `component` is still handed to `Route::get()` verbatim, which
-   > Laravel rejects as an invalid route action — and because admin routes are
-   > registered from a `booted()` callback, that takes down every request, not
-   > just this page. Keep the `view` ( render your own mount point in it ) and
-   > declare the federated module with `registerFederatedModule()`.
+   `helloWorldAdmin` entry and let the host load the React panel. Either keep
+   the Blade `view` ( render your own mount point in it ) and declare the module
+   with `registerFederatedModule()`, or swap the admin page's `view` for a
+   `component` — the framework renders its `cms::admin.layouts.federated` shell,
+   a mount point inside the admin chrome, for the host runtime to hydrate.
 
 ## Local testing
 
