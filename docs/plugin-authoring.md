@@ -94,7 +94,7 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | Field               | Type            | Notes |
 | ------------------- | --------------- | ----- |
 | `description`       | string          | Shown in the admin plugin list. |
-| `author`            | object          | `{ name, email?, url? }`. |
+| `author`            | object\|string  | `{ name, email?, url? }`, or a plain name string. |
 | `homepage`          | string ( URL )  | Documentation or marketing URL. |
 | `license`           | string          | SPDX identifier ( `MIT`, `Apache-2.0`, etc. ). |
 | `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
@@ -105,6 +105,14 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
 | `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
 | `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
+
+> **Displaying the author.** `PluginManager::discoverPlugins()` and
+> `::getPlugin()` return `author` verbatim from the manifest, so it is a
+> string or an object depending on what `plugin.json` declares — echoing it
+> directly risks an `Array to string conversion`. Each returned plugin also
+> carries an `author_name` key, always a display-safe string ( the object's
+> `name`, the plain string, or `''` ), which is what a host should render in
+> a plugin list.
 
 ## Base `PluginServiceProvider`
 

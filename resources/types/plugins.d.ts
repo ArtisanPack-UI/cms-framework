@@ -24,6 +24,46 @@ export type UpdateType = 'application' | 'plugin' | 'theme';
 // ---------------------------------------------------------------------------
 
 /**
+ * Structured plugin author, per the plugin.json `author` object form.
+ */
+export interface PluginAuthor {
+	/** The author's display name. */
+	name: string;
+	/** The author's email address. */
+	email?: string;
+	/** The author's URL. */
+	url?: string;
+}
+
+/**
+ * A plugin as returned by `PluginManager` discovery (`discoverPlugins()` and
+ * `getPlugin()`).
+ */
+export interface DiscoveredPlugin {
+	/** The unique plugin slug. */
+	slug: string;
+	/** The plugin display name. */
+	name: string;
+	/** The installed version string. */
+	version: string;
+	/** The plugin description. */
+	description: string;
+	/**
+	 * The raw manifest `author` value — a plain string or the documented
+	 * object form. Prefer `author_name` for display.
+	 */
+	author: string | PluginAuthor;
+	/** Display-safe author name, always a string. */
+	author_name: string;
+	/** Whether the plugin is currently active. */
+	is_active: boolean;
+	/** Absolute path to the plugin directory. */
+	path: string;
+	/** The full parsed plugin.json manifest. */
+	manifest: Record<string, unknown>;
+}
+
+/**
  * Plugin response shape.
  */
 export interface PluginResponse {

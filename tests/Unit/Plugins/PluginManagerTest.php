@@ -128,6 +128,51 @@ describe( 'Get Plugin', function (): void {
     } );
 } );
 
+describe( 'Author Name Resolution', function (): void {
+    it( 'exposes a display-safe author_name for a string author', function (): void {
+        $pluginsPath = base_path( 'plugins' );
+        File::ensureDirectoryExists( $pluginsPath );
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
+
+        $plugin = $this->manager->getPlugin( 'valid-plugin' );
+
+        expect( $plugin['author'] )->toBe( 'Test Author' )
+            ->and( $plugin['author_name'] )->toBe( 'Test Author' )
+            ->and( $plugin['author_name'] )->toBeString();
+
+        File::deleteDirectory( $pluginsPath . '/valid-plugin' );
+    } );
+
+    it( 'flattens an object-form author into author_name', function (): void {
+        $pluginsPath = base_path( 'plugins' );
+        File::ensureDirectoryExists( $pluginsPath );
+        File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $pluginsPath . '/object-author-plugin' );
+
+        $plugin = $this->manager->getPlugin( 'object-author-plugin' );
+
+        expect( $plugin['author'] )->toBeArray()
+            ->and( $plugin['author']['name'] )->toBe( 'Jane Developer' )
+            ->and( $plugin['author_name'] )->toBe( 'Jane Developer' )
+            ->and( $plugin['author_name'] )->toBeString();
+
+        File::deleteDirectory( $pluginsPath . '/object-author-plugin' );
+    } );
+
+    it( 'includes author_name for every discovered plugin', function (): void {
+        $pluginsPath = base_path( 'plugins' );
+        File::ensureDirectoryExists( $pluginsPath );
+        File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $pluginsPath . '/object-author-plugin' );
+
+        $plugins   = $this->manager->discoverPlugins();
+        $discovered = collect( $plugins )->firstWhere( 'slug', 'object-author-plugin' );
+
+        expect( $discovered['author_name'] )->toBe( 'Jane Developer' )
+            ->and( $discovered['author_name'] )->toBeString();
+
+        File::deleteDirectory( $pluginsPath . '/object-author-plugin' );
+    } );
+} );
+
 describe( 'Manifest Validation', function (): void {
     it( 'validates required fields', function (): void {
         $invalidManifest = ['name' => 'Test'];

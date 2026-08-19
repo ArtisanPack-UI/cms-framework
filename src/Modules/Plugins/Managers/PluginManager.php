@@ -51,7 +51,10 @@ class PluginManager
      * Results are cached for performance.
      *
      * @return array Array of plugin data with keys: slug, name, version,
-     *               description, author, is_active, path, manifest
+     *               description, author, author_name, is_active, path,
+     *               manifest. `author` is the raw manifest value ( string or
+     *               `{ name, email?, url? }` object ); `author_name` is always
+     *               a display-safe string.
      */
     public function discoverPlugins(): array
     {
@@ -74,7 +77,9 @@ class PluginManager
      *
      * @param  string  $slug  Plugin slug (validated)
      *
-     * @return array|null Plugin data or null if not found
+     * @return array|null Plugin data or null if not found. The returned array
+     *                    includes both the raw `author` manifest value and a
+     *                    display-safe `author_name` string.
      */
     public function getPlugin( string $slug ): ?array
     {
@@ -112,6 +117,7 @@ class PluginManager
             'version'     => $manifest['version'] ?? '0.0.0',
             'description' => $manifest['description'] ?? '',
             'author'      => $manifest['author'] ?? '',
+            'author_name' => $this->resolveAuthorName( $manifest['author'] ?? '' ),
             'is_active'   => $dbPlugin ? $dbPlugin->is_active : false,
             'path'        => $realPluginPath,
             'manifest'    => $manifest,
@@ -618,6 +624,26 @@ class PluginManager
     }
 
     /**
+     * Resolve a display-safe author name from a manifest author value.
+     *
+     * A plugin.json `author` may be a plain string or the documented object
+     * form ( `{ name, email?, url? }` ). This always returns a string so a
+     * host can echo the author directly without special-casing the shape.
+     *
+     * @param  mixed  $author  The raw manifest author value.
+     *
+     * @return string The display-safe author name, or an empty string.
+     */
+    protected function resolveAuthorName( mixed $author ): string
+    {
+        if ( is_array( $author ) ) {
+            return (string) ( $author['name'] ?? '' );
+        }
+
+        return is_string( $author ) ? $author : '';
+    }
+
+    /**
      * Order active plugin slugs dependencies-first for boot registration.
      *
      * Falls back to the given order if a dependency cycle is detected, and
@@ -1112,6 +1138,7 @@ class PluginManager
                 'version'     => $manifest['version'] ?? '0.0.0',
                 'description' => $manifest['description'] ?? '',
                 'author'      => $manifest['author'] ?? '',
+                'author_name' => $this->resolveAuthorName( $manifest['author'] ?? '' ),
                 'is_active'   => $dbPlugin ? $dbPlugin->is_active : false,
                 'path'        => $directory,
                 'manifest'    => $manifest,
