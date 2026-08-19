@@ -142,6 +142,7 @@ class ContentTypeController extends Controller
     public function update( ContentTypeRequest $request, string $slug ): ContentTypeResource
     {
         $sanitizedSlug = sanitizeText( $slug );
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $sanitizedSlug is sanitizeText() of a route param, bound via Eloquent where('slug', ...).
         $contentType   = ContentType::where( 'slug', $sanitizedSlug )->firstOrFail();
         $this->authorize( 'update', $contentType );
 
@@ -166,6 +167,7 @@ class ContentTypeController extends Controller
     public function destroy( string $slug ): Response
     {
         $sanitizedSlug = sanitizeText( $slug );
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $sanitizedSlug is sanitizeText() of a route param, bound via Eloquent where('slug', ...).
         $contentType   = ContentType::where( 'slug', $sanitizedSlug )->firstOrFail();
         $this->authorize( 'delete', $contentType );
 

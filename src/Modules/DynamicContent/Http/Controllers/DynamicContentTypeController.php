@@ -77,6 +77,7 @@ class DynamicContentTypeController extends Controller
     {
         $this->authorize( 'update', $type );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- update() receives $request->validated() from the DynamicContentTypeRequest Form Request; Eloquent parameter-binds the attributes.
         return new DynamicContentTypeResource( $this->manager->update( $type, $request->validated() ) );
     }
 

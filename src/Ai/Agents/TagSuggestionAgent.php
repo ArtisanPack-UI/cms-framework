@@ -125,6 +125,7 @@ PROMPT;
      */
     protected function execute( Credentials $credentials, string $model, string $instructions ): array
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input() is passed to normalizeInput(), which validates content and available_tags shape.
         $normalized = $this->normalizeInput( $this->input() );
 
         $prompter = app( AgentPrompter::class );
@@ -179,10 +180,12 @@ PROMPT;
             }
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var(..., FILTER_VALIDATE_BOOLEAN) is validation coercing allow_new to a strict bool.
         $allowNew = isset( $input['allow_new'] ) && filter_var( $input['allow_new'], FILTER_VALIDATE_BOOLEAN );
 
         $maxSelected = 5;
         if ( isset( $input['max_selected'] ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var(..., FILTER_VALIDATE_INT, range 1-10) is validation constraining max_selected.
             $parsed = filter_var(
                 $input['max_selected'],
                 FILTER_VALIDATE_INT,

@@ -175,8 +175,8 @@ class Page extends Model
      */
     public function siblings(): HasMany
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
         return $this->hasMany( Page::class, 'parent_id', 'parent_id' )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $this->id is the model's own integer primary key, parameter-bound in the relation where().
             ->where( 'id', '!=', $this->id )
             ->orderBy( 'order' );
     }

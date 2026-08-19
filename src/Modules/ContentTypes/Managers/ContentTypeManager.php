@@ -112,6 +112,7 @@ class ContentTypeManager
     {
         $slug = sanitizeText( $slug );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is sanitizeText()-normalized above and bound via Eloquent where('slug', ...).
         $contentType = ContentType::where( 'slug', $slug )->first();
         if ( $contentType ) {
             return $contentType;
@@ -256,6 +257,7 @@ class ContentTypeManager
     {
         $slug = sanitizeText( $slug );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is sanitizeText()-normalized above and bound via Eloquent where('slug', ...)->exists().
         if ( ContentType::where( 'slug', $slug )->exists() ) {
             return true;
         }

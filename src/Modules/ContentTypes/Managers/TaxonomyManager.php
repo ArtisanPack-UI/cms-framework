@@ -91,6 +91,7 @@ class TaxonomyManager
     {
         $contentTypeSlug = sanitizeText( $contentTypeSlug );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $contentTypeSlug is sanitizeText()-normalized above and bound via Eloquent where().
         $dbTaxonomies = Taxonomy::where( 'content_type_slug', $contentTypeSlug )->get();
 
         $filtered = applyFilters( 'ap.taxonomies.registeredTaxonomies', [] );
@@ -130,6 +131,7 @@ class TaxonomyManager
     {
         $slug = sanitizeText( $slug );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is sanitizeText()-normalized above and bound via Eloquent where('slug', ...)->exists().
         if ( Taxonomy::where( 'slug', $slug )->exists() ) {
             return true;
         }
@@ -152,6 +154,7 @@ class TaxonomyManager
     {
         $slug = sanitizeText( $slug );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is sanitizeText()-normalized above and bound via Eloquent where('slug', ...).
         $taxonomy = Taxonomy::where( 'slug', $slug )->first();
         if ( $taxonomy ) {
             return $taxonomy;

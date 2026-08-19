@@ -83,6 +83,7 @@ class TemplatesController extends Controller
         }
 
         try {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplateRequest Form Request; Eloquent parameter-binds create().
             $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
@@ -190,7 +191,9 @@ class TemplatesController extends Controller
     protected function upsertForTheme( string $theme, string $slug, array $validated ): Template
     {
         $existing = Template::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is the route parameter validated by SlugValidator::isValid() in update() and bound as an Eloquent query parameter.
             ->where( 'slug', $slug )
             ->first();
 
@@ -211,7 +214,9 @@ class TemplatesController extends Controller
             }
 
             $existing = Template::query()
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter.
                 ->where( 'theme', $theme )
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is the route parameter validated by SlugValidator::isValid() in update() and bound as an Eloquent query parameter.
                 ->where( 'slug', $slug )
                 ->firstOrFail();
 

@@ -48,6 +48,7 @@ trait HasContentFilters
             if ( null === $status || ContentStatus::Published === $status ) {
                 $query->published();
             } else {
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $status is a ContentStatus enum instance, applied as an Eloquent parameter-bound where().
                 $query->where( 'status', $status );
             }
         } elseif ( $defaultToPublished ) {

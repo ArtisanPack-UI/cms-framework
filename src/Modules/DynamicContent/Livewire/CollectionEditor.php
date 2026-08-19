@@ -78,10 +78,12 @@ class CollectionEditor extends Component
 
         if ( null === $this->editingRecordId ) {
             Gate::authorize( 'create', DynamicContentRecord::class );
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is built from validated Livewire server state and persisted via Eloquent create() behind a Gate::authorize('create', ...) check.
             $manager->create( $type, $data );
         } else {
             $record = DynamicContentRecord::findOrFail( $this->editingRecordId );
             Gate::authorize( 'update', $record );
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is built from validated Livewire server state and persisted via Eloquent update() behind a Gate::authorize('update', $record) check.
             $manager->update( $record, $data );
         }
 

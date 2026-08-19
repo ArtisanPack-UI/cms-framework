@@ -106,6 +106,7 @@ class DynamicContentTypeManager
         }
 
         DynamicContentField::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $type->id is a model primary key passed as an Eloquent where() binding.
             ->where( 'dynamic_content_type_id', $type->id )
             ->whereNotIn( 'id', $seen )
             ->delete();

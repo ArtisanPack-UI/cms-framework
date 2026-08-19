@@ -77,8 +77,8 @@ class NotificationController extends Controller
      */
     public function show( Request $request, int $id ): NotificationResource|JsonResponse
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Authenticated user ID is type-safe
         $notification = Notification::with( ['users' => function ( $q ) use ( $request ): void {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $request->user()->id is an authenticated, type-safe user id and is Eloquent parameter-bound in the where().
             $q->where( 'user_id', $request->user()->id );
         }] )->find( $id );
 

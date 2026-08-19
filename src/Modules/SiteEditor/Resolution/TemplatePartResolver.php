@@ -50,6 +50,7 @@ class TemplatePartResolver implements EntityResolver
             return null;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config); $slug is guarded by SlugValidator at the top of this method. Both are bound as Eloquent query parameters.
         $row          = TemplatePart::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
         $themeFile    = $this->resolveThemeFile( $theme, $slug );
         $hasThemeFile = null !== $themeFile;
@@ -131,6 +132,7 @@ class TemplatePartResolver implements EntityResolver
         }
 
         $themeFileSlugs = $this->themeFileSlugs( $theme );
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug from ThemeManager (internal config, not request input) and is bound as an Eloquent query parameter.
         $rows           = TemplatePart::query()->where( 'theme', $theme )->get()->keyBy( 'slug' );
 
         $allSlugs = array_unique( array_merge( $themeFileSlugs, $rows->keys()->all() ) );
@@ -164,6 +166,7 @@ class TemplatePartResolver implements EntityResolver
             return false;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config); $slug is guarded by SlugValidator at the top of this method. Both are bound as Eloquent query parameters.
         return TemplatePart::query()->where( 'theme', $theme )->where( 'slug', $slug )->delete() > 0;
     }
 

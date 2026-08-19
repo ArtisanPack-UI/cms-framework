@@ -125,6 +125,7 @@ class CustomFieldRequest extends FormRequest
     public function withValidator( Validator $validator ): void
     {
         $validator->after( function ( Validator $validator ): void {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input('key') is read in withValidator() only to detect a key conflict for validation; never persisted or echoed.
             $key = $this->input( 'key' );
 
             if ( ! is_string( $key ) || '' === $key ) {
@@ -133,6 +134,7 @@ class CustomFieldRequest extends FormRequest
 
             $conflict = app( CustomFieldManager::class )->findKeyConflict(
                 $key,
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input('content_types') is read in withValidator() only to feed the conflict lookup for validation; not persisted.
                 (array) $this->input( 'content_types', [] ),
             );
 

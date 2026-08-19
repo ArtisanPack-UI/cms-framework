@@ -104,6 +104,7 @@ final class MetadataClient
 
         for ( $attempt = 0; $attempt < $attempts; $attempt++ ) {
             try {
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $url is a config-derived absolute update-server endpoint passed to a Guzzle HTTP GET, not a SQL or output sink.
                 $response = self::client()->request( 'GET', $url, [
                     'headers'         => $headers,
                     'timeout'         => $timeout,

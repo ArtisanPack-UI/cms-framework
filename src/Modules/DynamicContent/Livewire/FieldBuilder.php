@@ -119,6 +119,7 @@ class FieldBuilder extends Component
         } else {
             $type = DynamicContentType::findOrFail( $this->typeId );
             Gate::authorize( 'update', $type );
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is assembled after $this->validate() and persisted via the manager's Eloquent update().
             $manager->update( $type, $data );
         }
 

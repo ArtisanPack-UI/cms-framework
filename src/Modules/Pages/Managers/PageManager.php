@@ -408,6 +408,7 @@ class PageManager
         $slug = $base;
         $n    = 2;
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is derived from Str::slug() and Eloquent parameter-bound in the where().
         while ( Page::withTrashed()->where( 'slug', $slug )->exists() ) {
             $slug = $base . '-' . $n;
             $n++;

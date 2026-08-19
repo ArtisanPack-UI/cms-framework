@@ -155,8 +155,8 @@ trait HasNotifications
      */
     public function markAllNotificationsAsRead(): int
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
         return \Illuminate\Support\Facades\DB::table( 'cms_notification_user' )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $this->id is the model's own integer primary key, parameter-bound by the query builder.
             ->where( 'user_id', $this->id )
             ->where( 'is_read', false )
             ->where( 'is_dismissed', false )
@@ -176,8 +176,8 @@ trait HasNotifications
      */
     public function dismissAllNotifications(): int
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
         return \Illuminate\Support\Facades\DB::table( 'cms_notification_user' )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $this->id is the model's own integer primary key, parameter-bound by the query builder.
             ->where( 'user_id', $this->id )
             ->where( 'is_dismissed', false )
             ->update( [
