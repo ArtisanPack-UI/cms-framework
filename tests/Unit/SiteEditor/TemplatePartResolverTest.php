@@ -114,6 +114,28 @@ describe( 'TemplatePartResolver::resolve()', function (): void {
 
         expect( $this->resolver->resolve( '../secret' ) )->toBeNull();
     } );
+
+    it( 'resolves a Blade part when no HTML file exists, marked read-only (#126)', function (): void {
+        File::put( $this->themeFiles . '/header.blade.php', '<header>{{ $x }}</header>' );
+
+        $result = $this->resolver->resolve( 'header' );
+
+        expect( $result->source )->toBe( 'theme' )
+            ->and( $result->isBlade )->toBeTrue()
+            ->and( $result->raw )->toBe( '' )
+            ->and( $result->blocks )->toBe( [] )
+            ->and( $result->area )->toBe( 'header' );
+    } );
+
+    it( 'prefers the HTML part when both HTML and Blade exist (#126)', function (): void {
+        File::put( $this->themeFiles . '/footer.html', '<!-- wp:paragraph --><p>F</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/footer.blade.php', '<footer>blade</footer>' );
+
+        $result = $this->resolver->resolve( 'footer' );
+
+        expect( $result->isBlade )->toBeFalse()
+            ->and( $result->blocks )->toHaveCount( 1 );
+    } );
 } );
 
 describe( 'TemplatePartResolver::all()', function (): void {

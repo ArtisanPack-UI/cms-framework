@@ -60,6 +60,7 @@ enum SettingType: string
         }
 
         return match ( $this ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var($value, FILTER_VALIDATE_BOOLEAN) casts a DB-stored value in the enum cast, a type-safe conversion.
             self::Boolean => filter_var( $value, FILTER_VALIDATE_BOOLEAN ),
             self::Integer => (int) $value,
             self::Float   => (float) $value,

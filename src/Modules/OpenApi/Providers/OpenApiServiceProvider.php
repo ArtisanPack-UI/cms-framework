@@ -18,6 +18,7 @@ use Dedoc\Scramble\Scramble;
 use Dedoc\Scramble\Support\Generator\OpenApi;
 use Dedoc\Scramble\Support\Generator\SecurityScheme;
 use Illuminate\Routing\Route;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 
@@ -113,11 +114,37 @@ class OpenApiServiceProvider extends ServiceProvider
         $scrambleConfig['ui']       = ['title' => $info['title'] ?? 'ArtisanPack CMS Framework API'];
 
         $scrambleConfig['info'] = [
-            'version'     => $info['version'] ?? '2.5.1',
+            'version'     => $info['version'] ?? $this->resolveDefaultVersion(),
             'description' => $info['description'] ?? '',
         ];
 
         return $scrambleConfig;
+    }
+
+    /**
+     * Resolve the fallback API version from the package's own `composer.json`.
+     *
+     * The `openapi.info.version` config drives the advertised spec version, but
+     * when it is absent this derives the version from `composer.json` rather than
+     * a hardcoded literal that silently goes stale between releases.
+     *
+     * @since 2.9.0
+     *
+     * @return string The package version, or `'0.0.0'` when it cannot be read.
+     */
+    protected function resolveDefaultVersion(): string
+    {
+        $composerPath = __DIR__ . '/../../../../composer.json';
+
+        if ( File::exists( $composerPath ) ) {
+            $decoded = json_decode( ( string ) File::get( $composerPath ), true );
+
+            if ( is_array( $decoded ) && ! empty( $decoded['version'] ) && is_string( $decoded['version'] ) ) {
+                return $decoded['version'];
+            }
+        }
+
+        return '0.0.0';
     }
 
     /**

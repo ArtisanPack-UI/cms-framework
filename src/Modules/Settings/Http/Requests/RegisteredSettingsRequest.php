@@ -72,6 +72,7 @@ class RegisteredSettingsRequest extends FormRequest
     public function withValidator( Validator $validator ): void
     {
         $validator->after( function ( Validator $validator ): void {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input('settings') is is_array-guarded and only used to check keys against a registered allowlist, never persisted or echoed.
             $settings = $this->input( 'settings' );
 
             if ( ! is_array( $settings ) ) {

@@ -15,15 +15,16 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Database\Factories;
 
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Comment;
+use ArtisanPackUI\CMSFramework\Modules\Users\Database\Factories\Concerns\ResolvesUserFactory;
 use Illuminate\Database\Eloquent\Factories\Factory;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 
 /**
  * @extends Factory<Comment>
  */
 class CommentFactory extends Factory
 {
+    use ResolvesUserFactory;
+
     /**
      * @var class-string<Comment>
      */
@@ -123,38 +124,5 @@ class CommentFactory extends Factory
             'status'      => Comment::STATUS_TRASH,
             'approved_at' => null,
         ] );
-    }
-
-    /**
-     * Resolve the configured user model's factory so host apps whose
-     * `auth.providers.users.model` is not `App\Models\User` still
-     * create the right user when `byUser()` is called without an id.
-     * Mirrors `Post::author()`'s use of the same config key.
-     *
-     * @since 2.1.0
-     */
-    protected function resolveUserFactory(): Factory|int|null
-    {
-        $userModel = config( 'auth.providers.users.model' );
-
-        if ( ! is_string( $userModel ) || ! class_exists( $userModel ) ) {
-            return null;
-        }
-
-        if ( ! is_subclass_of( $userModel, Model::class ) ) {
-            return null;
-        }
-
-        // `HasFactory` is the conventional gate; if the host's User
-        // model doesn't expose a factory, fall back to leaving
-        // `user_id` null so the caller must supply it explicitly.
-        if ( ! in_array( HasFactory::class, class_uses_recursive( $userModel ), true ) ) {
-            return null;
-        }
-
-        /** @var Factory $factory */
-        $factory = $userModel::factory();
-
-        return $factory;
     }
 }

@@ -1,0 +1,17 @@
+{
+  "slug": "object-author-plugin",
+  "name": "Object Author Plugin",
+  "version": "1.0.0",
+  "description": "A test plugin whose author uses the documented object form",
+  "author": {
+    "name": "Jane Developer",
+    "email": "jane@example.com",
+    "url": "https://example.com"
+  },
+  "service_provider": "ObjectAuthorPlugin\\ObjectAuthorPluginServiceProvider",
+  "autoload": {
+    "psr-4": {
+      "ObjectAuthorPlugin\\": "src/"
+    }
+  }
+}

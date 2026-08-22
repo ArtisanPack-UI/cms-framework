@@ -10,7 +10,7 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create( 'notification_preferences', function ( Blueprint $table ): void {
+        Schema::create( 'cms_notification_preferences', function ( Blueprint $table ): void {
             $table->id();
             $table->foreignId( 'user_id' )->constrained()->cascadeOnDelete();
             $table->string( 'notification_type' );
@@ -28,6 +28,6 @@ return new class extends Migration {
      */
     public function down(): void
     {
-        Schema::dropIfExists( 'notification_preferences' );
+        Schema::dropIfExists( 'cms_notification_preferences' );
     }
 };

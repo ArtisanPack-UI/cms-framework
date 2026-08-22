@@ -37,6 +37,18 @@ class Notification extends Model
     use HasFactory;
 
     /**
+     * The table associated with the model.
+     *
+     * Prefixed with `cms_` so it does not collide with the `notifications`
+     * table Laravel's own database notification channel uses.
+     *
+     * @since 2.9.0
+     *
+     * @var string
+     */
+    protected $table = 'cms_notifications';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @since 1.0.0
@@ -61,6 +73,14 @@ class Notification extends Model
      */
     public function getPivotAttribute()
     {
+        // When the model was fetched through the inverse relation
+        // ( e.g. `$user->systemNotifications` ), Eloquent has already loaded the
+        // real pivot onto the model. Return it directly — otherwise this accessor
+        // shadows it and reports null even though the pivot is present.
+        if ( $this->relationLoaded( 'pivot' ) ) {
+            return $this->getRelation( 'pivot' );
+        }
+
         if ( $this->relationLoaded( 'users' ) && $this->users->isNotEmpty() ) {
             return $this->users->first()->pivot;
         }
@@ -77,7 +97,7 @@ class Notification extends Model
     {
         return $this->belongsToMany(
             config( 'auth.providers.users.model' ),
-            'notification_user',
+            'cms_notification_user',
             'notification_id',
             'user_id',
         )
@@ -141,7 +161,7 @@ class Notification extends Model
      */
     public function scopeOfType( Builder $query, NotificationType $type )
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Type-safe enum
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $type is a type-safe NotificationType enum, parameter-bound by Eloquent in the scope where().
         return $query->where( 'type', $type );
     }
 

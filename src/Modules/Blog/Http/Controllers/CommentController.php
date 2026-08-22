@@ -51,10 +51,12 @@ class CommentController extends Controller
         $query = Comment::query()->with( 'replies' );
 
         if ( $request->filled( 'post_id' ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- post_id is (int)-cast and passed as an Eloquent where() binding.
             $query->where( 'post_id', ( int ) $request->input( 'post_id' ) );
         }
 
         if ( $request->has( 'parent_id' ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- parent_id is read only to be null/int-normalized and bound via Eloquent where(); not persisted or echoed raw.
             $parent = $request->input( 'parent_id' );
             $query->where( 'parent_id', '' === $parent || null === $parent ? null : ( int ) $parent );
         } else {
@@ -68,6 +70,7 @@ class CommentController extends Controller
         // `comments.moderate` capability can request non-approved
         // sets. Public callers always see the approved view,
         // regardless of what they pass on the query string.
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- the requested status is discarded unless the caller passes the comments.moderate capability check, otherwise forced to the Comment::STATUS_APPROVED constant.
         $requestedStatus = $request->input( 'status' );
         $user            = $request->user();
         $canModerate     = null !== $user && $user->can( applyFilters( 'ap.cmsFramework.abilities.comments.moderate', 'comments.moderate' ) );
@@ -75,8 +78,10 @@ class CommentController extends Controller
             ? $requestedStatus
             : Comment::STATUS_APPROVED;
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $status is either a class constant or a moderator-gated value, applied as an Eloquent parameter-bound where().
         $query->where( 'status', $status );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- per_page is (int)-cast then clamped to 1-100 before use as the pagination size.
         $perPage = ( int ) $request->input( 'per_page', 15 );
         $perPage = max( 1, min( 100, $perPage ) );
 

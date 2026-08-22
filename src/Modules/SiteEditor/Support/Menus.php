@@ -107,7 +107,9 @@ class Menus
         }
 
         return MenuLocationAssignment::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config) and is bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $location is a registered menu-location identifier and is bound as an Eloquent query parameter.
             ->where( 'location', $location )
             ->delete() > 0;
     }
@@ -127,7 +129,9 @@ class Menus
         }
 
         $assignment = MenuLocationAssignment::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config) and is bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $location is a registered menu-location identifier and is bound as an Eloquent query parameter.
             ->where( 'location', $location )
             ->first();
 

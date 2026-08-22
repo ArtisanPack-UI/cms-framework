@@ -20,6 +20,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * Notification Controller
@@ -77,18 +78,17 @@ class NotificationController extends Controller
      */
     public function show( Request $request, int $id ): NotificationResource|JsonResponse
     {
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Authenticated user ID is type-safe
         $notification = Notification::with( ['users' => function ( $q ) use ( $request ): void {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $request->user()->id is an authenticated, type-safe user id and is Eloquent parameter-bound in the where().
             $q->where( 'user_id', $request->user()->id );
         }] )->find( $id );
 
-        if ( ! $notification ) {
-            return response()->json( ['message' => 'Notification not found'], 404 );
-        }
-
-        // Check if user has access to this notification
-        if ( ! $notification->users->contains( 'id', $request->user()->id ) ) {
-            return response()->json( ['message' => 'Unauthorized'], 403 );
+        // Return 404 for both "does not exist" and "exists but not the caller's"
+        // so the response cannot be used to enumerate notification ids. The
+        // ownership decision runs through the registered `view` policy so it is
+        // not dead code.
+        if ( ! $notification || Gate::denies( 'view', $notification ) ) {
+            return response()->json( ['message' => __( 'Notification not found' )], 404 );
         }
 
         return new NotificationResource( $notification );
@@ -104,10 +104,10 @@ class NotificationController extends Controller
         $success = $this->notificationManager->markAsRead( $id, $request->user()->id );
 
         if ( ! $success ) {
-            return response()->json( ['message' => 'Failed to mark notification as read'], 400 );
+            return response()->json( ['message' => __( 'Failed to mark notification as read' )], 400 );
         }
 
-        return response()->json( ['message' => 'Notification marked as read'], 200 );
+        return response()->json( ['message' => __( 'Notification marked as read' )], 200 );
     }
 
     /**
@@ -120,10 +120,10 @@ class NotificationController extends Controller
         $success = $this->notificationManager->dismissNotification( $id, $request->user()->id );
 
         if ( ! $success ) {
-            return response()->json( ['message' => 'Failed to dismiss notification'], 400 );
+            return response()->json( ['message' => __( 'Failed to dismiss notification' )], 400 );
         }
 
-        return response()->json( ['message' => 'Notification dismissed'], 200 );
+        return response()->json( ['message' => __( 'Notification dismissed' )], 200 );
     }
 
     /**
@@ -136,7 +136,7 @@ class NotificationController extends Controller
         $count = $this->notificationManager->markAllAsRead( $request->user()->id );
 
         return response()->json( [
-            'message' => "Marked {$count} notifications as read",
+            'message' => trans_choice( ':count notification marked as read.|:count notifications marked as read.', $count, ['count' => $count] ),
             'count'   => $count,
         ], 200 );
     }
@@ -151,7 +151,7 @@ class NotificationController extends Controller
         $count = $this->notificationManager->dismissAll( $request->user()->id );
 
         return response()->json( [
-            'message' => "Dismissed {$count} notifications",
+            'message' => trans_choice( ':count notification dismissed.|:count notifications dismissed.', $count, ['count' => $count] ),
             'count'   => $count,
         ], 200 );
     }
@@ -167,6 +167,6 @@ class NotificationController extends Controller
 
         return response()->json( [
             'count' => $count,
-        ], 200);
+        ], 200 );
     }
 }

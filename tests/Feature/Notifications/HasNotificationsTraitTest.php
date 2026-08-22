@@ -17,6 +17,17 @@ test( 'user can access system notifications relationship', function (): void {
         ->and( $user->systemNotifications->first()->id )->toBe( $notification->id );
 } );
 
+test( 'pivot accessor returns the loaded pivot when fetched through the relation', function (): void {
+    $user         = User::factory()->create();
+    $notification = Notification::factory()->create();
+    $notification->users()->attach( $user->id, ['is_read' => true, 'is_dismissed' => false] );
+
+    $fetched = $user->systemNotifications()->first();
+
+    expect( $fetched->pivot )->not->toBeNull()
+        ->and( (bool) $fetched->pivot->is_read )->toBeTrue();
+} );
+
 test( 'user can access unread system notifications', function (): void {
     $user               = User::factory()->create();
     $readNotification   = Notification::factory()->create();

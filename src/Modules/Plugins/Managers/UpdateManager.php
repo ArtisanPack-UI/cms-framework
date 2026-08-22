@@ -10,8 +10,11 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Exception;
 use Illuminate\Support\Facades\Cache;
@@ -129,10 +132,12 @@ class UpdateManager
      * fall out of the same key.
      *
      * The https requirement is re-checked here rather than trusted from
-     * install-time validation. `updatePlugin()` refreshes `meta` straight from
-     * the manifest inside the downloaded ZIP without re-running
-     * `PluginManager::validateManifest()`, so an update can seat a value that
-     * never passed validation. A plaintext source is not a cosmetic problem:
+     * install-time validation. `updatePlugin()` now re-runs
+     * `PluginManager::assertManifestValid()` before seating a new manifest
+     * (#283), but this method also reads `meta` seated by a pre-#283 framework
+     * version or edited in place on disk (which `discoverPlugins()` still loads
+     * unvalidated), so a value that never passed validation can still reach
+     * here. A plaintext source is not a cosmetic problem:
      * `CustomJsonUpdateSource` would fetch the update metadata over http, and
      * a network attacker rewriting that response chooses both the download URL
      * and the `sha256` it is checked against — the digest and the archive come
@@ -152,11 +157,12 @@ class UpdateManager
         }
 
         // Re-run the shared manifest rules rather than assume they ever ran.
-        // `updatePlugin()` re-seats `meta` straight from the manifest inside the
-        // downloaded ZIP without re-running `PluginManager::validateManifest()`,
-        // so without this an `update.github` of `../../x` would be interpolated
-        // into a github.com URL and reach `GitHubUpdateSource::parseUrl()` as an
-        // owner/repo pair. Mirrors `ThemeManager::resolveUpdateSourceUrl()`.
+        // `updatePlugin()` re-validates a new manifest before seating it (#283),
+        // but a value seated by a pre-#283 version or edited in place on disk
+        // can still reach here, so without this an `update.github` of `../../x`
+        // would be interpolated into a github.com URL and reach
+        // `GitHubUpdateSource::parseUrl()` as an owner/repo pair. Mirrors
+        // `ThemeManager::resolveUpdateSourceUrl()`.
         if ( ! $this->pluginManager->isUsableUpdateSource( $update ) ) {
             logger()->warning( 'Ignoring plugin update source: malformed `update` key in plugin.json.', [
                 'plugin' => $plugin->slug,
@@ -229,9 +235,11 @@ class UpdateManager
             // 1. Backup current version
             $backupPath = $this->backupPlugin( $slug );
 
-            // 2. Deactivate if active
+            // 2. Deactivate if active. Forced past the dependents guard (#45):
+            //    this is a temporary deactivate/reactivate around an in-place
+            //    update, not a teardown, so active dependents must not abort it.
             if ( $wasActive ) {
-                $this->pluginManager->deactivate( $slug );
+                $this->pluginManager->deactivate( $slug, true );
             }
 
             // 3. Download new version
@@ -241,14 +249,44 @@ class UpdateManager
             //    is opened and guarded *before* the live directory is removed,
             //    so a rejected update never destroys the installed plugin.
             $pluginsRoot = base_path( config( 'cms.plugins.directory' ) );
-            $pluginPath  = $pluginsRoot . '/' . $slug;
+            // Build filesystem paths from the trusted database slug, not the raw
+            // route parameter, so a value that only matches a row after
+            // sanitization can never point extraction at an unvalidated path.
+            $pluginPath = $pluginsRoot . '/' . $plugin->slug;
 
-            $this->extractUpdateArchive( $zipPath, $pluginsRoot, $pluginPath, $slug );
+            $this->extractUpdateArchive( $zipPath, $pluginsRoot, $pluginPath, $plugin->slug );
 
-            // 6. Update database
+            // 5. Re-validate the new manifest before trusting it. Step 6 seats
+            //    `meta` straight from the manifest inside the downloaded ZIP, so
+            //    without this an update could install a manifest that would have
+            //    been refused at install — a `migrations_path` traversal, an
+            //    unprefixed permission, a malformed `update` source (#283). A
+            //    rejected manifest throws here and unwinds through the
+            //    backup-restore path below rather than leaving the value seated.
             $manifestPath = $pluginPath . '/plugin.json';
             $manifest     = json_decode( File::get( $manifestPath ), true );
 
+            if ( ! is_array( $manifest ) ) {
+                throw PluginValidationException::invalidManifest( 'The update archive manifest could not be parsed.' );
+            }
+
+            $this->pluginManager->assertManifestValid( $manifest );
+
+            // The update archive must be an update *of this plugin*. Step 6
+            // seats `meta` straight from the manifest, and `meta['slug']` (with
+            // its permission namespace) is trusted downstream — so a manifest
+            // that declared a different `slug` than the plugin being updated
+            // would let it claim, and later remove, another plugin's permission
+            // rows. `assertManifestValid()` only checks the slug's *format*;
+            // this asserts its *identity*, the way the Themes module does after
+            // extraction. A mismatch unwinds through the backup-restore path.
+            if ( $manifest['slug'] !== $slug ) {
+                throw PluginValidationException::invalidManifest(
+                    "Update archive manifest declares slug '{$manifest['slug']}', but plugin '{$slug}' is being updated.",
+                );
+            }
+
+            // 6. Update database
             $plugin->version          = $updateInfo['version'];
             $plugin->meta             = $manifest;
             $plugin->service_provider = $manifest['service_provider'] ?? null;
@@ -272,23 +310,44 @@ class UpdateManager
             // but the reactivate at step 7 rejected the new min_host_version.
             // Restore files AND DB so the plugin isn't stranded pointing at a
             // version whose files no longer exist.
-            $this->restoreFromBackup( $slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw $e;
+        } catch ( DependencyNotSatisfiedException | PluginConflictException $e ) {
+            // The reactivate at step 7 rejected the new manifest's `requires` /
+            // `conflicts` declaration (#45). Unwind exactly like the other
+            // post-extraction failures — restore files and revert the row — and
+            // surface the dependency reason instead of collapsing it into the
+            // generic `downloadFailed()`, which would misreport a satisfiable-
+            // dependency problem as a network error.
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+
+            throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( UpdateException $e ) {
             // A checksum mismatch or an unverifiable archive is not a download
             // failure, and collapsing it into `downloadFailed()` hides the one
             // detail an operator needs to tell a corrupted mirror apart from a
             // release that shipped without a `.sha256` sidecar.
-            $this->restoreFromBackup( $slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+
+            throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
+        } catch ( PluginValidationException $e ) {
+            // The new manifest failed re-validation (#283), so it is refused
+            // rather than seated. Unwind like any other post-extraction failure
+            // — restore the old files and revert the row — and surface the
+            // reason through the type the controller renders verbatim, instead
+            // of collapsing it into the generic `downloadFailed()`.
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( Exception $e ) {
             // Restore from backup on failure
-            $this->restoreFromBackup( $slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::downloadFailed( $slug );
         }
@@ -430,13 +489,22 @@ class UpdateManager
      * were rolled back.
      *
      * @param  array|null  $oldMeta  Prior manifest snapshot.
+     * @param  bool  $wasActive  Activation state before the update began.
      */
-    protected function revertPluginRow( Plugin $plugin, string $oldVersion, ?array $oldMeta, ?string $oldServiceProvider ): void
+    protected function revertPluginRow( Plugin $plugin, string $oldVersion, ?array $oldMeta, ?string $oldServiceProvider, bool $wasActive ): void
     {
         try {
+            // Reload from the database first. Step 2's deactivate() flipped
+            // is_active to false on a *separate* model instance, so this
+            // instance's is_active is stale and save() would not write the
+            // restore. Refreshing gives save() an accurate baseline so setting
+            // is_active back to $wasActive is seen as dirty and persisted.
+            $plugin->refresh();
+
             $plugin->version          = $oldVersion;
             $plugin->meta             = $oldMeta;
             $plugin->service_provider = $oldServiceProvider;
+            $plugin->is_active        = $wasActive;
             $plugin->save();
         } catch ( Exception $e ) {
             logger()->error( "Failed reverting plugin row after failed update: {$plugin->slug}", [

@@ -12,7 +12,10 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
@@ -23,6 +26,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use Dedoc\Scramble\Attributes\Group;
 use Exception;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Validation\ValidationException;
 
@@ -150,6 +154,20 @@ class PluginsController extends Controller
                 'required_version' => $e->requiredVersion,
                 'host_version'     => $e->hostVersion,
             ], 409 );
+        } catch ( PluginConflictException $e ) {
+            return response()->json( [
+                'message'   => $e->getMessage(),
+                'code'      => 'plugin_conflict',
+                'plugin'    => $e->pluginSlug,
+                'conflicts' => $e->conflicts,
+            ], 409 );
+        } catch ( DependencyNotSatisfiedException $e ) {
+            return response()->json( [
+                'message'      => $e->getMessage(),
+                'code'         => 'plugin_dependencies_unsatisfied',
+                'plugin'       => $e->pluginSlug,
+                'dependencies' => $e->result?->toArray(),
+            ], 409 );
         } catch ( PluginNotFoundException $e ) {
             throw ValidationException::withMessages( [
                 'slug' => $e->getMessage(),
@@ -184,6 +202,13 @@ class PluginsController extends Controller
     {
         try {
             $this->pluginManager->deactivate( $slug );
+        } catch ( DependencyNotSatisfiedException $e ) {
+            return response()->json( [
+                'message'    => $e->getMessage(),
+                'code'       => 'plugin_has_active_dependents',
+                'plugin'     => $e->pluginSlug,
+                'dependents' => $e->dependents,
+            ], 409 );
         } catch ( PluginNotFoundException $e ) {
             throw ValidationException::withMessages( [
                 'slug' => $e->getMessage(),
@@ -265,10 +290,23 @@ class PluginsController extends Controller
     {
         try {
             $updated = $this->updateManager->updatePlugin( $slug );
+        } catch ( IncompatiblePluginException $e ) {
+            // `UpdateManager` rethrows this one as-is: the new version's
+            // `min_host_version` is not satisfied. Render the same structured 409
+            // that `activate()` does, whose payload carries the version numbers a
+            // generic error bag cannot express, instead of a generic 422.
+            return response()->json( [
+                'message'          => $e->getMessage(),
+                'code'             => 'plugin_incompatible',
+                'plugin'           => $e->pluginSlug,
+                'required_version' => $e->requiredVersion,
+                'host_version'     => $e->hostVersion,
+            ], 409 );
         } catch ( PluginUpdateException $e ) {
             // `UpdateManager` funnels every in-flight failure — unknown slug,
-            // download, checksum mismatch, failed swap — through this type,
-            // carrying the underlying reason verbatim.
+            // download, checksum mismatch, failed swap, and unsatisfiable
+            // dependency/conflict — through this type, carrying the underlying
+            // reason verbatim.
             throw ValidationException::withMessages( [
                 'slug' => $e->getMessage(),
             ] );
@@ -285,6 +323,139 @@ class PluginsController extends Controller
                 ? __( 'Plugin updated successfully' )
                 : __( 'Plugin is already up to date.' ),
             'updated' => $updated,
+        ] );
+    }
+
+    /**
+     * Reports a plugin's declared dependencies and their current status.
+     *
+     * Endpoint: GET /api/v1/plugins/{slug}/dependencies
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug identifier.
+     *
+     * @return JsonResponse JSON response with the declared requires/conflicts and resolved status.
+     */
+    public function dependencies( string $slug ): JsonResponse
+    {
+        $graph  = $this->pluginManager->buildDependencyGraph();
+        $plugin = $this->pluginManager->getPlugin( $slug );
+
+        // Unknown means present in neither the database (the graph) nor on disk.
+        // A DB-registered plugin whose files are gone still has declared deps —
+        // don't 404 it the way `dependents()` deliberately doesn't.
+        if ( ! isset( $graph[ $slug ] ) && ! $plugin ) {
+            return response()->json( [
+                'message' => __( 'Plugin not found' ),
+            ], 404 );
+        }
+
+        if ( $plugin ) {
+            $requires  = $plugin['manifest']['requires'] ?? [];
+            $conflicts = $plugin['manifest']['conflicts'] ?? [];
+        } else {
+            // Files are gone; reconstruct the declared dependencies from the
+            // DB-persisted graph entry, mirroring the manifest shape.
+            $entry     = $graph[ $slug ];
+            $requires  = array_filter( [
+                'plugins'       => $entry['requires'] ?? [],
+                'cms-framework' => $entry['requires_host'] ?? null,
+            ], fn ( $value ) => ! empty( $value ) );
+            $conflicts = $entry['conflicts'] ?? [];
+        }
+
+        return response()->json( [
+            'slug'      => $slug,
+            'requires'  => $requires,
+            'conflicts' => $conflicts,
+            'status'    => $this->pluginManager->checkDependencies( $slug, $graph )->toArray(),
+        ] );
+    }
+
+    /**
+     * Reports the installed plugins that depend on the given plugin.
+     *
+     * Endpoint: GET /api/v1/plugins/{slug}/dependents
+     *
+     * @since 2.9.0
+     *
+     * @param  string  $slug  Plugin slug identifier.
+     *
+     * @return JsonResponse JSON response listing dependent plugin slugs.
+     */
+    public function dependents( string $slug ): JsonResponse
+    {
+        $graph = $this->pluginManager->buildDependencyGraph();
+
+        // Unknown means present in neither the database (the graph) nor on disk.
+        // A DB-registered plugin with no files still legitimately has dependents.
+        if ( ! isset( $graph[ $slug ] ) && ! $this->pluginManager->getPlugin( $slug ) ) {
+            return response()->json( [
+                'message' => __( 'Plugin not found' ),
+            ], 404 );
+        }
+
+        return response()->json( [
+            'slug'           => $slug,
+            'dependents'     => $this->pluginManager->getDependents( $slug, $graph ),
+            'can_deactivate' => $this->pluginManager->canDeactivate( $slug, $graph ),
+        ] );
+    }
+
+    /**
+     * Checks dependencies for a batch of plugins and returns a suggested
+     * activation order.
+     *
+     * Accepts either `{"plugins": ["a", "b"]}` or a bare JSON array body.
+     *
+     * Endpoint: POST /api/v1/plugins/check-dependencies
+     *
+     * @since 2.9.0
+     *
+     * @param  Request  $request  Request carrying the plugin slugs to check.
+     *
+     * @return JsonResponse JSON response with per-plugin status and activation order.
+     */
+    public function checkDependencies( Request $request ): JsonResponse
+    {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input('plugins') is is_array-checked then filtered to strings and used only as in-memory dependency-graph lookup keys, never persisted or echoed.
+        $slugs = $request->input( 'plugins' );
+        if ( ! is_array( $slugs ) ) {
+            $all   = $request->all();
+            $slugs = array_is_list( $all ) ? $all : [];
+        }
+        $slugs = array_values( array_filter( $slugs, 'is_string' ) );
+
+        // Bound the batch: each unknown slug costs a graph lookup, and an
+        // unbounded list is an easy amplification vector.
+        $slugs = array_slice( $slugs, 0, 100 );
+
+        $graph   = $this->pluginManager->buildDependencyGraph();
+        $results = [];
+        foreach ( $slugs as $slug ) {
+            // Surface whether the slug is installed so an uninstalled plugin is
+            // not silently reported as `satisfied: true` and dropped from `order`.
+            $results[ $slug ] = array_merge(
+                $this->pluginManager->checkDependencies( $slug, $graph )->toArray(),
+                [ 'installed' => isset( $graph[ $slug ] ) ],
+            );
+        }
+
+        try {
+            $order = $this->pluginManager->getActivationOrder( $slugs, $graph );
+        } catch ( CircularDependencyException $e ) {
+            return response()->json( [
+                'message' => $e->getMessage(),
+                'code'    => 'circular_dependency',
+                'cycle'   => $e->cycle,
+                'results' => $results,
+            ], 422 );
+        }
+
+        return response()->json( [
+            'order'   => $order,
+            'results' => $results,
         ] );
     }
 }

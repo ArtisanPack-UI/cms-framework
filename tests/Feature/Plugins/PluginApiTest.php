@@ -6,6 +6,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Http;
 
 beforeEach( function (): void {
     // Privileged user: mutating plugin routes gate on `manage-plugins`.
@@ -294,6 +295,71 @@ describe( 'Plugin API - Update', function (): void {
             ->assertJsonPath( 'updated', false )
             ->assertJsonPath( 'message', 'Plugin is already up to date.' );
     } );
+
+    it( 'returns a structured 409, not a generic 422, when the new version requires a newer host', function (): void {
+        $this->actingAs( $this->admin );
+
+        File::copyDirectory(
+            __DIR__ . '/../../Support/Plugins/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => true,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        // The new version declares a host requirement the test host cannot meet,
+        // so step-7 reactivation throws IncompatiblePluginException, which
+        // UpdateManager rethrows as-is for the controller to render structurally.
+        $manifest = [
+            'slug'             => 'valid-plugin',
+            'name'             => 'Valid Test Plugin',
+            'version'          => '2.0.0',
+            'description'      => 'Updated plugin',
+            'author'           => 'Test Author',
+            'min_host_version' => '999.0.0',
+        ];
+
+        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
+        $zip     = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
+        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
+        $zip->close();
+        $sha256 = hash( 'sha256', File::get( $zipPath ) );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        $response = $this->postJson( '/api/v1/plugins/valid-plugin/update' );
+
+        $response->assertStatus( 409 )
+            ->assertJsonPath( 'code', 'plugin_incompatible' )
+            ->assertJsonPath( 'plugin', 'valid-plugin' )
+            ->assertJsonPath( 'required_version', '999.0.0' );
+
+        // The failed update rolled back: still active at the old version.
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' )
+            ->and( $plugin->is_active )->toBeTrue();
+
+        File::delete( $zipPath );
+    } );
 } );
 
 describe( 'Plugin API - Check Updates', function (): void {
@@ -324,6 +390,11 @@ describe( 'Plugin API - Permission Checks', function (): void {
             ['POST', '/api/v1/plugins/test-plugin/deactivate'],
             ['DELETE', '/api/v1/plugins/test-plugin'],
             ['GET', '/api/v1/plugins/updates'],
+            // Read-only dependency endpoints (#45): auth-gated even though
+            // they are not `manage-plugins`-gated.
+            ['GET', '/api/v1/plugins/test-plugin/dependencies'],
+            ['GET', '/api/v1/plugins/test-plugin/dependents'],
+            ['POST', '/api/v1/plugins/check-dependencies'],
         ];
 
         foreach ( $endpoints as [$method, $uri] ) {

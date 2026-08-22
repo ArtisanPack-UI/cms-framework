@@ -43,7 +43,7 @@ class NotificationPolicy
     public function view( $user, Notification $notification ): bool
     {
         // User can only view notifications sent to them
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $user->id is a type-safe model id, Eloquent parameter-bound in the existence check.
         return $notification->users()->where( 'user_id', $user->id )->exists();
     }
 
@@ -56,8 +56,11 @@ class NotificationPolicy
      */
     public function create( $user ): bool
     {
-        // Only users with notification management capability can create
-        return $user->hasCapability( 'notifications.manage' );
+        // Only users with notification management capability can create. Guard
+        // `hasCapability()` so the globally registered policy degrades to a plain
+        // denial on host user models that do not compose the RBAC trait, rather
+        // than fataling with "Call to undefined method".
+        return method_exists( $user, 'hasCapability' ) && $user->hasCapability( 'notifications.manage' );
     }
 
     /**
@@ -70,7 +73,7 @@ class NotificationPolicy
     public function update( $user, Notification $notification ): bool
     {
         // User can update (mark as read/dismiss) their own notifications
-        // phpcs:ignore ArtisanPackUIStandard.Security.ValidatedSanitizedInput.MissingUnslash -- Model ID is type-safe
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $user->id is a type-safe model id, Eloquent parameter-bound in the existence check.
         return $notification->users()->where( 'user_id', $user->id )->exists();
     }
 
@@ -83,7 +86,10 @@ class NotificationPolicy
      */
     public function delete( $user, Notification $notification ): bool
     {
-        // Only users with notification management capability can delete
-        return $user->hasCapability( 'notifications.manage' );
+        // Only users with notification management capability can delete. Guard
+        // `hasCapability()` so the globally registered policy degrades to a plain
+        // denial on host user models that do not compose the RBAC trait, rather
+        // than fataling with "Call to undefined method".
+        return method_exists( $user, 'hasCapability' ) && $user->hasCapability( 'notifications.manage' );
     }
 }

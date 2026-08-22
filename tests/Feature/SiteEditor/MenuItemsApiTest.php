@@ -347,6 +347,47 @@ describe( 'POST /api/v1/menu-items', function (): void {
         expect( $response->json( 'classes' ) )->toBe( ['foo', 'bar', 'baz'] )
             ->and( $response->json( 'xfn' ) )->toBe( ['nofollow', 'noopener'] );
     } );
+
+    it( 'rejects a real menus id at validation when no theme is active', function (): void {
+        // With no active theme there is no scope in which a menu can
+        // exist, so the `menus` rule fails closed — the request rejects
+        // rather than widening to an unscoped exists and deferring to the
+        // controller's 409. A genuinely existing id is used to prove the
+        // rule rejects on scope, not on existence.
+        $this->mock( ThemeManager::class, function ( $mock ): void {
+            $mock->shouldReceive( 'getActiveTheme' )->andReturnNull();
+        } );
+
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/menu-items', [
+            'menus' => $this->menu->id,
+            'title' => 'Home',
+            'type'  => MenuItem::TYPE_LINK,
+        ] )->assertJsonValidationErrors( ['menus'] );
+    } );
+
+    it( 'rejects a real parent id at validation when no theme is active', function (): void {
+        $parent = MenuItem::create( [
+            'menu_id'  => $this->menu->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_SUBMENU,
+            'label'    => 'Parent',
+        ] );
+
+        $this->mock( ThemeManager::class, function ( $mock ): void {
+            $mock->shouldReceive( 'getActiveTheme' )->andReturnNull();
+        } );
+
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/menu-items', [
+            'menus'  => $this->menu->id,
+            'title'  => 'Child',
+            'type'   => MenuItem::TYPE_LINK,
+            'parent' => $parent->id,
+        ] )->assertJsonValidationErrors( ['menus', 'parent'] );
+    } );
 } );
 
 describe( 'PUT /api/v1/menu-items/{id}', function (): void {
@@ -385,6 +426,36 @@ describe( 'PUT /api/v1/menu-items/{id}', function (): void {
             'menus' => $this->menu->id,
             'title' => 'Item',
         ] )->assertStatus( 422 );
+    } );
+
+    it( 'rejects a real parent id at validation when no theme is active', function (): void {
+        // `parent` is validated on update too (unlike the prohibited
+        // `menus`), so the fail-closed rule must reject at validation
+        // rather than reaching the controller's theme-scoped 404.
+        $item = MenuItem::create( [
+            'menu_id'  => $this->menu->id,
+            'position' => 0,
+            'type'     => MenuItem::TYPE_LINK,
+            'label'    => 'Item',
+        ] );
+
+        $parent = MenuItem::create( [
+            'menu_id'  => $this->menu->id,
+            'position' => 1,
+            'type'     => MenuItem::TYPE_SUBMENU,
+            'label'    => 'Parent',
+        ] );
+
+        $this->mock( ThemeManager::class, function ( $mock ): void {
+            $mock->shouldReceive( 'getActiveTheme' )->andReturnNull();
+        } );
+
+        $this->actingAs( $this->user );
+
+        $this->putJson( '/api/v1/menu-items/' . $item->id, [
+            'title'  => 'Item',
+            'parent' => $parent->id,
+        ] )->assertJsonValidationErrors( ['parent'] );
     } );
 } );
 

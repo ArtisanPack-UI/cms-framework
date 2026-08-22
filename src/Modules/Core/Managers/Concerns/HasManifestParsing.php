@@ -158,6 +158,7 @@ trait HasManifestParsing
     {
         return is_string( $value )
             && str_starts_with( $value, 'https://' )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var($value, FILTER_VALIDATE_URL) combined with an https:// prefix check is itself validation.
             && false !== filter_var( $value, FILTER_VALIDATE_URL );
     }
 

@@ -133,6 +133,7 @@ class DynamicContentAccessor
 
         return $this->collectionMemo[ $typeSlug ] = DynamicContentRecord::query()
             ->with( 'values.field', 'type.fields' )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $type['db_id'] is an internal registry-resolved id passed as an Eloquent where() binding.
             ->where( 'dynamic_content_type_id', $type['db_id'] )
             ->orderBy( 'order' )
             ->orderBy( 'id' )
@@ -160,6 +161,7 @@ class DynamicContentAccessor
         $stamp = Cache::rememberForever(
             "dc.sig.{$typeSlug}",
             fn () => (string) DynamicContentRecord::query()
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $type['db_id'] is an internal registry-resolved id passed as an Eloquent where() binding.
                 ->where( 'dynamic_content_type_id', $type['db_id'] )
                 ->max( 'updated_at' ),
         );
@@ -177,6 +179,7 @@ class DynamicContentAccessor
 
         $record = DynamicContentRecord::query()
             ->with( 'values.field', 'type.fields' )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $type['db_id'] is an internal registry-resolved id passed as an Eloquent where() binding.
             ->where( 'dynamic_content_type_id', $type['db_id'] )
             ->orderBy( 'order' )
             ->orderBy( 'id' )

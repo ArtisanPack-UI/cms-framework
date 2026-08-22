@@ -7,7 +7,9 @@ use ArtisanPackUI\CMSFramework\Modules\Notifications\Jobs\SendNotificationEmail;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Managers\NotificationManager;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference;
+use ArtisanPackUI\CMSFramework\Tests\Support\PlainUser;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser as User;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 
 uses( Illuminate\Foundation\Testing\RefreshDatabase::class );
@@ -197,6 +199,65 @@ test( 'sendNotificationByRole sends to users with specific role', function (): v
         ->and( $notification->users->pluck( 'id' )->toArray() )->not->toContain( $user3->id );
 } );
 
+test( 'sendNotification degrades gracefully when user model lacks HasNotifications', function (): void {
+    $manager = app( NotificationManager::class );
+    $user1   = User::factory()->create();
+    $user2   = User::factory()->create();
+
+    // Point the app at a host user model with no notificationPreferences() relationship.
+    config()->set( 'auth.providers.users.model', PlainUser::class );
+
+    $manager->registerNotification( 'test.notification', 'Test', 'Content' );
+    $notification = $manager->sendNotification( 'test.notification', [$user1->id, $user2->id] );
+
+    // Every candidate opts in when there are no preferences to honour.
+    expect( $notification )->toBeInstanceOf( Notification::class )
+        ->and( $notification->users )->toHaveCount( 2 );
+} );
+
+test( 'sendNotification drops unknown user ids when user model lacks HasNotifications', function (): void {
+    $manager = app( NotificationManager::class );
+    $user    = User::factory()->create();
+
+    config()->set( 'auth.providers.users.model', PlainUser::class );
+
+    $manager->registerNotification( 'test.notification', 'Test', 'Content' );
+
+    // 999999 does not exist; only the real user should be attached, matching the
+    // trait-present path rather than attaching an orphan pivot row.
+    $notification = $manager->sendNotification( 'test.notification', [$user->id, 999999] );
+
+    expect( $notification->users )->toHaveCount( 1 )
+        ->and( $notification->users->first()->id )->toBe( $user->id );
+} );
+
+test( 'sendNotification still queues email when user model lacks HasNotifications', function (): void {
+    Queue::fake();
+
+    $manager = app( NotificationManager::class );
+    $user    = User::factory()->create();
+
+    config()->set( 'auth.providers.users.model', PlainUser::class );
+
+    $manager->registerNotification( 'test.notification', 'Test', 'Content', NotificationType::Info, true );
+    $manager->sendNotification( 'test.notification', [$user->id] );
+
+    Queue::assertPushed( SendNotificationEmail::class );
+} );
+
+test( 'sendNotificationByRole returns null when user model lacks HasRolesAndPermissions', function (): void {
+    $manager = app( NotificationManager::class );
+    User::factory()->create();
+
+    // Point the app at a host user model with no roles() relationship.
+    config()->set( 'auth.providers.users.model', PlainUser::class );
+
+    $manager->registerNotification( 'role.test', 'Role Test', 'Content' );
+    $notification = $manager->sendNotificationByRole( 'role.test', 'administrator' );
+
+    expect( $notification )->toBeNull();
+} );
+
 test( 'sendNotificationToCurrentUser sends to authenticated user', function (): void {
     $manager = app( NotificationManager::class );
     $user    = User::factory()->create();
@@ -367,4 +428,26 @@ test( 'getUnreadCount returns correct unread count', function (): void {
     $count = $manager->getUnreadCount( $user->id );
 
     expect( $count )->toBe( 2 );
+} );
+
+test( 'notification policy denies create for a host user without the RBAC trait instead of fataling', function (): void {
+    $plainUser = PlainUser::create( [
+        'name'     => 'Plain',
+        'email'    => 'plain-create@example.com',
+        'password' => bcrypt( 'x' ),
+    ] );
+
+    expect( Gate::forUser( $plainUser )->allows( 'create', Notification::class ) )->toBeFalse();
+} );
+
+test( 'notification policy denies delete for a host user without the RBAC trait instead of fataling', function (): void {
+    $plainUser = PlainUser::create( [
+        'name'     => 'Plain',
+        'email'    => 'plain-delete@example.com',
+        'password' => bcrypt( 'x' ),
+    ] );
+
+    $notification = Notification::factory()->create();
+
+    expect( Gate::forUser( $plainUser )->allows( 'delete', $notification ) )->toBeFalse();
 } );

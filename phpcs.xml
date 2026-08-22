@@ -39,6 +39,14 @@
     <!-- PHP sniffs -->
     <rule ref="ArtisanPackUIStandard.PHP.PhpTags"/>
 
+    <!--
+    Security sniff (only). Re-added per #301 so unsanitized user input reaching
+    the database or output is caught in CI. The remaining ArtisanPackUIStandard
+    sniffs (formatting/alignment/array/naming) stay excluded because they
+    conflict with PHP-CS-Fixer, the authoritative formatter for this repo.
+    -->
+    <rule ref="ArtisanPackUIStandard.Security.ValidatedSanitizedInput"/>
+
     <!-- Disable line length checks -->
     <rule ref="Generic.Files.LineLength">
         <severity>0</severity>

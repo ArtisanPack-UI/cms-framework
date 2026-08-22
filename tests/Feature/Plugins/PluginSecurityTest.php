@@ -346,4 +346,32 @@ describe( 'File System Security', function (): void {
 
         File::delete( $zipPath );
     } );
+
+    it( 'rejects a plugin ZIP whose manifest slug differs from the directory it installs as', function (): void {
+        $zipPath = storage_path( 'app/slug-mismatch-plugin-' . uniqid() . '.zip' );
+        File::ensureDirectoryExists( dirname( $zipPath ) );
+
+        // The archive installs as `installed-as`, but the manifest declares a
+        // different `slug` (with a permission namespace to match) — the divergence
+        // this fix rejects.
+        $zip = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'installed-as/plugin.json', json_encode( [
+            'slug'        => 'other-plugin',
+            'name'        => 'Slug Mismatch Plugin',
+            'version'     => '1.0.0',
+            'permissions' => ['other-plugin.manage'],
+        ] ) );
+        $zip->close();
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( PluginValidationException::class, 'must match extracted directory slug' );
+
+        // Rollback: the extracted directory is gone and no row was seated.
+        expect( File::exists( $this->pluginsPath . '/installed-as' ) )->toBeFalse();
+        expect( Plugin::where( 'slug', 'installed-as' )->exists() )->toBeFalse();
+        expect( Plugin::where( 'slug', 'other-plugin' )->exists() )->toBeFalse();
+
+        File::delete( $zipPath );
+    } );
 } );

@@ -137,6 +137,65 @@ describe( 'TemplateResolver::resolve()', function (): void {
     } );
 } );
 
+describe( 'TemplateResolver Blade fallback (#126)', function (): void {
+    it( 'resolves a Blade file when no HTML file exists, marked read-only', function (): void {
+        File::put( $this->themeFiles . '/page.blade.php', '<p>{{ $title }}</p>' );
+
+        $result = $this->resolver->resolve( 'page' );
+
+        expect( $result )
+            ->toBeInstanceOf( ResolvedEntity::class )
+            ->and( $result->source )->toBe( 'theme' )
+            ->and( $result->isBlade )->toBeTrue()
+            ->and( $result->hasThemeFile )->toBeTrue()
+            ->and( $result->isCustom )->toBeFalse()
+            ->and( $result->raw )->toBe( '' )
+            ->and( $result->blocks )->toBe( [] )
+            ->and( $result->title )->toBe( 'Page' );
+    } );
+
+    it( 'prefers the HTML file when both HTML and Blade exist (HTML wins)', function (): void {
+        File::put( $this->themeFiles . '/page.html', '<!-- wp:paragraph --><p>HTML</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/page.blade.php', '<p>{{ $blade }}</p>' );
+
+        $result = $this->resolver->resolve( 'page' );
+
+        expect( $result->isBlade )->toBeFalse()
+            ->and( $result->raw )->toContain( 'HTML' )
+            ->and( $result->blocks )->toHaveCount( 1 );
+    } );
+
+    it( 'lists Blade slugs in all() marked as Blade, deduped against HTML', function (): void {
+        File::put( $this->themeFiles . '/blade-only.blade.php', '<p>Blade</p>' );
+        File::put( $this->themeFiles . '/both.html', '<!-- html -->' );
+        File::put( $this->themeFiles . '/both.blade.php', '<p>blade</p>' );
+
+        $bySlug = collect( $this->resolver->all() )->keyBy( 'slug' );
+
+        expect( $bySlug->keys()->all() )->toEqual( ['blade-only', 'both'] )
+            ->and( $bySlug->get( 'blade-only' )->isBlade )->toBeTrue()
+            ->and( $bySlug->get( 'both' )->isBlade )->toBeFalse();
+    } );
+
+    it( 'lets a DB override win over a Blade file and stay editable', function (): void {
+        File::put( $this->themeFiles . '/page.blade.php', '<p>Blade</p>' );
+
+        Template::create( [
+            'theme'         => $this->themeSlug,
+            'slug'          => 'page',
+            'title'         => 'DB Page',
+            'is_custom'     => false,
+            'block_content' => [['blockName' => 'core/heading']],
+        ] );
+
+        $result = $this->resolver->resolve( 'page' );
+
+        expect( $result->source )->toBe( 'db' )
+            ->and( $result->isBlade )->toBeFalse()
+            ->and( $result->hasThemeFile )->toBeTrue();
+    } );
+} );
+
 describe( 'TemplateResolver::all()', function (): void {
     it( 'merges file slugs and DB slugs, deduplicating with DB winning', function (): void {
         File::put( $this->themeFiles . '/page.html', '<!-- page from file -->' );
@@ -209,6 +268,15 @@ describe( 'slug sanitization', function (): void {
         $result = $this->resolver->resolve( '../secret' );
 
         expect( $result )->toBeNull();
+    } );
+
+    it( 'rejects path-traversal slugs targeting a Blade file outside templates/', function (): void {
+        // The Blade fallback resolves `.blade.php` files; make sure the slug
+        // guard rejects a traversal to one planted outside the templates dir.
+        File::ensureDirectoryExists( $this->themesPath . '/' . $this->themeSlug );
+        File::put( $this->themesPath . '/' . $this->themeSlug . '/secret.blade.php', '<p>secret</p>' );
+
+        expect( $this->resolver->resolve( '../secret' ) )->toBeNull();
     } );
 
     it( 'rejects slugs containing slashes', function (): void {

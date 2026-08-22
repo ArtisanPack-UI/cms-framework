@@ -4,8 +4,10 @@
  * Template Resolver
  *
  * Resolves template entities for the active theme by merging DB-stored
- * templates with theme-file templates from `themes/{active}/templates/{slug}.html`.
- * DB rows win when present.
+ * templates with theme-file templates from `themes/{active}/templates/{slug}.html`,
+ * falling back to a Blade file at `themes/{active}/templates/{slug}.blade.php`
+ * when no HTML file exists. DB rows win over theme files; HTML wins over Blade.
+ * Blade files are read-only in the site editor.
  *
  * @since      2.0.0
  */
@@ -48,8 +50,9 @@ class TemplateResolver implements EntityResolver
             return null;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config, not request input); $slug is guarded by SlugValidator above. Both are bound as Eloquent query parameters.
         $row          = Template::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
-        $themeFile    = $this->themeFilePath( $theme, $slug );
+        $themeFile    = $this->resolveThemeFile( $theme, $slug );
         $hasThemeFile = null !== $themeFile;
 
         if ( null !== $row ) {
@@ -64,6 +67,7 @@ class TemplateResolver implements EntityResolver
                 status       : $row->status,
                 hasThemeFile : $hasThemeFile,
                 isCustom     : (bool) $row->is_custom && ! $hasThemeFile,
+                isBlade      : false,
                 area         : null,
                 model        : $row,
             );
@@ -73,7 +77,29 @@ class TemplateResolver implements EntityResolver
             return null;
         }
 
-        $markup = File::get( $themeFile );
+        // Blade theme files render at request time and are read-only in the
+        // site editor. They carry no block tree, so `raw` and `blocks` stay
+        // empty and the `isBlade` flag drives the editor's read-only affordance
+        // and the save-rejection guard in TemplatesController.
+        if ( $themeFile['isBlade'] ) {
+            return new ResolvedEntity(
+                slug         : $slug,
+                theme        : $theme,
+                source       : 'theme',
+                raw          : '',
+                blocks       : [],
+                title        : $this->humanizeSlug( $slug ),
+                description  : null,
+                status       : 'publish',
+                hasThemeFile : true,
+                isCustom     : false,
+                isBlade      : true,
+                area         : null,
+                model        : null,
+            );
+        }
+
+        $markup = File::get( $themeFile['path'] );
 
         return new ResolvedEntity(
             slug         : $slug,
@@ -86,6 +112,7 @@ class TemplateResolver implements EntityResolver
             status       : 'publish',
             hasThemeFile : true,
             isCustom     : false,
+            isBlade      : false,
             area         : null,
             model        : null,
         );
@@ -105,6 +132,7 @@ class TemplateResolver implements EntityResolver
         }
 
         $themeFileSlugs = $this->themeFileSlugs( $theme );
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug from ThemeManager (internal config, not request input) and is bound as an Eloquent query parameter.
         $rows           = Template::query()->where( 'theme', $theme )->get()->keyBy( 'slug' );
 
         $allSlugs = array_unique( array_merge( $themeFileSlugs, $rows->keys()->all() ) );
@@ -138,6 +166,7 @@ class TemplateResolver implements EntityResolver
             return false;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config); $slug is guarded by SlugValidator at the top of this method. Both are bound as Eloquent query parameters.
         return Template::query()->where( 'theme', $theme )->where( 'slug', $slug )->delete() > 0;
     }
 
@@ -166,21 +195,39 @@ class TemplateResolver implements EntityResolver
     }
 
     /**
-     * Returns the absolute path to the theme file for the given slug,
-     * or null when the file does not exist.
+     * Resolve the theme file backing a slug, preferring block-grammar HTML
+     * over a Blade fallback.
      *
-     * @since 2.0.0
+     * A slug may be authored either as `templates/{slug}.html` (block grammar,
+     * editable in the site editor) or `templates/{slug}.blade.php` (rendered at
+     * request time, read-only in the site editor). When both exist HTML wins,
+     * so a theme can migrate a file from Blade to blocks without changing its
+     * slug. Returns the absolute path and whether it is a Blade file, or null
+     * when neither exists.
+     *
+     * @since 2.9.0
+     *
+     * @return array{path: string, isBlade: bool}|null
      */
-    protected function themeFilePath( string $theme, string $slug ): ?string
+    protected function resolveThemeFile( string $theme, string $slug ): ?array
     {
         $directory = config( 'cms.themes.directory', 'themes' );
-        $path      = base_path( $directory ) . '/' . $theme . '/templates/' . $slug . '.html';
+        $base      = base_path( $directory ) . '/' . $theme . '/templates/' . $slug;
 
-        return File::exists( $path ) ? $path : null;
+        if ( File::exists( $base . '.html' ) ) {
+            return ['path' => $base . '.html', 'isBlade' => false];
+        }
+
+        if ( File::exists( $base . '.blade.php' ) ) {
+            return ['path' => $base . '.blade.php', 'isBlade' => true];
+        }
+
+        return null;
     }
 
     /**
-     * Returns the list of template slugs the active theme provides on disk.
+     * Returns the list of template slugs the active theme provides on disk,
+     * including both block-grammar HTML files and Blade fallbacks.
      *
      * @since 2.0.0
      *
@@ -198,12 +245,19 @@ class TemplateResolver implements EntityResolver
         $slugs = [];
 
         foreach ( File::files( $dir ) as $file ) {
-            if ( 'html' === $file->getExtension() ) {
+            $name = $file->getFilename();
+
+            // `getFilenameWithoutExtension()` strips only the final extension,
+            // so `page.blade.php` would yield `page.blade`; match the compound
+            // `.blade.php` suffix explicitly before falling back to `.html`.
+            if ( str_ends_with( $name, '.blade.php' ) ) {
+                $slugs[] = substr( $name, 0, -strlen( '.blade.php' ) );
+            } elseif ( 'html' === $file->getExtension() ) {
                 $slugs[] = $file->getFilenameWithoutExtension();
             }
         }
 
-        return $slugs;
+        return array_values( array_unique( $slugs ) );
     }
 
     /**

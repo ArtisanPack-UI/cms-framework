@@ -45,3 +45,35 @@ test( 'index endpoint rejects non-integer limit values', function (): void {
 
     $response->assertStatus( 422 );
 } );
+
+test( 'show returns the caller\'s own notification', function (): void {
+    $user         = User::factory()->create();
+    $notification = Notification::factory()->create();
+    $notification->users()->attach( $user->id, ['is_read' => false, 'is_dismissed' => false] );
+
+    $this->actingAs( $user, 'sanctum' )
+        ->getJson( "/api/v1/notifications/{$notification->id}" )
+        ->assertOk()
+        ->assertJsonPath( 'data.id', $notification->id );
+} );
+
+test( 'show returns 404, not 403, for a notification belonging to another user', function (): void {
+    $user  = User::factory()->create();
+    $other = User::factory()->create();
+
+    $notification = Notification::factory()->create();
+    $notification->users()->attach( $other->id, ['is_read' => false, 'is_dismissed' => false] );
+
+    // 404 (not 403) so the response cannot be used to enumerate notification ids.
+    $this->actingAs( $user, 'sanctum' )
+        ->getJson( "/api/v1/notifications/{$notification->id}" )
+        ->assertNotFound();
+} );
+
+test( 'show returns 404 for a missing notification', function (): void {
+    $user = User::factory()->create();
+
+    $this->actingAs( $user, 'sanctum' )
+        ->getJson( '/api/v1/notifications/999999' )
+        ->assertNotFound();
+} );

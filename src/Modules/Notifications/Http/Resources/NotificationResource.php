@@ -31,7 +31,7 @@ class NotificationResource extends JsonResource
      */
     public function toArray( Request $request ): array
     {
-        $pivotData = $this->whenPivotLoaded( 'notification_user', function () {
+        $pivotData = $this->whenPivotLoaded( 'cms_notification_user', function () {
             return [
                 'is_read'      => (bool) $this->pivot->is_read,
                 'read_at'      => $this->pivot->read_at,

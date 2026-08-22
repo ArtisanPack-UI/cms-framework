@@ -115,6 +115,7 @@ PROMPT;
      */
     protected function execute( Credentials $credentials, string $model, string $instructions ): array
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input() flows into normalizeInput(), which validates the array and trims title/excerpt.
         $normalized = $this->normalizeInput( $this->input() );
 
         $prompter = app( AgentPrompter::class );
@@ -165,6 +166,7 @@ PROMPT;
 
         $maxChars = 60;
         if ( isset( $input['max_chars'] ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var(..., FILTER_VALIDATE_INT, range 20-100) is validation constraining max_chars.
             $parsed = filter_var(
                 $input['max_chars'],
                 FILTER_VALIDATE_INT,

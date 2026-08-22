@@ -277,6 +277,63 @@ describe( 'PUT /api/v1/templates/{slug}', function (): void {
     } );
 } );
 
+describe( 'Blade templates are read-only (#126)', function (): void {
+    it( 'lists a Blade template with is_blade true and editable false', function (): void {
+        File::put( $this->themeFiles . '/page.blade.php', '<p>Blade</p>' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/templates/page' );
+
+        $response->assertOk();
+        expect( $response->json( 'is_blade' ) )->toBeTrue();
+        expect( $response->json( 'editable' ) )->toBeFalse();
+    } );
+
+    it( 'rejects a PUT against a Blade-only template with a clear 422', function (): void {
+        File::put( $this->themeFiles . '/page.blade.php', '<p>Blade</p>' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->putJson( '/api/v1/templates/page', [
+            'title'         => 'Try Edit',
+            'block_content' => [['blockName' => 'core/heading']],
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( $response->json( 'message' ) )->toContain( 'Blade' );
+        expect( Template::where( 'slug', 'page' )->exists() )->toBeFalse();
+    } );
+
+    it( 'rejects a POST creating a DB row over a Blade-only template', function (): void {
+        File::put( $this->themeFiles . '/page.blade.php', '<p>Blade</p>' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->postJson( '/api/v1/templates', [
+            'slug'  => 'page',
+            'title' => 'Try Create',
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( Template::where( 'slug', 'page' )->exists() )->toBeFalse();
+    } );
+
+    it( 'still allows editing an HTML template that also has a Blade sibling (HTML wins)', function (): void {
+        File::put( $this->themeFiles . '/page.html', '<!-- wp:paragraph --><p>H</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/page.blade.php', '<p>Blade</p>' );
+
+        $this->actingAs( $this->user );
+
+        $this->putJson( '/api/v1/templates/page', [
+            'title'         => 'DB Page',
+            'block_content' => [['blockName' => 'core/heading']],
+        ] )->assertOk();
+
+        expect( Template::where( 'slug', 'page' )->exists() )->toBeTrue();
+    } );
+} );
+
 describe( 'DELETE /api/v1/templates/{slug}', function (): void {
     it( 'reverts a DB override and returns 204', function (): void {
         Template::create( [

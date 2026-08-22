@@ -392,6 +392,7 @@ class BlogManager
         $slug = $base;
         $n    = 2;
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is generated internally via Str::slug() and used in a parameter-bound where() uniqueness check.
         while ( Post::withTrashed()->where( 'slug', $slug )->exists() ) {
             $slug = $base . '-' . $n;
             $n++;

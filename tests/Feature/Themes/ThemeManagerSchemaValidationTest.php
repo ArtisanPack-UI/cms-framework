@@ -101,6 +101,51 @@ describe( 'discoverThemes() with extended theme.json validation', function (): v
         expect( $slugs )->toContain( 'phase-h-theme' );
     } );
 
+    it( 'warns but still discovers when a customTemplates entry maps to a Blade-only file (#126)', function (): void {
+        Log::spy();
+
+        $path = writeTheme( $this->themesPath, 'blade-ct-theme', [
+            'name'            => 'Blade CT Theme',
+            'slug'            => 'blade-ct-theme',
+            'version'         => '1.0.0',
+            'customTemplates' => [
+                ['name' => 'landing', 'title' => 'Landing'],
+            ],
+        ], $this->testSlugs );
+
+        File::ensureDirectoryExists( $path . '/templates' );
+        File::put( $path . '/templates/landing.blade.php', '<x-layout>Landing</x-layout>' );
+
+        $themes = $this->manager->discoverThemes();
+
+        expect( array_column( $themes, 'slug' ) )->toContain( 'blade-ct-theme' );
+        Log::shouldHaveReceived( 'warning' )
+            ->withArgs( fn ( string $message, array $context = [] ): bool => str_contains( $message, 'Blade file' )
+                && ( $context['name'] ?? null ) === 'landing' )
+            ->once();
+    } );
+
+    it( 'does not warn when a customTemplates entry has an HTML file even if a Blade sibling exists (#126)', function (): void {
+        Log::spy();
+
+        $path = writeTheme( $this->themesPath, 'html-ct-theme', [
+            'name'            => 'HTML CT Theme',
+            'slug'            => 'html-ct-theme',
+            'version'         => '1.0.0',
+            'customTemplates' => [
+                ['name' => 'landing', 'title' => 'Landing'],
+            ],
+        ], $this->testSlugs );
+
+        File::ensureDirectoryExists( $path . '/templates' );
+        File::put( $path . '/templates/landing.html', '<!-- wp:paragraph --><p>L</p><!-- /wp:paragraph -->' );
+        File::put( $path . '/templates/landing.blade.php', '<x-layout>Landing</x-layout>' );
+
+        $this->manager->discoverThemes();
+
+        Log::shouldNotHaveReceived( 'warning' );
+    } );
+
     it( 'discovers themes carrying menus.locations as a cms-framework extension', function (): void {
         writeTheme( $this->themesPath, 'menus-theme', [
             'name'    => 'Menus Theme',

@@ -35,6 +35,7 @@ final class ResolvedEntity
      * @param  string  $status  WP status (`'publish'` by default).
      * @param  bool  $hasThemeFile  True when a theme file backs this slug (regardless of whether a DB override exists).
      * @param  bool  $isCustom  True when the entity was authored in the admin with no theme-file backing.
+     * @param  bool  $isBlade  True when the backing theme file is a Blade file (`{name}.blade.php`) rather than a block-grammar HTML file. Blade files render at request time and are read-only in the site editor: the file→DB authority flip stays HTML-only, so `blocks` and `raw` are empty and a save against the slug is rejected. Always false for DB rows and HTML theme files.
      * @param  string|null  $area  Template-part area (`'header' | 'footer' | 'sidebar' | 'uncategorized' | 'navigation-overlay'`); null for templates.
      * @param  Template|TemplatePart|null  $model  The DB row when `$source === 'db'`; null otherwise.
      */
@@ -49,6 +50,7 @@ final class ResolvedEntity
         public readonly string $status,
         public readonly bool $hasThemeFile,
         public readonly bool $isCustom,
+        public readonly bool $isBlade,
         public readonly ?string $area,
         public readonly Template|TemplatePart|null $model,
     ) {
@@ -92,6 +94,8 @@ final class ResolvedEntity
             'blocks'         => $this->blocks,
             'has_theme_file' => $this->hasThemeFile,
             'is_custom'      => $this->isCustom,
+            'is_blade'       => $this->isBlade,
+            'editable'       => ! $this->isBlade,
             'wp_id'          => $this->wpId(),
             'author_id'      => null !== $this->model && null !== $this->model->author_id
                 ? (int) $this->model->author_id

@@ -145,6 +145,50 @@ describe( 'PUT slug semantics for parts', function (): void {
     } );
 } );
 
+describe( 'Blade template parts are read-only (#126)', function (): void {
+    it( 'lists a Blade part with is_blade true and editable false', function (): void {
+        File::put( $this->themeParts . '/header.blade.php', '<header>Blade</header>' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/template-parts/header' );
+
+        $response->assertOk();
+        expect( $response->json( 'is_blade' ) )->toBeTrue();
+        expect( $response->json( 'editable' ) )->toBeFalse();
+    } );
+
+    it( 'rejects a PUT against a Blade-only part with a clear 422', function (): void {
+        File::put( $this->themeParts . '/header.blade.php', '<header>Blade</header>' );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->putJson( '/api/v1/template-parts/header', [
+            'title'         => 'Try Edit',
+            'area'          => 'header',
+            'block_content' => [['blockName' => 'core/heading']],
+        ] );
+
+        $response->assertStatus( 422 );
+        expect( $response->json( 'message' ) )->toContain( 'Blade' );
+        expect( TemplatePart::where( 'slug', 'header' )->exists() )->toBeFalse();
+    } );
+
+    it( 'rejects a POST creating a DB row over a Blade-only part', function (): void {
+        File::put( $this->themeParts . '/header.blade.php', '<header>Blade</header>' );
+
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/template-parts', [
+            'slug'  => 'header',
+            'title' => 'Try Create',
+            'area'  => 'header',
+        ] )->assertStatus( 422 );
+
+        expect( TemplatePart::where( 'slug', 'header' )->exists() )->toBeFalse();
+    } );
+} );
+
 describe( 'DELETE /api/v1/template-parts/{slug}', function (): void {
     it( 'reverts a DB override and returns 204', function (): void {
         TemplatePart::create( [

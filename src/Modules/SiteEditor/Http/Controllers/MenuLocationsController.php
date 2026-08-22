@@ -54,6 +54,7 @@ class MenuLocationsController extends Controller
 
         $assignments = null !== $theme
             ? MenuLocationAssignment::query()
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter.
                 ->where( 'theme', $theme )
                 ->pluck( 'menu_id', 'location' )
                 ->map( static fn ( $id ): int => (int) $id )
@@ -85,6 +86,7 @@ class MenuLocationsController extends Controller
         }
 
         $menuId = (int) $request->validated()['menu'];
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and $menuId is int-cast from the validated request; both are Eloquent parameter-bound.
         $menu   = Menu::query()->where( 'theme', $theme )->find( $menuId );
 
         if ( null === $menu ) {

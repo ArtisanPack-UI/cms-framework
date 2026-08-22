@@ -63,6 +63,8 @@ apSendNotificationByRole('post.pending_review', 'editor');
 apSendNotificationByRole('system.maintenance', 'administrator');
 ```
 
+Sending by role requires your host `User` model to use the `HasRolesAndPermissions` trait, which provides the `roles()` relationship the lookup depends on. If the model does not use it, the by-role helper matches no users and returns `null` rather than throwing — the notification is simply not sent. See [Roles and Permissions](../users/Roles-and-Permissions) for how to add the trait.
+
 ## Override Default Values
 
 Pass an `$overrides` array to customize the notification:
@@ -169,6 +171,8 @@ if (!$notification) {
 }
 ```
 
+Preference filtering requires your host `User` model to use the `HasNotifications` trait, which provides the `notificationPreferences()` relationship. If the model does not use it, sends still succeed — every existing recipient is treated as opted in, because there are no stored preferences to honour. Add the trait (see [Getting Started](Getting-Started)) to give users control over which notifications they receive.
+
 See [Notification Preferences](Notification-Preferences) for details on how users control their preferences.
 
 ## Email Notifications
@@ -198,7 +202,7 @@ When you send a notification:
 2. **Merge Overrides** — Overrides are merged with defaults
 3. **Filter by Preferences** — Users who disabled this notification type are excluded
 4. **Create Notification** — A `Notification` record is created in the database
-5. **Attach Users** — Remaining users are attached via the `notification_user` pivot table
+5. **Attach Users** — Remaining users are attached via the `cms_notification_user` pivot table
 6. **Fire Hook** — The `ap.notifications.sendNotification` action fires
 7. **Queue Emails** — If `send_email` is true, emails are queued for users who haven't disabled email
 

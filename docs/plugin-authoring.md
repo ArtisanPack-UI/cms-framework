@@ -56,7 +56,13 @@ A plugin's root directory MUST contain a `plugin.json` file:
   "service_provider": "HelloWorld\\HelloWorldServiceProvider",
   "requires": {
     "cms-framework": "^2.4",
-    "php": "^8.2"
+    "php": "^8.2",
+    "plugins": {
+      "google-oauth": "^1.0"
+    }
+  },
+  "conflicts": {
+    "legacy-hello": "*"
   },
   "autoload": {
     "psr-4": {
@@ -88,16 +94,25 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | Field               | Type            | Notes |
 | ------------------- | --------------- | ----- |
 | `description`       | string          | Shown in the admin plugin list. |
-| `author`            | object          | `{ name, email?, url? }`. |
+| `author`            | object\|string  | `{ name, email?, url? }`, or a plain name string. |
 | `homepage`          | string ( URL )  | Documentation or marketing URL. |
 | `license`           | string          | SPDX identifier ( `MIT`, `Apache-2.0`, etc. ). |
-| `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. Enforced on activation. |
+| `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
+| `conflicts`         | object          | Map of plugin slug to version constraint. Activation is refused when a matching plugin is installed. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. |
 | `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
 | `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
 | `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
 | `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
 | `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
+
+> **Displaying the author.** `PluginManager::discoverPlugins()` and
+> `::getPlugin()` return `author` verbatim from the manifest, so it is a
+> string or an object depending on what `plugin.json` declares — echoing it
+> directly risks an `Array to string conversion`. Each returned plugin also
+> carries an `author_name` key, always a display-safe string ( the object's
+> `name`, the plain string, or `''` ), which is what a host should render in
+> a plugin list.
 
 ## Base `PluginServiceProvider`
 
@@ -211,16 +226,32 @@ $this->registerAdminPage( 'hello-world', [
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
 
-> **Note ( as of 2.8.0 ):** a `component`-only admin page resolves to a route
-> that renders a mount point — `<div data-cms-federated-module="…"></div>` —
-> for the host's Module Federation runtime to hydrate. It is no longer handed
-> to `Route::get()` as a bare string (which Laravel rejects as an invalid route
-> action; because admin routes register from a `booted()` callback, that once
-> surfaced on *every* request, not just the plugin's own page, taking the whole
-> application down). A page that declares neither a `view` nor a `component`
-> responds `501` on its own route instead of breaking route registration. How
-> the host binds that mount point to a concrete component is still being
-> settled — see [#296](https://github.com/ArtisanPack-UI/cms-framework/issues/296).
+A `component`-only admin page renders the framework-owned
+`cms::admin.layouts.federated` shell, which emits a mount point —
+`<div data-cms-federated-module="…"></div>` — inside the admin chrome for the
+host's Module Federation runtime to hydrate. It is never handed to
+`Route::get()` as a bare string (which Laravel rejects as an invalid route
+action; because admin routes register from a `booted()` callback, that once
+surfaced on *every* request, not just the plugin's own page, taking the whole
+application down). A page that declares neither a `view` nor a `component`
+responds `501` on its own route instead of breaking route registration.
+
+A federation host that mounts components its own way — a different mount
+element, a server-rendered island, an Inertia response — overrides the default
+through the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
+the default route action, the component identifier and the page config, and
+returns its own route action:
+
+```php
+addFilter(
+    'ap.cmsFramework.admin.federatedPageAction',
+    function ( \Closure $default, string $component, array $config ): \Closure {
+        return static fn () => view( 'host::federated', ['module' => $component] );
+    },
+);
+```
+
+Returning anything other than a closure falls back to the shipped shell.
 
 ## Registering nav entries
 
@@ -364,6 +395,60 @@ Semver your plugin. Declare host-compatibility in `plugin.json`:
 
 `PluginManager::install()` refuses installation when the running framework
 version does not satisfy the `cms-framework` constraint.
+
+## Plugin dependencies & conflicts
+
+Plugins can declare hard dependencies on, and conflicts with, other plugins.
+Dependencies live under `requires.plugins` and conflicts under `conflicts`,
+both mapping a plugin slug to a semver constraint (`*` matches any version):
+
+```json
+"requires": {
+    "plugins": {
+        "google-oauth": "^1.0"
+    }
+},
+"conflicts": {
+    "legacy-forms": "*"
+}
+```
+
+`PluginManager::activate()` gates on these before any state changes. Activation
+is refused when a required plugin is **missing** (not installed), **inactive**
+(installed but not activated), or fails its **version constraint**, and when a
+declared **conflict** is installed within its constraint range. Conflicts are
+enforced **symmetrically** — activation is also refused when an already-installed
+plugin declares a conflict against the plugin being activated, so a conflict
+cannot be bypassed by activation order. The API returns `409` with a
+machine-readable `code` (`plugin_dependencies_unsatisfied` or `plugin_conflict`)
+and the offending details.
+
+> **Conflicts are scoped to _installed_, not _active_, plugins** (Composer-style
+> semantics). Two plugins that declare a conflict against each other cannot both
+> be installed and activated: activation is refused while the other is present on
+> disk, even if it is inactive. Resolve a mutual conflict by **deleting** one of
+> the two plugins, not merely deactivating it.
+
+Deactivation is guarded in the other direction: `PluginManager::deactivate()`
+refuses to disable a plugin while active plugins still depend on it (API `code`
+`plugin_has_active_dependents`). Deleting a plugin forces past this guard.
+
+At boot, active plugins are registered **dependencies-first**, so a dependent's
+service provider never boots before the provider whose services it consumes.
+
+Resolution helpers:
+
+| Method | Purpose |
+| ------ | ------- |
+| `checkDependencies( $slug ): DependencyResult` | Missing / inactive / version-mismatch / conflict buckets for one plugin. |
+| `getDependents( $slug ): array` | Slugs of installed plugins that require `$slug`. |
+| `canDeactivate( $slug ): bool` | Whether disabling `$slug` would break an active dependent. |
+| `getActivationOrder( array $slugs ): array` | Dependency-first ordering; throws `CircularDependencyException` on a cycle. |
+
+The same data is exposed over HTTP: `GET /api/v1/plugins/{slug}/dependencies`,
+`GET /api/v1/plugins/{slug}/dependents`, and
+`POST /api/v1/plugins/check-dependencies` (body `{ "plugins": [ "a", "b" ] }`),
+which returns a resolved activation `order` alongside per-plugin status.
 
 ## Shipping updates
 

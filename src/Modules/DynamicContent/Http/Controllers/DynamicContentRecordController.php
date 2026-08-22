@@ -35,6 +35,7 @@ class DynamicContentRecordController extends Controller
     {
         $this->authorize( 'createForType', [ DynamicContentRecord::class, $type ] );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- create() receives $request->validated() from the DynamicContentRecordRequest Form Request; Eloquent parameter-binds the attributes.
         return new DynamicContentRecordResource( $this->manager->create( $type, $request->validated() ) );
     }
 
@@ -56,6 +57,7 @@ class DynamicContentRecordController extends Controller
 
         abort_unless( $record->dynamic_content_type_id === $type->id, 404 );
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- update() receives $request->validated() from the DynamicContentRecordRequest Form Request; Eloquent parameter-binds the attributes.
         return new DynamicContentRecordResource( $this->manager->update( $record, $request->validated() ) );
     }
 

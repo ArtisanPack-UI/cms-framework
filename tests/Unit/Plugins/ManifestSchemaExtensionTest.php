@@ -226,6 +226,85 @@ describe( 'update', function (): void {
     } );
 } );
 
+describe( 'requires', function (): void {
+    it( 'accepts a well-formed requires block', function (): void {
+        $manifest = array_merge( $this->base, [
+            'requires' => [
+                'cms-framework' => '^2.0',
+                'plugins'       => ['base-forms' => '^1.5', 'file-uploads' => '^2.0'],
+            ],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'accepts an empty requires object', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => []] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a non-object requires', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => 'base-forms'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid requires.' );
+    } );
+
+    it( 'rejects a non-string cms-framework constraint', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => ['cms-framework' => 2]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'requires.cms-framework' );
+    } );
+
+    it( 'rejects requires.plugins expressed as a list', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => ['plugins' => ['base-forms']]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'requires.plugins' );
+    } );
+
+    it( 'rejects an empty version constraint', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => ['plugins' => ['base-forms' => '']]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'constraint' );
+    } );
+
+    it( 'rejects a plugin requiring its own slug', function (): void {
+        $manifest = array_merge( $this->base, ['requires' => ['plugins' => ['test-plugin' => '^1.0']]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'cannot reference its own slug' );
+    } );
+} );
+
+describe( 'conflicts', function (): void {
+    it( 'accepts a well-formed conflicts map', function (): void {
+        $manifest = array_merge( $this->base, ['conflicts' => ['legacy-forms' => '*']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a conflicts key with an invalid slug', function (): void {
+        $manifest = array_merge( $this->base, ['conflicts' => ['bad slug' => '*']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'conflicts' );
+    } );
+
+    it( 'rejects a plugin conflicting with its own slug', function (): void {
+        $manifest = array_merge( $this->base, ['conflicts' => ['test-plugin' => '*']] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'cannot reference its own slug' );
+    } );
+} );
+
 describe( 'Plugin model accessors', function (): void {
     it( 'exposes the new manifest fields ergonomically', function (): void {
         $plugin = new Plugin( [
@@ -256,5 +335,32 @@ describe( 'Plugin model accessors', function (): void {
             ->and( $plugin->nav_entries )->toBe( [] )
             ->and( $plugin->declared_permissions )->toBe( [] )
             ->and( $plugin->rollback_migrations_on_delete )->toBeFalse();
+    } );
+
+    it( 'exposes dependency and conflict manifest fields', function (): void {
+        $plugin = new Plugin( [
+            'slug'    => 'advanced-forms',
+            'name'    => 'Advanced Forms',
+            'version' => '2.0.0',
+            'meta'    => [
+                'requires'  => [
+                    'cms-framework' => '^2.0',
+                    'plugins'       => ['base-forms' => '^1.5'],
+                ],
+                'conflicts' => ['legacy-forms' => '*'],
+            ],
+        ] );
+
+        expect( $plugin->required_plugins )->toBe( ['base-forms' => '^1.5'] )
+            ->and( $plugin->required_host_version )->toBe( '^2.0' )
+            ->and( $plugin->conflicting_plugins )->toBe( ['legacy-forms' => '*'] );
+    } );
+
+    it( 'returns empty dependency maps when absent', function (): void {
+        $plugin = new Plugin( ['slug' => 'x', 'name' => 'X', 'version' => '1.0.0', 'meta' => []] );
+
+        expect( $plugin->required_plugins )->toBe( [] )
+            ->and( $plugin->required_host_version )->toBeNull()
+            ->and( $plugin->conflicting_plugins )->toBe( [] );
     } );
 } );

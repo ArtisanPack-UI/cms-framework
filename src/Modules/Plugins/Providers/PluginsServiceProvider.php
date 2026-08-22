@@ -4,13 +4,14 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Console\Commands\SyncPluginsCommand;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
-use Exception;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Schema;
+use Throwable;
 
 class PluginsServiceProvider extends ServiceProvider
 {
@@ -50,6 +51,12 @@ class PluginsServiceProvider extends ServiceProvider
             __DIR__ . '/../config/plugins.php' => config_path( 'cms/plugins.php' ),
         ], [ 'cms-plugins-config', 'cms-framework-config' ] );
 
+        if ( $this->app->runningInConsole() ) {
+            $this->commands( [
+                SyncPluginsCommand::class,
+            ] );
+        }
+
         $this->registerPluginCapabilities();
 
         // Load API routes
@@ -67,8 +74,10 @@ class PluginsServiceProvider extends ServiceProvider
                 $pluginManager = $this->app->make( PluginManager::class );
                 $pluginManager->loadActivePlugins();
             }
-        } catch ( Exception $e ) {
-            // Silently fail during installation/migration
+        } catch ( Throwable $e ) {
+            // Silently fail during installation/migration. Catch Throwable, not
+            // just Exception, so a plugin provider raising an Error at boot is
+            // logged rather than taking the whole site down.
             logger()->debug( 'Plugin loading skipped: ' . $e->getMessage() );
         }
     }

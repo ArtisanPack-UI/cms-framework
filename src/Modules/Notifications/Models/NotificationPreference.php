@@ -34,6 +34,18 @@ class NotificationPreference extends Model
     use HasFactory;
 
     /**
+     * The table associated with the model.
+     *
+     * Prefixed with `cms_` to match the renamed notifications tables and keep
+     * the module's schema in a single namespace.
+     *
+     * @since 2.9.0
+     *
+     * @var string
+     */
+    protected $table = 'cms_notification_preferences';
+
+    /**
      * The attributes that are mass assignable.
      *
      * @since 1.0.0

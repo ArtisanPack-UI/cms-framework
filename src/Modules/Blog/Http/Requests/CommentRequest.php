@@ -48,6 +48,7 @@ class CommentRequest extends FormRequest
         // client could reply to comment X on post A but file the
         // reply against post B, corrupting the thread tree. Build
         // the constraint as a per-post `exists` rule.
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- post_id is read in rules() only to build a conditional exists constraint and is int-cast; never persisted or output.
         $postId        = $this->input( 'post_id' );
         $parentIdRule  = Rule::exists( 'post_comments', 'id' );
         if ( null !== $postId && '' !== $postId ) {
@@ -97,6 +98,7 @@ class CommentRequest extends FormRequest
      */
     protected function prepareForValidation(): void
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- input() is read in prepareForValidation() to strip user_id/status before validation runs.
         $input = $this->input();
 
         unset( $input['user_id'] );

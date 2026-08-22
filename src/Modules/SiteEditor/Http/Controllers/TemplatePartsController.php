@@ -78,7 +78,12 @@ class TemplatePartsController extends Controller
             return response()->json( ['message' => 'No active theme.'], 409 );
         }
 
+        if ( null !== ( $blocked = $this->rejectIfBlade( $request->validated()['slug'] ?? null ) ) ) {
+            return $blocked;
+        }
+
         try {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplatePartRequest Form Request; Eloquent parameter-binds create().
             $part = TemplatePart::create( $this->normalizeAttributes( $theme, $request->validated() ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
@@ -128,6 +133,10 @@ class TemplatePartsController extends Controller
             ], 422 );
         }
 
+        if ( null !== ( $blocked = $this->rejectIfBlade( $slug ) ) ) {
+            return $blocked;
+        }
+
         unset( $validated['slug'] );
 
         $part = $this->upsertForTheme( $theme, $slug, $validated );
@@ -167,7 +176,9 @@ class TemplatePartsController extends Controller
     protected function upsertForTheme( string $theme, string $slug, array $validated ): TemplatePart
     {
         $existing = TemplatePart::query()
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is the route parameter validated by SlugValidator::isValid() in update() and bound as an Eloquent query parameter.
             ->where( 'slug', $slug )
             ->first();
 
@@ -188,7 +199,9 @@ class TemplatePartsController extends Controller
             }
 
             $existing = TemplatePart::query()
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug, bound as an Eloquent query parameter.
                 ->where( 'theme', $theme )
+                // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $slug is the route parameter validated by SlugValidator::isValid() in update() and bound as an Eloquent query parameter.
                 ->where( 'slug', $slug )
                 ->firstOrFail();
 
@@ -206,6 +219,34 @@ class TemplatePartsController extends Controller
         $theme = $this->themeManager->getActiveTheme();
 
         return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+    }
+
+    /**
+     * Reject a write against a Blade-backed template-part slug.
+     *
+     * Mirrors {@see TemplatesController::rejectIfBlade()}: Blade parts render at
+     * request time and are read-only in the site editor, so a create/update
+     * that would spawn a DB override is rejected with a clear 422. Returns null
+     * for every other slug (HTML theme files, existing DB rows, unknown slugs).
+     *
+     * @since 2.9.0
+     */
+    protected function rejectIfBlade( ?string $slug ): ?JsonResponse
+    {
+        if ( null === $slug ) {
+            return null;
+        }
+
+        $entity = $this->resolver->resolve( $slug );
+
+        if ( null === $entity || ! $entity->isBlade ) {
+            return null;
+        }
+
+        return response()->json( [
+            'message' => __( 'This template part is a Blade file and is read-only in the site editor.' ),
+            'errors'  => ['slug' => [ __( 'Blade template parts cannot be edited here. Author the part as a block-grammar HTML file to edit it in the site editor.' ) ]],
+        ], 422 );
     }
 
     /**

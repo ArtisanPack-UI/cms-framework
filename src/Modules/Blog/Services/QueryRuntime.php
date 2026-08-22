@@ -189,6 +189,7 @@ class QueryRuntime
         }
 
         if ( isset( $managerFilters['status'] ) && in_array( 'status', $instance->getFillable(), true ) ) {
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $managerFilters['status'] is applied as an Eloquent parameter-bound where(), gated on the column being fillable.
             $query->where( 'status', $managerFilters['status'] );
         }
 
@@ -469,6 +470,6 @@ class QueryRuntime
             static fn ( int $id ): bool => $id > 0,
         );
 
-        return array_values( array_unique( $ids));
+        return array_values( array_unique( $ids ) );
     }
 }
