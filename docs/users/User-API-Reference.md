@@ -6,15 +6,24 @@ title: User API Reference
 
 Complete API reference for the CMS Framework user management endpoints. All endpoints are prefixed with `/api/v1` and return JSON responses.
 
-## Authentication
+## Authentication & Authorization
 
-The API endpoints do not include authentication by default. You should implement authentication middleware appropriate for your application:
+The user endpoints are registered behind the `auth` middleware, so every request must be authenticated (the framework leaves the guard to your app's `auth.defaults.guard` — Sanctum, session, or otherwise). A guest receives `401 Unauthorized`.
 
-```php
-Route::middleware(['auth:sanctum'])->group(function () {
-    Route::apiResource('users', UserController::class);
-});
-```
+Beyond authentication, the endpoints are authorized by `UserPolicy`:
+
+| Action | Endpoint | Required capability |
+|--------|----------|---------------------|
+| List | `GET /users` | `users.manage` |
+| Show | `GET /users/{id}` | `users.manage` |
+| Create | `POST /users` | `users.manage` |
+| Update | `PUT/PATCH /users/{id}` | `users.manage` |
+| Delete | `DELETE /users/{id}` | `users.delete` |
+| Bulk | `POST /users/bulk` | `users.manage` / `users.delete` (per action) |
+
+An authenticated user who lacks the required capability receives `403 Forbidden`. Each default capability is filterable — e.g. `applyFilters( 'ap.cmsFramework.abilities.user.viewAny', 'users.manage' )` — so a host can rebrand or scope the checks without subclassing the policy.
+
+> **Changed in 2.9.0:** these endpoints previously enforced authentication only; they now enforce authorization as well. Grant `users.manage` (and `users.delete`) to the roles that should manage users.
 
 ## Base URL
 
