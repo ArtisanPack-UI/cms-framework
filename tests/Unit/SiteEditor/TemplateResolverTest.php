@@ -270,6 +270,15 @@ describe( 'slug sanitization', function (): void {
         expect( $result )->toBeNull();
     } );
 
+    it( 'rejects path-traversal slugs targeting a Blade file outside templates/', function (): void {
+        // The Blade fallback resolves `.blade.php` files; make sure the slug
+        // guard rejects a traversal to one planted outside the templates dir.
+        File::ensureDirectoryExists( $this->themesPath . '/' . $this->themeSlug );
+        File::put( $this->themesPath . '/' . $this->themeSlug . '/secret.blade.php', '<p>secret</p>' );
+
+        expect( $this->resolver->resolve( '../secret' ) )->toBeNull();
+    } );
+
     it( 'rejects slugs containing slashes', function (): void {
         expect( $this->resolver->resolve( 'a/b' ) )->toBeNull();
         expect( $this->resolver->resolve( 'a\\b' ) )->toBeNull();

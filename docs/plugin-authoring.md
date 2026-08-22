@@ -423,6 +423,12 @@ cannot be bypassed by activation order. The API returns `409` with a
 machine-readable `code` (`plugin_dependencies_unsatisfied` or `plugin_conflict`)
 and the offending details.
 
+> **Conflicts are scoped to _installed_, not _active_, plugins** (Composer-style
+> semantics). Two plugins that declare a conflict against each other cannot both
+> be installed and activated: activation is refused while the other is present on
+> disk, even if it is inactive. Resolve a mutual conflict by **deleting** one of
+> the two plugins, not merely deactivating it.
+
 Deactivation is guarded in the other direction: `PluginManager::deactivate()`
 refuses to disable a plugin while active plugins still depend on it (API `code`
 `plugin_has_active_dependents`). Deleting a plugin forces past this guard.

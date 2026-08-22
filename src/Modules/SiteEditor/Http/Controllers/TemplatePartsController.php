@@ -244,8 +244,8 @@ class TemplatePartsController extends Controller
         }
 
         return response()->json( [
-            'message' => 'This template part is a Blade file and is read-only in the site editor.',
-            'errors'  => ['slug' => ['Blade template parts cannot be edited here. Author the part as a block-grammar HTML file to edit it in the site editor.']],
+            'message' => __( 'This template part is a Blade file and is read-only in the site editor.' ),
+            'errors'  => ['slug' => [ __( 'Blade template parts cannot be edited here. Author the part as a block-grammar HTML file to edit it in the site editor.' ) ]],
         ], 422 );
     }
 

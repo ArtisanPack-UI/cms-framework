@@ -42,6 +42,14 @@ class AdminPageManager
      */
     public function register( string $slug, mixed $action, ?string $capability ): void
     {
+        // Coerce a null or empty capability to the admin-dashboard baseline so an
+        // admin page is never registered as an `auth`-only route that any
+        // authenticated user can reach. A page that genuinely wants a different
+        // gate passes its own capability.
+        $capability = ( is_string( $capability ) && '' !== $capability )
+            ? $capability
+            : 'access_admin_dashboard';
+
         $this->pages[ $slug ] = [
             'action'     => $action,
             'capability' => $capability,

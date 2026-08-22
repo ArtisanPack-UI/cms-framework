@@ -262,8 +262,8 @@ class TemplatesController extends Controller
         }
 
         return response()->json( [
-            'message' => 'This template is a Blade file and is read-only in the site editor.',
-            'errors'  => ['slug' => ['Blade templates cannot be edited here. Author the template as a block-grammar HTML file to edit it in the site editor.']],
+            'message' => __( 'This template is a Blade file and is read-only in the site editor.' ),
+            'errors'  => ['slug' => [ __( 'Blade templates cannot be edited here. Author the template as a block-grammar HTML file to edit it in the site editor.' ) ]],
         ], 422 );
     }
 

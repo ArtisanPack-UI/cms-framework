@@ -11,6 +11,7 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Role;
 use ArtisanPackUI\CMSFramework\Modules\Users\Policies\PermissionPolicy;
 use ArtisanPackUI\CMSFramework\Modules\Users\Policies\RolePolicy;
+use ArtisanPackUI\CMSFramework\Modules\Users\Policies\UserPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
@@ -46,12 +47,21 @@ class UserServiceProvider extends ServiceProvider
     }
 
     /**
-     * Register the Role + Permission policies. The
-     * `authorizeResource()` calls in the controllers depend on these
-     * bindings being in place.
+     * Register the User + Role + Permission policies. The
+     * `authorize()` calls in the controllers depend on these
+     * bindings being in place. The User policy is bound against the
+     * host-configured user model; it is skipped when the model has not
+     * been configured yet ( in which case the user endpoints would fail
+     * earlier anyway ).
      */
     protected function registerPolicies(): void
     {
+        $userModel = config( 'artisanpack.cms-framework.user_model' );
+
+        if ( is_string( $userModel ) && '' !== $userModel ) {
+            Gate::policy( $userModel, UserPolicy::class );
+        }
+
         Gate::policy( Role::class, RolePolicy::class );
         Gate::policy( Permission::class, PermissionPolicy::class );
     }

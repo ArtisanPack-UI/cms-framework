@@ -21,7 +21,7 @@ beforeEach( function (): void {
 } );
 
 afterEach( function (): void {
-    foreach ( [ 'valid-plugin', 'object-author-plugin' ] as $slug ) {
+    foreach ( [ 'valid-plugin', 'object-author-plugin', 'bad slug' ] as $slug ) {
         if ( File::exists( $this->pluginsPath . '/' . $slug ) ) {
             File::deleteDirectory( $this->pluginsPath . '/' . $slug );
         }
@@ -186,6 +186,32 @@ describe( 'syncFromDisk', function (): void {
 
         expect( $results['object-author-plugin']['status'] )->toBe( 'failed' )
             ->and( Plugin::where( 'slug', 'object-author-plugin' )->exists() )->toBeFalse();
+    } );
+
+    it( 'reports a failure and keeps going when a directory name is not a valid slug', function (): void {
+        // A directory whose basename is not a valid slug, with a manifest slug
+        // that matches it so the directory/manifest guard passes and the invalid
+        // slug reaches getPlugin()/validateSlug() inside installFromDisk().
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/bad slug',
+        );
+        $badManifestPath         = $this->pluginsPath . '/bad slug/plugin.json';
+        $badManifest             = json_decode( File::get( $badManifestPath ), true );
+        $badManifest['slug']     = 'bad slug';
+        File::put( $badManifestPath, json_encode( $badManifest ) );
+
+        // A valid plugin alongside it must still sync.
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        $results = collect( $this->manager->syncFromDisk() )->keyBy( 'slug' );
+
+        expect( $results['bad slug']['status'] )->toBe( 'failed' )
+            ->and( $results['valid-plugin']['status'] )->toBe( 'installed' )
+            ->and( Plugin::where( 'slug', 'valid-plugin' )->exists() )->toBeTrue();
     } );
 } );
 

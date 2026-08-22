@@ -23,13 +23,30 @@ return new class extends Migration {
      * the collision with Laravel's own `notifications` table was resolved.
      * Rename them in place so their data survives the upgrade. Fresh installs
      * already create the `cms_`-prefixed tables, so the guards skip every rename.
+     *
+     * Note: on MySQL/MariaDB a table rename does NOT rename the foreign-key
+     * constraint identifiers, so an upgraded install keeps the legacy
+     * `notification_user_notification_id_foreign` name on the renamed pivot.
+     * That is harmless today, but a future migration that drops the constraint
+     * by its conventional (`cms_`-prefixed) name would fail on upgraded installs
+     * only. Such a migration must resolve the constraint name from the schema
+     * rather than assume the Laravel default.
      */
     public function up(): void
     {
         foreach ( $this->tables as $from => $to ) {
-            if ( Schema::hasTable( $from ) && ! Schema::hasTable( $to ) ) {
-                Schema::rename( $from, $to );
+            if ( ! Schema::hasTable( $from ) || Schema::hasTable( $to ) ) {
+                continue;
             }
+
+            // `notifications` is also the name Laravel's database notification
+            // channel uses. Only rename it when it carries the CMS shape.
+            if ( 'notifications' === $from
+                && ( ! Schema::hasColumn( $from, 'send_email' ) || Schema::hasColumn( $from, 'notifiable_type' ) ) ) {
+                continue;
+            }
+
+            Schema::rename( $from, $to );
         }
     }
 

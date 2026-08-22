@@ -10,7 +10,9 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
@@ -247,9 +249,12 @@ class UpdateManager
             //    is opened and guarded *before* the live directory is removed,
             //    so a rejected update never destroys the installed plugin.
             $pluginsRoot = base_path( config( 'cms.plugins.directory' ) );
-            $pluginPath  = $pluginsRoot . '/' . $slug;
+            // Build filesystem paths from the trusted database slug, not the raw
+            // route parameter, so a value that only matches a row after
+            // sanitization can never point extraction at an unvalidated path.
+            $pluginPath = $pluginsRoot . '/' . $plugin->slug;
 
-            $this->extractUpdateArchive( $zipPath, $pluginsRoot, $pluginPath, $slug );
+            $this->extractUpdateArchive( $zipPath, $pluginsRoot, $pluginPath, $plugin->slug );
 
             // 5. Re-validate the new manifest before trusting it. Step 6 seats
             //    `meta` straight from the manifest inside the downloaded ZIP, so
@@ -305,16 +310,27 @@ class UpdateManager
             // but the reactivate at step 7 rejected the new min_host_version.
             // Restore files AND DB so the plugin isn't stranded pointing at a
             // version whose files no longer exist.
-            $this->restoreFromBackup( $slug, $backupPath );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw $e;
+        } catch ( DependencyNotSatisfiedException | PluginConflictException $e ) {
+            // The reactivate at step 7 rejected the new manifest's `requires` /
+            // `conflicts` declaration (#45). Unwind exactly like the other
+            // post-extraction failures — restore files and revert the row — and
+            // surface the dependency reason instead of collapsing it into the
+            // generic `downloadFailed()`, which would misreport a satisfiable-
+            // dependency problem as a network error.
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+
+            throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( UpdateException $e ) {
             // A checksum mismatch or an unverifiable archive is not a download
             // failure, and collapsing it into `downloadFailed()` hides the one
             // detail an operator needs to tell a corrupted mirror apart from a
             // release that shipped without a `.sha256` sidecar.
-            $this->restoreFromBackup( $slug, $backupPath );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
@@ -324,13 +340,13 @@ class UpdateManager
             // — restore the old files and revert the row — and surface the
             // reason through the type the controller renders verbatim, instead
             // of collapsing it into the generic `downloadFailed()`.
-            $this->restoreFromBackup( $slug, $backupPath );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( Exception $e ) {
             // Restore from backup on failure
-            $this->restoreFromBackup( $slug, $backupPath );
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::downloadFailed( $slug );

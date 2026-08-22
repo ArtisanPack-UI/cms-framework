@@ -181,6 +181,6 @@ class PageFactory extends Factory
     {
         return $this->state( fn ( array $attributes ) => [
             'order' => $order,
-        ]);
+        ] );
     }
 }

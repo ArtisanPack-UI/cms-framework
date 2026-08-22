@@ -470,6 +470,74 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
     } );
 } );
 
+describe( 'Reactivation failure after update (#45)', function (): void {
+    it( 'rolls back and reports the dependency reason, not a download failure, when the new manifest adds an unsatisfiable dependency', function (): void {
+        // Install an ACTIVE valid-plugin at 1.0.0 wired to a legacy update feed,
+        // so the update flow reaches the step-7 reactivation.
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => true,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        // The new manifest requires a plugin that is not installed, so the
+        // reactivation at step 7 throws DependencyNotSatisfiedException.
+        $manifest = [
+            'slug'        => 'valid-plugin',
+            'name'        => 'Valid Test Plugin',
+            'version'     => '2.0.0',
+            'description' => 'Updated plugin',
+            'author'      => 'Test Author',
+            'requires'    => [ 'plugins' => [ 'ghost-plugin' => '^1.0' ] ],
+        ];
+
+        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
+        $zip     = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
+        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
+        $zip->close();
+        $sha256 = hash( 'sha256', File::get( $zipPath ) );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class, 'dependencies are not satisfied' );
+
+        // Row rolled back: version, active state restored, and the new requires
+        // never seated.
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' )
+            ->and( $plugin->is_active )->toBeTrue()
+            ->and( $plugin->meta )->not->toHaveKey( 'requires' );
+
+        // Files restored from backup: the on-disk manifest is the 1.0.0 original.
+        $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '1.0.0' );
+
+        File::delete( $zipPath );
+    } );
+} );
+
 // Helper function
 function createMockUpdateZip(): void
 {

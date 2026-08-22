@@ -54,7 +54,9 @@ class PluginManager
      *               description, author, author_name, is_active, path,
      *               manifest. `author` is the raw manifest value ( string or
      *               `{ name, email?, url? }` object ); `author_name` is always
-     *               a display-safe string.
+     *               a string ( shape-normalized from the manifest author value ).
+     *               It is not escaped — the manifest is untrusted, so escape it
+     *               on output.
      */
     public function discoverPlugins(): array
     {
@@ -79,7 +81,8 @@ class PluginManager
      *
      * @return array|null Plugin data or null if not found. The returned array
      *                    includes both the raw `author` manifest value and a
-     *                    display-safe `author_name` string.
+     *                    shape-normalized `author_name` string ( unescaped —
+     *                    escape it on output ).
      */
     public function getPlugin( string $slug ): ?array
     {
@@ -149,6 +152,18 @@ class PluginManager
         $slug         = $this->extractZip( $zipPath );
         $manifestPath = $this->getPluginsPath() . '/' . $slug . '/plugin.json';
         $manifest     = $this->parseManifest( $manifestPath );
+
+        // A ZIP whose `plugin.json` is missing (e.g. nested below the slug root)
+        // or unparseable yields a null manifest. Clean up the extracted directory
+        // and fail with a clear reason instead of tripping validateManifest()'s
+        // `array` type hint and stranding the orphaned files.
+        if ( null === $manifest ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw PluginValidationException::invalidManifest(
+                "Plugin ZIP for '{$slug}' is missing a readable plugin.json at its root.",
+            );
+        }
 
         $this->validateManifest( $manifest );
 
@@ -289,20 +304,6 @@ class PluginManager
             $manifest = $discovered['manifest'];
 
             try {
-                // Guard the directory/manifest slug match before any write so a
-                // mismatched manifest can't seat a row under the wrong slug on
-                // the refresh path. `installFromDisk()` re-checks this for the
-                // install path.
-                if ( ( $manifest['slug'] ?? null ) !== $slug ) {
-                    $results[] = [
-                        'slug'    => $slug,
-                        'status'  => 'failed',
-                        'message' => "Manifest slug '" . ( $manifest['slug'] ?? '' ) . "' must match plugin directory slug '{$slug}'.",
-                    ];
-
-                    continue;
-                }
-
                 $existing = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
                 if ( null === $existing ) {
@@ -318,7 +319,7 @@ class PluginManager
                 }
 
                 $results[] = $this->refreshInstalledPlugin( $existing, $manifest );
-            } catch ( PluginValidationException | PluginInstallationException $e ) {
+            } catch ( PluginValidationException | PluginInstallationException | PluginNotFoundException $e ) {
                 $results[] = [
                     'slug'    => $slug,
                     'status'  => 'failed',
@@ -551,9 +552,11 @@ class PluginManager
         // Remove from database
         $plugin->delete();
 
-        // Remove from filesystem
+        // Remove from filesystem. Build the path from the trusted database slug,
+        // not the raw route parameter, so a value that only matches a row after
+        // sanitization can never point the delete at an unvalidated path.
         if ( $deleteFiles ) {
-            $pluginPath = $this->getPluginsPath() . '/' . $slug;
+            $pluginPath = $this->getPluginsPath() . '/' . $plugin->slug;
             if ( File::exists( $pluginPath ) ) {
                 File::deleteDirectory( $pluginPath );
             }
@@ -597,8 +600,10 @@ class PluginManager
             if ( $plugin->hasServiceProvider() ) {
                 try {
                     app()->register( $plugin->service_provider );
-                } catch ( Exception $e ) {
-                    // Log error but don't break application
+                } catch ( Throwable $e ) {
+                    // Log error but don't break application. Catch Throwable, not
+                    // just Exception: a missing provider class raises an Error,
+                    // which would otherwise take the whole site down at boot.
                     logger()->error( "Failed to register plugin service provider: {$plugin->slug}", [
                         'exception' => $e->getMessage(),
                     ] );
@@ -781,6 +786,18 @@ class PluginManager
      */
     protected function refreshInstalledPlugin( Plugin $existing, array $manifest ): array
     {
+        // Guard the directory/manifest slug match before any write so a
+        // mismatched manifest can't refresh a row's `meta` — and its permission
+        // namespace — under the wrong slug. `installFromDisk()` applies the same
+        // guard for the install path.
+        if ( ( $manifest['slug'] ?? null ) !== $existing->slug ) {
+            return [
+                'slug'    => $existing->slug,
+                'status'  => 'failed',
+                'message' => "Manifest slug '" . ( $manifest['slug'] ?? '' ) . "' must match plugin directory slug '{$existing->slug}'.",
+            ];
+        }
+
         $this->validateManifest( $manifest );
 
         $existing->fill( [
@@ -809,15 +826,16 @@ class PluginManager
     }
 
     /**
-     * Resolve a display-safe author name from a manifest author value.
+     * Resolve a shape-normalized author name from a manifest author value.
      *
      * A plugin.json `author` may be a plain string or the documented object
-     * form ( `{ name, email?, url? }` ). This always returns a string so a
-     * host can echo the author directly without special-casing the shape.
+     * form ( `{ name, email?, url? }` ). This always returns a string so a host
+     * receives a consistent shape without special-casing it. The value comes
+     * from the ( untrusted ) manifest and is not escaped — escape it on output.
      *
      * @param  mixed  $author  The raw manifest author value.
      *
-     * @return string The display-safe author name, or an empty string.
+     * @return string The author name as a plain string ( escape on output ), or an empty string.
      */
     protected function resolveAuthorName( mixed $author ): string
     {
@@ -865,7 +883,11 @@ class PluginManager
             }
         }
 
-        // Defensive: append any active slug the resolver never emitted.
+        // Invariant guard: `getActivationOrder()` emits every graph-present slug
+        // and the active set is a subset of all installed plugins, so this loop
+        // appends nothing under normal operation. It survives only to keep an
+        // active plugin from silently vanishing from the boot order if that
+        // invariant is ever broken (e.g. a stale graph snapshot missing a slug).
         foreach ( $activeSlugs as $slug ) {
             if ( ! empty( $active[ $slug ] ) ) {
                 $ordered[] = $slug;

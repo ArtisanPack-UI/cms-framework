@@ -63,9 +63,15 @@ abstract class PluginServiceProvider extends ServiceProvider
         $title   = $config['title'] ?? ucfirst( $slug );
         $section = $config['section'] ?? null;
 
+        // Coerce a null OR empty capability to the admin-dashboard baseline: the
+        // `??` alone lets an explicit `'capability' => ''` through, which would
+        // register an `auth`-only route any authenticated user could reach.
+        $capability = $config['capability'] ?? '';
+        $capability = '' !== $capability ? $capability : 'access_admin_dashboard';
+
         $options = array_filter( [
             'action'     => $this->resolveAdminPageAction( $config ),
-            'capability' => $config['capability'] ?? 'access_admin_dashboard',
+            'capability' => $capability,
             'icon'       => $config['icon'] ?? 'fas.puzzle-piece',
             'order'      => $config['order'] ?? 50,
             'menuTitle'  => $config['menuTitle'] ?? $title,

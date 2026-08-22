@@ -50,6 +50,31 @@ describe( 'resolve', function (): void {
             ->and( $result->missing )->toBe( ['base'] );
     } );
 
+    it( 'treats an unparseable constraint as an unsatisfied requirement, not a fatal', function (): void {
+        $graph = [
+            'base'  => graphEntry( ['version' => '1.0.0'] ),
+            'child' => graphEntry( ['requires' => ['base' => '^not^a^constraint']] ),
+        ];
+
+        $result = $this->resolver->resolve( 'child', $graph, '2.9.0' );
+
+        expect( $result->isSatisfied() )->toBeFalse()
+            ->and( $result->versionMismatch )->toBe( [
+                ['slug' => 'base', 'required' => '^not^a^constraint', 'installed' => '1.0.0'],
+            ] );
+    } );
+
+    it( 'normalizes a v-prefixed installed version before matching the constraint', function (): void {
+        $graph = [
+            'base'  => graphEntry( ['version' => 'v1.5.0'] ),
+            'child' => graphEntry( ['requires' => ['base' => '^1.0']] ),
+        ];
+
+        $result = $this->resolver->resolve( 'child', $graph, '2.9.0' );
+
+        expect( $result->isSatisfied() )->toBeTrue();
+    } );
+
     it( 'reports an installed but inactive dependency', function (): void {
         $graph = [
             'base'  => graphEntry( ['is_active' => false] ),

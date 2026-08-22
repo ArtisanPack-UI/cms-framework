@@ -69,6 +69,36 @@ it( 'renders a federated component admin page inside the admin layout over HTTP'
         ->assertSee( 'data-cms-federated-module="myPluginAdmin/Panel"', false );
 } );
 
+it( 'escapes a malicious component identifier and title in the federated shell', function (): void {
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'xss-plugin', [
+                'title'      => '<script>alert(1)</script>',
+                'component'  => '"><script>alert(1)</script>',
+                'capability' => 'access_admin_dashboard',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'xss-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    app( AdminPageManager::class )->registerRoutes();
+
+    $response = $this->actingAs( TestUser::factory()->create() )->get( '/admin/xss-plugin' );
+
+    // Neither the component identifier nor the title escapes into raw markup.
+    $response->assertOk()
+        ->assertDontSee( '<script>alert(1)</script>', false )
+        ->assertSee( 'data-cms-federated-module="&quot;&gt;&lt;script&gt;', false )
+        ->assertSee( '&lt;script&gt;alert(1)&lt;/script&gt;', false );
+} );
+
 it( 'renders a host-overridden federated action over HTTP', function (): void {
     addFilter(
         'ap.cmsFramework.admin.federatedPageAction',

@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\Notification;
 use ArtisanPackUI\CMSFramework\Modules\Notifications\Models\NotificationPreference;
 use ArtisanPackUI\CMSFramework\Tests\Support\PlainUser;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser as User;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
 
 uses( Illuminate\Foundation\Testing\RefreshDatabase::class );
@@ -427,4 +428,26 @@ test( 'getUnreadCount returns correct unread count', function (): void {
     $count = $manager->getUnreadCount( $user->id );
 
     expect( $count )->toBe( 2 );
+} );
+
+test( 'notification policy denies create for a host user without the RBAC trait instead of fataling', function (): void {
+    $plainUser = PlainUser::create( [
+        'name'     => 'Plain',
+        'email'    => 'plain-create@example.com',
+        'password' => bcrypt( 'x' ),
+    ] );
+
+    expect( Gate::forUser( $plainUser )->allows( 'create', Notification::class ) )->toBeFalse();
+} );
+
+test( 'notification policy denies delete for a host user without the RBAC trait instead of fataling', function (): void {
+    $plainUser = PlainUser::create( [
+        'name'     => 'Plain',
+        'email'    => 'plain-delete@example.com',
+        'password' => bcrypt( 'x' ),
+    ] );
+
+    $notification = Notification::factory()->create();
+
+    expect( Gate::forUser( $plainUser )->allows( 'delete', $notification ) )->toBeFalse();
 } );

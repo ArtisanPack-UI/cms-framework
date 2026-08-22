@@ -470,6 +470,6 @@ class QueryRuntime
             static fn ( int $id ): bool => $id > 0,
         );
 
-        return array_values( array_unique( $ids));
+        return array_values( array_unique( $ids ) );
     }
 }

@@ -63,6 +63,6 @@ test( 'a CMS notification coexists with a Laravel database notification', functi
     } );
 
     expect( Notification::count() )->toBe( 1 )
-        ->and( $user->notifications()->count())->toBe( 1)
-        ->and( $user->systemNotifications()->count())->toBe( 1);
+        ->and( $user->notifications()->count() )->toBe( 1 )
+        ->and( $user->systemNotifications()->count() )->toBe( 1 );
 });

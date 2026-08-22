@@ -151,6 +151,6 @@ class PostFactory extends Factory
     {
         return $this->state( fn ( array $attributes ) => [
             'author_id' => $authorId,
-        ]);
+        ] );
     }
 }

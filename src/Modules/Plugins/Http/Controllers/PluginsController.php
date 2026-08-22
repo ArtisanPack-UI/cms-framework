@@ -290,10 +290,23 @@ class PluginsController extends Controller
     {
         try {
             $updated = $this->updateManager->updatePlugin( $slug );
+        } catch ( IncompatiblePluginException $e ) {
+            // `UpdateManager` rethrows this one as-is: the new version's
+            // `min_host_version` is not satisfied. Render the same structured 409
+            // that `activate()` does, whose payload carries the version numbers a
+            // generic error bag cannot express, instead of a generic 422.
+            return response()->json( [
+                'message'          => $e->getMessage(),
+                'code'             => 'plugin_incompatible',
+                'plugin'           => $e->pluginSlug,
+                'required_version' => $e->requiredVersion,
+                'host_version'     => $e->hostVersion,
+            ], 409 );
         } catch ( PluginUpdateException $e ) {
             // `UpdateManager` funnels every in-flight failure — unknown slug,
-            // download, checksum mismatch, failed swap — through this type,
-            // carrying the underlying reason verbatim.
+            // download, checksum mismatch, failed swap, and unsatisfiable
+            // dependency/conflict — through this type, carrying the underlying
+            // reason verbatim.
             throw ValidationException::withMessages( [
                 'slug' => $e->getMessage(),
             ] );
@@ -326,19 +339,37 @@ class PluginsController extends Controller
      */
     public function dependencies( string $slug ): JsonResponse
     {
+        $graph  = $this->pluginManager->buildDependencyGraph();
         $plugin = $this->pluginManager->getPlugin( $slug );
 
-        if ( ! $plugin ) {
+        // Unknown means present in neither the database (the graph) nor on disk.
+        // A DB-registered plugin whose files are gone still has declared deps —
+        // don't 404 it the way `dependents()` deliberately doesn't.
+        if ( ! isset( $graph[ $slug ] ) && ! $plugin ) {
             return response()->json( [
                 'message' => __( 'Plugin not found' ),
             ], 404 );
         }
 
+        if ( $plugin ) {
+            $requires  = $plugin['manifest']['requires'] ?? [];
+            $conflicts = $plugin['manifest']['conflicts'] ?? [];
+        } else {
+            // Files are gone; reconstruct the declared dependencies from the
+            // DB-persisted graph entry, mirroring the manifest shape.
+            $entry     = $graph[ $slug ];
+            $requires  = array_filter( [
+                'plugins'       => $entry['requires'] ?? [],
+                'cms-framework' => $entry['requires_host'] ?? null,
+            ], fn ( $value ) => ! empty( $value ) );
+            $conflicts = $entry['conflicts'] ?? [];
+        }
+
         return response()->json( [
             'slug'      => $slug,
-            'requires'  => $plugin['manifest']['requires'] ?? [],
-            'conflicts' => $plugin['manifest']['conflicts'] ?? [],
-            'status'    => $this->pluginManager->checkDependencies( $slug )->toArray(),
+            'requires'  => $requires,
+            'conflicts' => $conflicts,
+            'status'    => $this->pluginManager->checkDependencies( $slug, $graph )->toArray(),
         ] );
     }
 
@@ -396,10 +427,19 @@ class PluginsController extends Controller
         }
         $slugs = array_values( array_filter( $slugs, 'is_string' ) );
 
+        // Bound the batch: each unknown slug costs a graph lookup, and an
+        // unbounded list is an easy amplification vector.
+        $slugs = array_slice( $slugs, 0, 100 );
+
         $graph   = $this->pluginManager->buildDependencyGraph();
         $results = [];
         foreach ( $slugs as $slug ) {
-            $results[ $slug ] = $this->pluginManager->checkDependencies( $slug, $graph )->toArray();
+            // Surface whether the slug is installed so an uninstalled plugin is
+            // not silently reported as `satisfied: true` and dropped from `order`.
+            $results[ $slug ] = array_merge(
+                $this->pluginManager->checkDependencies( $slug, $graph )->toArray(),
+                [ 'installed' => isset( $graph[ $slug ] ) ],
+            );
         }
 
         try {

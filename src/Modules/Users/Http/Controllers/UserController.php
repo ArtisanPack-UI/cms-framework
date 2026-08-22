@@ -17,6 +17,7 @@ use ArtisanPackUI\CMSFramework\Http\Controllers\Concerns\HasIncludableRelationsh
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Requests\BulkUserRequest;
 use ArtisanPackUI\CMSFramework\Modules\Users\Http\Resources\UserResource;
 use Dedoc\Scramble\Attributes\Group;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -37,6 +38,7 @@ use Throwable;
 #[Group( 'Users', weight: 10 )]
 class UserController extends Controller
 {
+    use AuthorizesRequests;
     use HasIncludableRelationships;
 
     /**
@@ -70,6 +72,8 @@ class UserController extends Controller
     public function index( Request $request ): AnonymousResourceCollection
     {
         $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $this->authorize( 'viewAny', $userModel );
+
         $includes  = $this->getRequestedIncludes( $request );
         $users     = $userModel::with( $includes )->paginate( 15 );
 
@@ -91,6 +95,7 @@ class UserController extends Controller
     public function store( Request $request ): JsonResponse
     {
         $userModel = config( 'artisanpack.cms-framework.user_model' );
+        $this->authorize( 'create', $userModel );
 
         $validated = $request->validate( [
             'name'     => 'required|string|max:255',
@@ -123,6 +128,7 @@ class UserController extends Controller
         $userModel = config( 'artisanpack.cms-framework.user_model' );
         $includes  = $this->getRequestedIncludes( $request );
         $user      = $userModel::with( $includes )->findOrFail( $id );
+        $this->authorize( 'view', $user );
 
         return new UserResource( $user );
     }
@@ -145,6 +151,8 @@ class UserController extends Controller
     {
         $userModel = config( 'artisanpack.cms-framework.user_model' );
         $user      = $userModel::findOrFail( $id );
+        $this->authorize( 'update', $user );
+
         $validated = $request->validate( [
             'name'     => 'sometimes|required|string|max:255',
             'email'    => 'sometimes|required|string|email|max:255|unique:users,email,' . $user->id,
@@ -177,6 +185,8 @@ class UserController extends Controller
     {
         $userModel = config( 'artisanpack.cms-framework.user_model' );
         $user      = $userModel::findOrFail( $id );
+        $this->authorize( 'delete', $user );
+
         $user->delete();
 
         return response()->noContent();

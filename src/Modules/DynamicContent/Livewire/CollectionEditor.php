@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Models\DynamicContentRecor
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Models\DynamicContentType;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -21,6 +22,7 @@ class CollectionEditor extends Component
 {
     use WithPagination;
 
+    #[Locked]
     public int $typeId;
 
     public ?int $editingRecordId = null;
@@ -86,11 +88,13 @@ class CollectionEditor extends Component
         $data = [ 'label' => $this->editingLabel, 'values' => $this->editingValues ];
 
         if ( null === $this->editingRecordId ) {
-            Gate::authorize( 'create', DynamicContentRecord::class );
-            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is validated above (mirroring DynamicContentRecordRequest) and persisted via Eloquent create() behind a Gate::authorize('create', ...) check.
+            Gate::authorize( 'createForType', [ DynamicContentRecord::class, $type ] );
+            abort_unless( $type->isCollection(), 404 );
+            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is validated above (mirroring DynamicContentRecordRequest) and persisted via Eloquent create() behind a Gate::authorize('createForType', $type) check.
             $manager->create( $type, $data );
         } else {
             $record = DynamicContentRecord::findOrFail( $this->editingRecordId );
+            abort_unless( $record->dynamic_content_type_id === $this->typeId, 404 );
             Gate::authorize( 'update', $record );
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $data is validated above (mirroring DynamicContentRecordRequest) and persisted via Eloquent update() behind a Gate::authorize('update', $record) check.
             $manager->update( $record, $data );

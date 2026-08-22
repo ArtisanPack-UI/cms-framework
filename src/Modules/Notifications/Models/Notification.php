@@ -73,6 +73,14 @@ class Notification extends Model
      */
     public function getPivotAttribute()
     {
+        // When the model was fetched through the inverse relation
+        // ( e.g. `$user->systemNotifications` ), Eloquent has already loaded the
+        // real pivot onto the model. Return it directly — otherwise this accessor
+        // shadows it and reports null even though the pivot is present.
+        if ( $this->relationLoaded( 'pivot' ) ) {
+            return $this->getRelation( 'pivot' );
+        }
+
         if ( $this->relationLoaded( 'users' ) && $this->users->isNotEmpty() ) {
             return $this->users->first()->pivot;
         }

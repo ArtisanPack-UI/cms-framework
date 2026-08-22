@@ -56,8 +56,11 @@ class NotificationPolicy
      */
     public function create( $user ): bool
     {
-        // Only users with notification management capability can create
-        return $user->hasCapability( 'notifications.manage' );
+        // Only users with notification management capability can create. Guard
+        // `hasCapability()` so the globally registered policy degrades to a plain
+        // denial on host user models that do not compose the RBAC trait, rather
+        // than fataling with "Call to undefined method".
+        return method_exists( $user, 'hasCapability' ) && $user->hasCapability( 'notifications.manage' );
     }
 
     /**
@@ -83,7 +86,10 @@ class NotificationPolicy
      */
     public function delete( $user, Notification $notification ): bool
     {
-        // Only users with notification management capability can delete
-        return $user->hasCapability( 'notifications.manage' );
+        // Only users with notification management capability can delete. Guard
+        // `hasCapability()` so the globally registered policy degrades to a plain
+        // denial on host user models that do not compose the RBAC trait, rather
+        // than fataling with "Call to undefined method".
+        return method_exists( $user, 'hasCapability' ) && $user->hasCapability( 'notifications.manage' );
     }
 }

@@ -145,6 +145,29 @@ describe( 'Boot-time load order', function (): void {
 
         expect( BootOrderRecorder::$order )->toBe( ['dependency-plugin', 'dependent-plugin'] );
     } );
+
+    it( 'still registers both providers when two active plugins require each other', function (): void {
+        BootOrderRecorder::reset();
+
+        // A dependency cycle: getActivationOrder() throws CircularDependencyException
+        // and loadActivePlugins() falls back to unordered load. Both providers
+        // must still boot rather than the site silently losing them.
+        makePlugin( 'dependent-plugin', [
+            'is_active'        => true,
+            'service_provider' => DependentProvider::class,
+        ], ['requires' => ['plugins' => ['dependency-plugin' => '^1.0']]] );
+
+        makePlugin( 'dependency-plugin', [
+            'is_active'        => true,
+            'service_provider' => DependencyProvider::class,
+        ], ['requires' => ['plugins' => ['dependent-plugin' => '^1.0']]] );
+
+        $this->manager->loadActivePlugins();
+
+        expect( BootOrderRecorder::$order )->toHaveCount( 2 )
+            ->and( BootOrderRecorder::$order )->toContain( 'dependency-plugin' )
+            ->and( BootOrderRecorder::$order )->toContain( 'dependent-plugin' );
+    } );
 } );
 
 describe( 'Deactivation dependent guard', function (): void {
@@ -294,5 +317,74 @@ describe( 'Dependency API', function (): void {
 
         $response->assertStatus( 422 )
             ->assertJsonPath( 'code', 'circular_dependency' );
+    } );
+
+    it( 'lists a plugin\'s declared dependencies and resolved status', function (): void {
+        makePlugin( 'google-web-tools', [], ['requires' => ['plugins' => ['google-oauth' => '^1.0']]] );
+
+        $response = $this->actingAs( $this->admin )
+            ->getJson( '/api/v1/plugins/google-web-tools/dependencies' );
+
+        $response->assertOk()
+            ->assertJsonPath( 'slug', 'google-web-tools' )
+            ->assertJsonPath( 'requires.plugins.google-oauth', '^1.0' )
+            ->assertJsonPath( 'status.satisfied', false )
+            ->assertJsonPath( 'status.missing.0', 'google-oauth' );
+    } );
+
+    it( 'returns 404 from the dependencies endpoint for an unknown plugin', function (): void {
+        $response = $this->actingAs( $this->admin )
+            ->getJson( '/api/v1/plugins/does-not-exist/dependencies' );
+
+        $response->assertNotFound();
+    } );
+
+    it( 'accepts a bare JSON array body for check-dependencies and reports installed status', function (): void {
+        makePlugin( 'google-oauth' );
+
+        $response = $this->actingAs( $this->admin )
+            ->postJson( '/api/v1/plugins/check-dependencies', ['google-oauth'] );
+
+        $response->assertOk()
+            ->assertJsonPath( 'order', ['google-oauth'] )
+            ->assertJsonPath( 'results.google-oauth.installed', true )
+            ->assertJsonPath( 'results.google-oauth.satisfied', true );
+    } );
+
+    it( 'reports an uninstalled slug as not installed rather than silently satisfied', function (): void {
+        $response = $this->actingAs( $this->admin )
+            ->postJson( '/api/v1/plugins/check-dependencies', [
+                'plugins' => ['ghost-plugin'],
+            ] );
+
+        $response->assertOk()
+            ->assertJsonPath( 'results.ghost-plugin.installed', false );
+    } );
+
+    it( 'returns an empty result for a non-array plugins value', function (): void {
+        $response = $this->actingAs( $this->admin )
+            ->postJson( '/api/v1/plugins/check-dependencies', [
+                'plugins' => 'not-an-array',
+            ] );
+
+        $response->assertOk()
+            ->assertExactJson( [
+                'order'   => [],
+                'results' => [],
+            ] );
+    } );
+
+    it( 'allows a non-privileged authenticated user onto the read-only dependency endpoints', function (): void {
+        makePlugin( 'solo' );
+
+        // A user WITHOUT manage-plugins: the read endpoints are auth-only by
+        // design, so this locks that posture against an accidental gate change.
+        $user = TestUser::factory()->create();
+
+        $this->actingAs( $user )->getJson( '/api/v1/plugins/solo/dependencies' )->assertOk();
+        $this->actingAs( $user )->getJson( '/api/v1/plugins/solo/dependents' )->assertOk();
+        $this->actingAs( $user )
+            ->postJson( '/api/v1/plugins/check-dependencies', ['plugins' => ['solo']] )
+            ->assertOk();
     } );
 } );

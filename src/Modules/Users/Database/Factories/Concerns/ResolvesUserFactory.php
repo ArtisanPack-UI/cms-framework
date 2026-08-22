@@ -33,11 +33,14 @@ trait ResolvesUserFactory
      * same config key.
      *
      * Returns `null` when the host's user model is missing, isn't an
-     * Eloquent model, or doesn't expose a factory — in which case the
-     * caller must supply the user foreign key explicitly rather than
-     * fatally erroring.
+     * Eloquent model, or doesn't expose a factory. In that case the owning
+     * factory leaves its user foreign key null, so the caller must supply it
+     * explicitly — e.g. through a `byAuthor()`-style state. Note this degrades
+     * gracefully only for `make()`; a bare `create()` still hits the NOT
+     * NULL / foreign-key column, so `create()` requires the caller to supply
+     * the key when the user model is unresolvable.
      *
-     * @since 2.1.0
+     * @since 2.9.0
      *
      * @return Factory|null The resolved user factory, or null when unavailable.
      */
