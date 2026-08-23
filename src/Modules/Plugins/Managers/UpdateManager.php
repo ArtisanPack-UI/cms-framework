@@ -10,6 +10,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
@@ -314,13 +315,14 @@ class UpdateManager
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw $e;
-        } catch ( DependencyNotSatisfiedException | PluginConflictException $e ) {
+        } catch ( DependencyNotSatisfiedException | PluginConflictException | ComposerDependencyNotSatisfiedException $e ) {
             // The reactivate at step 7 rejected the new manifest's `requires` /
-            // `conflicts` declaration (#45). Unwind exactly like the other
-            // post-extraction failures — restore files and revert the row — and
-            // surface the dependency reason instead of collapsing it into the
-            // generic `downloadFailed()`, which would misreport a satisfiable-
-            // dependency problem as a network error.
+            // `conflicts` declaration (#45) or could not satisfy its `composer`
+            // block (#323). Unwind exactly like the other post-extraction
+            // failures — restore files and revert the row — and surface the
+            // dependency reason instead of collapsing it into the generic
+            // `downloadFailed()`, which would misreport a satisfiable-dependency
+            // problem as a network error.
             $this->restoreFromBackup( $plugin->slug, $backupPath );
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 

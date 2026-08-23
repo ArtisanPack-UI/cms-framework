@@ -6,7 +6,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
@@ -14,6 +16,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationExce
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
 use Composer\Autoload\ClassLoader;
@@ -362,6 +365,13 @@ class PluginManager
         // Plugin dependency + conflict gate (#45). Also runs before any state
         // mutation so a plugin missing its dependencies never half-activates.
         $this->assertDependenciesSatisfied( $plugin );
+
+        // Composer-package dependency gate (#323). Resolves — and, when enabled,
+        // installs — the manifest `composer` block, then registers the vendor
+        // PSR-4 prefixes so the classes are autoloadable before the plugin's
+        // service provider boots below. Runs before any state mutation so a
+        // failed resolution fails closed without a half-activated plugin.
+        $this->ensureComposerDependencies( $plugin );
 
         doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
@@ -1091,6 +1101,58 @@ class PluginManager
         if ( isset( $manifest['conflicts'] ) ) {
             $this->validateConstraintMapManifestField( $manifest['conflicts'], 'conflicts', $manifest['slug'] );
         }
+
+        if ( isset( $manifest['composer'] ) ) {
+            $this->validateComposerManifestField( $manifest['composer'] );
+        }
+    }
+
+    /**
+     * Validate the optional `composer` manifest key for plugin→Composer-package
+     * dependencies (#323).
+     *
+     * Shape (Packagist package name => version constraint):
+     *     "composer": { "artisanpack-ui/convertkit": "^1.2" }
+     *
+     * The sibling of {@see validateConstraintMapManifestField()}: same object /
+     * non-empty-constraint rigor, but keys are validated as Composer package
+     * names (`vendor/package`) rather than plugin slugs. An empty object is
+     * allowed; a JSON array is rejected because it cannot express the mapping.
+     *
+     * @param  mixed  $composer  Raw manifest value.
+     *
+     * @throws PluginValidationException If the block is malformed.
+     */
+    protected function validateComposerManifestField( mixed $composer ): void
+    {
+        if ( ! is_array( $composer ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid composer. Must be an object mapping Composer package names to version constraints.' );
+        }
+
+        foreach ( $composer as $package => $constraint ) {
+            if ( ! is_string( $package ) || ! $this->isValidComposerPackageName( $package ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid composer. Each key must be a valid Composer package name (vendor/package).' );
+            }
+            if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid composer['{$package}']. Version constraint must be a non-empty string." );
+            }
+        }
+    }
+
+    /**
+     * Whether a string is a syntactically valid Composer package name.
+     *
+     * Mirrors Composer's own `vendor/package` grammar so a manifest cannot slip
+     * an arbitrary token — a shell fragment, a path — into the value later
+     * handed to `composer require`.
+     *
+     * @param  string  $package  Candidate package name.
+     *
+     * @return bool True when the name is well-formed.
+     */
+    protected function isValidComposerPackageName( string $package ): bool
+    {
+        return 1 === preg_match( '{^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$}iD', $package );
     }
 
     /**
@@ -1472,6 +1534,138 @@ class PluginManager
     protected function dependencyResolver(): DependencyResolver
     {
         return new DependencyResolver;
+    }
+
+    /**
+     * Resolve a stateless Composer-package resolver instance.
+     *
+     * @since 2.10.0
+     */
+    protected function composerPackageResolver(): ComposerPackageResolver
+    {
+        return new ComposerPackageResolver;
+    }
+
+    /**
+     * Resolve the bound Composer-package installer.
+     *
+     * Resolved from the container each call so a test can bind a fake and so a
+     * host can register its own install strategy.
+     *
+     * @since 2.10.0
+     */
+    protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+    {
+        return app( ComposerPackageInstallerInterface::class );
+    }
+
+    /**
+     * Resolve — and, when enabled, install — a plugin's declared Composer
+     * packages, then register their PSR-4 prefixes on the running class loader
+     * (#323).
+     *
+     * Fails closed: an unmet requirement with auto-install disabled, or an
+     * install that cannot complete (Packagist unreachable, a `composer.lock`
+     * conflict, a missing binary), raises
+     * {@see ComposerDependencyNotSatisfiedException}. Called from
+     * `activate()` before any state mutation, so a failure aborts activation
+     * without a rollback.
+     *
+     * @since 2.10.0
+     *
+     * @throws ComposerDependencyNotSatisfiedException When requirements cannot be satisfied.
+     */
+    protected function ensureComposerDependencies( Plugin $plugin ): void
+    {
+        $requirements = $plugin->required_composer_packages;
+        if ( empty( $requirements ) ) {
+            return;
+        }
+
+        $installer = $this->composerPackageInstaller();
+        $resolver  = $this->composerPackageResolver();
+
+        $result = $resolver->resolve( $requirements, $installer->installedVersions() );
+
+        if ( ! $result->isSatisfied() ) {
+            if ( ! config( 'cms.plugins.autoInstallComposerDependencies', true ) ) {
+                throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+            }
+
+            // Hand only the unmet constraints to Composer, which arbitrates any
+            // conflict against the host's existing lock. A non-zero exit throws
+            // ComposerDependencyNotSatisfiedException from the installer.
+            $installer->install( $plugin->slug, $result->unresolvedConstraints() );
+
+            // Re-resolve against the post-install snapshot to confirm the
+            // constraints are now met before booting the provider.
+            $result = $resolver->resolve( $requirements, $installer->installedVersions() );
+
+            if ( ! $result->isSatisfied() ) {
+                throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+            }
+        }
+
+        $this->registerComposerPackageAutoloaders( array_keys( $requirements ) );
+    }
+
+    /**
+     * Register the PSR-4 prefixes of installed Composer packages onto the
+     * runtime class loader so a freshly installed vendor tree is autoloadable
+     * within the same request that installed it.
+     *
+     * Best-effort: a package whose install path or `composer.json` cannot be
+     * read is skipped — its classes still load on the next request, which boots
+     * with a regenerated autoloader.
+     *
+     * @since 2.10.0
+     *
+     * @param  array<int,string>  $packages  Composer package names.
+     */
+    protected function registerComposerPackageAutoloaders( array $packages ): void
+    {
+        $installer  = $this->composerPackageInstaller();
+        $registered = false;
+
+        foreach ( $packages as $package ) {
+            $path = $installer->installPath( $package );
+            if ( null === $path ) {
+                continue;
+            }
+
+            $composerJson = rtrim( $path, '/' ) . '/composer.json';
+            if ( ! File::exists( $composerJson ) ) {
+                continue;
+            }
+
+            $decoded = json_decode( ( string ) File::get( $composerJson ), true );
+            $psr4    = $decoded['autoload']['psr-4'] ?? null;
+            if ( ! is_array( $psr4 ) ) {
+                continue;
+            }
+
+            foreach ( $psr4 as $namespace => $relative ) {
+                if ( ! is_string( $namespace ) ) {
+                    continue;
+                }
+
+                foreach ( ( array ) $relative as $relativePath ) {
+                    if ( is_string( $relativePath ) ) {
+                        // Trim both sides of the relative path so the registered
+                        // directory has no trailing slash, matching how Composer
+                        // stores its own PSR-4 prefixes.
+                        $prefixPath = rtrim( $path, '/' );
+                        $suffix     = trim( $relativePath, '/' );
+                        $this->classLoader->addPsr4( $namespace, '' === $suffix ? $prefixPath : $prefixPath . '/' . $suffix );
+                        $registered = true;
+                    }
+                }
+            }
+        }
+
+        if ( $registered ) {
+            $this->classLoader->register( true );
+        }
     }
 
     /**

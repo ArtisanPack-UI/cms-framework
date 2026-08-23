@@ -2,10 +2,12 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
@@ -531,6 +533,74 @@ describe( 'Reactivation failure after update (#45)', function (): void {
             ->and( $plugin->meta )->not->toHaveKey( 'requires' );
 
         // Files restored from backup: the on-disk manifest is the 1.0.0 original.
+        $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '1.0.0' );
+
+        File::delete( $zipPath );
+    } );
+
+    it( 'rolls back and reports the composer reason when the new manifest adds an unsatisfiable composer package (#323)', function (): void {
+        // A fake installer that reports nothing installed and fails any install,
+        // so the reactivation at step 7 cannot satisfy the new composer block.
+        $installer              = new FakeComposerPackageInstaller;
+        $installer->failInstall = true;
+        $installer->failReason  = 'Could not reach Packagist.';
+        app()->instance( ComposerPackageInstallerInterface::class, $installer );
+
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => true,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        $manifest = [
+            'slug'        => 'valid-plugin',
+            'name'        => 'Valid Test Plugin',
+            'version'     => '2.0.0',
+            'description' => 'Updated plugin',
+            'author'      => 'Test Author',
+            'composer'    => [ 'acme/engine' => '^1.0' ],
+        ];
+
+        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
+        $zip     = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
+        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
+        $zip->close();
+        $sha256 = hash( 'sha256', File::get( $zipPath ) );
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => $sha256,
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class, 'Could not reach Packagist.' );
+
+        // Row rolled back and the new composer block never seated.
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' )
+            ->and( $plugin->is_active )->toBeTrue()
+            ->and( $plugin->meta )->not->toHaveKey( 'composer' );
+
+        // Files restored from backup.
         $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
         expect( $onDisk['version'] )->toBe( '1.0.0' );
 

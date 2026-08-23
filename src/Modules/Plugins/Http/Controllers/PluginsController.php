@@ -13,6 +13,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Http\Controllers;
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
@@ -167,6 +168,13 @@ class PluginsController extends Controller
                 'code'         => 'plugin_dependencies_unsatisfied',
                 'plugin'       => $e->pluginSlug,
                 'dependencies' => $e->result?->toArray(),
+            ], 409 );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            return response()->json( [
+                'message'  => $e->getMessage(),
+                'code'     => 'plugin_composer_dependencies_unsatisfied',
+                'plugin'   => $e->pluginSlug,
+                'composer' => $e->result?->toArray(),
             ], 409 );
         } catch ( PluginNotFoundException $e ) {
             throw ValidationException::withMessages( [
