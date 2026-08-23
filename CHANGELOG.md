@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **`registerAdminPage( component: )`'s federated mount now renders a visible fallback instead of a silent dead div, and the federated admin-page contract is documented for both host styles** ([#325](https://github.com/ArtisanPack-UI/cms-framework/issues/325)) — the #296 shell emitted a bare `<div data-cms-federated-module="…"></div>`, which is inert on a host whose federation runtime never scans that attribute (e.g. Keystone CMS, whose runtime is Inertia-page-based and resolves `plugins/<remote>/<page>` from the `ap.plugins.federatedModules` manifest). On such a host the page rendered an empty, never-hydrated div — a footgun for plugin authors. The framework-owned `cms::admin.layouts.federated` shell now renders a role-`status` notice inside the mount naming the module and stating that the host must hydrate it, so an unhydrated page shows a clear message rather than a blank area; a host that scans the mount (or overrides `ap.cmsFramework.admin.federatedPageAction`) still replaces it. `docs/plugin-authoring.md` now documents the contract as a host-agnostic mount plus a host hydration responsibility, spelling out both supported paths (scan the Blade mount, or bridge via the filter) and calling out the Inertia `plugins/<remote>/<page>` path for Inertia-based hosts. No API signature changed.
+
 ## [2.9.0] - 2026-08-21
 
 ### Security

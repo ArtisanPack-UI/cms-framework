@@ -122,13 +122,18 @@ abstract class PluginServiceProvider extends ServiceProvider
      * - `view` → renders the Blade view, with the route's own parameters passed
      *   through as view data so a page at `reports/{id}` can read `$id`.
      * - `component` → a Module Federation identifier only the host's federation
-     *   runtime can resolve. The shipped default renders the framework-owned
-     *   `cms::admin.layouts.federated` shell, which emits a mount-point element
-     *   inside the admin chrome for the host front end to hydrate. A federation
-     *   host that mounts components its own way overrides the default through
-     *   the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
-     *   the default action, the component identifier, and the page config and
-     *   returns its own route action.
+     *   runtime can resolve. The framework owns no frontend and ships no
+     *   federation runtime, so the host must hydrate the component. The shipped
+     *   default renders the framework-owned `cms::admin.layouts.federated`
+     *   shell, which emits a mount-point element inside the admin chrome — plus
+     *   a visible fallback notice so an unhydrated page is never a silent blank
+     *   div. A host hydrates it either by scanning for the mount attribute in
+     *   its front end, or by overriding the default through the
+     *   `ap.cmsFramework.admin.federatedPageAction` filter, which receives the
+     *   default action, the component identifier, and the page config and
+     *   returns its own route action. Inertia-based hosts ( e.g. Keystone CMS )
+     *   take the filter path to bridge to their `plugins/<remote>/<page>`
+     *   runtime. See `docs/plugin-authoring.md`.
      * - neither → a 501, so the operator sees a clear "not configured" response
      *   instead of a white-screened application.
      *
