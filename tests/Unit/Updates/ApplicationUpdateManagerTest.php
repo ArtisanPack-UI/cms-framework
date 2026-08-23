@@ -28,6 +28,51 @@ use ZipArchive;
 class ApplicationUpdateManagerTest extends TestCase
 {
     /**
+     * The ambient `COMPOSER_BINARY`, captured so it can be restored per test.
+     *
+     * @since 2.10.0
+     *
+     * @var false|string
+     */
+    private string|false $originalComposerBinaryEnv = false;
+
+    /**
+     * Neutralize `COMPOSER_BINARY` for the duration of each test.
+     *
+     * Composer exports `COMPOSER_BINARY` into the environment of any script it
+     * runs, so under `composer test` `resolveComposerCommand()` would resolve
+     * that binary — and its `install` verb — ahead of a test's configured
+     * command, which is invisible under a bare `pest` run. Clearing it here makes
+     * command resolution deterministic across runners; the few tests that
+     * exercise the env var set their own value after this runs.
+     *
+     * @since 2.10.0
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->originalComposerBinaryEnv = getenv( 'COMPOSER_BINARY' );
+        putenv( 'COMPOSER_BINARY' );
+    }
+
+    /**
+     * Restore the ambient `COMPOSER_BINARY`.
+     *
+     * @since 2.10.0
+     */
+    protected function tearDown(): void
+    {
+        putenv(
+            false === $this->originalComposerBinaryEnv
+                ? 'COMPOSER_BINARY'
+                : 'COMPOSER_BINARY=' . $this->originalComposerBinaryEnv,
+        );
+
+        parent::tearDown();
+    }
+
+    /**
      * Test manager can check for updates.
      *
      * @since 1.0.0
