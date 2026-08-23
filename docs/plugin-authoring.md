@@ -240,21 +240,38 @@ $this->registerAdminPage( 'hello-world', [
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
 
-A `component`-only admin page renders the framework-owned
-`cms::admin.layouts.federated` shell, which emits a mount point —
-`<div data-cms-federated-module="…"></div>` — inside the admin chrome for the
-host's Module Federation runtime to hydrate. It is never handed to
-`Route::get()` as a bare string (which Laravel rejects as an invalid route
-action; because admin routes register from a `booted()` callback, that once
-surfaced on *every* request, not just the plugin's own page, taking the whole
-application down). A page that declares neither a `view` nor a `component`
-responds `501` on its own route instead of breaking route registration.
+### The federated admin-page contract
 
-A federation host that mounts components its own way — a different mount
-element, a server-rendered island, an Inertia response — overrides the default
-through the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
-the default route action, the component identifier and the page config, and
-returns its own route action:
+**The framework does not own the frontend and ships no Module Federation
+runtime.** It cannot resolve or hydrate a federated component itself — a host
+application must do that. `registerAdminPage( component: )` gives you a
+host-agnostic *mount contract*; the host holds the *hydration responsibility*.
+There are two supported ways a host can hydrate the mount:
+
+**1. Scan the Blade mount (host-agnostic).** A `component`-only admin page
+renders the framework-owned `cms::admin.layouts.federated` shell, which emits a
+single mount point inside the admin chrome:
+
+```html
+<div data-cms-federated-module="helloWorldAdmin/HelloWorldPanel">
+    <p class="cms-admin__federated-fallback" role="status">
+        This admin page loads the federated module "…", which the host
+        application must hydrate. …
+    </p>
+</div>
+```
+
+A host whose front end scans for `data-cms-federated-module` mounts the named
+module into that div, replacing the fallback notice. Until a host hydrates it,
+the fallback notice renders in place of a blank page — so an unconfigured host
+shows a clear "needs a host runtime" message rather than a **silent dead div**.
+
+**2. Bridge to the host's own runtime via the filter (Inertia and others).**
+A host that mounts components its own way — a different mount element, a
+server-rendered island, an Inertia page — overrides the default through the
+`ap.cmsFramework.admin.federatedPageAction` filter, which receives the default
+route action, the component identifier and the page config, and returns its own
+route action:
 
 ```php
 addFilter(
@@ -266,6 +283,25 @@ addFilter(
 ```
 
 Returning anything other than a closure falls back to the shipped shell.
+
+> **Inertia-based hosts (e.g. Keystone CMS).** Keystone's federation runtime is
+> Inertia-page-based: it resolves page names like `plugins/<remote>/<page>` from
+> a manifest built off the `ap.plugins.federatedModules` filter and mounts them
+> through the Inertia page resolver — it does **not** scan for the Blade mount
+> `data-cms-federated-module`. On such a host, ship your admin UI as an Inertia
+> page under the `plugins/<remote>/<page>` route (paired with a
+> [`federated_module`](#federated-react-modules) declaration so the host can
+> resolve the remote), and — if you also want `registerAdminPage( component: )`
+> to reach that page — bridge it with the filter above. Without the filter
+> override, `registerAdminPage( component: )` renders the fallback notice on an
+> Inertia host, because nothing hydrates the Blade mount there.
+
+The shell is never handed to `Route::get()` as a bare string (which Laravel
+rejects as an invalid route action; because admin routes register from a
+`booted()` callback, that once surfaced on *every* request, not just the
+plugin's own page, taking the whole application down). A page that declares
+neither a `view` nor a `component` responds `501` on its own route instead of
+breaking route registration.
 
 ## Registering nav entries
 
@@ -397,6 +433,12 @@ plugins consume federated modules the plugin has declared through:
 - **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )`
   in `boot()`. A programmatic registration wins: a manifest module is skipped
   when the same name is already registered.
+
+Declaring a module makes it *resolvable* by the host; it does not, by itself,
+place it on a page. To surface a federated module as an admin page, pair the
+declaration with `registerAdminPage( component: )` and hydrate it per the
+[federated admin-page contract](#the-federated-admin-page-contract) — either the
+Blade mount or the filter bridge, depending on the host.
 
 An example Module Federation config, Vite build, and remoteEntry contract live
 in the Keystone CMS docs. See

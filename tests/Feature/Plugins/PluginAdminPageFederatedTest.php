@@ -66,7 +66,39 @@ it( 'renders a federated component admin page inside the admin layout over HTTP'
     $response->assertOk()
         ->assertSee( '<title>My Plugin', false )
         ->assertSee( 'cms-admin__content', false )
+        ->assertSee( 'cms-admin__federated-fallback', false )
         ->assertSee( 'data-cms-federated-module="myPluginAdmin/Panel"', false );
+} );
+
+it( 'renders a visible fallback notice inside the mount when no host hydrates it', function (): void {
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerAdminPage( 'my-plugin', [
+                'title'      => 'My Plugin',
+                'component'  => 'myPluginAdmin/Panel',
+                'capability' => 'access_admin_dashboard',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'my-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    app( AdminPageManager::class )->registerRoutes();
+
+    $response = $this->actingAs( TestUser::factory()->create() )->get( '/admin/my-plugin' );
+
+    // Without a host federation runtime, the mount is not a silent dead div:
+    // it carries a visible notice naming the module so an operator understands
+    // why the page is empty. A host that hydrates the mount replaces this.
+    $response->assertOk()
+        ->assertSee( 'myPluginAdmin/Panel', false )
+        ->assertSee( 'the host application must hydrate', false );
 } );
 
 it( 'escapes a malicious component identifier and title in the federated shell', function (): void {
