@@ -3595,6 +3595,591 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * #308: the pre-extraction pre-flight must refuse a release whose archived
+     * `composer.json`/`composer.lock` pair is out of sync when stale-lock
+     * recovery is disabled — and, crucially, must leave the live tree untouched,
+     * so there is nothing to roll back.
+     *
+     * @since 2.10.0
+     */
+    public function test_preflight_refuses_out_of_sync_archive_before_extraction(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'        => false,
+            'cms.updates.verify_composer_lock_sync' => true,
+        ] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-preflight-refuse-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.10.0"}}' );
+        $zip->addFromString( 'release-root/composer.lock', '{"content-hash":"definitely-not-the-right-hash","packages":[]}' );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $threw = false;
+
+            try {
+                $manager->extractInto( $zipPath );
+            } catch ( UpdateException $e ) {
+                $threw = true;
+                $this->assertStringContainsString( 'out of sync', $e->getMessage() );
+            }
+
+            $this->assertTrue( $threw, 'The pre-flight must throw on an out-of-sync archive with recovery disabled.' );
+            $this->assertFileDoesNotExist(
+                $target . '/app/New.php',
+                'A refused release must never touch the live tree.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: the pre-flight must stay out of the way when stale-lock recovery is
+     * enabled ( the default ). A diverged lock is exactly what recovery
+     * re-resolves, so extraction proceeds and the release lands — refusing here
+     * would regress #273.
+     *
+     * @since 2.10.0
+     */
+    public function test_preflight_allows_out_of_sync_archive_when_recovery_enabled(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'        => true,
+            'cms.updates.verify_composer_lock_sync' => true,
+        ] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-preflight-allow-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.10.0"}}' );
+        $zip->addFromString( 'release-root/composer.lock', '{"content-hash":"definitely-not-the-right-hash","packages":[]}' );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists(
+                $target . '/app/New.php',
+                'With recovery enabled, extraction proceeds despite a diverged lock.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: a missing `composer.json`/`composer.lock` in the archive is
+     * inconclusive, so the pre-flight fails open and lets extraction proceed —
+     * even with recovery disabled.
+     *
+     * @since 2.10.0
+     */
+    public function test_preflight_fails_open_when_archive_lacks_composer_pair(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'        => false,
+            'cms.updates.verify_composer_lock_sync' => true,
+        ] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-preflight-open-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        // Ships a composer.json but no lock: the pair is incomplete.
+        $zip->addFromString( 'release-root/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.10.0"}}' );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists(
+                $target . '/app/New.php',
+                'An incomplete composer pair is inconclusive; extraction must proceed.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: an aborted update that rolls back must also drop the compiled caches,
+     * so the restored tree does not boot behind a config/service cache compiled
+     * against the release just unwound.
+     *
+     * @since 2.10.0
+     */
+    public function test_rollback_clears_compiled_caches(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-cacheclear-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+        file_put_contents( $target . '/app/Old.php', "<?php\n// old\n" );
+
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/Old.php', "<?php\n// old\n" );
+        $backup->close();
+
+        $manager = new class( $backupPath ) extends ApplicationUpdateManager {
+            public bool $cachesCleared = false;
+
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function runComposerInstall(): void
+            {
+            }
+
+            protected function clearCaches(): void
+            {
+            }
+
+            protected function clearCompiledCachesAfterFailure(): void
+            {
+                $this->cachesCleared = true;
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callHandleFailure( new RuntimeException( 'composer install failed' ) );
+
+            $this->assertTrue(
+                $manager->cachesCleared,
+                'A rollback must clear the compiled caches so the restored tree does not boot behind stale ones.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $backupPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: after a successful update, orphaned hashed build assets the manifest
+     * no longer references are purged, while referenced assets and the manifest
+     * itself are kept.
+     *
+     * @since 2.10.0
+     */
+    public function test_purge_stale_build_assets_removes_only_unreferenced_files(): void
+    {
+        config( ['cms.updates.purge_stale_build_assets' => true] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-build-purge-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $assets   = $target . '/public/build/assets';
+        mkdir( $assets, 0755, true );
+
+        file_put_contents( $target . '/public/build/manifest.json', json_encode( [
+            'resources/js/app.js' => [
+                'file' => 'assets/app-NEW.js',
+                'css'  => ['assets/app-NEW.css'],
+            ],
+        ] ) );
+        file_put_contents( $assets . '/app-NEW.js', 'current js' );
+        file_put_contents( $assets . '/app-NEW.css', 'current css' );
+        file_put_contents( $assets . '/app-OLD.js', 'orphaned js' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function callPurge(): void
+            {
+                $this->purgeStaleBuildAssets();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callPurge();
+
+            $this->assertFileExists( $assets . '/app-NEW.js', 'A referenced asset must survive the purge.' );
+            $this->assertFileExists( $assets . '/app-NEW.css', 'A referenced CSS asset must survive the purge.' );
+            $this->assertFileExists( $target . '/public/build/manifest.json', 'The manifest must never be purged.' );
+            $this->assertFileDoesNotExist( $assets . '/app-OLD.js', 'An orphaned asset must be purged.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: the manifest is the whitelist, so with no manifest to vouch for what
+     * is live the purge must do nothing rather than delete build output blindly.
+     *
+     * @since 2.10.0
+     */
+    public function test_purge_stale_build_assets_is_a_noop_without_a_manifest(): void
+    {
+        config( ['cms.updates.purge_stale_build_assets' => true] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-build-nomanifest-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $assets   = $target . '/public/build/assets';
+        mkdir( $assets, 0755, true );
+        file_put_contents( $assets . '/app-OLD.js', 'orphaned js' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function callPurge(): void
+            {
+                $this->purgeStaleBuildAssets();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callPurge();
+
+            $this->assertFileExists(
+                $assets . '/app-OLD.js',
+                'Without a manifest the purge must leave every build file in place.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: after a successful update, paths a release declares removed upstream
+     * are deleted — while excluded paths and any traversal attempt in the
+     * manifest are refused.
+     *
+     * @since 2.10.0
+     */
+    public function test_apply_removed_paths_manifest_deletes_listed_and_guards_the_rest(): void
+    {
+        config( [
+            'cms.updates.honor_removed_paths_manifest' => true,
+            'cms.updates.removed_paths_manifest'       => '.artisanpack/removed-paths.json',
+            'cms.updates.exclude_from_update'          => ['storage', '.env', 'vendor'],
+        ] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-removed-paths-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app/Http/Controllers', 0755, true );
+        mkdir( $target . '/storage/logs', 0755, true );
+        mkdir( $target . '/.artisanpack', 0755, true );
+        mkdir( $tempRoot . '/outside', 0755, true );
+
+        file_put_contents( $target . '/app/Http/Controllers/OldController.php', "<?php\n// dead\n" );
+        file_put_contents( $target . '/storage/logs/laravel.log', "log\n" );
+        file_put_contents( $tempRoot . '/outside/secret.txt', "secret\n" );
+
+        file_put_contents( $target . '/.artisanpack/removed-paths.json', json_encode( [
+            'app/Http/Controllers/OldController.php',
+            'storage/logs/laravel.log',
+            '../outside/secret.txt',
+        ] ) );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function callApply(): void
+            {
+                $this->applyRemovedPathsManifest();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callApply();
+
+            $this->assertFileDoesNotExist(
+                $target . '/app/Http/Controllers/OldController.php',
+                'A path the release removed upstream must be deleted.',
+            );
+            $this->assertFileExists(
+                $target . '/storage/logs/laravel.log',
+                'An excluded path must survive even when the manifest lists it.',
+            );
+            $this->assertFileExists(
+                $tempRoot . '/outside/secret.txt',
+                'A traversal entry must never reach outside base_path().',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            $this->removeDirectory( $tempRoot . '/outside' );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: the pre-flight must stay silent when the resolved composer command
+     * runs `update` rather than `install` — an operator who runs `composer update`
+     * re-resolves the lock and *wants* a divergence — even with recovery off.
+     *
+     * @since 2.10.0
+     */
+    public function test_preflight_allows_out_of_sync_archive_when_command_is_update(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'        => false,
+            'cms.updates.verify_composer_lock_sync' => true,
+            'cms.updates.composer_install_command'  => 'composer update --no-dev',
+        ] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-preflight-update-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.10.0"}}' );
+        $zip->addFromString( 'release-root/composer.lock', '{"content-hash":"definitely-not-the-right-hash","packages":[]}' );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists(
+                $target . '/app/New.php',
+                'A `composer update` command reconciles the lock, so the pre-flight must not refuse.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: the pre-flight honours the same opt-out as the post-extraction
+     * check — with `verify_composer_lock_sync` disabled it stays silent even when
+     * the pair is out of sync and recovery is off.
+     *
+     * @since 2.10.0
+     */
+    public function test_preflight_is_silent_when_sync_check_disabled(): void
+    {
+        config( [
+            'cms.updates.recover_stale_lock'        => false,
+            'cms.updates.verify_composer_lock_sync' => false,
+        ] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-preflight-disabled-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target, 0755, true );
+
+        $zipPath = $tempRoot . '/update.zip';
+        $zip     = new ZipArchive;
+        $this->assertTrue( true === $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $zip->addFromString( 'release-root/composer.json', '{"require":{"artisanpack-ui/cms-framework":"^2.10.0"}}' );
+        $zip->addFromString( 'release-root/composer.lock', '{"content-hash":"definitely-not-the-right-hash","packages":[]}' );
+        $zip->addFromString( 'release-root/app/New.php', "<?php\n// added\n" );
+        $zip->close();
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function extractInto( string $zipPath ): void
+            {
+                $this->extractUpdate( $zipPath );
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->extractInto( $zipPath );
+
+            $this->assertFileExists(
+                $target . '/app/New.php',
+                'With the sync check disabled the pre-flight must not refuse.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $zipPath );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: the build purge reads the `.vite/manifest.json` sidecar Laravel/Vite
+     * also writes when no top-level `manifest.json` is present, and keeps assets
+     * a chunk lists under `assets`.
+     *
+     * @since 2.10.0
+     */
+    public function test_purge_stale_build_assets_reads_vite_sidecar_and_keeps_assets(): void
+    {
+        config( ['cms.updates.purge_stale_build_assets' => true] );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-build-sidecar-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $assets   = $target . '/public/build/assets';
+        mkdir( $assets, 0755, true );
+        mkdir( $target . '/public/build/.vite', 0755, true );
+
+        file_put_contents( $target . '/public/build/.vite/manifest.json', json_encode( [
+            'resources/js/app.js' => [
+                'file'   => 'assets/app-NEW.js',
+                'assets' => ['assets/logo-NEW.png'],
+            ],
+        ] ) );
+        file_put_contents( $assets . '/app-NEW.js', 'current js' );
+        file_put_contents( $assets . '/logo-NEW.png', 'current image' );
+        file_put_contents( $assets . '/logo-OLD.png', 'orphaned image' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function callPurge(): void
+            {
+                $this->purgeStaleBuildAssets();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callPurge();
+
+            $this->assertFileExists( $assets . '/app-NEW.js', 'A referenced chunk file must survive.' );
+            $this->assertFileExists( $assets . '/logo-NEW.png', 'An asset a chunk lists must survive.' );
+            $this->assertFileExists(
+                $target . '/public/build/.vite/manifest.json',
+                'The sidecar manifest must never be purged.',
+            );
+            $this->assertFileDoesNotExist( $assets . '/logo-OLD.png', 'An orphaned asset must be purged.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * #308: when the run fails with no snapshot to restore ( backups disabled ),
+     * the compiled caches must still be dropped so a half-applied or reverted
+     * tree does not boot behind a cache compiled against the failed release.
+     *
+     * @since 2.10.0
+     */
+    public function test_no_backup_failure_clears_compiled_caches(): void
+    {
+        config( ['cms.updates.backup_enabled' => false] );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public bool $cachesCleared = false;
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            protected function liftMaintenanceModeAfterFailure( string $context, ?UpdateStep $step = null ): void
+            {
+            }
+
+            protected function clearCompiledCachesAfterFailure(): void
+            {
+                $this->cachesCleared = true;
+            }
+        };
+
+        $manager->callHandleFailure( new RuntimeException( 'download failed before backup' ) );
+
+        $this->assertTrue(
+            $manager->cachesCleared,
+            'A failure with no snapshot must still clear the compiled caches.',
+        );
+    }
+
+    /**
      * Write a scratch base path holding a `composer.json` and, optionally, a
      * `composer.lock`. Returns the directory, which the caller must remove.
      *
