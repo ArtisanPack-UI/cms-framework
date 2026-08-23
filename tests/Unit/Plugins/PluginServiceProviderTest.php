@@ -445,3 +445,176 @@ it( 'resolves pluginPath and pluginConfig from the manifest', function (): void 
         ->and( $provider->exposePluginConfig( 'nested.key' ) )->toBe( 'value' )
         ->and( $provider->exposePluginConfig( 'missing' ) )->toBeNull();
 } );
+
+/**
+ * Build a provider whose manifest is exactly $manifest and whose boot() runs
+ * the given imperative callback, so the manifest-bridge tests can exercise both
+ * declarative and imperative registration in one place.
+ *
+ * @param  array<string,mixed>  $manifest
+ */
+function manifestProvider( array $manifest, ?Closure $boot = null ): PluginServiceProvider
+{
+    return new class( app(), $manifest, $boot ) extends PluginServiceProvider {
+        /** @param array<string,mixed> $pluginManifest */
+        public function __construct( $app, private array $pluginManifest, private ?Closure $onBoot )
+        {
+            parent::__construct( $app );
+        }
+
+        public function boot(): void
+        {
+            if ( null !== $this->onBoot ) {
+                ( $this->onBoot )( $this );
+            }
+        }
+
+        public function imperativeNavEntry( array $entry ): void
+        {
+            $this->registerNavEntry( $entry );
+        }
+
+        public function imperativeFederatedModule( string $name, string $entry, array $exposes = [] ): void
+        {
+            $this->registerFederatedModule( $name, $entry, $exposes );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = $this->pluginManifest;
+        }
+    };
+}
+
+it( 'auto-registers manifest nav_entries when declaration alone is used', function (): void {
+    $provider = manifestProvider( [
+        'slug'        => 'reports-plugin',
+        'nav_entries' => [
+            [
+                'slug'       => 'reports',
+                'label'      => 'Reports',
+                'url'        => '/admin/reports',
+                'permission' => 'reports.view',
+            ],
+        ],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    $entries = app( PluginRegistry::class )->navEntries();
+
+    expect( $entries )->toHaveKey( 'reports' )
+        ->and( $entries['reports']['url'] )->toBe( '/admin/reports' )
+        ->and( $entries['reports']['permission'] )->toBe( 'reports.view' );
+} );
+
+it( 'auto-registers a manifest federated_module keyed by the plugin slug', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'reports-plugin',
+        'federated_module' => [
+            'entry'   => 'dist/remoteEntry.js',
+            'exposes' => ['./App', './Panel'],
+        ],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    $modules = applyFilters( 'ap.plugins.federatedModules', [] );
+
+    expect( $modules )->toHaveKey( 'reports-plugin' )
+        ->and( $modules['reports-plugin']['entry'] )->toBe( 'dist/remoteEntry.js' )
+        ->and( $modules['reports-plugin']['exposes'] )->toBe( ['./App', './Panel'] );
+} );
+
+it( 'keys a federated_module by its explicit name when the manifest provides one', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'reports-plugin',
+        'federated_module' => [
+            'name'  => 'reportsAdmin',
+            'entry' => 'dist/remoteEntry.js',
+        ],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    $modules = applyFilters( 'ap.plugins.federatedModules', [] );
+
+    expect( $modules )->toHaveKey( 'reportsAdmin' )
+        ->and( $modules )->not->toHaveKey( 'reports-plugin' )
+        ->and( $modules['reportsAdmin'] )->not->toHaveKey( 'exposes' );
+} );
+
+it( 'sanitizes a manifest nav_entry url through registerNavEntry', function (): void {
+    $provider = manifestProvider( [
+        'slug'        => 'evil-plugin',
+        'nav_entries' => [
+            [ 'slug' => 'evil', 'label' => 'Evil', 'url' => 'javascript:alert(1)' ],
+        ],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    expect( app( PluginRegistry::class )->navEntries()['evil']['url'] )->toBe( '#' );
+} );
+
+it( 'ignores a malformed federated_module and invalid nav_entries', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'broken-plugin',
+        'federated_module' => ['exposes' => ['./App']], // no entry
+        'nav_entries'      => [
+            ['label' => 'No Slug'],
+            ['slug' => 'no-label'],
+            'not-an-array',
+        ],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    expect( app( PluginRegistry::class )->navEntries() )->toBeEmpty()
+        ->and( app( PluginRegistry::class )->federatedModules() )->toBeEmpty();
+} );
+
+it( 'lets an imperative nav registration override a manifest entry regardless of order', function (): void {
+    // Imperative first (as if boot() ran before the bridge): the bridge must
+    // not clobber it. Then bridge: the manifest slug is already present.
+    $provider = manifestProvider(
+        [
+            'slug'        => 'reports-plugin',
+            'nav_entries' => [
+                ['slug' => 'reports', 'label' => 'Manifest Reports', 'url' => '/manifest'],
+            ],
+        ],
+        fn ( $p ) => $p->imperativeNavEntry( [
+            'slug'  => 'reports',
+            'label' => 'Imperative Reports',
+            'url'   => '/imperative',
+        ] ),
+    );
+
+    $provider->boot();
+    $provider->bridgeManifestRegistrations();
+
+    $entries = app( PluginRegistry::class )->navEntries();
+
+    expect( $entries )->toHaveCount( 1 )
+        ->and( $entries['reports']['label'] )->toBe( 'Imperative Reports' )
+        ->and( $entries['reports']['url'] )->toBe( '/imperative' );
+} );
+
+it( 'lets an imperative federated module override a manifest one regardless of order', function (): void {
+    $provider = manifestProvider(
+        [
+            'slug'             => 'reports-plugin',
+            'federated_module' => ['entry' => 'dist/manifest.js'],
+        ],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports-plugin', 'dist/imperative.js', ['./App'] ),
+    );
+
+    $provider->boot();
+    $provider->bridgeManifestRegistrations();
+
+    $modules = app( PluginRegistry::class )->federatedModules();
+
+    expect( $modules['reports-plugin']['entry'] )->toBe( 'dist/imperative.js' )
+        ->and( $modules['reports-plugin']['exposes'] )->toBe( ['./App'] );
+} );

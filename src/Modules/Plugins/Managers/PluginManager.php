@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
 use Exception;
@@ -403,7 +404,8 @@ class PluginManager
                 }
 
                 if ( $plugin->hasServiceProvider() ) {
-                    app()->register( $plugin->service_provider );
+                    $provider = app()->register( $plugin->service_provider );
+                    $this->bridgeManifestRegistrations( $provider );
                     $serviceProviderStarted = true;
                 }
 
@@ -609,7 +611,8 @@ class PluginManager
             // Register service provider
             if ( $plugin->hasServiceProvider() ) {
                 try {
-                    app()->register( $plugin->service_provider );
+                    $provider = app()->register( $plugin->service_provider );
+                    $this->bridgeManifestRegistrations( $provider );
                 } catch ( Throwable $e ) {
                     // Log error but don't break application. Catch Throwable, not
                     // just Exception: a missing provider class raises an Error,
@@ -774,6 +777,28 @@ class PluginManager
         }
 
         return $graph;
+    }
+
+    /**
+     * Bridge a freshly registered plugin provider's declarative manifest fields
+     * (`nav_entries`, `federated_module`) into the runtime PluginRegistry.
+     *
+     * Runs after the provider is registered so declaring the fields in
+     * `plugin.json` is enough to surface them — the provider no longer has to
+     * duplicate the data with imperative `register*()` calls (#324). Only the
+     * base {@see PluginServiceProvider} carries the normalization those calls
+     * apply, so plain Laravel providers are skipped. `$provider` is typed
+     * `mixed` because `app()->register()` returns a bare `ServiceProvider`.
+     *
+     * @since 2.10.0
+     *
+     * @param  mixed  $provider  The provider instance returned by `app()->register()`.
+     */
+    protected function bridgeManifestRegistrations( mixed $provider ): void
+    {
+        if ( $provider instanceof PluginServiceProvider ) {
+            $provider->bridgeManifestRegistrations();
+        }
     }
 
     /**

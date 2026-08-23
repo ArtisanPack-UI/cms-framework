@@ -70,15 +70,28 @@ A plugin's root directory MUST contain a `plugin.json` file:
     }
   },
   "migrations": "database/migrations",
-  "federated_modules": [
+  "nav_entries": [
     {
-      "name": "helloWorldAdmin",
-      "entry": "dist/remoteEntry.js",
-      "exposes": ["./HelloWorldPanel"]
+      "slug": "hello-world",
+      "label": "Hello World",
+      "url": "/admin/hello-world",
+      "icon": "fas.puzzle-piece",
+      "permission": "access_admin_dashboard",
+      "order": 60
     }
-  ]
+  ],
+  "federated_module": {
+    "entry": "dist/remoteEntry.js",
+    "exposes": ["./HelloWorldPanel"]
+  }
 }
 ```
+
+Declaring `nav_entries` and `federated_module` in the manifest is enough — the
+framework bridges them into the runtime `PluginRegistry` when your plugin loads,
+with no `register*()` call required. See
+[Registering nav entries](#registering-nav-entries) and
+[Federated React modules](#federated-react-modules).
 
 ### Required fields
 
@@ -102,8 +115,8 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Resolved from Packagist on activation. See [Composer-package dependencies](#composer-package-dependencies). |
 | `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. |
 | `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
-| `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
-| `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
+| `federated_module`  | object          | Single federated module descriptor `{ name?, entry, exposes? }`. Auto-registered on load. See [Federated React modules](#federated-react-modules). |
+| `nav_entries`       | array           | List of static nav entries `{ slug, label, url?, icon?, permission?, order?, ... }`. Auto-registered on load; equivalent to calling `registerNavEntry()` from your provider. |
 | `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
 | `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
 
@@ -261,9 +274,13 @@ host's admin shell reads it via the `ap.admin.menu` filter. Entries are
 identified by `slug` and are idempotent — repeated registrations from the same
 plugin ( e.g. under Octane workers ) overwrite instead of accumulating.
 
-You may alternatively pre-declare nav entries in `plugin.json` under `nav`.
-Programmatic registration is preferred when nav visibility depends on
-per-request state ( feature flags, tenant configuration, etc. ).
+You may alternatively pre-declare nav entries in `plugin.json` under
+`nav_entries`. The framework bridges each declared entry into the registry
+through the same `registerNavEntry()` path — including URL sanitization — when
+the plugin loads, so declaration alone is enough. Programmatic registration is
+preferred when nav visibility depends on per-request state ( feature flags,
+tenant configuration, etc. ), and always wins: a manifest entry is skipped when
+your provider has already registered the same `slug`.
 
 ## Migrations
 
@@ -374,13 +391,17 @@ The framework does not own the frontend, and does not ship a Module Federation
 runtime. Host apps ( e.g. Keystone CMS ) that support runtime-loaded React
 plugins consume federated modules the plugin has declared through:
 
-- **Manifest** — `federated_modules` array in `plugin.json`.
-- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )` in `boot()`.
+- **Manifest** — a `federated_module` object in `plugin.json`. The framework
+  auto-registers it on load, keyed by the descriptor's optional `name` (falling
+  back to the plugin slug). Declaration alone is enough.
+- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )`
+  in `boot()`. A programmatic registration wins: a manifest module is skipped
+  when the same name is already registered.
 
 An example Module Federation config, Vite build, and remoteEntry contract live
 in the Keystone CMS docs. See
 [`examples/hello-world-plugin/`](../examples/hello-world-plugin/) for a stub
-that pairs a Blade admin page with a `federated_modules` declaration that
+that pairs a Blade admin page with a `federated_module` declaration that
 Keystone can consume.
 
 ## Versioning & host compatibility

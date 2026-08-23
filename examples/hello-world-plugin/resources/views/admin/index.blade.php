@@ -11,7 +11,7 @@
         </p>
 
         <p>
-            {{ __('The plugin also declares a federated_modules entry for hosts that support runtime-loaded React admin pages (see plugin.json). Blade and federated flavors coexist — the host chooses which to render based on its own capabilities.') }}
+            {{ __('The plugin also declares a federated_module entry for hosts that support runtime-loaded React admin pages (see plugin.json). Blade and federated flavors coexist — the host chooses which to render based on its own capabilities.') }}
         </p>
     </div>
 @endsection

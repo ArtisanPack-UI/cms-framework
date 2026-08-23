@@ -11,7 +11,7 @@ and is not a Composer package. Copy the tree into your host application's
 
 | Piece | File |
 | ----- | ---- |
-| Manifest schema, including `requires`, `autoload`, `nav`, `federated_modules` | [`plugin.json`](./plugin.json) |
+| Manifest schema, including `requires`, `autoload`, `nav_entries`, `federated_module` | [`plugin.json`](./plugin.json) |
 | Base `PluginServiceProvider` usage, admin page, nav entry, federated module | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
 | Custom field type registration ( `map_picker` ) via `apRegisterFieldType()` | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
 | Edit-screen panel registration via `ap.admin.contentEdit.panels` | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
