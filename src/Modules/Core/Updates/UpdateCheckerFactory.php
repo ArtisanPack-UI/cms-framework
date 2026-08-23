@@ -42,7 +42,7 @@ class UpdateCheckerFactory
      *
      * @param  string  $url  Update source URL (GitHub, GitLab, custom JSON, etc.)
      * @param  UpdateType  $type  Update type
-     * @param  string  $slug  Unique identifier (e.g., 'digital-shopfront-cms')
+     * @param  string  $slug  Unique identifier (e.g., 'application')
      * @param  string|null  $currentVersion  Current version (auto-detected if null)
      */
     public static function buildUpdateChecker(

@@ -1020,10 +1020,24 @@ class ApplicationUpdateManager
         // single downstream product's name. Changing it invalidates any
         // existing `cms.application.<old-slug>.update_check` cache entry, which
         // simply forces one fresh check.
+        //
+        // Coalesced to the generic default rather than passed through raw: a
+        // key present but set to `null` or `''` (a published config whose env
+        // var is unset, an operator who blanked the value) would otherwise key
+        // the cache as `cms.application..update_check` and identify the app to
+        // the source as empty. `config()`'s own default only covers a *missing*
+        // key, not a null or empty one.
+        $slug = config( 'cms.updates.application_slug', 'application' );
+        $slug = is_string( $slug ) ? trim( $slug ) : '';
+
+        if ( '' === $slug ) {
+            $slug = 'application';
+        }
+
         $this->checker = UpdateCheckerFactory::buildUpdateChecker(
             url: $updateUrl,
             type: UpdateType::Application,
-            slug: (string) config( 'cms.updates.application_slug', 'application' ),
+            slug: $slug,
         );
 
         return $this->checker;

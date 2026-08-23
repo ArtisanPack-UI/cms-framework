@@ -116,6 +116,52 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Test the update checker's slug is read from config rather than hard-coded.
+     *
+     * @since 2.10.0
+     */
+    public function test_update_checker_slug_is_read_from_config(): void
+    {
+        config( ['cms.updates.application_slug' => 'keystone-cms'] );
+
+        $checker = $this->buildRealUpdateChecker();
+
+        $this->assertSame( 'keystone-cms', $checker->getSlug() );
+    }
+
+    /**
+     * Test the update checker falls back to the generic 'application' slug when
+     * none is configured, so no downstream product name is baked into the
+     * framework default.
+     *
+     * @since 2.10.0
+     */
+    public function test_update_checker_slug_defaults_to_application(): void
+    {
+        config( ['cms.updates.application_slug' => null] );
+
+        $checker = $this->buildRealUpdateChecker();
+
+        $this->assertSame( 'application', $checker->getSlug() );
+    }
+
+    /**
+     * Test an existing digital-shopfront-cms install keeps its slug via a config
+     * (or env) override, preserving back-compat with the previously hard-coded
+     * value.
+     *
+     * @since 2.10.0
+     */
+    public function test_update_checker_slug_honours_back_compat_override(): void
+    {
+        config( ['cms.updates.application_slug' => 'digital-shopfront-cms'] );
+
+        $checker = $this->buildRealUpdateChecker();
+
+        $this->assertSame( 'digital-shopfront-cms', $checker->getSlug() );
+    }
+
+    /**
      * Test path exclusion logic.
      *
      * @since 1.0.0
@@ -3623,6 +3669,24 @@ class ApplicationUpdateManagerTest extends TestCase
         $app['config']->set( 'cms.updates.verify_checksum', false ); // Disable for tests
         $app['config']->set( 'cms.updates.composer_install_command', 'composer install --no-dev' );
         $app['config']->set( 'cms.updates.composer_timeout', 600 );
-        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor']);
+        $app['config']->set( 'cms.updates.exclude_from_update', ['.env', 'storage', 'vendor'] );
+    }
+
+    /**
+     * Build a real update checker through the manager's config-driven factory
+     * path, bypassing the mock injection used elsewhere.
+     *
+     * @since 2.10.0
+     *
+     * @return UpdateChecker The checker the manager builds from config.
+     */
+    private function buildRealUpdateChecker(): UpdateChecker
+    {
+        $manager    = new ApplicationUpdateManager;
+        $reflection = new ReflectionClass( $manager );
+        $method     = $reflection->getMethod( 'getUpdateChecker' );
+        $method->setAccessible( true );
+
+        return $method->invoke( $manager );
     }
 }
