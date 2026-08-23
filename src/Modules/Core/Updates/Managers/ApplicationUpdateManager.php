@@ -2806,9 +2806,22 @@ class ApplicationUpdateManager
             );
 
             foreach ( $iterator as $fileInfo ) {
-                // Never follow or remove a symlink, and leave directories to be
-                // pruned only once empty ( below ).
-                if ( $fileInfo->isLink() || ! $fileInfo->isFile() ) {
+                if ( $fileInfo->isLink() ) {
+                    continue;
+                }
+
+                // The iterator is CHILD_FIRST, so a directory is visited after
+                // its contents — prune it here once purging has emptied it,
+                // rather than leaving hollow directory trees behind. `@rmdir`
+                // only succeeds on an empty directory, so a still-populated one
+                // (an unreferenced file that survived, a symlink) is left alone.
+                if ( $fileInfo->isDir() ) {
+                    @rmdir( $fileInfo->getPathname() );
+
+                    continue;
+                }
+
+                if ( ! $fileInfo->isFile() ) {
                     continue;
                 }
 
@@ -2977,6 +2990,15 @@ class ApplicationUpdateManager
                     continue;
                 }
 
+                // Never let a removed-paths manifest reach a critical host file.
+                // A framework release removes its own orphaned source; it has no
+                // business deleting the front controller, the environment file,
+                // Composer's own state, or the VCS/webserver control files, so
+                // these stay off-limits even if a manifest names them.
+                if ( $this->isProtectedFromRemoval( $canonical ) ) {
+                    continue;
+                }
+
                 $fullPath = $basePath . DIRECTORY_SEPARATOR . $canonical;
 
                 // Only ever remove a regular file. A directory or a symlink at
@@ -2999,12 +3021,64 @@ class ApplicationUpdateManager
                     'count' => $removed,
                 ] );
             }
+
+            // Consume the manifest so it applies exactly once — for the release
+            // that shipped it. Extraction is add/overwrite-only, so a manifest
+            // left in place survives into later updates; a subsequent release
+            // that ships no manifest of its own would then re-apply this stale
+            // list and delete files that release deliberately re-introduced.
+            // Deleting it here closes that data-loss window: a real deletion set
+            // arrives only inside the archive being extracted.
+            if ( is_link( $manifestPath ) || ! $this->isPathWithinExtractRoot( $manifestPath, $basePath ) ) {
+                return;
+            }
+
+            File::delete( $manifestPath );
         } catch ( Throwable $e ) {
             Log::warning(
                 'cms-framework: could not apply the release\'s removed-paths manifest after the update; upstream-deleted files may remain on disk.',
                 [ 'exception' => $e->getMessage() ],
             );
         }
+    }
+
+    /**
+     * Whether a repo-relative path is a critical host file a removed-paths
+     * manifest must never delete.
+     *
+     * Defence-in-depth over the containment and exclusion guards: even a
+     * legitimate-but-overreaching (or, in the worst case, a checksum-passing
+     * malicious) archive cannot use the deletion pass to strip the front
+     * controller, the environment file, Composer's state, the CLI entrypoint, or
+     * the VCS/webserver control files out from under a running host.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $canonical  Canonicalized repo-relative path.
+     *
+     * @return bool True when the path is protected from removal.
+     */
+    protected function isProtectedFromRemoval( string $canonical ): bool
+    {
+        $normalized = str_replace( '\\', '/', $canonical );
+        $normalized = ltrim( $normalized, '/' );
+
+        $protectedExact = [
+            '.env',
+            '.htaccess',
+            'artisan',
+            'composer.json',
+            'composer.lock',
+            'public/index.php',
+            'public/.htaccess',
+        ];
+
+        if ( in_array( $normalized, $protectedExact, true ) ) {
+            return true;
+        }
+
+        // Anything under the VCS metadata directory.
+        return str_starts_with( $normalized, '.git/' );
     }
 
     /**

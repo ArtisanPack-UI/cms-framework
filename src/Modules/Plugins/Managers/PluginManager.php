@@ -22,6 +22,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
+use Composer\Semver\VersionParser;
 use Exception;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -1161,7 +1162,47 @@ class PluginManager
             if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
                 throw PluginValidationException::invalidManifest( "Invalid composer['{$package}']. Version constraint must be a non-empty string." );
             }
+            if ( ! $this->isValidComposerConstraint( $constraint ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid composer['{$package}']. Version constraint must be a bounded, stable semver range (no '*', '@dev', or 'dev-' branch references)." );
+            }
         }
+    }
+
+    /**
+     * Whether a string is a Composer version constraint safe to auto-install.
+     *
+     * Beyond parsing as a valid `composer/semver` constraint, an auto-installed
+     * Packagist dependency must be *bounded and stable*: a bare `*`, a `@dev`
+     * stability flag, or a `dev-<branch>` reference would let a plugin pull the
+     * newest — or an arbitrary branch's — code at activation time, defeating any
+     * pinning and widening the supply-chain window every time the source
+     * publishes. Bounded wildcards such as `1.2.*` remain allowed.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $constraint  Candidate version constraint.
+     *
+     * @return bool True when the constraint is well-formed, bounded, and stable.
+     */
+    protected function isValidComposerConstraint( string $constraint ): bool
+    {
+        $constraint = trim( $constraint );
+        if ( '' === $constraint ) {
+            return false;
+        }
+
+        $lower = strtolower( $constraint );
+        if ( '*' === $constraint || str_contains( $lower, '@dev' ) || str_contains( $lower, 'dev-' ) ) {
+            return false;
+        }
+
+        try {
+            ( new VersionParser )->parseConstraints( $constraint );
+        } catch ( Throwable $e ) {
+            return false;
+        }
+
+        return true;
     }
 
     /**
@@ -1585,6 +1626,43 @@ class PluginManager
     }
 
     /**
+     * The package names the host declares in its own root `composer.json`
+     * (`require` and `require-dev`), lower-cased.
+     *
+     * A plugin's declared Composer dependencies are refused when they name any
+     * of these, so a plugin can never drive `composer require` to change the
+     * version of a library the host itself owns. A missing or unreadable
+     * `composer.json` yields an empty list — the guard simply does not fire.
+     *
+     * @since 2.10.0
+     *
+     * @return array<int,string> Lower-cased root package names.
+     */
+    protected function hostRootComposerPackages(): array
+    {
+        try {
+            $path = base_path( 'composer.json' );
+            if ( ! File::exists( $path ) ) {
+                return [];
+            }
+
+            $decoded = json_decode( (string) File::get( $path ), true );
+            if ( ! is_array( $decoded ) ) {
+                return [];
+            }
+
+            $packages = array_merge(
+                array_keys( is_array( $decoded['require'] ?? null ) ? $decoded['require'] : [] ),
+                array_keys( is_array( $decoded['require-dev'] ?? null ) ? $decoded['require-dev'] : [] ),
+            );
+
+            return array_values( array_unique( array_map( 'strtolower', $packages ) ) );
+        } catch ( Throwable $e ) {
+            return [];
+        }
+    }
+
+    /**
      * Resolve — and, when enabled, install — a plugin's declared Composer
      * packages, then seat the freshly installed classes on the running class
      * loader (#323).
@@ -1619,21 +1697,43 @@ class PluginManager
             return;
         }
 
-        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', true ) ) {
+        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', false ) ) {
             throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+        }
+
+        $constraints = $result->unresolvedConstraints();
+
+        // A plugin may bring in *new* packages, but it must not name one the host
+        // itself declares in its root `composer.json`. Running `composer require`
+        // for a host root package (with `--with-all-dependencies`) would let the
+        // plugin change the version of a library the host depends on — a
+        // downgrade to a vulnerable release, or an upgrade out from under the
+        // host. Refuse before shelling out.
+        $declared      = array_map( 'strtolower', array_keys( $constraints ) );
+        $rootConflicts = array_values( array_intersect( $declared, $this->hostRootComposerPackages() ) );
+        if ( ! empty( $rootConflicts ) ) {
+            throw ComposerDependencyNotSatisfiedException::rootPackageConflict( $plugin->slug, $rootConflicts );
         }
 
         // Hand only the unmet constraints to Composer, which arbitrates any
         // conflict against the host's existing lock. A non-zero exit throws
         // ComposerDependencyNotSatisfiedException from the installer.
-        $installer->install( $plugin->slug, $result->unresolvedConstraints() );
+        $installer->install( $plugin->slug, $constraints );
 
         // Re-resolve against the post-install snapshot to confirm the
         // constraints are now met before booting the provider.
         $result = $resolver->resolve( $requirements, $installer->installedVersions() );
 
         if ( ! $result->isSatisfied() ) {
-            throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+            // Composer exited zero, so the packages are installed on disk, but
+            // this long-running worker may still hold a pre-install autoload /
+            // InstalledVersions snapshot when the host restricts
+            // `opcache_invalidate` (`opcache.restrict_api`, or the function
+            // disabled, with `opcache.validate_timestamps=0`). Fail closed —
+            // never boot a provider whose classes may be unresolvable — but say
+            // so, since a fresh request (which reads the regenerated metadata)
+            // completes the activation without reinstalling.
+            throw ComposerDependencyNotSatisfiedException::installedButUnverified( $plugin->slug, $result );
         }
 
         // Packages were just installed this request; seat the regenerated

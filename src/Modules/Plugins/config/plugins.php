@@ -103,11 +103,15 @@ return [
     | installed packages.
     |
     | autoInstallComposerDependencies:
-    |   When true (default), an unmet requirement is installed on activation by
-    |   shelling out to `composer require` in the host root — so the dependency
-    |   survives a fresh deploy. When false, activation instead fails closed and
-    |   the operator is expected to have installed the package themselves; use
-    |   this on hardened hosts that must not run Composer at runtime.
+    |   When false (the default), activation fails closed on an unmet requirement
+    |   and the operator is expected to have installed the package themselves —
+    |   the safe default, since auto-install fetches and boots arbitrary
+    |   third-party Packagist code (its service provider via `package:discover`,
+    |   and any eager `autoload.files`) in the host process. When true, an unmet
+    |   requirement is installed on activation by shelling out to `composer
+    |   require` in the host root, so the dependency survives a fresh deploy;
+    |   enable it only where you trust every installed plugin's declared
+    |   dependencies and the host may run Composer at runtime.
     |
     | Resolution always fails closed: if a required package is missing (and
     | auto-install is off or cannot complete — Packagist unreachable, a
@@ -118,7 +122,7 @@ return [
     | they are never auto-removed, since the host or another plugin may share
     | them and Composer offers no safe ref-counted uninstall here.
     */
-    'autoInstallComposerDependencies' => env( 'PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES', true ),
+    'autoInstallComposerDependencies' => env( 'PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES', false ),
 
     // Override the composer binary/command used to install plugin dependencies.
     // Null falls back to the `COMPOSER_BINARY` env var, then a bare `composer`

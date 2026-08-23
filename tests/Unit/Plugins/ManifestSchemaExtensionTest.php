@@ -356,6 +356,32 @@ describe( 'composer', function (): void {
         expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
             ->toThrow( PluginValidationException::class, 'constraint' );
     } );
+
+    it( 'accepts a bounded wildcard constraint', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => '1.2.*' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects an unbounded or dev-branch version constraint', function ( string $constraint ): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => $constraint ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'bounded, stable' );
+    } )->with( [
+        'bare wildcard'   => [ '*' ],
+        'dev stability'   => [ '^1.2@dev' ],
+        'dev branch'      => [ 'dev-main' ],
+        'aliased branch'  => [ 'dev-main as 1.0.0' ],
+    ] );
+
+    it( 'rejects an unparseable version constraint', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => 'not-a-range' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'bounded, stable' );
+    } );
 } );
 
 describe( 'Plugin model accessors', function (): void {

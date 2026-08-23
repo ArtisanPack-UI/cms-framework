@@ -540,6 +540,10 @@ describe( 'Reactivation failure after update (#45)', function (): void {
     } );
 
     it( 'rolls back and reports the composer reason when the new manifest adds an unsatisfiable composer package (#323)', function (): void {
+        // Auto-install is opt-in (off by default); this test exercises the
+        // installer-failure rollback path, so it turns auto-install on.
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+
         // A fake installer that reports nothing installed and fails any install,
         // so the reactivation at step 7 cannot satisfy the new composer block.
         $installer              = new FakeComposerPackageInstaller;

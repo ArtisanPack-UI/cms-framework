@@ -196,6 +196,14 @@ abstract class PluginServiceProvider extends ServiceProvider
         $slug = ( string ) $entry['slug'];
         $url  = $this->normalizeNavUrl( $entry['url'] ?? '#' );
 
+        // A nav entry with no declared permission falls back to the admin
+        // dashboard baseline rather than rendering to everyone who can see the
+        // menu — the same fallback registerAdminPage() applies to an empty
+        // capability, so a manifest-bridged entry cannot surface an ungated link.
+        $permission = '' !== trim( (string) ( $entry['permission'] ?? '' ) )
+            ? (string) $entry['permission']
+            : 'access_admin_dashboard';
+
         $normalized = [
             'title'      => $entry['label'],
             'slug'       => $slug,
@@ -203,8 +211,8 @@ abstract class PluginServiceProvider extends ServiceProvider
             'section'    => null,
             'icon'       => $entry['icon'] ?? ( $entry['iconId'] ?? '' ),
             'iconId'     => $entry['iconId'] ?? ( $entry['icon'] ?? '' ),
-            'capability' => $entry['permission'] ?? '',
-            'permission' => $entry['permission'] ?? '',
+            'capability' => $permission,
+            'permission' => $permission,
             'order'      => ( int ) ( $entry['order'] ?? 50 ),
             'route'      => $url,
             'menuTitle'  => $entry['label'],

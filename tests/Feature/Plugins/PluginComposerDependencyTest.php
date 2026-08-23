@@ -198,4 +198,57 @@ describe( 'Composer-package activation gate', function (): void {
         expect( $this->manager->activate( 'widget' ) )->toBeTrue()
             ->and( activeComposerClassLoader()->getPrefixesPsr4() )->not->toHaveKey( 'Acme\\Unused\\' );
     } );
+
+    it( 'refuses — without installing — a package the host itself requires', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+
+        // Sandbox base_path() to a root composer.json that requires acme/rootdep,
+        // so the guard can see the host's own requirement.
+        $target = sys_get_temp_dir() . '/cms-host-' . uniqid();
+        File::ensureDirectoryExists( $target );
+        File::put( $target . '/composer.json', json_encode( [
+            'require' => [ 'acme/rootdep' => '^1.0' ],
+        ] ) );
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            // Case-insensitive: the plugin names it in mixed case.
+            makeComposerPlugin( 'shop', [ 'Acme/RootDep' => '^2.0' ] );
+
+            try {
+                $this->manager->activate( 'shop' );
+                $this->fail( 'Expected ComposerDependencyNotSatisfiedException.' );
+            } catch ( ComposerDependencyNotSatisfiedException $e ) {
+                expect( $e->getMessage() )->toContain( 'the host already requires' )
+                    ->and( $e->getMessage() )->toContain( 'acme/rootdep' );
+            }
+
+            expect( $this->installer->installCalls )->toBe( [] )
+                ->and( Plugin::where( 'slug', 'shop' )->first()->is_active )->toBeFalse();
+        } finally {
+            app()->setBasePath( $originalBase );
+            File::deleteDirectory( $target );
+        }
+    } );
+
+    it( 'fails closed with a retry hint when a successful install stays invisible in-process', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+
+        // install() succeeds but applies nothing — modelling the OPcache-restricted
+        // host where the regenerated metadata is not visible this request.
+        $this->installer->installsToApply = [];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        try {
+            $this->manager->activate( 'convertkit' );
+            $this->fail( 'Expected ComposerDependencyNotSatisfiedException.' );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            expect( $e->getMessage() )->toContain( 'Retry the activation' );
+        }
+
+        expect( $this->installer->installCalls )->toHaveCount( 1 )
+            ->and( Plugin::where( 'slug', 'convertkit' )->first()->is_active )->toBeFalse();
+    } );
 } );

@@ -90,4 +90,50 @@ class ComposerDependencyNotSatisfiedException extends CMSFrameworkException
             $slug,
         );
     }
+
+    /**
+     * Build the exception raised when a plugin's declared Composer packages name
+     * one the host itself requires in its root `composer.json`.
+     *
+     * Refused before shelling out to Composer, so a plugin can never change the
+     * installed version of a library the host owns.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $slug  Plugin being activated.
+     * @param  array<int,string>  $packages  Host root packages the plugin tried to require.
+     *
+     * @return self
+     */
+    public static function rootPackageConflict( string $slug, array $packages ): self
+    {
+        $list = implode( ', ', $packages );
+
+        return new self(
+            "Plugin '{$slug}' declares Composer dependencies the host already requires and may not manage: {$list}. Remove them from the plugin manifest, or align the host's own requirement.",
+            $slug,
+        );
+    }
+
+    /**
+     * Build the exception raised when Composer installed the packages (exit
+     * zero) but this process still cannot see them — the OPcache-restricted
+     * host case where the in-process autoload / InstalledVersions snapshot stays
+     * stale. Fails closed; a fresh request completes the activation.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $slug  Plugin being activated.
+     * @param  ComposerPackageResult  $result  The still-unsatisfied resolution result.
+     *
+     * @return self
+     */
+    public static function installedButUnverified( string $slug, ComposerPackageResult $result ): self
+    {
+        return new self(
+            "Plugin '{$slug}' installed its Composer packages, but this process cannot verify them yet (the host likely restricts OPcache invalidation). Retry the activation — a fresh request will pick up the installed packages.",
+            $slug,
+            $result,
+        );
+    }
 }

@@ -535,26 +535,36 @@ to semver constraint:
 This is the sibling of `requires.plugins` (plugin→plugin): `requires` resolves
 *other plugins* by slug, while `composer` resolves *Packagist packages* and can
 bring their vendor tree into the host. Keys are validated as Composer package
-names (`vendor/package`); the same constraint rigor as the other manifest maps
-applies.
+names (`vendor/package`), and each constraint must be a **bounded, stable**
+semver range: a bare `*`, a `@dev` stability flag, or a `dev-<branch>` reference
+is rejected at validation time, since an auto-installed dependency must not pull
+the newest or an arbitrary branch's code at activation. Bounded wildcards such
+as `1.2.*` are fine. A plugin also may not name a package the host itself
+requires in its root `composer.json` — it may bring in new packages, but never
+change the version of one the host owns.
 
 **When it runs.** On activation, before the service provider boots, the
 framework resolves the `composer` block against the host's installed packages
 (reusing `composer/semver`). Requirements already satisfied are left untouched.
 
 **Installing.** When a requirement is unmet and
-`cms.plugins.autoInstallComposerDependencies` is `true` (the default), the
-framework runs `composer require <package>:<constraint>` in the host root, so
-the dependency is added to the host's `composer.json` / `composer.lock` and
-survives a fresh deploy. The freshly installed package's PSR-4 prefixes are
-registered on the running class loader so its classes are autoloadable when the
-plugin boots in that same request. Composer itself arbitrates any conflict with
-the host's existing lock.
+`cms.plugins.autoInstallComposerDependencies` is `true`, the framework runs
+`composer require <package>:<constraint>` in the host root, so the dependency is
+added to the host's `composer.json` / `composer.lock` and survives a fresh
+deploy. The freshly installed package's PSR-4 prefixes are registered on the
+running class loader so its classes are autoloadable when the plugin boots in
+that same request. Composer itself arbitrates any conflict with the host's
+existing lock. **This is off by default** (`false`): auto-install fetches and
+boots arbitrary third-party Packagist code (its service provider via
+`package:discover`, and any eager `autoload.files`) in the host process, so it
+is opt-in and every declared install is logged. Enable it only where you trust
+every installed plugin's declared dependencies.
 
 **Failing closed.** Resolution never half-activates a plugin. If a requirement
-is unmet and auto-install is disabled, or an install cannot complete — Packagist
-unreachable, a `composer.lock` conflict, or a missing `composer` binary —
-activation raises `ComposerDependencyNotSatisfiedException` and the activation
+is unmet and auto-install is disabled (the default), or an install cannot
+complete — Packagist unreachable, a `composer.lock` conflict, or a missing
+`composer` binary — activation raises `ComposerDependencyNotSatisfiedException`
+and the activation
 transaction unwinds. Over HTTP the activate endpoint returns `409` with code
 `plugin_composer_dependencies_unsatisfied`. On the update flow the same failure
 restores the previous version through the backup-restore path.

@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstalle
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Throwable;
 
@@ -92,6 +93,16 @@ class ProcessComposerPackageInstaller implements ComposerPackageInstallerInterfa
         // auto-registered.
         $command = $binary . ' require ' . implode( ' ', $specs ) . ' --no-interaction --no-progress --no-plugins --with-all-dependencies';
 
+        // Auto-install runs third-party code in the host process, so leave an
+        // audit trail of exactly what was required, for which plugin. The specs
+        // are validated package:constraint pairs — no secrets — and the binary
+        // is operator-configured.
+        Log::info( 'cms-framework: installing plugin Composer dependencies.', [
+            'plugin'   => $slug,
+            'packages' => array_keys( $constraints ),
+            'command'  => $command,
+        ] );
+
         // `composer require` rewrites the host `composer.json`/`composer.lock`
         // in place; two overlapping activations in that directory can drop a
         // requirement or leave the lock inconsistent. Serialize the run behind
@@ -124,7 +135,7 @@ class ProcessComposerPackageInstaller implements ComposerPackageInstallerInterfa
 
             throw ComposerDependencyNotSatisfiedException::installationFailed(
                 $slug,
-                '' !== $reason ? $reason : 'composer require exited with a non-zero status.',
+                '' !== $reason ? $this->redactProcessOutput( $reason ) : 'composer require exited with a non-zero status.',
             );
         }
 
@@ -224,6 +235,30 @@ class ProcessComposerPackageInstaller implements ComposerPackageInstallerInterfa
             // Best-effort: the on-disk install still succeeded, and the next
             // request boots with a fresh autoloader that sees the package.
         }
+    }
+
+    /**
+     * Redact secrets from Composer's process output before it is surfaced in an
+     * activation error (shown to admins, written to logs).
+     *
+     * A failed `composer require` against a private repository can echo the
+     * tokenised URL it tried (`https://user:token@host/…`) or an
+     * auth/token query parameter. Strip inline URL credentials and common
+     * secret-bearing query keys so the failure detail stays useful without
+     * leaking them.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $output  Raw process output.
+     *
+     * @return string The output with credentials masked.
+     */
+    protected function redactProcessOutput( string $output ): string
+    {
+        $output = (string) preg_replace( '#(://)[^/@\s:]+:[^/@\s]+@#', '$1***@', $output );
+        $output = (string) preg_replace( '#(?i)(token|password|passwd|secret|api[_-]?key|authorization)([=:]\s*)\S+#', '$1$2***', $output );
+
+        return $output;
     }
 
     /**

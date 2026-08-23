@@ -295,6 +295,31 @@ it( 'injects a nav entry via the ap.cmsFramework.admin.menu filter', function ()
         ->and( $menu['reports']['external'] )->toBeFalse();
 } );
 
+it( 'defaults a nav entry with no permission to the admin dashboard baseline', function (): void {
+    $provider = new class( app() ) extends PluginServiceProvider {
+        public function boot(): void
+        {
+            $this->registerNavEntry( [
+                'slug'  => 'ungated',
+                'label' => 'Ungated',
+                'url'   => '/admin/ungated',
+            ] );
+        }
+
+        protected function loadManifest(): array
+        {
+            return $this->manifest = ['slug' => 'ungated-plugin'];
+        }
+    };
+
+    $provider->boot();
+
+    $entry = app( PluginRegistry::class )->navEntries()['ungated'];
+
+    expect( $entry['permission'] )->toBe( 'access_admin_dashboard' )
+        ->and( $entry['capability'] )->toBe( 'access_admin_dashboard' );
+} );
+
 it( 'reduces a non-string nav url to # instead of raising a TypeError', function ( mixed $url ): void {
     expect( NavUrl::sanitizeValue( $url ) )->toBe( '#' );
 } )->with( [

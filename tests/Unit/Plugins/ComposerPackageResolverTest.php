@@ -61,6 +61,19 @@ describe( 'ComposerPackageResolver', function (): void {
         expect( $result->isSatisfied() )->toBeTrue();
     } );
 
+    it( 'treats a dev/branch install as satisfying any constraint', function ( string $installed ): void {
+        $result = $this->resolver->resolve(
+            [ 'vendor/pkg' => '^1.2' ],
+            [ 'vendor/pkg' => $installed ],
+        );
+
+        expect( $result->isSatisfied() )->toBeTrue()
+            ->and( $result->versionMismatch )->toBe( [] );
+    } )->with( [
+        'branch alias' => [ 'dev-main' ],
+        'x-dev suffix' => [ '1.2.x-dev' ],
+    ] );
+
     it( 'treats an unparseable constraint as unmet rather than throwing', function (): void {
         $result = $this->resolver->resolve(
             [ 'vendor/pkg' => 'not-a-constraint' ],

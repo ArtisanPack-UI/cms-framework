@@ -4180,6 +4180,141 @@ class ApplicationUpdateManagerTest extends TestCase
     }
 
     /**
+     * Recursively remove a directory used by extraction tests.
+     *
+     * @since 2.5.2
+     */
+    /**
+     * The removed-paths manifest applies once and is then consumed, so a stale
+     * manifest cannot survive into a later update and delete files that release
+     * deliberately re-introduced (#308 data-loss guard).
+     *
+     * @since 2.10.0
+     */
+    public function test_removed_paths_manifest_is_consumed_after_apply(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-removed-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/.artisanpack', 0755, true );
+        mkdir( $target . '/app', 0755, true );
+
+        file_put_contents( $target . '/app/Legacy.php', "<?php\n" );
+        file_put_contents(
+            $target . '/.artisanpack/removed-paths.json',
+            json_encode( [ 'app/Legacy.php' ] ),
+        );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function applyRemoved(): void
+            {
+                $this->applyRemovedPathsManifest();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->applyRemoved();
+
+            $this->assertFileDoesNotExist( $target . '/app/Legacy.php', 'The upstream-removed file should be deleted.' );
+            $this->assertFileDoesNotExist(
+                $target . '/.artisanpack/removed-paths.json',
+                'The manifest should be consumed so it cannot re-apply on a later update.',
+            );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * A removed-paths manifest must never reach a critical host file, even when
+     * it names one (defence-in-depth over containment/exclusion, #308).
+     *
+     * @since 2.10.0
+     */
+    public function test_removed_paths_manifest_protects_critical_host_files(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-removed-crit-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/.artisanpack', 0755, true );
+        mkdir( $target . '/public', 0755, true );
+
+        foreach ( [ 'artisan', '.htaccess', 'public/index.php', 'composer.json' ] as $file ) {
+            file_put_contents( $target . '/' . $file, 'keep' );
+        }
+
+        file_put_contents(
+            $target . '/.artisanpack/removed-paths.json',
+            json_encode( [ 'artisan', '.htaccess', 'public/index.php', 'composer.json' ] ),
+        );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function applyRemoved(): void
+            {
+                $this->applyRemovedPathsManifest();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->applyRemoved();
+
+            foreach ( [ 'artisan', '.htaccess', 'public/index.php', 'composer.json' ] as $file ) {
+                $this->assertFileExists( $target . '/' . $file, "{$file} must be protected from removal." );
+            }
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Purging orphaned build assets prunes the directories it empties rather than
+     * leaving hollow trees behind.
+     *
+     * @since 2.10.0
+     */
+    public function test_purge_stale_build_assets_prunes_emptied_directories(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-purge-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        $buildDir = $target . '/public/build';
+        mkdir( $buildDir . '/assets', 0755, true );
+
+        // An empty manifest declares nothing live, so the orphan is unreferenced.
+        file_put_contents( $buildDir . '/manifest.json', json_encode( [] ) );
+        file_put_contents( $buildDir . '/assets/orphan-abc123.js', 'console.log(1)' );
+
+        $manager = new class extends ApplicationUpdateManager {
+            public function purgeAssets(): void
+            {
+                $this->purgeStaleBuildAssets();
+            }
+        };
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->purgeAssets();
+
+            $this->assertFileDoesNotExist( $buildDir . '/assets/orphan-abc123.js', 'The orphaned asset should be purged.' );
+            $this->assertDirectoryDoesNotExist( $buildDir . '/assets', 'The emptied directory should be pruned.' );
+            $this->assertFileExists( $buildDir . '/manifest.json', 'The manifest itself is never purged.' );
+        } finally {
+            app()->setBasePath( $originalBase );
+            $this->removeDirectory( $target );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
      * Write a scratch base path holding a `composer.json` and, optionally, a
      * `composer.lock`. Returns the directory, which the caller must remove.
      *
@@ -4204,11 +4339,6 @@ class ApplicationUpdateManagerTest extends TestCase
         return $target;
     }
 
-    /**
-     * Recursively remove a directory used by extraction tests.
-     *
-     * @since 2.5.2
-     */
     protected function removeDirectory( string $path ): void
     {
         if ( ! is_dir( $path ) ) {
