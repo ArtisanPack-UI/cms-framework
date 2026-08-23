@@ -85,6 +85,14 @@ class ProcessComposerPackageInstaller implements ComposerPackageInstallerInterfa
 
         $binary  = $this->resolveComposerBinary();
         $timeout = ( int ) config( 'cms.plugins.composerTimeout', 600 );
+        // A zero or negative value disables the process timeout entirely, but the
+        // serialization lock's TTL is derived from it (`$timeout + 30`). Left
+        // unclamped, an unbounded `composer require` would run behind a lock that
+        // expires after 30s, letting a second activation start a concurrent
+        // require in the same directory — the exact corruption the lock prevents.
+        if ( $timeout <= 0 ) {
+            $timeout = 600;
+        }
         // `--no-plugins` keeps a malicious dependency of type `composer-plugin`
         // from executing its own code during the require — the marginal
         // supply-chain surface this feature introduces. Scripts are deliberately

@@ -22,6 +22,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
+use Composer\Semver\Semver;
 use Composer\Semver\VersionParser;
 use Exception;
 use Illuminate\Support\Facades\Artisan;
@@ -1198,6 +1199,15 @@ class PluginManager
 
         try {
             ( new VersionParser )->parseConstraints( $constraint );
+
+            // Reject a lower-bound-only range such as `>=1.0`: it carries no
+            // upper bound, so a future major of the auto-installed dependency
+            // could be pulled unreviewed. Probe with an absurdly high version —
+            // any bounded range (`^1.2`, `~2.0`, `1.2.*`, `>=1.0 <2.0`) excludes
+            // it, while an unbounded one accepts it.
+            if ( Semver::satisfies( '99999999.0.0', $constraint ) ) {
+                return false;
+            }
         } catch ( Throwable $e ) {
             return false;
         }
@@ -1683,6 +1693,22 @@ class PluginManager
         $requirements = $plugin->required_composer_packages;
         if ( empty( $requirements ) ) {
             return;
+        }
+
+        // Re-validate the persisted requirements before they reach the resolver
+        // or `composer require`. `validateManifest()` vetted them at install and
+        // update time, but this reads them back from `meta`, which a later write
+        // path (or direct row tampering) could have seated unvalidated — the same
+        // reason `UpdateManager` re-checks `isUsableUpdateSource()` at update
+        // time. Fail closed on anything that would not pass validation today.
+        foreach ( $requirements as $package => $constraint ) {
+            if ( ! is_string( $package ) || ! $this->isValidComposerPackageName( $package )
+                || ! is_string( $constraint ) || ! $this->isValidComposerConstraint( $constraint ) ) {
+                throw ComposerDependencyNotSatisfiedException::invalidRequirement(
+                    $plugin->slug,
+                    is_string( $package ) ? $package : '(non-string package name)',
+                );
+            }
         }
 
         $installer = $this->composerPackageInstaller();

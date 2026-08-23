@@ -82,6 +82,30 @@ describe( 'Composer-package activation gate', function (): void {
         expect( Plugin::where( 'slug', 'convertkit' )->first()->is_active )->toBeTrue();
     } );
 
+    it( 'fails closed when a persisted requirement no longer passes validation', function ( array $composer ): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+
+        // makeComposerPlugin seats meta directly, bypassing validateManifest — so
+        // this models a requirement that reached the row unvalidated. Activation
+        // must re-validate it and fail closed before touching the installer.
+        makeComposerPlugin( 'tampered', $composer );
+
+        try {
+            $this->manager->activate( 'tampered' );
+            $this->fail( 'Expected ComposerDependencyNotSatisfiedException.' );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            expect( $e->getMessage() )->toContain( 'invalid Composer requirement' );
+        }
+
+        expect( $this->installer->installCalls )->toBe( [] )
+            ->and( Plugin::where( 'slug', 'tampered' )->first()->is_active )->toBeFalse();
+    } )->with( [
+        'unbounded constraint'    => [ [ 'acme/pkg' => '*' ] ],
+        'lower-bound-only'        => [ [ 'acme/pkg' => '>=1.0' ] ],
+        'dev branch'              => [ [ 'acme/pkg' => 'dev-main' ] ],
+        'invalid package name'    => [ [ 'not-a-package' => '^1.0' ] ],
+    ] );
+
     it( 'fails closed without installing when auto-install is disabled', function (): void {
         config()->set( 'cms.plugins.autoInstallComposerDependencies', false );
         makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );

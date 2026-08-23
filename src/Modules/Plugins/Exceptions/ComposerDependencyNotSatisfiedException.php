@@ -116,6 +116,26 @@ class ComposerDependencyNotSatisfiedException extends CMSFrameworkException
     }
 
     /**
+     * Build the exception raised when a persisted Composer requirement fails
+     * revalidation at activation time (an invalid package name or a constraint
+     * that is no longer accepted — unbounded, dev, or malformed).
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $slug  Plugin being activated.
+     * @param  string  $package  The offending package name.
+     *
+     * @return self
+     */
+    public static function invalidRequirement( string $slug, string $package ): self
+    {
+        return new self(
+            "Plugin '{$slug}' declares an invalid Composer requirement for '{$package}'; it must name a valid package with a bounded, stable version constraint. Republish the plugin with a compliant manifest.",
+            $slug,
+        );
+    }
+
+    /**
      * Build the exception raised when Composer installed the packages (exit
      * zero) but this process still cannot see them — the OPcache-restricted
      * host case where the in-process autoload / InstalledVersions snapshot stays

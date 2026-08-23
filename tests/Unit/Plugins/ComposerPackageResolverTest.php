@@ -61,17 +61,18 @@ describe( 'ComposerPackageResolver', function (): void {
         expect( $result->isSatisfied() )->toBeTrue();
     } );
 
-    it( 'treats a dev/branch install as satisfying any constraint', function ( string $installed ): void {
+    it( 'lets composer/semver arbitrate dev installs', function ( string $installed, bool $satisfied ): void {
         $result = $this->resolver->resolve(
             [ 'vendor/pkg' => '^1.2' ],
             [ 'vendor/pkg' => $installed ],
         );
 
-        expect( $result->isSatisfied() )->toBeTrue()
-            ->and( $result->versionMismatch )->toBe( [] );
+        expect( $result->isSatisfied() )->toBe( $satisfied );
     } )->with( [
-        'branch alias' => [ 'dev-main' ],
-        'x-dev suffix' => [ '1.2.x-dev' ],
+        // A comparable branch alias falls within the range.
+        'x-dev alias in range'  => [ '1.2.x-dev', true ],
+        // A non-comparable branch cannot satisfy a stable tagged range.
+        'non-comparable branch' => [ 'dev-main', false ],
     ] );
 
     it( 'treats an unparseable constraint as unmet rather than throwing', function (): void {

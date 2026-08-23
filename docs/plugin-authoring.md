@@ -536,12 +536,15 @@ This is the sibling of `requires.plugins` (plugin→plugin): `requires` resolves
 *other plugins* by slug, while `composer` resolves *Packagist packages* and can
 bring their vendor tree into the host. Keys are validated as Composer package
 names (`vendor/package`), and each constraint must be a **bounded, stable**
-semver range: a bare `*`, a `@dev` stability flag, or a `dev-<branch>` reference
-is rejected at validation time, since an auto-installed dependency must not pull
-the newest or an arbitrary branch's code at activation. Bounded wildcards such
-as `1.2.*` are fine. A plugin also may not name a package the host itself
-requires in its root `composer.json` — it may bring in new packages, but never
-change the version of one the host owns.
+semver range: a bare `*`, a `@dev` stability flag, a `dev-<branch>` reference, or
+a lower-bound-only range (`>=1.0`, `>1.0`) is rejected at validation time, since
+an auto-installed dependency must not pull the newest, an arbitrary branch's, or
+a future major's code at activation. Bounded ranges — `^1.2`, `~2.0`,
+`>=1.0 <2.0`, and bounded wildcards such as `1.2.*` — are fine. The `composer`
+block is re-validated at activation, not only at install/update, so a
+requirement that reached the row unvalidated still fails closed. A plugin also
+may not name a package the host itself requires in its root `composer.json` — it
+may bring in new packages, but never change the version of one the host owns.
 
 **When it runs.** On activation, before the service provider boots, the
 framework resolves the `composer` block against the host's installed packages

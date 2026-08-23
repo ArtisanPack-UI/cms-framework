@@ -370,10 +370,12 @@ describe( 'composer', function (): void {
         expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
             ->toThrow( PluginValidationException::class, 'bounded, stable' );
     } )->with( [
-        'bare wildcard'   => [ '*' ],
-        'dev stability'   => [ '^1.2@dev' ],
-        'dev branch'      => [ 'dev-main' ],
-        'aliased branch'  => [ 'dev-main as 1.0.0' ],
+        'bare wildcard'       => [ '*' ],
+        'dev stability'       => [ '^1.2@dev' ],
+        'dev branch'          => [ 'dev-main' ],
+        'aliased branch'      => [ 'dev-main as 1.0.0' ],
+        'lower bound only'    => [ '>=1.0' ],
+        'greater than only'   => [ '>1.0' ],
     ] );
 
     it( 'rejects an unparseable version constraint', function (): void {

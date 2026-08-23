@@ -88,17 +88,10 @@ class ComposerPackageResolver
 
         $normalized = ltrim( $version, 'vV' );
 
-        // A dev/branch install (`dev-main`, `1.2.x-dev`) is a deliberate
-        // developer choice that Semver::satisfies() reports as unmet against a
-        // tagged range like `^1.2`. Treating it as unmet would re-trigger a
-        // no-op `composer require` on every activation (and, on an
-        // OPcache-restricted host, wrongly fail the activation closed). The
-        // package is present, so count it as satisfied.
-        $lower = strtolower( $normalized );
-        if ( str_starts_with( $lower, 'dev-' ) || str_ends_with( $lower, '-dev' ) ) {
-            return true;
-        }
-
+        // Let composer/semver arbitrate every version, dev installs included. A
+        // comparable branch alias such as `1.2.x-dev` satisfies `^1.2`, while a
+        // non-comparable branch like `dev-main` does not — matching what
+        // Composer itself would resolve, rather than papering over the mismatch.
         try {
             return Semver::satisfies( $normalized, $constraint );
         } catch ( Throwable $e ) {
