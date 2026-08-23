@@ -229,6 +229,7 @@ class UpdateManager
         $oldMeta                = $plugin->meta;
         $oldServiceProvider     = $plugin->service_provider;
         $backupPath             = null;
+        $zipPath                = null;
 
         doAction( 'ap.cmsFramework.plugin.updating', $slug, $oldVersion, $updateInfo['version'] );
 
@@ -299,8 +300,9 @@ class UpdateManager
             }
 
             // 8. Cleanup. Forget the cached check so it no longer advertises
-            //    the version just installed for the rest of the TTL.
-            File::delete( $zipPath );
+            //    the version just installed for the rest of the TTL. The
+            //    downloaded archive is removed in the `finally` below, which
+            //    also covers every rollback path.
             Cache::forget( $this->updateCacheKey( $slug ) );
 
             doAction( 'ap.cmsFramework.plugin.updated', $slug, $updateInfo['version'] );
@@ -352,6 +354,13 @@ class UpdateManager
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::downloadFailed( $slug );
+        } finally {
+            // Remove the downloaded archive on every outcome — success and each
+            // rollback path — so repeated failed updates don't accumulate ZIPs
+            // in storage.
+            if ( null !== $zipPath ) {
+                File::delete( $zipPath );
+            }
         }
     }
 

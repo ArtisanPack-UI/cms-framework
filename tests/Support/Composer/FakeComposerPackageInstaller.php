@@ -30,11 +30,11 @@ class FakeComposerPackageInstaller implements ComposerPackageInstallerInterface
     public array $installsToApply = [];
 
     /**
-     * Install paths returned by installPath(), keyed by package name.
+     * Regenerated autoload maps returned by autoloadMaps().
      *
-     * @var array<string,string>
+     * @var array{psr-4?:array<string,array<int,string>>,classmap?:array<string,string>,files?:array<int,string>}
      */
-    public array $installPaths = [];
+    public array $autoloadMaps = [];
 
     /**
      * When true, install() throws instead of resolving anything.
@@ -82,8 +82,15 @@ class FakeComposerPackageInstaller implements ComposerPackageInstallerInterface
         }
     }
 
-    public function installPath( string $package ): ?string
+    /**
+     * @return array{psr-4:array<string,array<int,string>>,classmap:array<string,string>,files:array<int,string>}
+     */
+    public function autoloadMaps(): array
     {
-        return $this->installPaths[ $package ] ?? null;
+        return [
+            'psr-4'    => $this->autoloadMaps['psr-4'] ?? [],
+            'classmap' => $this->autoloadMaps['classmap'] ?? [],
+            'files'    => $this->autoloadMaps['files'] ?? [],
+        ];
     }
 }

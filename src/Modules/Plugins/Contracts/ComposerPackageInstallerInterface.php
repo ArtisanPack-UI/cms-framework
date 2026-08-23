@@ -47,18 +47,18 @@ interface ComposerPackageInstallerInterface
     public function install( string $slug, array $constraints ): void;
 
     /**
-     * Absolute filesystem path a package is installed at, or null when it is
-     * not installed.
+     * The host's regenerated Composer autoload maps, for seating freshly
+     * installed classes onto the running class loader before the plugin's
+     * service provider boots.
      *
-     * Used to locate a freshly installed package's own `composer.json` so its
-     * PSR-4 prefixes can be registered onto the running class loader before the
-     * plugin's service provider boots.
+     * Reading the full regenerated maps — not just a declared package's own
+     * `composer.json` — is what makes transitive dependencies, classmap
+     * entries, and eager `files` helpers autoloadable in the same request that
+     * installed them.
      *
      * @since 2.10.0
      *
-     * @param  string  $package  The Composer package name.
-     *
-     * @return string|null Install path, or null when unresolved.
+     * @return array{psr-4:array<string,array<int,string>>,classmap:array<string,string>,files:array<int,string>}
      */
-    public function installPath( string $package ): ?string;
+    public function autoloadMaps(): array;
 }

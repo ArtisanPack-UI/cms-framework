@@ -7,6 +7,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Support;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use Composer\InstalledVersions;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Process;
 use Throwable;
 
@@ -91,12 +92,29 @@ class ProcessComposerPackageInstaller implements ComposerPackageInstallerInterfa
         // auto-registered.
         $command = $binary . ' require ' . implode( ' ', $specs ) . ' --no-interaction --no-progress --no-plugins --with-all-dependencies';
 
+        // `composer require` rewrites the host `composer.json`/`composer.lock`
+        // in place; two overlapping activations in that directory can drop a
+        // requirement or leave the lock inconsistent. Serialize the run behind
+        // an atomic lock and fail closed when another install holds it.
+        $lock = Cache::lock( 'cms.plugins.composer-require', $timeout + 30 );
+
+        if ( ! $lock->get() ) {
+            throw ComposerDependencyNotSatisfiedException::installationFailed(
+                $slug,
+                'Another Composer installation is already running; try again once it completes.',
+            );
+        }
+
         try {
             $result = Process::timeout( $timeout )
                 ->path( base_path() )
                 ->run( $command );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            throw $e;
         } catch ( Throwable $e ) {
             throw ComposerDependencyNotSatisfiedException::installationFailed( $slug, $e->getMessage() );
+        } finally {
+            $lock->release();
         }
 
         if ( ! $result->successful() ) {
@@ -122,24 +140,47 @@ class ProcessComposerPackageInstaller implements ComposerPackageInstallerInterfa
      * {@inheritDoc}
      *
      * @since 2.10.0
+     *
+     * @return array{psr-4:array<string,array<int,string>>,classmap:array<string,string>,files:array<int,string>}
      */
-    public function installPath( string $package ): ?string
+    public function autoloadMaps(): array
     {
-        if ( ! class_exists( InstalledVersions::class ) ) {
-            return null;
-        }
+        $base = base_path( 'vendor/composer/' );
 
+        return [
+            'psr-4'    => $this->readAutoloadMap( $base . 'autoload_psr4.php' ),
+            'classmap' => $this->readAutoloadMap( $base . 'autoload_classmap.php' ),
+            'files'    => array_values( $this->readAutoloadMap( $base . 'autoload_files.php' ) ),
+        ];
+    }
+
+    /**
+     * Read one of Composer's regenerated autoload map files, invalidating any
+     * stale OPcache copy first so the just-installed entries are seen.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $path  Absolute path to the map file.
+     *
+     * @return array<int|string,mixed> The map, or an empty array on any failure.
+     */
+    protected function readAutoloadMap( string $path ): array
+    {
         try {
-            if ( ! InstalledVersions::isInstalled( $package ) ) {
-                return null;
+            if ( ! is_file( $path ) ) {
+                return [];
             }
 
-            $path = InstalledVersions::getInstallPath( $package );
-        } catch ( Throwable $e ) {
-            return null;
-        }
+            if ( function_exists( 'opcache_invalidate' ) ) {
+                opcache_invalidate( $path, true );
+            }
 
-        return is_string( $path ) && '' !== $path ? $path : null;
+            $data = require $path;
+
+            return is_array( $data ) ? $data : [];
+        } catch ( Throwable $e ) {
+            return [];
+        }
     }
 
     /**

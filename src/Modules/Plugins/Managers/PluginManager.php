@@ -1561,8 +1561,8 @@ class PluginManager
 
     /**
      * Resolve — and, when enabled, install — a plugin's declared Composer
-     * packages, then register their PSR-4 prefixes on the running class loader
-     * (#323).
+     * packages, then seat the freshly installed classes on the running class
+     * loader (#323).
      *
      * Fails closed: an unmet requirement with auto-install disabled, or an
      * install that cannot complete (Packagist unreachable, a `composer.lock`
@@ -1587,84 +1587,83 @@ class PluginManager
 
         $result = $resolver->resolve( $requirements, $installer->installedVersions() );
 
-        if ( ! $result->isSatisfied() ) {
-            if ( ! config( 'cms.plugins.autoInstallComposerDependencies', true ) ) {
-                throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
-            }
-
-            // Hand only the unmet constraints to Composer, which arbitrates any
-            // conflict against the host's existing lock. A non-zero exit throws
-            // ComposerDependencyNotSatisfiedException from the installer.
-            $installer->install( $plugin->slug, $result->unresolvedConstraints() );
-
-            // Re-resolve against the post-install snapshot to confirm the
-            // constraints are now met before booting the provider.
-            $result = $resolver->resolve( $requirements, $installer->installedVersions() );
-
-            if ( ! $result->isSatisfied() ) {
-                throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
-            }
+        // Already satisfied: the packages were installed in a prior request, so
+        // the host autoloader that booted this process already knows them — no
+        // install and no in-request autoload seating needed.
+        if ( $result->isSatisfied() ) {
+            return;
         }
 
-        $this->registerComposerPackageAutoloaders( array_keys( $requirements ) );
+        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', true ) ) {
+            throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+        }
+
+        // Hand only the unmet constraints to Composer, which arbitrates any
+        // conflict against the host's existing lock. A non-zero exit throws
+        // ComposerDependencyNotSatisfiedException from the installer.
+        $installer->install( $plugin->slug, $result->unresolvedConstraints() );
+
+        // Re-resolve against the post-install snapshot to confirm the
+        // constraints are now met before booting the provider.
+        $result = $resolver->resolve( $requirements, $installer->installedVersions() );
+
+        if ( ! $result->isSatisfied() ) {
+            throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+        }
+
+        // Packages were just installed this request; seat the regenerated
+        // autoload maps so their classes are usable before the provider boots.
+        $this->registerComposerPackageAutoloaders();
     }
 
     /**
-     * Register the PSR-4 prefixes of installed Composer packages onto the
-     * runtime class loader so a freshly installed vendor tree is autoloadable
-     * within the same request that installed it.
+     * Seat the host's regenerated Composer autoload maps onto the runtime class
+     * loader so a freshly installed vendor tree — including transitive
+     * dependencies, classmap entries, and eager `files` helpers — is
+     * autoloadable within the same request that installed it.
      *
-     * Best-effort: a package whose install path or `composer.json` cannot be
-     * read is skipped — its classes still load on the next request, which boots
-     * with a regenerated autoloader.
+     * Only entries the loader does not already carry are added, so re-seating
+     * on a long-running worker does not accumulate duplicate paths. Best-effort:
+     * a map Composer did not (re)write is simply skipped, and its classes still
+     * load on the next request, which boots with a regenerated autoloader.
      *
      * @since 2.10.0
-     *
-     * @param  array<int,string>  $packages  Composer package names.
      */
-    protected function registerComposerPackageAutoloaders( array $packages ): void
+    protected function registerComposerPackageAutoloaders(): void
     {
-        $installer  = $this->composerPackageInstaller();
+        $maps       = $this->composerPackageInstaller()->autoloadMaps();
         $registered = false;
 
-        foreach ( $packages as $package ) {
-            $path = $installer->installPath( $package );
-            if ( null === $path ) {
+        $existingPsr4 = $this->classLoader->getPrefixesPsr4();
+        foreach ( ( $maps['psr-4'] ?? [] ) as $namespace => $paths ) {
+            if ( ! is_string( $namespace ) ) {
                 continue;
             }
 
-            $composerJson = rtrim( $path, '/' ) . '/composer.json';
-            if ( ! File::exists( $composerJson ) ) {
-                continue;
+            $newPaths = array_values( array_diff( ( array ) $paths, $existingPsr4[ $namespace ] ?? [] ) );
+            if ( ! empty( $newPaths ) ) {
+                $this->classLoader->addPsr4( $namespace, $newPaths );
+                $registered = true;
             }
+        }
 
-            $decoded = json_decode( ( string ) File::get( $composerJson ), true );
-            $psr4    = $decoded['autoload']['psr-4'] ?? null;
-            if ( ! is_array( $psr4 ) ) {
-                continue;
-            }
-
-            foreach ( $psr4 as $namespace => $relative ) {
-                if ( ! is_string( $namespace ) ) {
-                    continue;
-                }
-
-                foreach ( ( array ) $relative as $relativePath ) {
-                    if ( is_string( $relativePath ) ) {
-                        // Trim both sides of the relative path so the registered
-                        // directory has no trailing slash, matching how Composer
-                        // stores its own PSR-4 prefixes.
-                        $prefixPath = rtrim( $path, '/' );
-                        $suffix     = trim( $relativePath, '/' );
-                        $this->classLoader->addPsr4( $namespace, '' === $suffix ? $prefixPath : $prefixPath . '/' . $suffix );
-                        $registered = true;
-                    }
-                }
-            }
+        $newClassMap = array_diff_key( $maps['classmap'] ?? [], $this->classLoader->getClassMap() );
+        if ( ! empty( $newClassMap ) ) {
+            $this->classLoader->addClassMap( $newClassMap );
+            $registered = true;
         }
 
         if ( $registered ) {
             $this->classLoader->register( true );
+        }
+
+        // Eager `files` helpers Composer includes at bootstrap. require_once
+        // dedups by realpath, so files already loaded this request are skipped
+        // and only newly installed ones are pulled in.
+        foreach ( ( $maps['files'] ?? [] ) as $file ) {
+            if ( is_string( $file ) && File::exists( $file ) ) {
+                require_once $file;
+            }
         }
     }
 

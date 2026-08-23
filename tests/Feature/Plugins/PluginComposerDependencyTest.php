@@ -157,33 +157,45 @@ describe( 'Composer-package activation gate', function (): void {
         ] );
     } );
 
-    it( 'registers the installed package PSR-4 prefixes on the class loader before boot', function (): void {
-        $packageDir = sys_get_temp_dir() . '/composer-dep-' . uniqid();
-        File::ensureDirectoryExists( $packageDir );
-        File::put( $packageDir . '/composer.json', json_encode( [
-            'name'     => 'acme/widget',
-            'autoload' => [
-                'psr-4' => [
-                    // A multi-path array exercises the (array) cast branch.
-                    'Acme\\Widget\\' => [ 'src/', 'lib/' ],
-                ],
-            ],
-        ] ) );
+    it( 'seats the regenerated autoload maps on the class loader after installing', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
 
-        $this->installer->installed     = [ 'acme/widget' => '1.4.0' ];
-        $this->installer->installPaths  = [ 'acme/widget' => $packageDir ];
+        $packageDir = sys_get_temp_dir() . '/composer-dep-' . uniqid();
+        File::ensureDirectoryExists( $packageDir . '/src' );
+
+        // The install brings the package into range, and the fake reports the
+        // regenerated maps Composer would have written — PSR-4 (multi-path),
+        // a classmap entry, and an eager files helper.
+        $this->installer->installsToApply = [ 'acme/widget' => '1.4.0' ];
+        $this->installer->autoloadMaps    = [
+            'psr-4'    => [ 'Acme\\Widget\\' => [ $packageDir . '/src', $packageDir . '/lib' ] ],
+            'classmap' => [ 'Acme\\Widget\\Legacy' => $packageDir . '/src/Legacy.php' ],
+            'files'    => [],
+        ];
         makeComposerPlugin( 'widget', [ 'acme/widget' => '^1.2' ] );
 
         try {
             expect( $this->manager->activate( 'widget' ) )->toBeTrue();
 
-            $prefixes = activeComposerClassLoader()->getPrefixesPsr4();
+            $loader = activeComposerClassLoader();
 
-            expect( $prefixes )->toHaveKey( 'Acme\\Widget\\' )
-                ->and( $prefixes['Acme\\Widget\\'] )->toContain( $packageDir . '/src' )
-                ->and( $prefixes['Acme\\Widget\\'] )->toContain( $packageDir . '/lib' );
+            expect( $loader->getPrefixesPsr4() )->toHaveKey( 'Acme\\Widget\\' )
+                ->and( $loader->getPrefixesPsr4()['Acme\\Widget\\'] )->toContain( $packageDir . '/src' )
+                ->and( $loader->getPrefixesPsr4()['Acme\\Widget\\'] )->toContain( $packageDir . '/lib' )
+                ->and( $loader->getClassMap() )->toHaveKey( 'Acme\\Widget\\Legacy' );
         } finally {
             File::deleteDirectory( $packageDir );
         }
+    } );
+
+    it( 'does not seat autoload maps when the requirement is already satisfied', function (): void {
+        $this->installer->installed    = [ 'acme/widget' => '1.4.0' ];
+        $this->installer->autoloadMaps = [
+            'psr-4' => [ 'Acme\\Unused\\' => [ '/tmp/should-not-register' ] ],
+        ];
+        makeComposerPlugin( 'widget', [ 'acme/widget' => '^1.2' ] );
+
+        expect( $this->manager->activate( 'widget' ) )->toBeTrue()
+            ->and( activeComposerClassLoader()->getPrefixesPsr4() )->not->toHaveKey( 'Acme\\Unused\\' );
     } );
 } );
