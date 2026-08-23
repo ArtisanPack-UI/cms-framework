@@ -22,7 +22,7 @@
         }
     },
     "migrations": "database/migrations",
-    "nav": [
+    "nav_entries": [
         {
             "slug": "hello-world-manifest-nav",
             "label": "Hello (from manifest)",
@@ -32,14 +32,12 @@
             "order": 61
         }
     ],
-    "federated_modules": [
-        {
-            "name": "helloWorldAdmin",
-            "entry": "dist/remoteEntry.js",
-            "exposes": [
-                "./HelloWorldPanel",
-                "./MapPickerEditor"
-            ]
-        }
-    ]
+    "federated_module": {
+        "name": "helloWorldAdmin",
+        "entry": "dist/remoteEntry.js",
+        "exposes": [
+            "./HelloWorldPanel",
+            "./MapPickerEditor"
+        ]
+    }
 }

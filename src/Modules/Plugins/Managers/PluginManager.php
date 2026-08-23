@@ -6,7 +6,9 @@ namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\DependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginConflictException;
@@ -14,10 +16,14 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationExce
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
+use Composer\Semver\Semver;
+use Composer\Semver\VersionParser;
 use Exception;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
@@ -363,6 +369,13 @@ class PluginManager
         // mutation so a plugin missing its dependencies never half-activates.
         $this->assertDependenciesSatisfied( $plugin );
 
+        // Composer-package dependency gate (#323). Resolves — and, when enabled,
+        // installs — the manifest `composer` block, then registers the vendor
+        // PSR-4 prefixes so the classes are autoloadable before the plugin's
+        // service provider boots below. Runs before any state mutation so a
+        // failed resolution fails closed without a half-activated plugin.
+        $this->ensureComposerDependencies( $plugin );
+
         doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
         $priorPsr4              = [];
@@ -393,7 +406,8 @@ class PluginManager
                 }
 
                 if ( $plugin->hasServiceProvider() ) {
-                    app()->register( $plugin->service_provider );
+                    $provider = app()->register( $plugin->service_provider );
+                    $this->bridgeManifestRegistrations( $provider );
                     $serviceProviderStarted = true;
                 }
 
@@ -599,7 +613,8 @@ class PluginManager
             // Register service provider
             if ( $plugin->hasServiceProvider() ) {
                 try {
-                    app()->register( $plugin->service_provider );
+                    $provider = app()->register( $plugin->service_provider );
+                    $this->bridgeManifestRegistrations( $provider );
                 } catch ( Throwable $e ) {
                     // Log error but don't break application. Catch Throwable, not
                     // just Exception: a missing provider class raises an Error,
@@ -764,6 +779,28 @@ class PluginManager
         }
 
         return $graph;
+    }
+
+    /**
+     * Bridge a freshly registered plugin provider's declarative manifest fields
+     * (`nav_entries`, `federated_module`) into the runtime PluginRegistry.
+     *
+     * Runs after the provider is registered so declaring the fields in
+     * `plugin.json` is enough to surface them — the provider no longer has to
+     * duplicate the data with imperative `register*()` calls (#324). Only the
+     * base {@see PluginServiceProvider} carries the normalization those calls
+     * apply, so plain Laravel providers are skipped. `$provider` is typed
+     * `mixed` because `app()->register()` returns a bare `ServiceProvider`.
+     *
+     * @since 2.10.0
+     *
+     * @param  mixed  $provider  The provider instance returned by `app()->register()`.
+     */
+    protected function bridgeManifestRegistrations( mixed $provider ): void
+    {
+        if ( $provider instanceof PluginServiceProvider ) {
+            $provider->bridgeManifestRegistrations();
+        }
     }
 
     /**
@@ -1091,6 +1128,107 @@ class PluginManager
         if ( isset( $manifest['conflicts'] ) ) {
             $this->validateConstraintMapManifestField( $manifest['conflicts'], 'conflicts', $manifest['slug'] );
         }
+
+        if ( isset( $manifest['composer'] ) ) {
+            $this->validateComposerManifestField( $manifest['composer'] );
+        }
+    }
+
+    /**
+     * Validate the optional `composer` manifest key for plugin→Composer-package
+     * dependencies (#323).
+     *
+     * Shape (Packagist package name => version constraint):
+     *     "composer": { "artisanpack-ui/convertkit": "^1.2" }
+     *
+     * The sibling of {@see validateConstraintMapManifestField()}: same object /
+     * non-empty-constraint rigor, but keys are validated as Composer package
+     * names (`vendor/package`) rather than plugin slugs. An empty object is
+     * allowed; a JSON array is rejected because it cannot express the mapping.
+     *
+     * @param  mixed  $composer  Raw manifest value.
+     *
+     * @throws PluginValidationException If the block is malformed.
+     */
+    protected function validateComposerManifestField( mixed $composer ): void
+    {
+        if ( ! is_array( $composer ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid composer. Must be an object mapping Composer package names to version constraints.' );
+        }
+
+        foreach ( $composer as $package => $constraint ) {
+            if ( ! is_string( $package ) || ! $this->isValidComposerPackageName( $package ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid composer. Each key must be a valid Composer package name (vendor/package).' );
+            }
+            if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid composer['{$package}']. Version constraint must be a non-empty string." );
+            }
+            if ( ! $this->isValidComposerConstraint( $constraint ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid composer['{$package}']. Version constraint must be a bounded, stable semver range (no '*', '@dev', or 'dev-' branch references)." );
+            }
+        }
+    }
+
+    /**
+     * Whether a string is a Composer version constraint safe to auto-install.
+     *
+     * Beyond parsing as a valid `composer/semver` constraint, an auto-installed
+     * Packagist dependency must be *bounded and stable*: a bare `*`, a `@dev`
+     * stability flag, or a `dev-<branch>` reference would let a plugin pull the
+     * newest — or an arbitrary branch's — code at activation time, defeating any
+     * pinning and widening the supply-chain window every time the source
+     * publishes. Bounded wildcards such as `1.2.*` remain allowed.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $constraint  Candidate version constraint.
+     *
+     * @return bool True when the constraint is well-formed, bounded, and stable.
+     */
+    protected function isValidComposerConstraint( string $constraint ): bool
+    {
+        $constraint = trim( $constraint );
+        if ( '' === $constraint ) {
+            return false;
+        }
+
+        $lower = strtolower( $constraint );
+        if ( '*' === $constraint || str_contains( $lower, '@dev' ) || str_contains( $lower, 'dev-' ) ) {
+            return false;
+        }
+
+        try {
+            ( new VersionParser )->parseConstraints( $constraint );
+
+            // Reject a lower-bound-only range such as `>=1.0`: it carries no
+            // upper bound, so a future major of the auto-installed dependency
+            // could be pulled unreviewed. Probe with an absurdly high version —
+            // any bounded range (`^1.2`, `~2.0`, `1.2.*`, `>=1.0 <2.0`) excludes
+            // it, while an unbounded one accepts it.
+            if ( Semver::satisfies( '99999999.0.0', $constraint ) ) {
+                return false;
+            }
+        } catch ( Throwable $e ) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Whether a string is a syntactically valid Composer package name.
+     *
+     * Mirrors Composer's own `vendor/package` grammar so a manifest cannot slip
+     * an arbitrary token — a shell fragment, a path — into the value later
+     * handed to `composer require`.
+     *
+     * @param  string  $package  Candidate package name.
+     *
+     * @return bool True when the name is well-formed.
+     */
+    protected function isValidComposerPackageName( string $package ): bool
+    {
+        return 1 === preg_match( '{^[a-z0-9]([_.-]?[a-z0-9]+)*/[a-z0-9](([_.]|-{1,2})?[a-z0-9]+)*$}iD', $package );
     }
 
     /**
@@ -1472,6 +1610,212 @@ class PluginManager
     protected function dependencyResolver(): DependencyResolver
     {
         return new DependencyResolver;
+    }
+
+    /**
+     * Resolve a stateless Composer-package resolver instance.
+     *
+     * @since 2.10.0
+     */
+    protected function composerPackageResolver(): ComposerPackageResolver
+    {
+        return new ComposerPackageResolver;
+    }
+
+    /**
+     * Resolve the bound Composer-package installer.
+     *
+     * Resolved from the container each call so a test can bind a fake and so a
+     * host can register its own install strategy.
+     *
+     * @since 2.10.0
+     */
+    protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+    {
+        return app( ComposerPackageInstallerInterface::class );
+    }
+
+    /**
+     * The package names the host declares in its own root `composer.json`
+     * (`require` and `require-dev`), lower-cased.
+     *
+     * A plugin's declared Composer dependencies are refused when they name any
+     * of these, so a plugin can never drive `composer require` to change the
+     * version of a library the host itself owns. A missing or unreadable
+     * `composer.json` yields an empty list — the guard simply does not fire.
+     *
+     * @since 2.10.0
+     *
+     * @return array<int,string> Lower-cased root package names.
+     */
+    protected function hostRootComposerPackages(): array
+    {
+        try {
+            $path = base_path( 'composer.json' );
+            if ( ! File::exists( $path ) ) {
+                return [];
+            }
+
+            $decoded = json_decode( (string) File::get( $path ), true );
+            if ( ! is_array( $decoded ) ) {
+                return [];
+            }
+
+            $packages = array_merge(
+                array_keys( is_array( $decoded['require'] ?? null ) ? $decoded['require'] : [] ),
+                array_keys( is_array( $decoded['require-dev'] ?? null ) ? $decoded['require-dev'] : [] ),
+            );
+
+            return array_values( array_unique( array_map( 'strtolower', $packages ) ) );
+        } catch ( Throwable $e ) {
+            return [];
+        }
+    }
+
+    /**
+     * Resolve — and, when enabled, install — a plugin's declared Composer
+     * packages, then seat the freshly installed classes on the running class
+     * loader (#323).
+     *
+     * Fails closed: an unmet requirement with auto-install disabled, or an
+     * install that cannot complete (Packagist unreachable, a `composer.lock`
+     * conflict, a missing binary), raises
+     * {@see ComposerDependencyNotSatisfiedException}. Called from
+     * `activate()` before any state mutation, so a failure aborts activation
+     * without a rollback.
+     *
+     * @since 2.10.0
+     *
+     * @throws ComposerDependencyNotSatisfiedException When requirements cannot be satisfied.
+     */
+    protected function ensureComposerDependencies( Plugin $plugin ): void
+    {
+        $requirements = $plugin->required_composer_packages;
+        if ( empty( $requirements ) ) {
+            return;
+        }
+
+        // Re-validate the persisted requirements before they reach the resolver
+        // or `composer require`. `validateManifest()` vetted them at install and
+        // update time, but this reads them back from `meta`, which a later write
+        // path (or direct row tampering) could have seated unvalidated — the same
+        // reason `UpdateManager` re-checks `isUsableUpdateSource()` at update
+        // time. Fail closed on anything that would not pass validation today.
+        foreach ( $requirements as $package => $constraint ) {
+            if ( ! is_string( $package ) || ! $this->isValidComposerPackageName( $package )
+                || ! is_string( $constraint ) || ! $this->isValidComposerConstraint( $constraint ) ) {
+                throw ComposerDependencyNotSatisfiedException::invalidRequirement(
+                    $plugin->slug,
+                    is_string( $package ) ? $package : '(non-string package name)',
+                );
+            }
+        }
+
+        $installer = $this->composerPackageInstaller();
+        $resolver  = $this->composerPackageResolver();
+
+        $result = $resolver->resolve( $requirements, $installer->installedVersions() );
+
+        // Already satisfied: the packages were installed in a prior request, so
+        // the host autoloader that booted this process already knows them — no
+        // install and no in-request autoload seating needed.
+        if ( $result->isSatisfied() ) {
+            return;
+        }
+
+        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', false ) ) {
+            throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+        }
+
+        $constraints = $result->unresolvedConstraints();
+
+        // A plugin may bring in *new* packages, but it must not name one the host
+        // itself declares in its root `composer.json`. Running `composer require`
+        // for a host root package (with `--with-all-dependencies`) would let the
+        // plugin change the version of a library the host depends on — a
+        // downgrade to a vulnerable release, or an upgrade out from under the
+        // host. Refuse before shelling out.
+        $declared      = array_map( 'strtolower', array_keys( $constraints ) );
+        $rootConflicts = array_values( array_intersect( $declared, $this->hostRootComposerPackages() ) );
+        if ( ! empty( $rootConflicts ) ) {
+            throw ComposerDependencyNotSatisfiedException::rootPackageConflict( $plugin->slug, $rootConflicts );
+        }
+
+        // Hand only the unmet constraints to Composer, which arbitrates any
+        // conflict against the host's existing lock. A non-zero exit throws
+        // ComposerDependencyNotSatisfiedException from the installer.
+        $installer->install( $plugin->slug, $constraints );
+
+        // Re-resolve against the post-install snapshot to confirm the
+        // constraints are now met before booting the provider.
+        $result = $resolver->resolve( $requirements, $installer->installedVersions() );
+
+        if ( ! $result->isSatisfied() ) {
+            // Composer exited zero, so the packages are installed on disk, but
+            // this long-running worker may still hold a pre-install autoload /
+            // InstalledVersions snapshot when the host restricts
+            // `opcache_invalidate` (`opcache.restrict_api`, or the function
+            // disabled, with `opcache.validate_timestamps=0`). Fail closed —
+            // never boot a provider whose classes may be unresolvable — but say
+            // so, since a fresh request (which reads the regenerated metadata)
+            // completes the activation without reinstalling.
+            throw ComposerDependencyNotSatisfiedException::installedButUnverified( $plugin->slug, $result );
+        }
+
+        // Packages were just installed this request; seat the regenerated
+        // autoload maps so their classes are usable before the provider boots.
+        $this->registerComposerPackageAutoloaders();
+    }
+
+    /**
+     * Seat the host's regenerated Composer autoload maps onto the runtime class
+     * loader so a freshly installed vendor tree — including transitive
+     * dependencies, classmap entries, and eager `files` helpers — is
+     * autoloadable within the same request that installed it.
+     *
+     * Only entries the loader does not already carry are added, so re-seating
+     * on a long-running worker does not accumulate duplicate paths. Best-effort:
+     * a map Composer did not (re)write is simply skipped, and its classes still
+     * load on the next request, which boots with a regenerated autoloader.
+     *
+     * @since 2.10.0
+     */
+    protected function registerComposerPackageAutoloaders(): void
+    {
+        $maps       = $this->composerPackageInstaller()->autoloadMaps();
+        $registered = false;
+
+        $existingPsr4 = $this->classLoader->getPrefixesPsr4();
+        foreach ( ( $maps['psr-4'] ?? [] ) as $namespace => $paths ) {
+            if ( ! is_string( $namespace ) ) {
+                continue;
+            }
+
+            $newPaths = array_values( array_diff( ( array ) $paths, $existingPsr4[ $namespace ] ?? [] ) );
+            if ( ! empty( $newPaths ) ) {
+                $this->classLoader->addPsr4( $namespace, $newPaths );
+                $registered = true;
+            }
+        }
+
+        $newClassMap = array_diff_key( $maps['classmap'] ?? [], $this->classLoader->getClassMap() );
+        if ( ! empty( $newClassMap ) ) {
+            $this->classLoader->addClassMap( $newClassMap );
+            $registered = true;
+        }
+
+        if ( $registered ) {
+            $this->classLoader->register( true );
+        }
+
+        // Eager `files` helpers Composer includes at bootstrap. require_once
+        // dedups by realpath, so files already loaded this request are skipped
+        // and only newly installed ones are pulled in.
+        foreach ( ( $maps['files'] ?? [] ) as $file ) {
+            if ( is_string( $file ) && File::exists( $file ) ) {
+                require_once $file;
+            }
+        }
     }
 
     /**

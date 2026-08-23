@@ -92,4 +92,43 @@ return [
     | deployment pipeline handles rebuilds on demand.
     */
     'autoClearFrameworkCaches' => env( 'PLUGINS_AUTO_CLEAR_FRAMEWORK_CACHES', false ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Plugin Composer-package Dependencies
+    |--------------------------------------------------------------------------
+    | A plugin may declare Packagist dependencies in its manifest `composer`
+    | block, e.g. `"composer": { "artisanpack-ui/convertkit": "^1.2" }`. At
+    | activation the framework resolves those constraints against the host's
+    | installed packages.
+    |
+    | autoInstallComposerDependencies:
+    |   When false (the default), activation fails closed on an unmet requirement
+    |   and the operator is expected to have installed the package themselves —
+    |   the safe default, since auto-install fetches and boots arbitrary
+    |   third-party Packagist code (its service provider via `package:discover`,
+    |   and any eager `autoload.files`) in the host process. When true, an unmet
+    |   requirement is installed on activation by shelling out to `composer
+    |   require` in the host root, so the dependency survives a fresh deploy;
+    |   enable it only where you trust every installed plugin's declared
+    |   dependencies and the host may run Composer at runtime.
+    |
+    | Resolution always fails closed: if a required package is missing (and
+    | auto-install is off or cannot complete — Packagist unreachable, a
+    | `composer.lock` conflict, or a missing binary), the activation transaction
+    | unwinds rather than booting a plugin with an absent vendor tree.
+    |
+    | Packages brought in by a plugin are left in place on deactivate/delete —
+    | they are never auto-removed, since the host or another plugin may share
+    | them and Composer offers no safe ref-counted uninstall here.
+    */
+    'autoInstallComposerDependencies' => env( 'PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES', false ),
+
+    // Override the composer binary/command used to install plugin dependencies.
+    // Null falls back to the `COMPOSER_BINARY` env var, then a bare `composer`
+    // on the PATH.
+    'composerBinary' => env( 'PLUGINS_COMPOSER_BINARY' ),
+
+    // Timeout, in seconds, for a plugin's `composer require` install.
+    'composerTimeout' => 600,
 ];

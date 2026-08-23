@@ -827,6 +827,14 @@ class ApplicationUpdateManager
             $this->beginStep( UpdateStep::Cleanup );
             $this->cleanup( $zipPath );
 
+            // #308: extract-on-top only ever adds or overwrites, so with the
+            // update now finalized we reconcile the two things it cannot do on
+            // its own — purge the previous build's orphaned hashed assets, and
+            // delete paths the release removed upstream. Both are best-effort:
+            // the update has already succeeded and neither may fail it.
+            $this->purgeStaleBuildAssets();
+            $this->applyRemovedPathsManifest();
+
             // Step 10: Disable maintenance mode
             $this->beginStep( UpdateStep::DisableMaintenanceMode );
             $this->disableMaintenanceMode();
@@ -1020,10 +1028,24 @@ class ApplicationUpdateManager
         // single downstream product's name. Changing it invalidates any
         // existing `cms.application.<old-slug>.update_check` cache entry, which
         // simply forces one fresh check.
+        //
+        // Coalesced to the generic default rather than passed through raw: a
+        // key present but set to `null` or `''` (a published config whose env
+        // var is unset, an operator who blanked the value) would otherwise key
+        // the cache as `cms.application..update_check` and identify the app to
+        // the source as empty. `config()`'s own default only covers a *missing*
+        // key, not a null or empty one.
+        $slug = config( 'cms.updates.application_slug', 'application' );
+        $slug = is_string( $slug ) ? trim( $slug ) : '';
+
+        if ( '' === $slug ) {
+            $slug = 'application';
+        }
+
         $this->checker = UpdateCheckerFactory::buildUpdateChecker(
             url: $updateUrl,
             type: UpdateType::Application,
-            slug: (string) config( 'cms.updates.application_slug', 'application' ),
+            slug: $slug,
         );
 
         return $this->checker;
@@ -1421,6 +1443,17 @@ class ApplicationUpdateManager
 
         // Detect common root prefix by scanning all entry names
         $commonPrefix = $this->detectCommonRootPrefix( $zip, $excludePaths );
+
+        // #308: adjudicate the release's own `composer.json`/`composer.lock`
+        // pair from *inside the archive*, before a single byte is written over
+        // `base_path()`. When the pair is provably out of sync and the operator
+        // has disabled stale-lock recovery — the one configuration in which
+        // `composer install` would abort with no way forward — refuse the update
+        // here, so a rejected release never touches the live tree and there is
+        // nothing to roll back. When recovery is enabled ( the default ), this
+        // stays silent and lets the existing extract → install → recover path
+        // run, exactly as before.
+        $this->preflightArchiveComposerSync( $zip, $commonPrefix, $zipPath );
 
         // Extract files (except excluded paths), stripping common prefix
         for ( $i = 0; $i < $zip->numFiles; $i++ ) {
@@ -2093,6 +2126,139 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Reject a release whose `composer.json`/`composer.lock` pair is out of sync
+     * *before* extraction writes anything over `base_path()` (#308).
+     *
+     * `verifyComposerFilesInSync()` above runs the same content-hash comparison,
+     * but only *after* extraction has already overwritten the live tree — where
+     * a divergence it detects is merely wrapped into `composer install`'s
+     * eventual failure message, by which point the site is a half-applied hybrid
+     * that the failure handler then has to unwind. This pre-flight reads the two
+     * files straight out of the archive and adjudicates the same question one
+     * step earlier, so a provably-broken release is refused while the live tree
+     * is still untouched and there is nothing to roll back.
+     *
+     * It is deliberately narrow, and every guard fails *open* — toward letting
+     * the existing post-extraction path adjudicate — so it never regresses a
+     * release the current flow would have installed:
+     *
+     * - It stays silent when `cms.updates.recover_stale_lock` is enabled ( the
+     *   default ). A diverged lock is exactly what that recovery re-resolves
+     *   (#273), so pre-empting extraction there would turn a recoverable update
+     *   into a hard refusal. It fires only in the one configuration where
+     *   `composer install` has no forward path: recovery off *and* the sync
+     *   check on.
+     * - It stays silent when the sync check itself is disabled
+     *   (`cms.updates.verify_composer_lock_sync`), honouring the same opt-out
+     *   `verifyComposerFilesInSync()` respects.
+     * - It stays silent unless the resolved composer command actually runs
+     *   `install` — an operator override that runs `composer update` re-resolves
+     *   the lock and *wants* a divergence — mirroring the post-extraction check.
+     * - A missing, unreadable, or unparseable `composer.json`/`composer.lock` in
+     *   the archive, or a lock with no `content-hash`, records no divergence:
+     *   composer itself adjudicates after extraction, as it does today.
+     *
+     * @since 2.10.0
+     *
+     * @param  ZipArchive   $zip           Opened update archive.
+     * @param  string|null  $commonPrefix  Common root prefix stripped during extraction.
+     * @param  string       $zipPath       Archive path, for the exception message.
+     *
+     * @throws UpdateException When the archive's composer pair is provably out
+     *                         of sync and stale-lock recovery is disabled.
+     */
+    protected function preflightArchiveComposerSync( ZipArchive $zip, ?string $commonPrefix, string $zipPath ): void
+    {
+        if ( ! config( 'cms.updates.verify_composer_lock_sync', true ) ) {
+            return;
+        }
+
+        // Recovery ( default on ) is the intended path for a diverged lock, so
+        // never pre-empt extraction while it is available.
+        if ( config( 'cms.updates.recover_stale_lock', true ) ) {
+            return;
+        }
+
+        // Only an `install` reads the lock as fixed; `update` reconciles it.
+        if ( ! preg_match( '/(?:^|\s)install(?:\s|$)/', $this->resolveComposerCommand() ) ) {
+            return;
+        }
+
+        $jsonContents = $this->archiveEntryContents( $zip, $commonPrefix, 'composer.json' );
+        $lockContents = $this->archiveEntryContents( $zip, $commonPrefix, 'composer.lock' );
+
+        // Fail open: if the archive does not carry both files, let composer
+        // adjudicate after extraction rather than refusing on a partial view.
+        if ( null === $jsonContents || null === $lockContents ) {
+            return;
+        }
+
+        $expectedHash = $this->composerContentHashFromContents( $jsonContents );
+        if ( null === $expectedHash ) {
+            return;
+        }
+
+        $lock = json_decode( $lockContents, true );
+        if ( ! is_array( $lock ) || ! is_string( $lock['content-hash'] ?? null ) ) {
+            return;
+        }
+
+        if ( $lock['content-hash'] === $expectedHash ) {
+            return;
+        }
+
+        Log::error(
+            'Refusing update before extraction: the release archive ships a composer.json and composer.lock that are out of sync, and stale-lock recovery is disabled, so composer install could only abort. The live tree was left untouched.',
+            [
+                'expected_content_hash' => $expectedHash,
+                'lock_content_hash'     => $lock['content-hash'],
+            ],
+        );
+
+        throw UpdateException::archiveComposerFilesOutOfSync( $zipPath );
+    }
+
+    /**
+     * Read a single logical file's contents out of the update archive, honouring
+     * the same common-prefix stripping and canonicalization the extraction loop
+     * applies, so `composer.json` is found whether the archive stores it as
+     * `composer.json`, `release-root/composer.json`, or `./release-root/composer.json`.
+     *
+     * @since 2.10.0
+     *
+     * @param  ZipArchive   $zip           Opened update archive.
+     * @param  string|null  $commonPrefix  Common root prefix to strip.
+     * @param  string       $targetPath    Repo-relative path to locate.
+     *
+     * @return string|null The entry's contents, or null when it is absent or unreadable.
+     */
+    protected function archiveEntryContents( ZipArchive $zip, ?string $commonPrefix, string $targetPath ): ?string
+    {
+        for ( $i = 0; $i < $zip->numFiles; $i++ ) {
+            $canonicalName = $this->canonicalizeArchivePath( (string) $zip->getNameIndex( $i ) );
+
+            if ( null === $canonicalName ) {
+                continue;
+            }
+
+            $stripped = $canonicalName;
+            if ( $commonPrefix && str_starts_with( $canonicalName, $commonPrefix ) ) {
+                $stripped = substr( $canonicalName, strlen( $commonPrefix ) );
+            }
+
+            if ( $stripped !== $targetPath ) {
+                continue;
+            }
+
+            $contents = $zip->getFromIndex( $i );
+
+            return false === $contents ? null : $contents;
+        }
+
+        return null;
+    }
+
+    /**
      * Compute the `content-hash` composer would write into a lock file for the
      * given `composer.json`, mirroring `Composer\Package\Locker::getContentHash()`.
      *
@@ -2109,6 +2275,24 @@ class ApplicationUpdateManager
             return null;
         }
 
+        return $this->composerContentHashFromContents( $contents );
+    }
+
+    /**
+     * Compute a `composer.json`'s lock `content-hash` from its raw contents.
+     *
+     * Extracted from {@see self::composerContentHash()} so the pre-flight check
+     * can hash the archive's `composer.json` — which it reads as a string
+     * straight out of the ZIP — without first materializing it to disk.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $contents  Raw `composer.json` JSON.
+     *
+     * @return string|null The hash, or null when the JSON cannot be parsed.
+     */
+    protected function composerContentHashFromContents( string $contents ): ?string
+    {
         $manifest = json_decode( $contents, true );
         if ( ! is_array( $manifest ) ) {
             return null;
@@ -2527,6 +2711,38 @@ class ApplicationUpdateManager
     }
 
     /**
+     * Drop every stale compiled cache after an aborted update has unwound, so
+     * the restored tree boots on its own source rather than on caches compiled
+     * against the half-applied release (#308).
+     *
+     * Extraction excludes `bootstrap/cache/*.php` and the backup snapshot never
+     * captured a *newer* config cache, so a run that overwrote application code
+     * and then aborted leaves `bootstrap/cache/{config,services,packages,
+     * modules}.php` dated to — and describing — the release that was just rolled
+     * back. On a real install that surfaced as a white screen served entirely
+     * from a config cache that no longer matched the code on disk. `optimize:clear`
+     * removes the config, route, view, event and compiled-service caches in one
+     * pass so the framework rebuilds them lazily from the restored source.
+     *
+     * Best-effort by design: a clear that fails on an already-broken tree must
+     * not turn a completed rollback into a reported rollback *failure*. Each
+     * outcome is logged; none is fatal.
+     *
+     * @since 2.10.0
+     */
+    protected function clearCompiledCachesAfterFailure(): void
+    {
+        try {
+            Artisan::call( 'optimize:clear' );
+        } catch ( Throwable $e ) {
+            Log::warning(
+                'cms-framework: could not clear compiled caches after an aborted update; stale bootstrap/cache files may remain. Run `php artisan optimize:clear` on the host.',
+                [ 'exception' => $e->getMessage() ],
+            );
+        }
+    }
+
+    /**
      * Clean up temporary files.
      *
      * @since 1.0.0
@@ -2538,6 +2754,331 @@ class ApplicationUpdateManager
         if ( File::exists( $zipPath ) ) {
             File::delete( $zipPath );
         }
+    }
+
+    /**
+     * Remove hashed build assets orphaned by previous releases (#308).
+     *
+     * Extraction writes the new release's `public/build` on top of the old one
+     * but never deletes the previous build's hashed files, so `public/build/assets`
+     * accumulates every release's output — one real install held 541 JS files
+     * spanning four releases. The manifest itself stays consistent ( it names
+     * only the current build ), which is exactly what makes the dead files safe
+     * to remove: any file under the build directory that the manifest does not
+     * reference is no longer served.
+     *
+     * The manifest is the whitelist, so the purge is skipped entirely whenever
+     * it cannot be read or parsed — deleting build output with no manifest to
+     * vouch for what is live would be the more dangerous failure. Symlinks are
+     * never followed or removed, and only regular files are unlinked.
+     *
+     * Gated by `cms.updates.purge_stale_build_assets` ( default on ) and
+     * best-effort: a completed update must not fail on cleanup.
+     *
+     * @since 2.10.0
+     */
+    protected function purgeStaleBuildAssets(): void
+    {
+        if ( ! config( 'cms.updates.purge_stale_build_assets', true ) ) {
+            return;
+        }
+
+        try {
+            $buildDir = base_path( (string) config( 'cms.updates.build_path', 'public/build' ) );
+
+            if ( ! File::isDirectory( $buildDir ) ) {
+                return;
+            }
+
+            $referenced = $this->referencedBuildAssets( $buildDir );
+
+            // No manifest, or an unparseable one: the whitelist is unknown, so
+            // purge nothing rather than guess.
+            if ( null === $referenced ) {
+                return;
+            }
+
+            $removed = 0;
+
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator( $buildDir, RecursiveDirectoryIterator::SKIP_DOTS ),
+                RecursiveIteratorIterator::CHILD_FIRST,
+            );
+
+            foreach ( $iterator as $fileInfo ) {
+                if ( $fileInfo->isLink() ) {
+                    continue;
+                }
+
+                // The iterator is CHILD_FIRST, so a directory is visited after
+                // its contents — prune it here once purging has emptied it,
+                // rather than leaving hollow directory trees behind. `@rmdir`
+                // only succeeds on an empty directory, so a still-populated one
+                // (an unreferenced file that survived, a symlink) is left alone.
+                if ( $fileInfo->isDir() ) {
+                    @rmdir( $fileInfo->getPathname() );
+
+                    continue;
+                }
+
+                if ( ! $fileInfo->isFile() ) {
+                    continue;
+                }
+
+                // `RecursiveDirectoryIterator` always yields paths with
+                // `$buildDir` as an exact leading prefix, so strip it by length
+                // rather than with `str_replace()` — a base path that happened to
+                // repeat the build-dir string (…/public/build/…/public/build)
+                // would otherwise have both occurrences removed and mis-key a
+                // live file as unreferenced.
+                $absolute = $fileInfo->getPathname();
+                $relative = ltrim( substr( $absolute, strlen( $buildDir ) ), DIRECTORY_SEPARATOR );
+                $relative = str_replace( DIRECTORY_SEPARATOR, '/', $relative );
+
+                // The manifest and its Vite sidecar are the source of truth for
+                // what is live; never remove them.
+                if ( 'manifest.json' === $relative || '.vite/manifest.json' === $relative ) {
+                    continue;
+                }
+
+                if ( isset( $referenced[ $relative ] ) ) {
+                    continue;
+                }
+
+                if ( File::delete( $absolute ) ) {
+                    $removed++;
+                }
+            }
+
+            if ( $removed > 0 ) {
+                Log::info( 'cms-framework: purged orphaned build assets left by previous releases.', [
+                    'count' => $removed,
+                ] );
+            }
+        } catch ( Throwable $e ) {
+            Log::warning(
+                'cms-framework: could not purge orphaned build assets after the update; they remain on disk but are harmless.',
+                [ 'exception' => $e->getMessage() ],
+            );
+        }
+    }
+
+    /**
+     * Build the set of build-relative asset paths the current manifest declares
+     * live, used by {@see self::purgeStaleBuildAssets()} as its delete whitelist.
+     *
+     * Reads `manifest.json` ( or the `.vite/manifest.json` sidecar Laravel/Vite
+     * also writes ) and collects every `file`, `css` and `assets` entry across
+     * all chunks. The manifest itself is added so it is never a purge candidate.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $buildDir  Absolute path to the build directory.
+     *
+     * @return array<string, true>|null Referenced paths as a lookup set, or null
+     *                                  when no manifest could be read.
+     */
+    protected function referencedBuildAssets( string $buildDir ): ?array
+    {
+        $manifestPath = null;
+
+        foreach ( [ 'manifest.json', '.vite/manifest.json' ] as $candidate ) {
+            $path = $buildDir . DIRECTORY_SEPARATOR . str_replace( '/', DIRECTORY_SEPARATOR, $candidate );
+
+            if ( is_file( $path ) ) {
+                $manifestPath = $path;
+
+                break;
+            }
+        }
+
+        if ( null === $manifestPath ) {
+            return null;
+        }
+
+        $manifest = json_decode( (string) @file_get_contents( $manifestPath ), true );
+        if ( ! is_array( $manifest ) ) {
+            return null;
+        }
+
+        $referenced = [];
+
+        foreach ( $manifest as $chunk ) {
+            if ( ! is_array( $chunk ) ) {
+                continue;
+            }
+
+            if ( is_string( $chunk['file'] ?? null ) ) {
+                $referenced[ $chunk['file'] ] = true;
+            }
+
+            foreach ( [ 'css', 'assets' ] as $group ) {
+                if ( ! is_array( $chunk[ $group ] ?? null ) ) {
+                    continue;
+                }
+
+                foreach ( $chunk[ $group ] as $asset ) {
+                    if ( is_string( $asset ) ) {
+                        $referenced[ $asset ] = true;
+                    }
+                }
+            }
+        }
+
+        return $referenced;
+    }
+
+    /**
+     * Delete paths a release removed upstream, honouring a manifest the archive
+     * ships (#308).
+     *
+     * Extract-on-top can add and overwrite but never delete, so a release that
+     * *removes* a file upstream — the monolithic-`app/` → modular-`Modules/`
+     * restructure left dead `app/Http/Controllers/*.php` beside their new
+     * `Modules/*` replacements — leaves the removed files orphaned on the host,
+     * where the autoloader can still find and load stale classes. A release
+     * declares those deletions in a manifest ( default `.artisanpack/removed-paths.json`,
+     * a JSON array of repo-relative paths ); this applies them after a
+     * successful update.
+     *
+     * Every deletion is guarded exactly as extraction and rollback removal are:
+     * the path is canonicalized and must stay under `base_path()`, it is skipped
+     * when `exclude_from_update` protects it, and symlinks are never followed.
+     * Absent or malformed manifests are a no-op, and the whole pass is
+     * best-effort so it can never fail a completed update.
+     *
+     * @since 2.10.0
+     */
+    protected function applyRemovedPathsManifest(): void
+    {
+        if ( ! config( 'cms.updates.honor_removed_paths_manifest', true ) ) {
+            return;
+        }
+
+        try {
+            $manifestRelative = (string) config( 'cms.updates.removed_paths_manifest', '.artisanpack/removed-paths.json' );
+
+            $manifestPath = base_path( $manifestRelative );
+            if ( ! is_file( $manifestPath ) ) {
+                return;
+            }
+
+            $paths = json_decode( (string) @file_get_contents( $manifestPath ), true );
+            if ( ! is_array( $paths ) ) {
+                return;
+            }
+
+            $excludePaths = config( 'cms.updates.exclude_from_update', [] );
+            $basePath     = base_path();
+            $removed      = 0;
+
+            foreach ( $paths as $path ) {
+                if ( ! is_string( $path ) ) {
+                    continue;
+                }
+
+                // Reuse the extraction canonicalizer so an absolute path or a
+                // `..` traversal in the manifest is rejected the same way an
+                // archive entry would be.
+                $canonical = $this->canonicalizeArchivePath( $path );
+                if ( null === $canonical || '' === $canonical ) {
+                    continue;
+                }
+
+                // Never delete a path the operator preserves across updates.
+                if ( $this->isPathExcluded( $canonical, $excludePaths ) ) {
+                    continue;
+                }
+
+                // Never let a removed-paths manifest reach a critical host file.
+                // A framework release removes its own orphaned source; it has no
+                // business deleting the front controller, the environment file,
+                // Composer's own state, or the VCS/webserver control files, so
+                // these stay off-limits even if a manifest names them.
+                if ( $this->isProtectedFromRemoval( $canonical ) ) {
+                    continue;
+                }
+
+                $fullPath = $basePath . DIRECTORY_SEPARATOR . $canonical;
+
+                // Only ever remove a regular file. A directory or a symlink at
+                // this path is something the manifest must not reach through.
+                if ( is_link( $fullPath ) || ! is_file( $fullPath ) ) {
+                    continue;
+                }
+
+                if ( ! $this->isPathWithinExtractRoot( $fullPath, $basePath ) ) {
+                    continue;
+                }
+
+                if ( File::delete( $fullPath ) ) {
+                    $removed++;
+                }
+            }
+
+            if ( $removed > 0 ) {
+                Log::info( 'cms-framework: removed paths the release deleted upstream, per its removed-paths manifest.', [
+                    'count' => $removed,
+                ] );
+            }
+
+            // Consume the manifest so it applies exactly once — for the release
+            // that shipped it. Extraction is add/overwrite-only, so a manifest
+            // left in place survives into later updates; a subsequent release
+            // that ships no manifest of its own would then re-apply this stale
+            // list and delete files that release deliberately re-introduced.
+            // Deleting it here closes that data-loss window: a real deletion set
+            // arrives only inside the archive being extracted.
+            if ( is_link( $manifestPath ) || ! $this->isPathWithinExtractRoot( $manifestPath, $basePath ) ) {
+                return;
+            }
+
+            File::delete( $manifestPath );
+        } catch ( Throwable $e ) {
+            Log::warning(
+                'cms-framework: could not apply the release\'s removed-paths manifest after the update; upstream-deleted files may remain on disk.',
+                [ 'exception' => $e->getMessage() ],
+            );
+        }
+    }
+
+    /**
+     * Whether a repo-relative path is a critical host file a removed-paths
+     * manifest must never delete.
+     *
+     * Defence-in-depth over the containment and exclusion guards: even a
+     * legitimate-but-overreaching (or, in the worst case, a checksum-passing
+     * malicious) archive cannot use the deletion pass to strip the front
+     * controller, the environment file, Composer's state, the CLI entrypoint, or
+     * the VCS/webserver control files out from under a running host.
+     *
+     * @since 2.10.0
+     *
+     * @param  string  $canonical  Canonicalized repo-relative path.
+     *
+     * @return bool True when the path is protected from removal.
+     */
+    protected function isProtectedFromRemoval( string $canonical ): bool
+    {
+        $normalized = str_replace( '\\', '/', $canonical );
+        $normalized = ltrim( $normalized, '/' );
+
+        $protectedExact = [
+            '.env',
+            '.htaccess',
+            'artisan',
+            'composer.json',
+            'composer.lock',
+            'public/index.php',
+            'public/.htaccess',
+        ];
+
+        if ( in_array( $normalized, $protectedExact, true ) ) {
+            return true;
+        }
+
+        // Anything under the VCS metadata directory.
+        return str_starts_with( $normalized, '.git/' );
     }
 
     /**
@@ -3205,6 +3746,12 @@ class ApplicationUpdateManager
 
             $this->state()->markFinishForward();
 
+            // The new code and schema are in place, but a failure *at* the
+            // ClearCaches step means the compiled caches can still describe the
+            // previous release — the same stale-cache white screen #308 fixes,
+            // just forward. Drop them before the site serves the new version.
+            $this->clearCompiledCachesAfterFailure();
+
             // The code and schema are already in place, so the site can serve
             // the new version. Bring it back up (best-effort, as before).
             try {
@@ -3231,6 +3778,12 @@ class ApplicationUpdateManager
                 // both — otherwise orphaned code and, worse, orphaned
                 // migrations are left behind.
                 $this->removeExtractionAdditions();
+
+                // The tree now matches the pre-update version, but the compiled
+                // caches can still describe the release just unwound. Drop them
+                // so the restored code does not boot behind a stale config or
+                // service cache (#308).
+                $this->clearCompiledCachesAfterFailure();
 
                 $this->state()->markRollback( true );
             } catch ( Throwable $e ) {
@@ -3265,6 +3818,12 @@ class ApplicationUpdateManager
         // cannot be restored, so the lift policy governs whether it goes back
         // on the public internet — rather than lifting unconditionally and
         // serving a mix of old and new code.
+        //
+        // Still drop the compiled caches: whether the site ends up serving the
+        // old or a half-applied tree, a config/service cache compiled against
+        // the failed release is the wrong one to boot behind (#308).
+        $this->clearCompiledCachesAfterFailure();
+
         $this->state()->markRollback( null );
 
         $this->liftMaintenanceModeAfterFailure( 'the update failure handler', $this->currentStep );

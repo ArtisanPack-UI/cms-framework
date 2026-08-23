@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [2.10.0] - 2026-08-23
+
+### Added
+
+- **Plugins can declare Composer-package dependencies in their manifest `composer` block** ([#323](https://github.com/ArtisanPack-UI/cms-framework/issues/323)) — a plugin lists `vendor/package => constraint` pairs that the framework resolves against the host's installed packages on activation (via `composer/semver`), failing closed when a requirement is unmet. When auto-install is enabled the framework runs `composer require` in the host root and seats the regenerated autoload maps so the new classes are usable in the same request.
+- **Manifest-driven federated module and nav-entry auto-registration** ([#324](https://github.com/ArtisanPack-UI/cms-framework/issues/324)) — a plugin's `federated_module` and `nav_entries` manifest keys are now auto-registered from the manifest alone, without an imperative `boot()` call. Imperative registrations still win, and auto-registration never overwrites a core route.
+
+### Changed
+
+- **`registerAdminPage( component: )`'s federated mount now renders a visible fallback instead of a silent dead div, and the federated admin-page contract is documented for both host styles** ([#325](https://github.com/ArtisanPack-UI/cms-framework/issues/325)) — the #296 shell emitted a bare `<div data-cms-federated-module="…"></div>`, which is inert on a host whose federation runtime never scans that attribute (e.g. Keystone CMS, whose runtime is Inertia-page-based and resolves `plugins/<remote>/<page>` from the `ap.plugins.federatedModules` manifest). On such a host the page rendered an empty, never-hydrated div — a footgun for plugin authors. The framework-owned `cms::admin.layouts.federated` shell now renders a role-`status` notice inside the mount naming the module and stating that the host must hydrate it, so an unhydrated page shows a clear message rather than a blank area; a host that scans the mount (or overrides `ap.cmsFramework.admin.federatedPageAction`) still replaces it. `docs/plugin-authoring.md` now documents the contract as a host-agnostic mount plus a host hydration responsibility, spelling out both supported paths (scan the Blade mount, or bridge via the filter) and calling out the Inertia `plugins/<remote>/<page>` path for Inertia-based hosts. No API signature changed.
+- **The application self-updater resolves its update slug from config** ([#120](https://github.com/ArtisanPack-UI/cms-framework/issues/120)) — a null/empty configured slug now coalesces to the `application` default rather than producing a malformed update source. The slug is operator-config-only (no remote influence).
+- **Plugin Composer auto-install is now opt-in (`cms.plugins.autoInstallComposerDependencies` defaults to `false`)** — auto-install fetches and boots arbitrary third-party Packagist code (a package's service provider via `package:discover`, and any eager `autoload.files`) in the host process, so it is now off by default; enable it only on hosts that trust every installed plugin's declared dependencies. Each auto-install is logged with the exact `composer require` invocation.
+
+### Fixed
+
+- **The self-updater reconciles the working tree when a self-update aborts after extraction** ([#308](https://github.com/ArtisanPack-UI/cms-framework/issues/308)) — a partial extraction followed by an abort no longer leaves a broken tree; the release's optional `removed-paths` manifest deletes files the release removed upstream, and orphaned build assets are purged. The removed-paths manifest is now **consumed after it applies**, so a stale manifest from an earlier release can never survive into a later update and delete files that release deliberately re-introduced.
+- **`purgeStaleBuildAssets` prunes the directories it empties** rather than leaving hollow directory trees behind.
+
+### Security
+
+- **Plugin Composer version constraints must be bounded and stable** — a bare `*`, an `@dev` stability flag, a `dev-<branch>` reference, or a lower-bound-only range (`>=1.0`, `>1.0`) is rejected at manifest-validation time, so an auto-installed dependency cannot pull the newest, an arbitrary branch's, or a future major's code at activation. Bounded wildcards (`1.2.*`) remain allowed. The persisted `composer` block is **re-validated at activation** (not only at install/update), failing closed on anything that would not pass validation today.
+- **A plugin may not declare a Composer dependency the host itself requires** — the framework refuses (before shelling out) any plugin-declared package present in the host's root `composer.json`, so a plugin can never drive `composer require --with-all-dependencies` to change the version of a library the host owns.
+- **The self-updater's removed-paths manifest can never delete a critical host file** — `.env`, `.htaccess`, `artisan`, `composer.json`/`composer.lock`, `public/index.php`, and the VCS metadata directory are protected from removal even when a manifest names them, defence-in-depth over the existing containment and exclusion guards.
+- **Composer install output is redacted before it surfaces in an activation error** — inline URL credentials (`https://user:token@host`) and secret-bearing tokens (`token`/`password`/`api_key`/`authorization`) in a failed `composer require`'s output are masked before the failure detail reaches admins or logs.
+
 ## [2.9.0] - 2026-08-21
 
 ### Security

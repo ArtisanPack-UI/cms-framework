@@ -126,6 +126,28 @@ class UpdateException extends CMSFrameworkException
     }
 
     /**
+     * The update archive's `composer.json` and `composer.lock` are out of sync,
+     * caught by the pre-extraction pre-flight (#308).
+     *
+     * Raised only when stale-lock recovery is disabled, so `composer install`
+     * would install from the lock and abort with no forward path. Refusing here
+     * leaves the live tree untouched — nothing was extracted, so nothing needs
+     * rolling back.
+     *
+     * @since 2.10.0
+     */
+    public static function archiveComposerFilesOutOfSync( string $zipPath ): self
+    {
+        return new self(
+            "Refusing to install update archive '{$zipPath}': its composer.json and composer.lock are out of sync "
+            . '( the lock records a different set of dependency constraints than composer.json declares ), and '
+            . '`cms.updates.recover_stale_lock` is disabled, so `composer install` could only abort. The release must '
+            . 'ship a committed `composer.lock` that matches its `composer.json`. The site was left untouched on its '
+            . 'current version.',
+        );
+    }
+
+    /**
      * Composer install failed.
      *
      * When the pre-flight sync check detected that `composer.json` and

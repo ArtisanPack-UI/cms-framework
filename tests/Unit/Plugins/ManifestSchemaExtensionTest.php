@@ -305,6 +305,87 @@ describe( 'conflicts', function (): void {
     } );
 } );
 
+describe( 'composer', function (): void {
+    it( 'accepts a well-formed composer block', function (): void {
+        $manifest = array_merge( $this->base, [
+            'composer' => [ 'artisanpack-ui/convertkit' => '^1.2' ],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'accepts an empty composer object', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a non-object composer', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => 'artisanpack-ui/convertkit' ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid composer.' );
+    } );
+
+    it( 'rejects composer expressed as a list', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid composer.' );
+    } );
+
+    it( 'rejects a key that is not a valid Composer package name', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'not-a-package' => '^1.0' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'valid Composer package name' );
+    } );
+
+    it( 'rejects a package name with a shell fragment', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'vendor/pkg; rm -rf /' => '^1.0' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'valid Composer package name' );
+    } );
+
+    it( 'rejects an empty version constraint', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => '' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'constraint' );
+    } );
+
+    it( 'accepts a bounded wildcard constraint', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => '1.2.*' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects an unbounded or dev-branch version constraint', function ( string $constraint ): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => $constraint ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'bounded, stable' );
+    } )->with( [
+        'bare wildcard'       => [ '*' ],
+        'dev stability'       => [ '^1.2@dev' ],
+        'dev branch'          => [ 'dev-main' ],
+        'aliased branch'      => [ 'dev-main as 1.0.0' ],
+        'lower bound only'    => [ '>=1.0' ],
+        'greater than only'   => [ '>1.0' ],
+    ] );
+
+    it( 'rejects an unparseable version constraint', function (): void {
+        $manifest = array_merge( $this->base, [ 'composer' => [ 'artisanpack-ui/convertkit' => 'not-a-range' ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'bounded, stable' );
+    } );
+} );
+
 describe( 'Plugin model accessors', function (): void {
     it( 'exposes the new manifest fields ergonomically', function (): void {
         $plugin = new Plugin( [
@@ -348,12 +429,14 @@ describe( 'Plugin model accessors', function (): void {
                     'plugins'       => ['base-forms' => '^1.5'],
                 ],
                 'conflicts' => ['legacy-forms' => '*'],
+                'composer'  => ['artisanpack-ui/convertkit' => '^1.2'],
             ],
         ] );
 
         expect( $plugin->required_plugins )->toBe( ['base-forms' => '^1.5'] )
             ->and( $plugin->required_host_version )->toBe( '^2.0' )
-            ->and( $plugin->conflicting_plugins )->toBe( ['legacy-forms' => '*'] );
+            ->and( $plugin->conflicting_plugins )->toBe( ['legacy-forms' => '*'] )
+            ->and( $plugin->required_composer_packages )->toBe( ['artisanpack-ui/convertkit' => '^1.2'] );
     } );
 
     it( 'returns empty dependency maps when absent', function (): void {
@@ -361,6 +444,7 @@ describe( 'Plugin model accessors', function (): void {
 
         expect( $plugin->required_plugins )->toBe( [] )
             ->and( $plugin->required_host_version )->toBeNull()
-            ->and( $plugin->conflicting_plugins )->toBe( [] );
+            ->and( $plugin->conflicting_plugins )->toBe( [] )
+            ->and( $plugin->required_composer_packages )->toBe( [] );
     } );
 } );

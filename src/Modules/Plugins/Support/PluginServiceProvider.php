@@ -38,6 +38,34 @@ abstract class PluginServiceProvider extends ServiceProvider
     protected ?array $manifest = null;
 
     /**
+     * Bridge the plugin manifest's declarative `nav_entries` and
+     * `federated_module` into the runtime {@see PluginRegistry}.
+     *
+     * `plugin.json`'s `nav_entries` and `federated_module` are validated by
+     * {@see \ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager}
+     * but were otherwise inert: only an imperative {@see registerNavEntry()} /
+     * {@see registerFederatedModule()} call ever populated the registry, forcing
+     * authors to declare the same data twice. This bridges the declaration so
+     * listing the fields in the manifest is enough (#324).
+     *
+     * The framework calls this once per plugin, right after the provider is
+     * registered. Imperative calls always win: a manifest entry is only bridged
+     * when its slug (nav) or module name is not already in the registry, so a
+     * provider may override or extend any declarative entry from boot()
+     * regardless of registration ordering.
+     *
+     * @since 2.10.0
+     */
+    public function bridgeManifestRegistrations(): void
+    {
+        $manifest = $this->loadManifest();
+        $registry = $this->pluginRegistry();
+
+        $this->bridgeManifestFederatedModule( $manifest, $registry );
+        $this->bridgeManifestNavEntries( $manifest, $registry );
+    }
+
+    /**
      * Register a Blade or Inertia admin page.
      *
      * A `view` is wrapped in a closure before it reaches the route: Laravel's
@@ -94,13 +122,18 @@ abstract class PluginServiceProvider extends ServiceProvider
      * - `view` → renders the Blade view, with the route's own parameters passed
      *   through as view data so a page at `reports/{id}` can read `$id`.
      * - `component` → a Module Federation identifier only the host's federation
-     *   runtime can resolve. The shipped default renders the framework-owned
-     *   `cms::admin.layouts.federated` shell, which emits a mount-point element
-     *   inside the admin chrome for the host front end to hydrate. A federation
-     *   host that mounts components its own way overrides the default through
-     *   the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
-     *   the default action, the component identifier, and the page config and
-     *   returns its own route action.
+     *   runtime can resolve. The framework owns no frontend and ships no
+     *   federation runtime, so the host must hydrate the component. The shipped
+     *   default renders the framework-owned `cms::admin.layouts.federated`
+     *   shell, which emits a mount-point element inside the admin chrome — plus
+     *   a visible fallback notice so an unhydrated page is never a silent blank
+     *   div. A host hydrates it either by scanning for the mount attribute in
+     *   its front end, or by overriding the default through the
+     *   `ap.cmsFramework.admin.federatedPageAction` filter, which receives the
+     *   default action, the component identifier, and the page config and
+     *   returns its own route action. Inertia-based hosts ( e.g. Keystone CMS )
+     *   take the filter path to bridge to their `plugins/<remote>/<page>`
+     *   runtime. See `docs/plugin-authoring.md`.
      * - neither → a 501, so the operator sees a clear "not configured" response
      *   instead of a white-screened application.
      *
@@ -163,6 +196,14 @@ abstract class PluginServiceProvider extends ServiceProvider
         $slug = ( string ) $entry['slug'];
         $url  = $this->normalizeNavUrl( $entry['url'] ?? '#' );
 
+        // A nav entry with no declared permission falls back to the admin
+        // dashboard baseline rather than rendering to everyone who can see the
+        // menu — the same fallback registerAdminPage() applies to an empty
+        // capability, so a manifest-bridged entry cannot surface an ungated link.
+        $permission = '' !== trim( (string) ( $entry['permission'] ?? '' ) )
+            ? (string) $entry['permission']
+            : 'access_admin_dashboard';
+
         $normalized = [
             'title'      => $entry['label'],
             'slug'       => $slug,
@@ -170,8 +211,8 @@ abstract class PluginServiceProvider extends ServiceProvider
             'section'    => null,
             'icon'       => $entry['icon'] ?? ( $entry['iconId'] ?? '' ),
             'iconId'     => $entry['iconId'] ?? ( $entry['icon'] ?? '' ),
-            'capability' => $entry['permission'] ?? '',
-            'permission' => $entry['permission'] ?? '',
+            'capability' => $permission,
+            'permission' => $permission,
             'order'      => ( int ) ( $entry['order'] ?? 50 ),
             'route'      => $url,
             'menuTitle'  => $entry['label'],
@@ -200,6 +241,75 @@ abstract class PluginServiceProvider extends ServiceProvider
         }
 
         $this->pluginRegistry()->setFederatedModule( $name, $descriptor );
+    }
+
+    /**
+     * Bridge the manifest's singular `federated_module` object.
+     *
+     * Re-checks the shape the manifest validator enforces so a descriptor that
+     * reached a non-validating code path can never corrupt the registry. The
+     * descriptor is keyed by an optional `name`, falling back to the plugin
+     * slug — the singular field models one federated module per plugin. An
+     * already-registered name is left untouched so imperative registrations win.
+     *
+     * @since 2.10.0
+     *
+     * @param  array<string,mixed>  $manifest
+     */
+    protected function bridgeManifestFederatedModule( array $manifest, PluginRegistry $registry ): void
+    {
+        $module = $manifest['federated_module'] ?? null;
+
+        if ( ! is_array( $module ) || empty( $module['entry'] ) || ! is_string( $module['entry'] ) ) {
+            return;
+        }
+
+        $name = ( isset( $module['name'] ) && is_string( $module['name'] ) && '' !== trim( $module['name'] ) )
+            ? ( string ) $module['name']
+            : ( isset( $manifest['slug'] ) && is_string( $manifest['slug'] ) ? ( string ) $manifest['slug'] : '' );
+
+        if ( '' === $name || array_key_exists( $name, $registry->federatedModules() ) ) {
+            return;
+        }
+
+        $exposes = ( isset( $module['exposes'] ) && is_array( $module['exposes'] ) )
+            ? array_values( array_filter( $module['exposes'], 'is_string' ) )
+            : [];
+
+        $this->registerFederatedModule( $name, $module['entry'], $exposes );
+    }
+
+    /**
+     * Bridge the manifest's `nav_entries` list.
+     *
+     * Skips entries missing the slug/label the validator requires, and any slug
+     * already present in the registry, so imperative registrations win. Each
+     * surviving entry passes through {@see registerNavEntry()}, which applies
+     * the same URL sanitization and normalization as a programmatic call.
+     *
+     * @since 2.10.0
+     *
+     * @param  array<string,mixed>  $manifest
+     */
+    protected function bridgeManifestNavEntries( array $manifest, PluginRegistry $registry ): void
+    {
+        $entries = $manifest['nav_entries'] ?? null;
+
+        if ( ! is_array( $entries ) ) {
+            return;
+        }
+
+        foreach ( $entries as $entry ) {
+            if ( ! is_array( $entry ) || empty( $entry['slug'] ) || empty( $entry['label'] ) ) {
+                continue;
+            }
+
+            if ( array_key_exists( ( string ) $entry['slug'], $registry->navEntries() ) ) {
+                continue;
+            }
+
+            $this->registerNavEntry( $entry );
+        }
     }
 
     /**

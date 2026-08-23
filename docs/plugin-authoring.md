@@ -70,15 +70,28 @@ A plugin's root directory MUST contain a `plugin.json` file:
     }
   },
   "migrations": "database/migrations",
-  "federated_modules": [
+  "nav_entries": [
     {
-      "name": "helloWorldAdmin",
-      "entry": "dist/remoteEntry.js",
-      "exposes": ["./HelloWorldPanel"]
+      "slug": "hello-world",
+      "label": "Hello World",
+      "url": "/admin/hello-world",
+      "icon": "fas.puzzle-piece",
+      "permission": "access_admin_dashboard",
+      "order": 60
     }
-  ]
+  ],
+  "federated_module": {
+    "entry": "dist/remoteEntry.js",
+    "exposes": ["./HelloWorldPanel"]
+  }
 }
 ```
+
+Declaring `nav_entries` and `federated_module` in the manifest is enough — the
+framework bridges them into the runtime `PluginRegistry` when your plugin loads,
+with no `register*()` call required. See
+[Registering nav entries](#registering-nav-entries) and
+[Federated React modules](#federated-react-modules).
 
 ### Required fields
 
@@ -99,10 +112,11 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | `license`           | string          | SPDX identifier ( `MIT`, `Apache-2.0`, etc. ). |
 | `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `conflicts`         | object          | Map of plugin slug to version constraint. Activation is refused when a matching plugin is installed. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
+| `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Resolved from Packagist on activation. See [Composer-package dependencies](#composer-package-dependencies). |
 | `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. |
 | `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
-| `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
-| `nav`               | array           | Static nav entries; equivalent to calling `registerNavEntry()` from your provider. |
+| `federated_module`  | object          | Single federated module descriptor `{ name?, entry, exposes? }`. Auto-registered on load. See [Federated React modules](#federated-react-modules). |
+| `nav_entries`       | array           | List of static nav entries `{ slug, label, url?, icon?, permission?, order?, ... }`. Auto-registered on load; equivalent to calling `registerNavEntry()` from your provider. |
 | `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
 | `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
 
@@ -226,21 +240,38 @@ $this->registerAdminPage( 'hello-world', [
 Host apps map the `component` identifier to a real React component through
 their Module Federation loader.
 
-A `component`-only admin page renders the framework-owned
-`cms::admin.layouts.federated` shell, which emits a mount point —
-`<div data-cms-federated-module="…"></div>` — inside the admin chrome for the
-host's Module Federation runtime to hydrate. It is never handed to
-`Route::get()` as a bare string (which Laravel rejects as an invalid route
-action; because admin routes register from a `booted()` callback, that once
-surfaced on *every* request, not just the plugin's own page, taking the whole
-application down). A page that declares neither a `view` nor a `component`
-responds `501` on its own route instead of breaking route registration.
+### The federated admin-page contract
 
-A federation host that mounts components its own way — a different mount
-element, a server-rendered island, an Inertia response — overrides the default
-through the `ap.cmsFramework.admin.federatedPageAction` filter, which receives
-the default route action, the component identifier and the page config, and
-returns its own route action:
+**The framework does not own the frontend and ships no Module Federation
+runtime.** It cannot resolve or hydrate a federated component itself — a host
+application must do that. `registerAdminPage( component: )` gives you a
+host-agnostic *mount contract*; the host holds the *hydration responsibility*.
+There are two supported ways a host can hydrate the mount:
+
+**1. Scan the Blade mount (host-agnostic).** A `component`-only admin page
+renders the framework-owned `cms::admin.layouts.federated` shell, which emits a
+single mount point inside the admin chrome:
+
+```html
+<div data-cms-federated-module="helloWorldAdmin/HelloWorldPanel">
+    <p class="cms-admin__federated-fallback" role="status">
+        This admin page loads the federated module "…", which the host
+        application must hydrate. …
+    </p>
+</div>
+```
+
+A host whose front end scans for `data-cms-federated-module` mounts the named
+module into that div, replacing the fallback notice. Until a host hydrates it,
+the fallback notice renders in place of a blank page — so an unconfigured host
+shows a clear "needs a host runtime" message rather than a **silent dead div**.
+
+**2. Bridge to the host's own runtime via the filter (Inertia and others).**
+A host that mounts components its own way — a different mount element, a
+server-rendered island, an Inertia page — overrides the default through the
+`ap.cmsFramework.admin.federatedPageAction` filter, which receives the default
+route action, the component identifier and the page config, and returns its own
+route action:
 
 ```php
 addFilter(
@@ -253,6 +284,25 @@ addFilter(
 
 Returning anything other than a closure falls back to the shipped shell.
 
+> **Inertia-based hosts (e.g. Keystone CMS).** Keystone's federation runtime is
+> Inertia-page-based: it resolves page names like `plugins/<remote>/<page>` from
+> a manifest built off the `ap.plugins.federatedModules` filter and mounts them
+> through the Inertia page resolver — it does **not** scan for the Blade mount
+> `data-cms-federated-module`. On such a host, ship your admin UI as an Inertia
+> page under the `plugins/<remote>/<page>` route (paired with a
+> [`federated_module`](#federated-react-modules) declaration so the host can
+> resolve the remote), and — if you also want `registerAdminPage( component: )`
+> to reach that page — bridge it with the filter above. Without the filter
+> override, `registerAdminPage( component: )` renders the fallback notice on an
+> Inertia host, because nothing hydrates the Blade mount there.
+
+The shell is never handed to `Route::get()` as a bare string (which Laravel
+rejects as an invalid route action; because admin routes register from a
+`booted()` callback, that once surfaced on *every* request, not just the
+plugin's own page, taking the whole application down). A page that declares
+neither a `view` nor a `component` responds `501` on its own route instead of
+breaking route registration.
+
 ## Registering nav entries
 
 `registerNavEntry()` writes an entry to the framework's `PluginRegistry`; the
@@ -260,9 +310,13 @@ host's admin shell reads it via the `ap.admin.menu` filter. Entries are
 identified by `slug` and are idempotent — repeated registrations from the same
 plugin ( e.g. under Octane workers ) overwrite instead of accumulating.
 
-You may alternatively pre-declare nav entries in `plugin.json` under `nav`.
-Programmatic registration is preferred when nav visibility depends on
-per-request state ( feature flags, tenant configuration, etc. ).
+You may alternatively pre-declare nav entries in `plugin.json` under
+`nav_entries`. The framework bridges each declared entry into the registry
+through the same `registerNavEntry()` path — including URL sanitization — when
+the plugin loads, so declaration alone is enough. Programmatic registration is
+preferred when nav visibility depends on per-request state ( feature flags,
+tenant configuration, etc. ), and always wins: a manifest entry is skipped when
+your provider has already registered the same `slug`.
 
 ## Migrations
 
@@ -373,13 +427,23 @@ The framework does not own the frontend, and does not ship a Module Federation
 runtime. Host apps ( e.g. Keystone CMS ) that support runtime-loaded React
 plugins consume federated modules the plugin has declared through:
 
-- **Manifest** — `federated_modules` array in `plugin.json`.
-- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )` in `boot()`.
+- **Manifest** — a `federated_module` object in `plugin.json`. The framework
+  auto-registers it on load, keyed by the descriptor's optional `name` (falling
+  back to the plugin slug). Declaration alone is enough.
+- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )`
+  in `boot()`. A programmatic registration wins: a manifest module is skipped
+  when the same name is already registered.
+
+Declaring a module makes it *resolvable* by the host; it does not, by itself,
+place it on a page. To surface a federated module as an admin page, pair the
+declaration with `registerAdminPage( component: )` and hydrate it per the
+[federated admin-page contract](#the-federated-admin-page-contract) — either the
+Blade mount or the filter bridge, depending on the host.
 
 An example Module Federation config, Vite build, and remoteEntry contract live
 in the Keystone CMS docs. See
 [`examples/hello-world-plugin/`](../examples/hello-world-plugin/) for a stub
-that pairs a Blade admin page with a `federated_modules` declaration that
+that pairs a Blade admin page with a `federated_module` declaration that
 Keystone can consume.
 
 ## Versioning & host compatibility
@@ -449,6 +513,74 @@ The same data is exposed over HTTP: `GET /api/v1/plugins/{slug}/dependencies`,
 `GET /api/v1/plugins/{slug}/dependents`, and
 `POST /api/v1/plugins/check-dependencies` (body `{ "plugins": [ "a", "b" ] }`),
 which returns a resolved activation `order` alongside per-plugin status.
+
+## Composer-package dependencies
+
+A plugin can depend on a real Packagist package instead of vendoring it inside
+the ZIP. Declare the requirement in a `composer` block — Composer package name
+to semver constraint:
+
+```json
+{
+    "slug": "convertkit",
+    "name": "ConvertKit",
+    "version": "1.0.0",
+    "service_provider": "ConvertKit\\ConvertKitServiceProvider",
+    "composer": {
+        "artisanpack-ui/convertkit": "^1.2"
+    }
+}
+```
+
+This is the sibling of `requires.plugins` (plugin→plugin): `requires` resolves
+*other plugins* by slug, while `composer` resolves *Packagist packages* and can
+bring their vendor tree into the host. Keys are validated as Composer package
+names (`vendor/package`), and each constraint must be a **bounded, stable**
+semver range: a bare `*`, a `@dev` stability flag, a `dev-<branch>` reference, or
+a lower-bound-only range (`>=1.0`, `>1.0`) is rejected at validation time, since
+an auto-installed dependency must not pull the newest, an arbitrary branch's, or
+a future major's code at activation. Bounded ranges — `^1.2`, `~2.0`,
+`>=1.0 <2.0`, and bounded wildcards such as `1.2.*` — are fine. The `composer`
+block is re-validated at activation, not only at install/update, so a
+requirement that reached the row unvalidated still fails closed. A plugin also
+may not name a package the host itself requires in its root `composer.json` — it
+may bring in new packages, but never change the version of one the host owns.
+
+**When it runs.** On activation, before the service provider boots, the
+framework resolves the `composer` block against the host's installed packages
+(reusing `composer/semver`). Requirements already satisfied are left untouched.
+
+**Installing.** When a requirement is unmet and
+`cms.plugins.autoInstallComposerDependencies` is `true`, the framework runs
+`composer require <package>:<constraint>` in the host root, so the dependency is
+added to the host's `composer.json` / `composer.lock` and survives a fresh
+deploy. The freshly installed package's PSR-4 prefixes are registered on the
+running class loader so its classes are autoloadable when the plugin boots in
+that same request. Composer itself arbitrates any conflict with the host's
+existing lock. **This is off by default** (`false`): auto-install fetches and
+boots arbitrary third-party Packagist code (its service provider via
+`package:discover`, and any eager `autoload.files`) in the host process, so it
+is opt-in and every declared install is logged. Enable it only where you trust
+every installed plugin's declared dependencies.
+
+**Failing closed.** Resolution never half-activates a plugin. If a requirement
+is unmet and auto-install is disabled (the default), or an install cannot
+complete — Packagist unreachable, a `composer.lock` conflict, or a missing
+`composer` binary — activation raises `ComposerDependencyNotSatisfiedException`
+and the activation
+transaction unwinds. Over HTTP the activate endpoint returns `409` with code
+`plugin_composer_dependencies_unsatisfied`. On the update flow the same failure
+restores the previous version through the backup-restore path.
+
+**Deactivation & removal.** Packages a plugin brought in are **left in place**
+on deactivate and delete. They are never auto-removed: the host or another
+plugin may share the same package, and Composer offers no safe ref-counted
+uninstall here. Remove an unwanted package with `composer remove` yourself.
+
+**Hardened hosts.** Set `PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES=false` to
+forbid runtime Composer installs; activation then requires the operator to have
+installed the declared packages ahead of time. `PLUGINS_COMPOSER_BINARY`
+overrides the resolved `composer` command for sandboxed PHP-FPM pools.
 
 ## Shipping updates
 
