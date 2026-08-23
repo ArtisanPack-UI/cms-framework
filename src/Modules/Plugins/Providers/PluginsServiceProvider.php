@@ -5,9 +5,11 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Console\Commands\SyncPluginsCommand;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginRegistry;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ProcessComposerPackageInstaller;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Schema;
@@ -17,6 +19,14 @@ class PluginsServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Resolver for a plugin's Composer-package dependencies (#323). Bound
+        // to the interface so a test — or a host with a bespoke install
+        // strategy — can swap the shell-out installer for its own.
+        $this->app->bind(
+            ComposerPackageInstallerInterface::class,
+            ProcessComposerPackageInstaller::class,
+        );
+
         // Register PluginManager as singleton
         $this->app->singleton( PluginManager::class, function ( $app ) {
             return new PluginManager;

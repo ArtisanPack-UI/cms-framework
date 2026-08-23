@@ -99,6 +99,7 @@ A plugin's root directory MUST contain a `plugin.json` file:
 | `license`           | string          | SPDX identifier ( `MIT`, `Apache-2.0`, etc. ). |
 | `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `conflicts`         | object          | Map of plugin slug to version constraint. Activation is refused when a matching plugin is installed. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
+| `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Resolved from Packagist on activation. See [Composer-package dependencies](#composer-package-dependencies). |
 | `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. |
 | `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
 | `federated_modules` | array           | See [Federated React modules](#federated-react-modules). |
@@ -449,6 +450,61 @@ The same data is exposed over HTTP: `GET /api/v1/plugins/{slug}/dependencies`,
 `GET /api/v1/plugins/{slug}/dependents`, and
 `POST /api/v1/plugins/check-dependencies` (body `{ "plugins": [ "a", "b" ] }`),
 which returns a resolved activation `order` alongside per-plugin status.
+
+## Composer-package dependencies
+
+A plugin can depend on a real Packagist package instead of vendoring it inside
+the ZIP. Declare the requirement in a `composer` block — Composer package name
+to semver constraint:
+
+```json
+{
+    "slug": "convertkit",
+    "name": "ConvertKit",
+    "version": "1.0.0",
+    "service_provider": "ConvertKit\\ConvertKitServiceProvider",
+    "composer": {
+        "artisanpack-ui/convertkit": "^1.2"
+    }
+}
+```
+
+This is the sibling of `requires.plugins` (plugin→plugin): `requires` resolves
+*other plugins* by slug, while `composer` resolves *Packagist packages* and can
+bring their vendor tree into the host. Keys are validated as Composer package
+names (`vendor/package`); the same constraint rigor as the other manifest maps
+applies.
+
+**When it runs.** On activation, before the service provider boots, the
+framework resolves the `composer` block against the host's installed packages
+(reusing `composer/semver`). Requirements already satisfied are left untouched.
+
+**Installing.** When a requirement is unmet and
+`cms.plugins.autoInstallComposerDependencies` is `true` (the default), the
+framework runs `composer require <package>:<constraint>` in the host root, so
+the dependency is added to the host's `composer.json` / `composer.lock` and
+survives a fresh deploy. The freshly installed package's PSR-4 prefixes are
+registered on the running class loader so its classes are autoloadable when the
+plugin boots in that same request. Composer itself arbitrates any conflict with
+the host's existing lock.
+
+**Failing closed.** Resolution never half-activates a plugin. If a requirement
+is unmet and auto-install is disabled, or an install cannot complete — Packagist
+unreachable, a `composer.lock` conflict, or a missing `composer` binary —
+activation raises `ComposerDependencyNotSatisfiedException` and the activation
+transaction unwinds. Over HTTP the activate endpoint returns `409` with code
+`plugin_composer_dependencies_unsatisfied`. On the update flow the same failure
+restores the previous version through the backup-restore path.
+
+**Deactivation & removal.** Packages a plugin brought in are **left in place**
+on deactivate and delete. They are never auto-removed: the host or another
+plugin may share the same package, and Composer offers no safe ref-counted
+uninstall here. Remove an unwanted package with `composer remove` yourself.
+
+**Hardened hosts.** Set `PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES=false` to
+forbid runtime Composer installs; activation then requires the operator to have
+installed the declared packages ahead of time. `PLUGINS_COMPOSER_BINARY`
+overrides the resolved `composer` command for sandboxed PHP-FPM pools.
 
 ## Shipping updates
 

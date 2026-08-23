@@ -149,6 +149,16 @@ class Plugin extends Model
     }
 
     /**
+     * Composer packages declared under the manifest `composer` block (#323).
+     *
+     * @return array<string,string> Map of Composer package name to version constraint.
+     */
+    public function getRequiredComposerPackagesAttribute(): array
+    {
+        return $this->normalizeConstraintMap( $this->meta['composer'] ?? [] );
+    }
+
+    /**
      * Reduce a raw manifest constraint map to string-keyed, string-valued
      * entries so downstream resolution never trips over malformed input.
      *
