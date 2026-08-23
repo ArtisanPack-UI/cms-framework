@@ -378,6 +378,45 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Post-Update Tree Reconciliation
+    |--------------------------------------------------------------------------
+    |
+    | Extraction writes the new release *on top of* the live tree: it adds and
+    | overwrites, but it can never delete. Two kinds of stale file therefore
+    | accumulate that only a deliberate pass can reconcile after a successful
+    | update.
+    |
+    | `purge_stale_build_assets`: every release ships fresh hashed files under
+    | `public/build`, but the previous build's hashed files are never removed, so
+    | `public/build/assets` grows without bound across updates ( one real install
+    | held 541 JS files spanning four releases ). With this enabled, a completed
+    | update deletes any file under `build_path` the current `manifest.json` does
+    | not reference. The manifest is the whitelist: if it cannot be read, nothing
+    | is purged. Set to `false` to leave every build file in place.
+    |
+    | `build_path`: the Vite build directory to purge, relative to `base_path()`.
+    | Override only if the host builds assets somewhere other than `public/build`.
+    |
+    | `honor_removed_paths_manifest`: a release that *removes* a file upstream
+    | ( e.g. crossing a monolithic-`app/` → modular-`Modules/` restructure ) leaves
+    | the removed file orphaned on the host, where the autoloader can still pick up
+    | stale classes. A release may declare those deletions in a manifest — a JSON
+    | array of repo-relative paths — that the updater applies after a successful
+    | update. Every deletion is guarded like extraction: the path must stay under
+    | `base_path()`, `exclude_from_update` still protects it, and symlinks are
+    | never followed. Set to `false` to ignore the manifest.
+    |
+    | `removed_paths_manifest`: where that manifest lives, relative to
+    | `base_path()`. Absent or malformed manifests are simply a no-op.
+    |
+    */
+    'purge_stale_build_assets'     => env( 'CMS_UPDATES_PURGE_STALE_BUILD_ASSETS', true ),
+    'build_path'                   => 'public/build',
+    'honor_removed_paths_manifest' => env( 'CMS_UPDATES_HONOR_REMOVED_PATHS', true ),
+    'removed_paths_manifest'       => '.artisanpack/removed-paths.json',
+
+    /*
+    |--------------------------------------------------------------------------
     | Cache Settings
     |--------------------------------------------------------------------------
     |
