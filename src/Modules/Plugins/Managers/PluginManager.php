@@ -383,28 +383,34 @@ class PluginManager
         $serviceProviderStarted = false;
 
         try {
-            DB::transaction( function () use (
-                $plugin,
-                &$priorPsr4,
-                &$migrationsAttempted,
-                &$serviceProviderStarted,
-            ): void {
-                if ( isset( $plugin->meta['autoload'] ) ) {
-                    // Snapshot the PSR-4 map BEFORE adding, so rollback can
-                    // restore prior paths for shared namespaces instead of
-                    // wiping them with setPsr4($ns, []).
-                    $priorPsr4 = $this->snapshotPsr4( $plugin->meta['autoload']['psr-4'] ?? [] );
-                    $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
-                }
+            if ( isset( $plugin->meta['autoload'] ) ) {
+                // Snapshot the PSR-4 map BEFORE adding, so rollback can
+                // restore prior paths for shared namespaces instead of
+                // wiping them with setPsr4($ns, []). Registering the
+                // autoloader is an in-memory ClassLoader change, never a DB
+                // write, so it sits outside the transaction.
+                $priorPsr4 = $this->snapshotPsr4( $plugin->meta['autoload']['psr-4'] ?? [] );
+                $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
+            }
 
-                if ( isset( $plugin->meta['migrations_path'] ) ) {
-                    // Flip BEFORE the Artisan call so a mid-migration failure
-                    // (DDL auto-commits in MySQL/MariaDB) still triggers a
-                    // rollback attempt in the catch block.
-                    $migrationsAttempted = true;
-                    $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
-                }
+            if ( isset( $plugin->meta['migrations_path'] ) ) {
+                // Run migrations OUTSIDE the transaction below. A plugin's
+                // CREATE TABLE implicitly commits the open transaction on
+                // MySQL/MariaDB, so wrapping migrations would leave the
+                // transaction's own commit() with nothing to commit —
+                // throwing "There is no active transaction" after the table
+                // was already created (#333). DDL was never atomic there in
+                // the first place; migration rollback is handled explicitly
+                // in the catch via $migrationsAttempted. Flip the flag BEFORE
+                // the Artisan call so a mid-migration failure still triggers
+                // that rollback.
+                $migrationsAttempted = true;
+                $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+            }
 
+            // Only the genuinely transactional DB writes stay wrapped: the
+            // permission seed and the is_active flip.
+            DB::transaction( function () use ( $plugin, &$serviceProviderStarted ): void {
                 if ( $plugin->hasServiceProvider() ) {
                     $provider = app()->register( $plugin->service_provider );
                     $this->bridgeManifestRegistrations( $provider );
