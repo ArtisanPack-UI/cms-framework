@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.10.1] - 2026-08-29
+
+### Fixed
+
+- **Plugin activation no longer throws `There is no active transaction` on MySQL/MariaDB** ([#333](https://github.com/ArtisanPack-UI/cms-framework/issues/333)) — `PluginManager::activate()` ran the plugin's migrations inside a `DB::transaction()`. On MySQL/MariaDB a plugin migration's `CREATE TABLE` triggers an implicit commit, ending that transaction, so when the wrapper then calls `commit()` PDO throws `There is no active transaction` — after the table was already created, leaving a half-applied activation. (SQLite has transactional DDL, so the path was never tripped by the suite.) The in-memory autoloader registration and the DDL migrations now run **before** the transaction, which wraps only the genuinely transactional writes (permission seeding and the `is_active` flip). Rollback semantics are unchanged: the PSR-4 snapshot and `migrationsAttempted` still drive `rollbackFailedActivation()`, which already rolled migrations back itself.
+
 ## [2.10.0] - 2026-08-23
 
 ### Added
