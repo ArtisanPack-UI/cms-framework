@@ -343,10 +343,11 @@ class PluginManager
      * Process:
      * 1. Find plugin in database
      * 2. Register PSR-4 autoloader
-     * 3. Run migrations (if any)
+     * 3. Run plugin's own `migrations_path` migrations (if any)
      * 4. Register service provider
      * 5. Update database (is_active = true)
-     * 6. Fire activation hooks
+     * 6. Run migrations shipped by Composer packages installed this activation (#338)
+     * 7. Fire activation hooks
      *
      * @param  string  $slug  Plugin slug
      *
@@ -374,7 +375,10 @@ class PluginManager
         // PSR-4 prefixes so the classes are autoloadable before the plugin's
         // service provider boots below. Runs before any state mutation so a
         // failed resolution fails closed without a half-activated plugin.
-        $this->ensureComposerDependencies( $plugin );
+        // Returns true when packages were freshly installed this request, so
+        // the caller can run migrations the packages ship after the plugin's
+        // service provider has booted (and registered them) — see #338.
+        $composerPackagesInstalled = $this->ensureComposerDependencies( $plugin );
 
         doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
@@ -422,6 +426,19 @@ class PluginManager
                 $plugin->is_active = true;
                 $plugin->save();
             } );
+
+            // Run migrations that Composer packages installed this activation
+            // ship (#338). The plugin's own migrations already ran above at
+            // the --path-scoped step; this catches migrations a just-installed
+            // vendor package registers through its service provider's
+            // `loadMigrationsFrom()`. Runs AFTER the plugin's service provider
+            // is registered above so the package provider — which the plugin
+            // provider typically pulls in — has already announced its
+            // migration paths to the migrator. Idempotent by filename, so
+            // migrations already applied are skipped.
+            if ( $composerPackagesInstalled ) {
+                $this->runComposerPackageMigrations( $plugin );
+            }
         } catch ( Throwable $e ) {
             // Roll back any partial activation state (#182).
             $this->rollbackFailedActivation( $plugin, $priorPsr4, $migrationsAttempted );
@@ -1693,12 +1710,18 @@ class PluginManager
      * @since 2.10.0
      *
      * @throws ComposerDependencyNotSatisfiedException When requirements cannot be satisfied.
+     *
+     * @return bool True when at least one package was freshly installed this
+     *              request. False when the manifest declared none, or every
+     *              declared package was already installed in range. The caller
+     *              uses it to decide whether to run migrations packages
+     *              register through their own service providers (#338).
      */
-    protected function ensureComposerDependencies( Plugin $plugin ): void
+    protected function ensureComposerDependencies( Plugin $plugin ): bool
     {
         $requirements = $plugin->required_composer_packages;
         if ( empty( $requirements ) ) {
-            return;
+            return false;
         }
 
         // Re-validate the persisted requirements before they reach the resolver
@@ -1724,9 +1747,11 @@ class PluginManager
 
         // Already satisfied: the packages were installed in a prior request, so
         // the host autoloader that booted this process already knows them — no
-        // install and no in-request autoload seating needed.
+        // install and no in-request autoload seating needed. Migrations those
+        // packages ship also ran on an earlier activation (or a prior deploy),
+        // so return false to keep the post-activation migrate a no-op.
         if ( $result->isSatisfied() ) {
-            return;
+            return false;
         }
 
         if ( ! config( 'cms.plugins.autoInstallComposerDependencies', false ) ) {
@@ -1771,6 +1796,39 @@ class PluginManager
         // Packages were just installed this request; seat the regenerated
         // autoload maps so their classes are usable before the provider boots.
         $this->registerComposerPackageAutoloaders();
+
+        return true;
+    }
+
+    /**
+     * Run migrations that Composer packages installed this activation ship
+     * (#338).
+     *
+     * `activate()` runs the plugin's own `--path`-scoped migrations up front,
+     * but a plugin's declared Composer package can register migrations of its
+     * own through its service provider (`loadMigrationsFrom(__DIR__ . '/../
+     * database/migrations')`). Without this step the package's tables are
+     * never created at activation time, and the first request that hits a
+     * package model 500s with `Base table or view not found` until an
+     * operator runs `php artisan migrate` by hand.
+     *
+     * An unscoped `migrate --force` is idempotent by filename against the
+     * `migrations` table, so every already-applied migration — the framework's,
+     * the host's, the plugin's own migrations already run above — is skipped
+     * and only the newly registered package migrations are applied. Runs at
+     * the pre-activation transaction nesting level (same as
+     * {@see runMigrations()}) so its DDL cannot implicitly commit an open
+     * outer transaction on MySQL/MariaDB (#333).
+     *
+     * @since 2.11.0
+     *
+     * @param  Plugin  $plugin  The plugin being activated (for logging context).
+     */
+    protected function runComposerPackageMigrations( Plugin $plugin ): void
+    {
+        Artisan::call( 'migrate', [
+            '--force' => true,
+        ] );
     }
 
     /**
