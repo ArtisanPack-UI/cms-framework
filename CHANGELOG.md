@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`NotificationPolicy` no longer denies every user the ability to create or delete notifications** ([#332](https://github.com/ArtisanPack-UI/cms-framework/issues/332)) — `create()` and `delete()` gated on `method_exists( $user, 'hasCapability' )`, but cms-framework's user model composes `HasRolesAndPermissions` (rbac's `HasPermissions`), whose public surface is `hasPermissionTo()`/`hasPermission()` and which never defines `hasCapability()`. On a stock host `method_exists()` was always `false`, so `notifications.manage` could never take effect no matter which role held it. Both methods now resolve the capability through a shared `userHasCapability()` helper that probes `hasCapability` → `hasPermissionTo` → `hasPermission` in priority order, each guarded with `method_exists()`, so the first contract the host model exposes decides — while still degrading to a plain denial (not a fatal) on a user model that composes no RBAC trait. This mirrors the `FontPolicy` fix in `artisanpack-ui/visual-editor` #733.
+
 ## [2.10.1] - 2026-08-29
 
 ### Fixed
