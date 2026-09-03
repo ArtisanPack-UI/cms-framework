@@ -3476,6 +3476,19 @@ class ApplicationUpdateManagerTest extends TestCase
             'A failure before Extract must skip rollback entirely, drop compiled caches, and lift maintenance mode.',
         );
 
+        // Also assert the persisted `rolled_back` state. The event list only
+        // proves the rollback hooks were skipped; without this, a regression
+        // that swapped `markRollback( null )` for `markRollback( false )`
+        // would still pass while `update:status` reported `rolled_back: false`
+        // — the exact operator-facing symptom #336 exists to remove.
+        $persisted = $manager->updateState();
+        $this->assertIsArray( $persisted, 'The update state must be persisted.' );
+        $this->assertArrayHasKey( 'rolled_back', $persisted );
+        $this->assertNull(
+            $persisted['rolled_back'],
+            'A pre-Extract failure must persist rolled_back as null (not-applicable), never false.',
+        );
+
         @unlink( $backup );
     }
 
