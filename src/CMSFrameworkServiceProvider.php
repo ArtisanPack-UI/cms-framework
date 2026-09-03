@@ -311,31 +311,6 @@ class CMSFrameworkServiceProvider extends ServiceProvider
     }
 
     /**
-     * The enabled state of every cms.* AI feature.
-     *
-     * The single source both trigger surfaces read — {@see Http\Controllers\Ai\AiController::features()}
-     * and {@see AiTools::enabledFeatures()}
-     * — so the toggle-resolution loop is spelled once.
-     *
-     * @since 2.8.0
-     *
-     * @return array<string, bool> Feature key to enabled flag.
-     */
-    public static function aiFeatureStateMap(): array
-    {
-        /** @var FeatureRegistry $registry */
-        $registry = app( FeatureRegistry::class );
-
-        $state = [];
-
-        foreach ( self::AI_FEATURE_KEYS as $key ) {
-            $state[ $key ] = null !== $registry->get( $key ) && $registry->isToggleOn( $key );
-        }
-
-        return $state;
-    }
-
-    /**
      * Registers the CMS AI trigger surfaces (Livewire component +
      * `/api/v1/cms/ai/*` REST endpoints).
      *
