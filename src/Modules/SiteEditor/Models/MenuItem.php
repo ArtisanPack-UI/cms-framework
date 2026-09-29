@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $object_type
  * @property int|null $object_id
  * @property string|null $kind
+ * @property array<string, mixed>|null $block_attributes Navigation-block attributes with no dedicated column (since 2.11.0).
  * @property Carbon $created_at
  * @property Carbon $updated_at
  */
@@ -94,6 +95,7 @@ class MenuItem extends Model
         'object_type',
         'object_id',
         'kind',
+        'block_attributes',
     ];
 
     /**
@@ -131,8 +133,9 @@ class MenuItem extends Model
     protected function casts(): array
     {
         return [
-            'position'  => 'integer',
-            'object_id' => 'integer',
+            'position'         => 'integer',
+            'object_id'        => 'integer',
+            'block_attributes' => 'array',
         ];
     }
 

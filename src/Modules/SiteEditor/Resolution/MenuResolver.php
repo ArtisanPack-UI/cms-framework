@@ -180,19 +180,20 @@ class MenuResolver
     protected function itemToShape( MenuItem $item, array $byParent ): array
     {
         $shape = [
-            'id'          => (int) $item->id,
-            'type'        => $item->type,
-            'label'       => $item->label,
-            'url'         => $item->url,
-            'target'      => $item->target,
-            'rel'         => $item->rel,
-            'classes'     => $item->classes,
-            'description' => $item->description,
-            'object_type' => $item->object_type,
-            'object_id'   => null !== $item->object_id ? (int) $item->object_id : null,
-            'kind'        => $item->kind,
-            'parent_id'   => null !== $item->parent_id ? (int) $item->parent_id : null,
-            'position'    => (int) $item->position,
+            'id'               => (int) $item->id,
+            'type'             => $item->type,
+            'label'            => $item->label,
+            'url'              => $item->url,
+            'target'           => $item->target,
+            'rel'              => $item->rel,
+            'classes'          => $item->classes,
+            'description'      => $item->description,
+            'object_type'      => $item->object_type,
+            'object_id'        => null !== $item->object_id ? (int) $item->object_id : null,
+            'kind'             => $item->kind,
+            'block_attributes' => $item->block_attributes,
+            'parent_id'        => null !== $item->parent_id ? (int) $item->parent_id : null,
+            'position'         => (int) $item->position,
         ];
 
         if ( MenuItem::TYPE_SUBMENU === $item->type ) {
