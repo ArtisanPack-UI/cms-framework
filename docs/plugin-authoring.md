@@ -563,6 +563,12 @@ boots arbitrary third-party Packagist code (its service provider via
 is opt-in and every declared install is logged. Enable it only where you trust
 every installed plugin's declared dependencies.
 
+**Package migrations (2.11.0).** When activation freshly installs a package that
+registers its own migrations (`loadMigrationsFrom()` in its service provider),
+the framework runs `migrate --force` after the plugin's service provider
+registers, so the package's tables exist before first use. A migration failure
+fails the activation and rolls it back.
+
 **Failing closed.** Resolution never half-activates a plugin. If a requirement
 is unmet and auto-install is disabled (the default), or an install cannot
 complete — Packagist unreachable, a `composer.lock` conflict, or a missing

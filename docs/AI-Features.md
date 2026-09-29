@@ -29,7 +29,7 @@ The canonical list is exposed as `CMSFrameworkServiceProvider::AI_FEATURE_KEYS` 
 The AI foundation is a soft dependency, declared in `composer.json` under `suggest` and `require-dev`. To unlock the AI features in a host application:
 
 ```bash
-composer require artisanpack-ui/ai:^1.0
+composer require artisanpack-ui/ai:^1.2
 ```
 
 Without it, `aiFeatures()` returns and the AI Livewire component + REST routes stay unregistered — the framework still boots normally.
