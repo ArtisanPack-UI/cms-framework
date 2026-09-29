@@ -3766,6 +3766,31 @@ class ApplicationUpdateManager
             return;
         }
 
+        // Skip the rollback when the failure happened before `Extract` ever
+        // ran. Steps 1-4 (`EnableMaintenanceMode`, `Backup`, `Download`,
+        // `VerifyChecksum`) do not touch `base_path()` — they enable
+        // maintenance mode, write a backup ZIP under `storage/`, and pull the
+        // release archive to a temp file. A snapshot restore therefore has
+        // nothing to undo, and when the restore itself trips (a truncated
+        // backup, a `ZipArchive::extractTo()` that returns false partway) it
+        // manufactures a scary `Rollback failed … Manual intervention
+        // required` error over a completely clean tree — exactly what #336
+        // reports for a `VerifyChecksum` refusal on a source that did not
+        // advertise a SHA-256 checksum. Treat this the same as "no snapshot
+        // to restore": drop compiled caches, mark rollback as N/A, and let
+        // the lift policy govern maintenance mode. The tree is untouched, so
+        // step-aware will lift; the operator sees the original refusal
+        // unadorned.
+        if ( null !== $this->currentStep && $this->currentStep->number() < UpdateStep::Extract->number() ) {
+            $this->clearCompiledCachesAfterFailure();
+
+            $this->state()->markRollback( null );
+
+            $this->liftMaintenanceModeAfterFailure( 'the update failure handler', $this->currentStep );
+
+            return;
+        }
+
         // If we have a backup, attempt rollback
         if ( $this->backupPath && File::exists( $this->backupPath ) ) {
             try {

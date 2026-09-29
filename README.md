@@ -323,10 +323,10 @@ Error responses use consistent status codes: `403 feature_disabled`, `422 invali
 
 ### Requirements
 
-The AI features require `artisanpack-ui/ai ^1.0`. It's declared as a `suggest` in `composer.json` — install it explicitly to opt in:
+The AI features require `artisanpack-ui/ai ^1.2`. It's declared as a `suggest` in `composer.json` — install it explicitly to opt in:
 
 ```bash
-composer require artisanpack-ui/ai:^1.0
+composer require artisanpack-ui/ai:^1.2
 ```
 
 Without it, the agents, the Livewire component, and the REST endpoints stay unregistered — the framework boots normally.

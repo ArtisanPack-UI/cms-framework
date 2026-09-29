@@ -212,6 +212,8 @@ When an update fails, the framework rolls back to the pre-update backup. Two beh
 
 - **When rollback itself fails, the resulting exception preserves the original update-failure message.** You'll see both `Rollback failed: {rollback error}. Original update error: {original error}. Manual intervention required.` — no more losing the actual first-error text.
 
+- **A failure before extraction does not attempt a rollback (2.11.0).** The steps before `Extract` — maintenance mode, backup, download, and checksum verification — never write to the application tree, so `handleUpdateFailure()` skips the snapshot restore, marks rollback as not applicable (`rolled_back` is `null`), and surfaces the original error. A benign refusal such as a missing checksum is no longer reported as `Rollback failed … Manual intervention required`.
+
 ## Extraction safety
 
 `ApplicationUpdateManager::extractUpdate()` streams each ZIP entry via `fopen()`/`fwrite()` (rather than `ZipArchive::extractTo()`) so a single large file can't OOM mid-extraction. Two guards keep that path safe:

@@ -3309,7 +3309,7 @@ class ApplicationUpdateManagerTest extends TestCase
      */
     public function test_caught_failure_rolls_back_before_lifting_maintenance(): void
     {
-        config()->set( 'cms.updates.lift_maintenance_on_interrupt', 'always' );
+        config()->set( 'cms.updates.lift_maintenance_on_interrupt', true );
 
         $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-h1-' );
         file_put_contents( $backup, 'stub' );
@@ -3321,7 +3321,11 @@ class ApplicationUpdateManagerTest extends TestCase
             public function __construct( string $backupPath )
             {
                 $this->backupPath  = $backupPath;
-                $this->currentStep = UpdateStep::VerifyChecksum;
+                // Extract is the first step that actually mutates base_path(),
+                // so it is the earliest step for which a snapshot restore is
+                // meaningful; steps before Extract skip rollback entirely
+                // ( #336 ).
+                $this->currentStep = UpdateStep::Extract;
             }
 
             public function callHandleFailure( Throwable $e ): void
@@ -3406,6 +3410,83 @@ class ApplicationUpdateManagerTest extends TestCase
             ['rollback'],
             $manager->events,
             'A step_aware policy must keep the site down after a failure on a half-applied step, even once the snapshot is restored.',
+        );
+
+        @unlink( $backup );
+    }
+
+    /**
+     * #336: a failure before `Extract` ever ran must skip the snapshot restore
+     * entirely. Steps 1-4 do not touch `base_path()`, so a rollback there has
+     * nothing to undo — and a failed rollback (a truncated backup, a
+     * `ZipArchive::extractTo()` short return) would manufacture a critical
+     * "Manual intervention required" error over a completely clean tree,
+     * turning a benign checksum refusal into a scary rollback failure.
+     *
+     * @since 2.11.0
+     */
+    public function test_failure_before_extract_skips_rollback_and_lifts_maintenance(): void
+    {
+        config()->set( 'cms.updates.lift_maintenance_on_interrupt', 'step_aware' );
+
+        $backup = (string) tempnam( sys_get_temp_dir(), 'cmsfw-336-' );
+        file_put_contents( $backup, 'stub' );
+
+        $manager = new class( $backup ) extends ApplicationUpdateManager {
+            /** @var array<int, string> */
+            public array $events = [];
+
+            public function __construct( string $backupPath )
+            {
+                $this->backupPath  = $backupPath;
+                $this->currentStep = UpdateStep::VerifyChecksum;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            public function rollback( string $backupPath ): void
+            {
+                $this->events[] = 'rollback';
+            }
+
+            protected function removeExtractionAdditions(): void
+            {
+                $this->events[] = 'remove-additions';
+            }
+
+            protected function clearCompiledCachesAfterFailure(): void
+            {
+                $this->events[] = 'clear-caches';
+            }
+
+            protected function disableMaintenanceMode(): void
+            {
+                $this->events[] = 'lift';
+            }
+        };
+
+        $manager->callHandleFailure( UpdateException::checksumRequired( '2.1.0' ) );
+
+        $this->assertSame(
+            ['clear-caches', 'lift'],
+            $manager->events,
+            'A failure before Extract must skip rollback entirely, drop compiled caches, and lift maintenance mode.',
+        );
+
+        // Also assert the persisted `rolled_back` state. The event list only
+        // proves the rollback hooks were skipped; without this, a regression
+        // that swapped `markRollback( null )` for `markRollback( false )`
+        // would still pass while `update:status` reported `rolled_back: false`
+        // — the exact operator-facing symptom #336 exists to remove.
+        $persisted = $manager->updateState();
+        $this->assertIsArray( $persisted, 'The update state must be persisted.' );
+        $this->assertArrayHasKey( 'rolled_back', $persisted );
+        $this->assertNull(
+            $persisted['rolled_back'],
+            'A pre-Extract failure must persist rolled_back as null (not-applicable), never false.',
         );
 
         @unlink( $backup );

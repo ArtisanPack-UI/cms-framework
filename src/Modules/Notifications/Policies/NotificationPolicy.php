@@ -56,11 +56,8 @@ class NotificationPolicy
      */
     public function create( $user ): bool
     {
-        // Only users with notification management capability can create. Guard
-        // `hasCapability()` so the globally registered policy degrades to a plain
-        // denial on host user models that do not compose the RBAC trait, rather
-        // than fataling with "Call to undefined method".
-        return method_exists( $user, 'hasCapability' ) && $user->hasCapability( 'notifications.manage' );
+        // Only users with notification management capability can create.
+        return $this->userHasCapability( $user, 'notifications.manage' );
     }
 
     /**
@@ -86,10 +83,34 @@ class NotificationPolicy
      */
     public function delete( $user, Notification $notification ): bool
     {
-        // Only users with notification management capability can delete. Guard
-        // `hasCapability()` so the globally registered policy degrades to a plain
-        // denial on host user models that do not compose the RBAC trait, rather
-        // than fataling with "Call to undefined method".
-        return method_exists( $user, 'hasCapability' ) && $user->hasCapability( 'notifications.manage' );
+        // Only users with notification management capability can delete.
+        return $this->userHasCapability( $user, 'notifications.manage' );
+    }
+
+    /**
+     * Resolve the capability against whichever RBAC contract the host user
+     * model exposes.
+     *
+     * The candidate methods are probed in priority order — the WordPress-style
+     * `hasCapability()` first, then the rbac `hasPermissionTo()` and its
+     * `hasPermission()` alias, which is what cms-framework's users actually
+     * expose. Each candidate is guarded with `method_exists()` first, and the
+     * first one the model defines decides the outcome, so a host model that
+     * composes none of them degrades to a plain denial instead of fataling with
+     * "Call to undefined method".
+     *
+     * @since 2.11.0
+     *
+     * @param  mixed  $user
+     */
+    protected function userHasCapability( $user, string $capability ): bool
+    {
+        foreach ( ['hasCapability', 'hasPermissionTo', 'hasPermission'] as $method ) {
+            if ( method_exists( $user, $method ) ) {
+                return (bool) $user->{$method}( $capability );
+            }
+        }
+
+        return false;
     }
 }

@@ -13,7 +13,7 @@ The Menus module introduces navigation menus and the locations API. Unlike templ
 DB tables:
 
 - `menus` — `id`, `theme`, `slug`, `name`, `description`, `auto_add_pages`, `author_id`, timestamps. Unique constraint on `(theme, slug)`.
-- `menu_items` — `id`, `menu_id` (FK), `parent_id` (nullable, self-FK), `position`, `type` (`link` / `submenu` / `page-list`), `label`, `url`, `target`, `rel`, `classes`, `description`, `object_type`, `object_id`, `kind`, timestamps.
+- `menu_items` — `id`, `menu_id` (FK), `parent_id` (nullable, self-FK), `position`, `type` (`link` / `submenu` / `page-list`), `label`, `url`, `target`, `rel`, `classes`, `description`, `object_type`, `object_id`, `kind`, `block_attributes` (nullable JSON, since 2.11.0 — navigation-block attributes that have no dedicated column, such as visual-editor block visibility or bindings; cast to an array on `MenuItem`), timestamps.
 - `menu_location_assignments` — `id`, `theme`, `location`, `menu_id` (FK), timestamps. Unique constraint on `(theme, location)`.
 
 A separate `menu_location_assignments` table (rather than a `location` column on `menus`) lets one menu satisfy multiple locations and keeps location keys theme-scoped — switching themes leaves a menu unassigned without orphaning the menu itself.
@@ -105,7 +105,7 @@ Mirrors WP `/wp/v2/menu-items`. Note that `type` carries the WP-side vocabulary 
 
 `MenuResolver::all()` powers the `ap.visual-editor.navigation` filter. It returns `array<string, ResolvedMenu>` keyed by location key. Locations the active theme declares but no menu is assigned to still appear with `wp_id => null` and an empty `items` array, so editor surfaces can render empty slots.
 
-The `items` field projects `MenuItem` rows into the upstream `core/navigation-link` / `core/navigation-submenu` / `core/page-list` shapes — children nest under parents by `(parent_id, position)`. Page-list items render as a dynamic placeholder (`'dynamic' => 'page-list'`) — the resolver does not enumerate pages here so cms-framework stays decoupled from content types. The navigation block performs the page enumeration at render time.
+The `items` field projects `MenuItem` rows into the upstream `core/navigation-link` / `core/navigation-submenu` / `core/page-list` shapes — children nest under parents by `(parent_id, position)`. Page-list items render as a dynamic placeholder (`'dynamic' => 'page-list'`) — the resolver does not enumerate pages here so cms-framework stays decoupled from content types. The navigation block performs the page enumeration at render time. Each projected item carries its `block_attributes` (or `null`) so consumers can restore those attributes onto the navigation block.
 
 ```php
 class MenuResolver

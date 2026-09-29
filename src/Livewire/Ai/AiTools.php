@@ -14,9 +14,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Livewire\Ai;
 
 use ArtisanPackUI\Ai\Agents\ArtisanPackAgent;
-use ArtisanPackUI\Ai\Exceptions\FeatureDisabledException;
-use ArtisanPackUI\Ai\Exceptions\FeatureError;
-use ArtisanPackUI\Ai\Exceptions\MissingCredentialsException;
+use ArtisanPackUI\Ai\Concerns\HandlesAiFeatureResponses;
 use ArtisanPackUI\CMSFramework\Ai\Agents\CategorySuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\ExcerptGenerationAgent;
 use ArtisanPackUI\CMSFramework\Ai\Agents\PostTitleSuggestionAgent;
@@ -25,10 +23,8 @@ use ArtisanPackUI\CMSFramework\Ai\Agents\TagSuggestionAgent;
 use ArtisanPackUI\CMSFramework\Ai\Support\AgentMeta;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Log;
 use Livewire\Attributes\On;
 use Livewire\Component;
-use Throwable;
 
 /**
  * Thin Livewire wrapper that runs any of the five cms-framework AI
@@ -54,6 +50,8 @@ use Throwable;
  */
 class AiTools extends Component
 {
+    use HandlesAiFeatureResponses;
+
     /**
      * Generate 3–5 title variants from a draft body.
      *
@@ -186,7 +184,7 @@ class AiTools extends Component
      */
     public function enabledFeatures(): array
     {
-        return CMSFrameworkServiceProvider::aiFeatureStateMap();
+        return $this->aiFeatureStateMap( CMSFrameworkServiceProvider::AI_FEATURE_KEYS );
     }
 
     /**
@@ -204,6 +202,18 @@ class AiTools extends Component
     }
 
     /**
+     * Tag the shared handler's log line with this surface.
+     *
+     * @since 2.11.0
+     *
+     * @return string
+     */
+    protected function aiFeatureLogMessage(): string
+    {
+        return 'cms-framework AI trigger failed';
+    }
+
+    /**
      * Shared run-and-emit path. Kept private so callers can only reach
      * agents through the five public entry points, each of which
      * pre-shapes its input.
@@ -212,12 +222,11 @@ class AiTools extends Component
      * so `AI_FEATURE_KEYS` and each agent's `$featureKey` stay the only
      * places a key is spelled. Renaming one is a single-property edit.
      *
-     * Takes the class and input rather than a built agent so that
-     * `for()` runs *inside* the try: it resolves through the container,
-     * and `docs/AI-Features.md` invites hosts to bind a subclass over an
-     * agent, so construction is a real throw site. Building it at the
-     * call site would let a failed binding escape this handler, and the
-     * front-end would wait forever for a status event that never fires.
+     * The exception ladder is delegated to
+     * {@see HandlesAiFeatureResponses::handleAiFeature()}; this method
+     * folds the outcome into a browser event whose name is driven by
+     * {@see AiFeatureOutcome::$statusSlug}. The gate check stays here —
+     * authorization belongs to this surface, not to the shared ladder.
      *
      * @since 2.3.0
      *
@@ -240,47 +249,25 @@ class AiTools extends Component
             return;
         }
 
-        try {
-            $output = $agentClass::for( $input )->run();
+        $outcome = $this->handleAiFeature(
+            $featureKey,
+            fn () => $agentClass::for( $input )->run(),
+        );
 
+        if ( $outcome->succeeded ) {
             $this->dispatch(
-                sprintf( 'ap-cms-ai:%s:success', $featureKey ),
-                feature: $featureKey,
-                output: $output,
+                sprintf( 'ap-cms-ai:%s:success', $outcome->feature ),
+                feature: $outcome->feature,
+                output: $outcome->output,
             );
-        } catch ( FeatureDisabledException $e ) {
-            $this->dispatch(
-                sprintf( 'ap-cms-ai:%s:disabled', $featureKey ),
-                feature: $featureKey,
-                message: $e->getMessage(),
-            );
-        } catch ( MissingCredentialsException $e ) {
-            $this->dispatch(
-                sprintf( 'ap-cms-ai:%s:missing-credentials', $featureKey ),
-                feature: $featureKey,
-                message: $e->getMessage(),
-            );
-        } catch ( FeatureError $e ) {
-            // Validation-style failure (missing required field, hallucinated
-            // tag, etc.). Emit under a distinct event so front-ends can
-            // route it to a form-level warning instead of a generic
-            // error toast — mirrors the HTTP surface's 422 status.
-            $this->dispatch(
-                sprintf( 'ap-cms-ai:%s:invalid-input', $featureKey ),
-                feature: $featureKey,
-                message: $e->getMessage(),
-            );
-        } catch ( Throwable $e ) {
-            Log::error( 'cms-framework AI trigger failed', [
-                'feature' => $featureKey,
-                'error'   => $e->getMessage(),
-            ] );
 
-            $this->dispatch(
-                sprintf( 'ap-cms-ai:%s:error', $featureKey ),
-                feature: $featureKey,
-                message: 'Unexpected error running AI feature.',
-            );
+            return;
         }
+
+        $this->dispatch(
+            sprintf( 'ap-cms-ai:%s:%s', $outcome->feature, $outcome->statusSlug ),
+            feature: $outcome->feature,
+            message: $outcome->message,
+        );
     }
 }

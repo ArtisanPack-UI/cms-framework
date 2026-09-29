@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-09-29
+
+### Added
+
+- **Menu items persist navigation-block attributes without a dedicated column** ([#344](https://github.com/ArtisanPack-UI/cms-framework/issues/344)) — a new nullable JSON `menu_items.block_attributes` column (cast to an array on `MenuItem`, and included in `MenuResolver`'s item shape) stores block attributes such as visual-editor block visibility, animations, and bindings, so they survive a menu save instead of being dropped. The migration is guarded with `hasTable` / `hasColumn`, so it is safe to re-run and to roll back. Required by `artisanpack-ui/visual-editor` 1.12.
+
+### Changed
+
+- **The AI trigger surfaces use the shared `HandlesAiFeatureResponses` trait** ([#335](https://github.com/ArtisanPack-UI/cms-framework/issues/335)) — `AiController` and the `AiTools` Livewire component now delegate the AI exception-to-response mapping and the per-feature enabled-state registry walk to `artisanpack-ui/ai`'s `HandlesAiFeatureResponses` trait instead of carrying their own copies. Response envelopes are unchanged.
+- **`artisanpack-ui/ai` constraint raised to `^1.2`** ([#337](https://github.com/ArtisanPack-UI/cms-framework/issues/337)) — the test suite now consumes the shared `ArtisanPackUI\Ai\Testing\FakeAgentPrompter` shipped in `ai` 1.2, and the local copy was removed.
+
+### Fixed
+
+- **Plugin activation runs the migrations of Composer packages it installs** ([#338](https://github.com/ArtisanPack-UI/cms-framework/issues/338)) — when a plugin's manifest `composer` block installed a package that ships migrations through its own service provider, activation registered the package's autoloader but never created its tables, so the first request touching a package model failed with `Base table or view not found`. When activation freshly installs a package, it now runs an unscoped `migrate --force` after the plugin's service provider registers. It runs outside the activation transaction to keep the [#333](https://github.com/ArtisanPack-UI/cms-framework/issues/333) DDL guarantee, and a failure unwinds through the existing activation rollback.
+- **An update that fails before extraction no longer reports a spurious rollback failure** ([#336](https://github.com/ArtisanPack-UI/cms-framework/issues/336)) — steps before `Extract` (maintenance mode, backup, download, checksum verification) never touch the application tree, but `handleUpdateFailure()` still attempted a snapshot restore. When that restore itself failed, a benign refusal (for example an unverified checksum) was reported as `Rollback failed … Manual intervention required`. A pre-extract failure now skips the restore, marks rollback as not applicable, and surfaces the original error.
+
+- **`NotificationPolicy` no longer denies every user the ability to create or delete notifications** ([#332](https://github.com/ArtisanPack-UI/cms-framework/issues/332)) — `create()` and `delete()` gated on `method_exists( $user, 'hasCapability' )`, but cms-framework's user model composes `HasRolesAndPermissions` (rbac's `HasPermissions`), whose public surface is `hasPermissionTo()`/`hasPermission()` and which never defines `hasCapability()`. On a stock host `method_exists()` was always `false`, so `notifications.manage` could never take effect no matter which role held it. Both methods now resolve the capability through a shared `userHasCapability()` helper that probes `hasCapability` → `hasPermissionTo` → `hasPermission` in priority order, each guarded with `method_exists()`, so the first contract the host model exposes decides — while still degrading to a plain denial (not a fatal) on a user model that composes no RBAC trait. This mirrors the `FontPolicy` fix in `artisanpack-ui/visual-editor` #733.
+
 ## [2.10.1] - 2026-08-29
 
 ### Fixed

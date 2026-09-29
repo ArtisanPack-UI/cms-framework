@@ -257,6 +257,139 @@ describe( 'Composer-package activation gate', function (): void {
         }
     } );
 
+    it( 'runs unscoped migrations after installing packages that ship their own (#338)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        // Probe subclass records whether the post-activation unscoped migrate
+        // fired, and its slug, so we can assert both firing and ordering
+        // (packages installed → migrate) without touching Composer, the
+        // filesystem, or Artisan.
+        $installer = $this->installer;
+        $manager   = new class ( $installer ) extends PluginManager {
+            public int $packageMigrateCalls = 0;
+
+            public ?string $packageMigrateSlug = null;
+
+            public function __construct( private FakeComposerPackageInstaller $bound )
+            {
+                parent::__construct();
+            }
+
+            protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+            {
+                return $this->bound;
+            }
+
+            protected function runComposerPackageMigrations( Plugin $plugin ): void
+            {
+                $this->packageMigrateCalls++;
+                $this->packageMigrateSlug = $plugin->slug;
+            }
+        };
+
+        expect( $manager->activate( 'convertkit' ) )->toBeTrue()
+            ->and( $manager->packageMigrateCalls )->toBe( 1 )
+            ->and( $manager->packageMigrateSlug )->toBe( 'convertkit' );
+    } );
+
+    it( 'skips the unscoped migrate when composer requirements are already satisfied', function (): void {
+        // No auto-install needed; the requirement is already in range in the
+        // vendor tree, so no packages are freshly installed this activation.
+        $this->installer->installed = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        $installer = $this->installer;
+        $manager   = new class ( $installer ) extends PluginManager {
+            public int $packageMigrateCalls = 0;
+
+            public function __construct( private FakeComposerPackageInstaller $bound )
+            {
+                parent::__construct();
+            }
+
+            protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+            {
+                return $this->bound;
+            }
+
+            protected function runComposerPackageMigrations( Plugin $plugin ): void
+            {
+                $this->packageMigrateCalls++;
+            }
+        };
+
+        expect( $manager->activate( 'convertkit' ) )->toBeTrue()
+            ->and( $manager->packageMigrateCalls )->toBe( 0 );
+    } );
+
+    it( 'skips the unscoped migrate when the plugin declares no composer block', function (): void {
+        Plugin::create( [
+            'slug'      => 'plain',
+            'name'      => 'Plain',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => [ 'slug' => 'plain' ],
+        ] );
+
+        $installer = $this->installer;
+        $manager   = new class ( $installer ) extends PluginManager {
+            public int $packageMigrateCalls = 0;
+
+            public function __construct( private FakeComposerPackageInstaller $bound )
+            {
+                parent::__construct();
+            }
+
+            protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+            {
+                return $this->bound;
+            }
+
+            protected function runComposerPackageMigrations( Plugin $plugin ): void
+            {
+                $this->packageMigrateCalls++;
+            }
+        };
+
+        expect( $manager->activate( 'plain' ) )->toBeTrue()
+            ->and( $manager->packageMigrateCalls )->toBe( 0 );
+    } );
+
+    it( 'rolls back activation when the post-install unscoped migrate throws (#338)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        $installer = $this->installer;
+        $manager   = new class ( $installer ) extends PluginManager {
+            public function __construct( private FakeComposerPackageInstaller $bound )
+            {
+                parent::__construct();
+            }
+
+            protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+            {
+                return $this->bound;
+            }
+
+            protected function runComposerPackageMigrations( Plugin $plugin ): void
+            {
+                throw new RuntimeException( 'simulated migration failure' );
+            }
+        };
+
+        try {
+            $manager->activate( 'convertkit' );
+            $this->fail( 'Expected RuntimeException.' );
+        } catch ( RuntimeException $e ) {
+            expect( $e->getMessage() )->toBe( 'simulated migration failure' );
+        }
+
+        expect( Plugin::where( 'slug', 'convertkit' )->first()->is_active )->toBeFalse();
+    } );
+
     it( 'fails closed with a retry hint when a successful install stays invisible in-process', function (): void {
         config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
 
