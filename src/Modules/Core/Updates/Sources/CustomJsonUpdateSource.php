@@ -160,13 +160,17 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
      */
     public function setAuthentication( string|array $credentials ): void
     {
+        // Each call replaces the header credential, so switching back to a
+        // query-string mode cannot leave an earlier header in force.
         if ( is_string( $credentials ) ) {
+            $this->headers              = [];
             $this->queryParams['token'] = $credentials;
 
             return;
         }
 
         if ( ! is_array( $credentials['headers'] ?? null ) ) {
+            $this->headers     = [];
             $this->queryParams = $credentials;
 
             return;
@@ -206,8 +210,25 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
             $url .= ( str_contains( $url, '?' ) ? '&' : '?' ) . http_build_query( $this->queryParams );
         }
 
+        $credentialed = [] !== $this->headers;
+
+        if ( $credentialed ) {
+            $this->assertSecureFeedUrl();
+        }
+
+        // Redirects are not followed while credential headers are set. The
+        // HTTP client strips `Authorization` on a cross-origin redirect but
+        // forwards custom header names, so following one would hand a header
+        // like `X-License-Key` to whatever host — or plaintext scheme — the
+        // redirect names.
         $retries  = max( 0, (int) config( 'cms.updates.http_retries', 3 ) - 1 );
-        $response = MetadataClient::get( $url, $this->headers, retries: $retries );
+        $response = MetadataClient::get( $url, $this->headers, retries: $retries, followRedirects: ! $credentialed );
+
+        if ( $credentialed && $response['status'] >= 300 && $response['status'] < 400 ) {
+            throw UpdateException::versionCheckFailed(
+                "HTTP {$response['status']}: the update feed redirected, and redirects are not followed while credential headers are configured. Point the feed URL at its final location.",
+            );
+        }
 
         if ( $response['status'] < 200 || $response['status'] >= 300 ) {
             throw UpdateException::versionCheckFailed( "HTTP {$response['status']}: {$response['body']}" );
@@ -222,6 +243,31 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
         }
 
         return $data;
+    }
+
+    /**
+     * Refuse to send credential headers to a plaintext feed.
+     *
+     * The plugin and theme managers already reject non-https sources, but this
+     * class is also reachable directly and through `UpdateCheckerFactory`,
+     * which accept any URL. `cms.updates.allow_insecure_transport` is the same
+     * opt-out the archive download honours.
+     *
+     * @since 2.12.0
+     *
+     * @throws UpdateException When the feed URL is not https and the opt-out is off.
+     */
+    protected function assertSecureFeedUrl(): void
+    {
+        $scheme = strtolower( (string) parse_url( $this->url, PHP_URL_SCHEME ) );
+
+        if ( 'https' === $scheme || config( 'cms.updates.allow_insecure_transport', false ) ) {
+            return;
+        }
+
+        throw UpdateException::versionCheckFailed(
+            'Refusing to send credential headers to an update feed over an insecure transport. Use an https feed URL.',
+        );
     }
 
     /**

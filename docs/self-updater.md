@@ -176,10 +176,25 @@ feed's origin. A feed that serves its archive from a CDN or object store on
 another host must keep issuing a pre-signed URL for it. Query-string credentials
 are never sent to `download_url`.
 
-That scoping covers the download. The feed request itself follows redirects the
-ordinary way, where the HTTP client strips `Authorization` on a cross-origin
-redirect but forwards custom header names — one more reason to carry the
-credential in `Authorization` rather than a bespoke header.
+The feed request is held to the same standard. With credential headers
+configured:
+
+- the feed URL must be `https` — a plaintext feed is refused before anything is
+  sent, unless `cms.updates.allow_insecure_transport` is on;
+- redirects are **not followed**. The HTTP client strips `Authorization` on a
+  cross-origin redirect but forwards custom header names, so a redirecting feed
+  fails with a message saying so rather than passing an `X-License-Key` along.
+  Point the feed URL at its final location.
+
+Feeds without credential headers — public ones, and those using query-string
+credentials — follow redirects as before.
+
+Each `setAuthentication()` call replaces the header credential: passing a
+string or a flat array afterwards clears any headers set earlier.
+
+Transport errors are reported with the query string and any `user:pass@`
+userinfo of the request URL redacted, so a `?token=` credential does not reach
+logs or scheduler output through a connection failure.
 
 Plugins and themes opt in per slug through `updateTokens` — see
 [[plugin-authoring]] and [[themes/Updating]].

@@ -697,6 +697,10 @@ host and port ): if `download_url`, or a redirect from it, names a different
 host, the headers are dropped for that request. Serve the archive from the
 feed's host, or keep using a pre-signed URL for an off-host one.
 
+The feed URL itself must answer directly: redirects are not followed while
+credential headers are configured, so the credential cannot be passed along to
+another host.
+
 An optional `query` key alongside `headers` carries any query parameters the
 feed still needs. Header auth applies to manifests that declare the source
 through `update.url`; the legacy `update_url` key is fetched without

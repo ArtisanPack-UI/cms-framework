@@ -9,8 +9,10 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Sources\CustomJsonUpdateSour
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Request as GuzzleRequest;
 use GuzzleHttp\Psr7\Response as GuzzleResponse;
 use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
@@ -695,6 +697,219 @@ class CustomJsonUpdateSourceTest extends TestCase
 
         Http::assertSent( fn ( $request ): bool => 'https://example.com/releases/cms-2.0.0.zip' === $request->url()
             && ! $request->hasHeader( 'Authorization' ) );
+    }
+
+    /**
+     * Switching back to a query-string credential clears an earlier header
+     * credential instead of leaving it in force.
+     *
+     * @since 2.12.0
+     */
+    #[DataProvider( 'queryModeCredentials' )]
+    public function test_query_mode_credentials_clear_previous_headers( string|array $credentials ): void
+    {
+        Http::fake( [
+            '*' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/releases/cms-2.0.0.zip',
+            ], 200 ),
+        ] );
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+        $source->setAuthentication( [
+            'headers' => [ 'Authorization' => 'Bearer secret123' ],
+        ] );
+        $source->setAuthentication( $credentials );
+
+        $source->checkForUpdate();
+
+        Http::assertSent( fn ( $request ): bool => ! $request->hasHeader( 'Authorization' ) );
+    }
+
+    /**
+     * Credentials that select a query-string mode.
+     *
+     * @since 2.12.0
+     *
+     * @return array<string, array{array<string, string>|string}>
+     */
+    public static function queryModeCredentials(): array
+    {
+        return [
+            'a token string' => [ 'new-token' ],
+            'a flat array'   => [ [ 'api_key' => 'key123' ] ],
+            'an empty array' => [ [] ],
+        ];
+    }
+
+    /**
+     * Credential headers are never sent to a plaintext feed.
+     *
+     * @since 2.12.0
+     */
+    public function test_header_authentication_refuses_a_plaintext_feed(): void
+    {
+        Http::fake();
+
+        $source = new CustomJsonUpdateSource( 'http://example.com/updates.json', '1.0.0' );
+        $source->setAuthentication( [
+            'headers' => [ 'Authorization' => 'Bearer secret123' ],
+        ] );
+
+        try {
+            $source->checkForUpdate();
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'insecure transport', $e->getMessage() );
+        }
+
+        Http::assertNothingSent();
+    }
+
+    /**
+     * The insecure-transport opt-out applies to a credentialed feed as it does
+     * to the archive download.
+     *
+     * @since 2.12.0
+     */
+    public function test_header_authentication_allows_a_plaintext_feed_when_opted_in(): void
+    {
+        config()->set( 'cms.updates.allow_insecure_transport', true );
+
+        Http::fake( [
+            'example.com/updates.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'http://example.com/releases/cms-2.0.0.zip',
+            ], 200 ),
+        ] );
+
+        $source = new CustomJsonUpdateSource( 'http://example.com/updates.json', '1.0.0' );
+        $source->setAuthentication( [
+            'headers' => [ 'Authorization' => 'Bearer secret123' ],
+        ] );
+
+        $this->assertSame( '2.0.0', $source->checkForUpdate()->latestVersion );
+    }
+
+    /**
+     * A credentialed feed request does not follow redirects, so a custom
+     * header is never passed along to the host a redirect names.
+     *
+     * @since 2.12.0
+     */
+    public function test_header_authentication_does_not_follow_feed_redirects(): void
+    {
+        Http::fake( [
+            'example.com/updates.json' => Http::response( '', 302, [
+                'Location' => 'https://evil.example.net/updates.json',
+            ] ),
+            'evil.example.net/*' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://evil.example.net/cms-2.0.0.zip',
+            ], 200 ),
+        ] );
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+        $source->setAuthentication( [
+            'headers' => [ 'X-License-Key' => 'lic456' ],
+        ] );
+
+        try {
+            $source->checkForUpdate();
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'redirects are not followed', $e->getMessage() );
+        }
+
+        Http::assertSentCount( 1 );
+        Http::assertNotSent( fn ( $request ): bool => str_contains( $request->url(), 'evil.example.net' ) );
+    }
+
+    /**
+     * The production (raw Guzzle) path disables redirects for a credentialed
+     * feed request rather than relying on the test bridge.
+     *
+     * @since 2.12.0
+     */
+    public function test_header_authentication_disables_redirects_on_the_raw_client(): void
+    {
+        MetadataClient::reset();
+
+        $mock = new MockHandler( [
+            new GuzzleResponse( 302, [ 'Location' => 'https://evil.example.net/updates.json' ] ),
+            new GuzzleResponse( 200, [], json_encode( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://evil.example.net/cms-2.0.0.zip',
+            ] ) ),
+        ] );
+        MetadataClient::setClient( new GuzzleClient( [ 'handler' => HandlerStack::create( $mock ) ] ) );
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+        $source->setAuthentication( [
+            'headers' => [ 'X-License-Key' => 'lic456' ],
+        ] );
+
+        try {
+            $source->checkForUpdate();
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'redirects are not followed', $e->getMessage() );
+        }
+
+        $this->assertSame( 1, $mock->count(), 'The redirect target must never be requested.' );
+    }
+
+    /**
+     * A feed without credential headers still follows redirects.
+     *
+     * @since 2.12.0
+     */
+    public function test_feed_without_header_credentials_still_follows_redirects(): void
+    {
+        Http::fake( [
+            'example.com/updates.json' => Http::response( '', 302, [
+                'Location' => 'https://example.com/v2/updates.json',
+            ] ),
+            'example.com/v2/updates.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/releases/cms-2.0.0.zip',
+            ], 200 ),
+        ] );
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+
+        $this->assertSame( '2.0.0', $source->checkForUpdate()->latestVersion );
+    }
+
+    /**
+     * A transport failure reports the host but not the query-string token the
+     * HTTP client appends to its error message.
+     *
+     * @since 2.12.0
+     */
+    public function test_transport_error_message_omits_url_credentials(): void
+    {
+        MetadataClient::reset();
+
+        $failure = static fn (): ConnectException => new ConnectException(
+            'cURL error 6: Could not resolve host: example.com for https://user:hunter2@example.com/updates.json?token=secret123',
+            new GuzzleRequest( 'GET', 'https://example.com/updates.json?token=secret123' ),
+        );
+        $mock = new MockHandler( [ $failure(), $failure(), $failure() ] );
+        MetadataClient::setClient( new GuzzleClient( [ 'handler' => HandlerStack::create( $mock ) ] ) );
+
+        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
+        $source->setAuthentication( 'secret123' );
+
+        try {
+            $source->checkForUpdate();
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'Could not resolve host: example.com', $e->getMessage() );
+            $this->assertStringContainsString( 'example.com/updates.json', $e->getMessage() );
+            $this->assertStringNotContainsString( 'secret123', $e->getMessage() );
+            $this->assertStringNotContainsString( 'hunter2', $e->getMessage() );
+        }
     }
 
     /**

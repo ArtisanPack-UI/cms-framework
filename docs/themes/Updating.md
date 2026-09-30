@@ -230,7 +230,8 @@ key instead:
 The headers are sent with the feed request and with the archive download, scoped
 to the feed's own origin ( scheme, host and port ): if `download_url`, or a
 redirect from it, names a different host, the headers are dropped for that
-request.
+request. The feed URL itself must answer directly — redirects are not followed
+while credential headers are configured.
 
 ## Scheduled update checks
 
