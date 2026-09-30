@@ -820,6 +820,29 @@ describe( 'Scheduled Update Checks', function (): void {
             ->and( $this->updateManager->checkPluginUpdate( 'flaky-plugin' )['version'] )->toBe( '2.0.0' );
     } );
 
+    it( 'reports a failed legacy update_url check and keeps the cached answer', function (): void {
+        Plugin::create( [
+            'slug'    => 'legacy-plugin',
+            'name'    => 'Legacy Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update_url' => 'https://example.com/updates/legacy-plugin'],
+        ] );
+
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::sequence()
+                ->push( [
+                    'version'      => '2.0.0',
+                    'download_url' => 'https://example.com/legacy-plugin-2.0.0.zip',
+                ] )
+                ->push( [], 503 ),
+        ] );
+
+        expect( $this->updateManager->checkPluginUpdate( 'legacy-plugin' )['version'] )->toBe( '2.0.0' );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )->toHaveKey( 'legacy-plugin' )
+            ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' )['version'] )->toBe( '2.0.0' );
+    } );
+
     it( 'sends a per-slug header credential only to that plugin\'s feed', function (): void {
         config()->set( 'cms.plugins.updateTokens', [
             'licensed-plugin' => [

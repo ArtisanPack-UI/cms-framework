@@ -239,7 +239,11 @@ class CustomJsonUpdateSource implements UpdateSourceInterface
         if ( ! is_array( $data ) ) {
             // The bare feed URL, not `$url`: that one carries the query-string
             // credentials, and this message reaches logs and command output.
-            throw UpdateException::invalidJsonResponse( $this->url );
+            // Redacted too, since a host may write credentials into the
+            // configured URL itself.
+            throw UpdateException::invalidJsonResponse(
+                MetadataClient::redactUrlCredentials( $this->url ),
+            );
         }
 
         return $data;

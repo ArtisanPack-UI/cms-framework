@@ -475,6 +475,30 @@ class CustomJsonUpdateSourceTest extends TestCase
     }
 
     /**
+     * Credentials written into the configured feed URL itself are redacted
+     * from the invalid-JSON failure too.
+     *
+     * @since 2.12.0
+     */
+    public function test_invalid_json_message_redacts_credentials_in_the_configured_url(): void
+    {
+        Http::fake( [
+            'example.com/updates.json*' => Http::response( 'not json', 200 ),
+        ] );
+
+        $source = new CustomJsonUpdateSource( 'https://user:hunter2@example.com/updates.json?key=secret123', '1.0.0' );
+
+        try {
+            $source->checkForUpdate();
+            $this->fail( 'Expected UpdateException to be thrown.' );
+        } catch ( UpdateException $e ) {
+            $this->assertStringContainsString( 'example.com/updates.json', $e->getMessage() );
+            $this->assertStringNotContainsString( 'secret123', $e->getMessage() );
+            $this->assertStringNotContainsString( 'hunter2', $e->getMessage() );
+        }
+    }
+
+    /**
      * Header-mode credentials are sent as request headers, not query params.
      *
      * @since 2.12.0

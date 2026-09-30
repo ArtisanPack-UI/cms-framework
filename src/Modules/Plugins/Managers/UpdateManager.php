@@ -509,6 +509,8 @@ class UpdateManager
      *
      * @param  Plugin  $plugin  Plugin to check.
      *
+     * @throws UpdateException When the feed answers with a non-2xx status.
+     *
      * @return array|null Raw feed payload, or null when already current.
      */
     protected function checkViaCustomFeed( Plugin $plugin ): ?array
@@ -527,8 +529,11 @@ class UpdateManager
         $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
             ->get( $feedUrl );
 
+        // Thrown, not `null`: `runUpdateCheck()` would cache a null as "no
+        // update" for the whole TTL, and a scheduled check would never report
+        // the failure.
         if ( ! $response->successful() ) {
-            return null;
+            throw UpdateException::versionCheckFailed( "Update feed returned HTTP {$response->status()}." );
         }
 
         $updateData = $response->json();
