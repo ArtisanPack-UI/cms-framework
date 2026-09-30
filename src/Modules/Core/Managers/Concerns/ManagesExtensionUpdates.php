@@ -77,20 +77,26 @@ trait ManagesExtensionUpdates
     }
 
     /**
-     * Resolve the access token for an extension's private update source.
+     * Resolve the credential for an extension's private update source.
      *
-     * Tokens are keyed by slug in config rather than read from the manifest
-     * ( which ships inside the distributed ZIP ) and are deliberately not
-     * global: a single shared token would be sent to whatever host any
-     * installed extension names in its manifest.
+     * Credentials are keyed by slug in config rather than read from the
+     * manifest ( which ships inside the distributed ZIP ) and are deliberately
+     * not global: a single shared credential would be sent to whatever host
+     * any installed extension names in its manifest.
+     *
+     * An entry is either a token string or an array handed to the source's
+     * `setAuthentication()` verbatim — for a custom JSON feed,
+     * `['headers' => ['Authorization' => 'Bearer …']]` sends the credential as
+     * a header instead of the `?token=` query parameter.
      *
      * @since 2.8.0
+     * @since 2.12.0 An entry may be an array of source credentials.
      *
      * @param  string  $slug  Extension slug.
      *
-     * @return string|null Token, or null when the source is public.
+     * @return array<array-key, mixed>|string|null Credential, or null when the source is public.
      */
-    protected function resolveUpdateToken( string $slug ): ?string
+    protected function resolveUpdateToken( string $slug ): string|array|null
     {
         $tokens = config( $this->updateConfigPrefix() . '.updateTokens', [] );
 
@@ -98,7 +104,13 @@ trait ManagesExtensionUpdates
             return null;
         }
 
-        return $this->nonEmptyString( $tokens[ $slug ] ?? null );
+        $token = $tokens[ $slug ] ?? null;
+
+        if ( is_array( $token ) ) {
+            return [] === $token ? null : $token;
+        }
+
+        return $this->nonEmptyString( $token );
     }
 
     /**

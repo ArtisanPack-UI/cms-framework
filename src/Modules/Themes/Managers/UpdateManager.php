@@ -109,6 +109,58 @@ class UpdateManager
     }
 
     /**
+     * Re-check every installed theme against its update source, bypassing cached answers.
+     *
+     * The scheduled counterpart to `checkForUpdates()`: that method serves a
+     * cached answer for `cms.themes.updateCacheTtl`, so running it on a
+     * schedule would mostly re-read the cache. This one always asks the
+     * source and re-caches what it learns.
+     *
+     * Each theme is checked in isolation, so one unreachable source does not
+     * stop the others from being checked. A failed check is reported rather
+     * than thrown, and leaves that theme's previously cached answer in place.
+     *
+     * @since 2.12.0
+     *
+     * @return array{updates: array<string, array>, failures: array<string, string>} Available updates and failure messages, both keyed by theme slug.
+     */
+    public function refreshUpdateChecks(): array
+    {
+        $updates  = [];
+        $failures = [];
+
+        foreach ( $this->themeManager->discoverThemes() as $theme ) {
+            $slug = $theme['slug'] ?? null;
+
+            if ( ! is_string( $slug ) || '' === $slug ) {
+                continue;
+            }
+
+            try {
+                $manifest   = $this->themeManager->getTheme( $slug );
+                $updateInfo = null === $manifest ? null : $this->runUpdateCheck( $manifest, $slug, true );
+            } catch ( Throwable $e ) {
+                logger()->error( "Failed to check update for theme: {$slug}", [
+                    'exception' => $e->getMessage(),
+                ] );
+
+                $failures[ $slug ] = $e->getMessage();
+
+                continue;
+            }
+
+            if ( null !== $updateInfo ) {
+                $updates[ $slug ] = $updateInfo;
+            }
+        }
+
+        return [
+            'updates'  => $updates,
+            'failures' => $failures,
+        ];
+    }
+
+    /**
      * Check for an update to a specific theme.
      *
      * Unlike the plugin equivalent there is no legacy custom-feed path to keep
@@ -139,30 +191,7 @@ class UpdateManager
             return null;
         }
 
-        if ( null === $this->resolveUpdateSourceUrl( $manifest, $slug ) ) {
-            return null;
-        }
-
-        $cacheKey = $this->updateCacheKey( $slug );
-        $cached   = Cache::get( $cacheKey );
-
-        // Deliberately not `Cache::remember()`: it treats a null return as a
-        // miss and re-runs the closure, so the overwhelmingly common
-        // "no update available" answer would be written and never read back,
-        // and `cms.themes.updateCacheTtl` would do nothing. An empty array is
-        // stored for that answer instead, which caches like any other value.
-        if ( null !== $cached ) {
-            return is_array( $cached ) && [] !== $cached ? $cached : null;
-        }
-
-        $updateInfo = $this->checkViaUpdateSource( $manifest, $slug );
-
-        // Only reached when the check actually completed — a thrown failure
-        // caches nothing, so the next call retries rather than serving
-        // "no update" for the next twelve hours.
-        Cache::put( $cacheKey, $updateInfo ?? [], config( 'cms.themes.updateCacheTtl', 43200 ) );
-
-        return $updateInfo;
+        return $this->runUpdateCheck( $manifest, $slug, false );
     }
 
     /**
@@ -453,6 +482,55 @@ class UpdateManager
                 'error' => $e->getMessage(),
             ] );
         }
+    }
+
+    /**
+     * Run one theme's update check and cache the answer.
+     *
+     * @since 2.12.0
+     *
+     * @param  array  $manifest  Parsed theme.json contents.
+     * @param  string  $slug  Theme slug.
+     * @param  bool  $fresh  Skip the cached answer and ask the source again.
+     *
+     * @throws UpdateException If the update source could not be reached or returned an unusable response.
+     *
+     * @return array|null Normalized update info, or null when the theme declares no source or is current.
+     */
+    protected function runUpdateCheck( array $manifest, string $slug, bool $fresh ): ?array
+    {
+        if ( null === $this->resolveUpdateSourceUrl( $manifest, $slug ) ) {
+            return null;
+        }
+
+        $cacheKey = $this->updateCacheKey( $slug );
+
+        if ( $fresh ) {
+            // `UpdateChecker` keeps its own raw entry; left in place it would
+            // answer the "fresh" check from cache.
+            Cache::forget( 'cms.' . UpdateType::Theme->value . ".{$slug}.update_check" );
+        } else {
+            $cached = Cache::get( $cacheKey );
+
+            // Deliberately not `Cache::remember()`: it treats a null return as
+            // a miss and re-runs the closure, so the overwhelmingly common
+            // "no update available" answer would be written and never read
+            // back, and `cms.themes.updateCacheTtl` would do nothing. An empty
+            // array is stored for that answer instead, which caches like any
+            // other value.
+            if ( null !== $cached ) {
+                return is_array( $cached ) && [] !== $cached ? $cached : null;
+            }
+        }
+
+        $updateInfo = $this->checkViaUpdateSource( $manifest, $slug );
+
+        // Only reached when the check actually completed — a thrown failure
+        // caches nothing, so the next call retries rather than serving
+        // "no update" for the next twelve hours.
+        Cache::put( $cacheKey, $updateInfo ?? [], config( 'cms.themes.updateCacheTtl', 43200 ) );
+
+        return $updateInfo;
     }
 
     /**

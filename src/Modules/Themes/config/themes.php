@@ -141,6 +141,22 @@ return [
     | whatever host any installed theme asks for. Public repositories — the
     | normal case — need no entry here.
     |
+    | A string entry is a token: GitHub and GitLab send it as their own auth
+    | header, and a custom JSON feed receives it as the `?token=` query
+    | parameter. To keep a custom feed's credential out of URLs and access
+    | logs, give an array with a `headers` key instead:
+    |
+    |     'updateTokens' => [
+    |         'my-licensed-theme' => [
+    |             'headers' => [
+    |                 'Authorization' => 'Bearer ' . env( 'MY_LICENSE_KEY' ),
+    |             ],
+    |         ],
+    |     ],
+    |
+    | Those headers go to the feed, and to the feed's `download_url` only
+    | while it stays on the feed's own scheme, host and port.
+    |
     */
     'updateTokens' => [],
 

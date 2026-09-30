@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Console\Commands\CheckThemeUpdatesCommand;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Support\EnqueuedAssets;
@@ -97,6 +98,12 @@ class ThemesServiceProvider extends ServiceProvider
         $this->publishes( [
             __DIR__ . '/../config/themes.php' => config_path( 'cms/themes.php' ),
         ], [ 'cms-themes-config', 'cms-framework-config' ] );
+
+        if ( $this->app->runningInConsole() ) {
+            $this->commands( [
+                CheckThemeUpdatesCommand::class,
+            ] );
+        }
 
         // Register theme view paths early in the boot cycle
         $themeManager = $this->app->make( ThemeManager::class );
