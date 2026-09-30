@@ -715,3 +715,210 @@ describe( 'Row Revert', function (): void {
             ->and( $fresh->meta['old'] )->toBeTrue();
     } );
 } );
+
+describe( 'Scheduled Update Checks', function (): void {
+    it( 'asks the source again instead of serving the cached answer', function (): void {
+        Plugin::create( [
+            'slug'    => 'fresh-plugin',
+            'name'    => 'Fresh Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/fresh-plugin.json']],
+        ] );
+
+        Http::fake( [
+            'https://licensing.example.com/fresh-plugin.json' => Http::sequence()
+                ->push( [
+                    'version'      => '1.0.0',
+                    'download_url' => 'https://licensing.example.com/fresh-plugin-1.0.0.zip',
+                ] )
+                ->push( [
+                    'version'      => '2.0.0',
+                    'download_url' => 'https://licensing.example.com/fresh-plugin-2.0.0.zip',
+                ] ),
+        ] );
+
+        // Caches "no update", and the second call is served from that cache.
+        expect( $this->updateManager->checkPluginUpdate( 'fresh-plugin' ) )->toBeNull()
+            ->and( $this->updateManager->checkPluginUpdate( 'fresh-plugin' ) )->toBeNull();
+
+        Http::assertSentCount( 1 );
+
+        $results = $this->updateManager->refreshUpdateChecks();
+
+        expect( $results['failures'] )->toBe( [] )
+            ->and( $results['updates']['fresh-plugin']['version'] )->toBe( '2.0.0' )
+            // The refreshed answer replaces the cached one.
+            ->and( $this->updateManager->checkPluginUpdate( 'fresh-plugin' )['version'] )->toBe( '2.0.0' );
+
+        Http::assertSentCount( 2 );
+    } );
+
+    it( 'keeps checking the remaining plugins when one source fails', function (): void {
+        Plugin::create( [
+            'slug'    => 'a-failing-plugin',
+            'name'    => 'Failing Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/failing.json']],
+        ] );
+
+        Plugin::create( [
+            'slug'    => 'b-github-plugin',
+            'name'    => 'GitHub Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['github' => 'owner/repo']],
+        ] );
+
+        Plugin::create( [
+            'slug'    => 'c-legacy-plugin',
+            'name'    => 'Legacy Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update_url' => 'https://example.com/updates/legacy-plugin'],
+        ] );
+
+        Http::fake( [
+            'https://licensing.example.com/failing.json'       => Http::response( [], 500 ),
+            'https://api.github.com/repos/owner/repo/releases' => Http::response(
+                githubReleasesResponse( 'v2.0.0', [
+                    [
+                        'name'                 => 'b-github-plugin.zip',
+                        'browser_download_url' => 'https://github.com/owner/repo/releases/download/v2.0.0/b-github-plugin.zip',
+                    ],
+                ] ),
+            ),
+            'https://example.com/updates/legacy-plugin' => Http::response( [
+                'version'      => '3.0.0',
+                'download_url' => 'https://example.com/downloads/legacy-plugin-3.0.0.zip',
+            ] ),
+        ] );
+
+        $results = $this->updateManager->refreshUpdateChecks();
+
+        expect( $results['failures'] )->toHaveKey( 'a-failing-plugin' )
+            ->and( array_keys( $results['updates'] ) )->toBe( ['b-github-plugin', 'c-legacy-plugin'] )
+            ->and( $results['updates']['b-github-plugin']['version'] )->toBe( '2.0.0' )
+            ->and( $results['updates']['c-legacy-plugin']['version'] )->toBe( '3.0.0' );
+    } );
+
+    it( 'does not cache a failed check as "no update"', function (): void {
+        Plugin::create( [
+            'slug'    => 'flaky-plugin',
+            'name'    => 'Flaky Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/flaky.json']],
+        ] );
+
+        Http::fake( [
+            'https://licensing.example.com/flaky.json' => Http::sequence()
+                ->push( [], 500 )
+                ->push( [
+                    'version'      => '2.0.0',
+                    'download_url' => 'https://licensing.example.com/flaky-2.0.0.zip',
+                ] ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )->toHaveKey( 'flaky-plugin' )
+            ->and( $this->updateManager->checkPluginUpdate( 'flaky-plugin' )['version'] )->toBe( '2.0.0' );
+    } );
+
+    it( 'sends a per-slug header credential only to that plugin\'s feed', function (): void {
+        config()->set( 'cms.plugins.updateTokens', [
+            'licensed-plugin' => [
+                'headers' => ['Authorization' => 'Bearer license-key'],
+            ],
+        ] );
+
+        Plugin::create( [
+            'slug'    => 'licensed-plugin',
+            'name'    => 'Licensed Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/licensed.json']],
+        ] );
+
+        Plugin::create( [
+            'slug'    => 'other-plugin',
+            'name'    => 'Other Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://other.example.net/other.json']],
+        ] );
+
+        Http::fake( [
+            'https://licensing.example.com/licensed.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://licensing.example.com/licensed-2.0.0.zip',
+            ] ),
+            'https://other.example.net/other.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://other.example.net/other-2.0.0.zip',
+            ] ),
+        ] );
+
+        $this->updateManager->refreshUpdateChecks();
+
+        Http::assertSent( fn ( $request ): bool => 'https://licensing.example.com/licensed.json' === $request->url()
+            && $request->hasHeader( 'Authorization', 'Bearer license-key' ) );
+        Http::assertSent( fn ( $request ): bool => 'https://other.example.net/other.json' === $request->url()
+            && ! $request->hasHeader( 'Authorization' ) );
+    } );
+} );
+
+describe( 'cms:plugins:check-updates command', function (): void {
+    it( 'reports the available updates', function (): void {
+        Plugin::create( [
+            'slug'    => 'command-plugin',
+            'name'    => 'Command Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/command-plugin.json']],
+        ] );
+
+        Http::fake( [
+            'https://licensing.example.com/command-plugin.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://licensing.example.com/command-plugin-2.0.0.zip',
+            ] ),
+        ] );
+
+        $this->artisan( 'cms:plugins:check-updates' )
+            ->expectsOutputToContain( 'command-plugin' )
+            ->expectsOutputToContain( '1 plugin update available.' )
+            ->assertExitCode( 0 );
+
+        expect( $this->updateManager->checkPluginUpdate( 'command-plugin' )['version'] )->toBe( '2.0.0' );
+
+        Http::assertSentCount( 1 );
+    } );
+
+    it( 'exits with a failure code when a source fails, after checking the rest', function (): void {
+        Plugin::create( [
+            'slug'    => 'a-failing-plugin',
+            'name'    => 'Failing Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/failing.json']],
+        ] );
+
+        Plugin::create( [
+            'slug'    => 'b-working-plugin',
+            'name'    => 'Working Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update' => ['url' => 'https://licensing.example.com/working.json']],
+        ] );
+
+        Http::fake( [
+            'https://licensing.example.com/failing.json' => Http::response( [], 500 ),
+            'https://licensing.example.com/working.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://licensing.example.com/working-2.0.0.zip',
+            ] ),
+        ] );
+
+        $this->artisan( 'cms:plugins:check-updates' )
+            ->expectsOutputToContain( 'Failed to check a-failing-plugin' )
+            ->expectsOutputToContain( 'b-working-plugin' )
+            ->assertExitCode( 1 );
+    } );
+
+    it( 'succeeds when nothing needs updating', function (): void {
+        $this->artisan( 'cms:plugins:check-updates' )
+            ->expectsOutputToContain( '0 plugin updates available.' )
+            ->assertExitCode( 0 );
+    } );
+} );

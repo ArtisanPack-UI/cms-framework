@@ -661,7 +661,60 @@ token keyed by your plugin slug:
 ```
 
 Tokens live in host config, never in `plugin.json` — the manifest ships inside
-the distributed ZIP.
+the distributed ZIP. They are per-slug rather than one global token: a plugin
+names its own update host in its own manifest, so a shared token would be handed
+to whatever host any installed plugin asks for. A site can therefore mix
+sources freely — some plugins from a licensing server, others straight from a
+private GitLab project — with each credential going only to its own plugin's
+source.
+
+A string token is sent by GitHub and GitLab sources as their own auth header,
+and by a custom JSON feed as the `?token=` query parameter.
+
+### Header auth for custom JSON feeds (2.12.0)
+
+A query-string credential ends up in URLs, access logs and proxy logs. To send a
+custom JSON feed's credential as a header instead, the host gives an array with
+a `headers` key:
+
+```php
+// config/cms.php
+'plugins' => [
+    'updateTokens' => [
+        'my-licensed-plugin' => [
+            'headers' => [
+                'Authorization' => 'Bearer ' . env( 'MY_LICENSE_KEY' ),
+            ],
+        ],
+    ],
+],
+```
+
+The headers are sent with the feed request and with the archive download, so
+your feed's `download_url` can point at an authenticated endpoint rather than a
+pre-signed or public URL. They are scoped to the feed's own origin ( scheme,
+host and port ): if `download_url`, or a redirect from it, names a different
+host, the headers are dropped for that request. Serve the archive from the
+feed's host, or keep using a pre-signed URL for an off-host one.
+
+An optional `query` key alongside `headers` carries any query parameters the
+feed still needs. Header auth applies to manifests that declare the source
+through `update.url`; the legacy `update_url` key is fetched without
+credentials.
+
+### Scheduled update checks (2.12.0)
+
+Update checks run on demand and are cached for `cms.plugins.updateCacheTtl`.
+To keep those answers warm, the host schedules the built-in command:
+
+```php
+// routes/console.php
+Schedule::command( 'cms:plugins:check-updates' )->daily();
+```
+
+It re-checks every plugin regardless of source, bypassing the cached answers,
+and caches what it learns. One plugin's source failing does not stop the others
+from being checked; the command reports each failure and exits non-zero.
 
 ## Testing your plugin
 

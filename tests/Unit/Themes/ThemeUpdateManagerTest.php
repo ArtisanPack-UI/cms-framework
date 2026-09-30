@@ -907,3 +907,154 @@ describe( 'Theme Updating', function (): void {
         expect( Cache::has( 'theme.update.cache-theme' ) )->toBeFalse();
     } );
 } );
+
+describe( 'Scheduled Update Checks', function (): void {
+    it( 'asks the source again instead of serving the cached answer', function (): void {
+        installTestTheme( $this->themesPath, 'fresh-theme', [
+            'slug'    => 'fresh-theme',
+            'name'    => 'Fresh Theme',
+            'version' => '1.0.0',
+            'update'  => ['url' => 'https://licensing.example.com/fresh-theme.json'],
+        ], $this->testSlugs );
+
+        Http::fake( [
+            'https://licensing.example.com/fresh-theme.json' => Http::sequence()
+                ->push( [
+                    'version'      => '1.0.0',
+                    'download_url' => 'https://licensing.example.com/fresh-theme-1.0.0.zip',
+                ] )
+                ->push( [
+                    'version'      => '2.0.0',
+                    'download_url' => 'https://licensing.example.com/fresh-theme-2.0.0.zip',
+                ] ),
+        ] );
+
+        // Caches "no update", and the second call is served from that cache.
+        expect( $this->updateManager->checkThemeUpdate( 'fresh-theme' ) )->toBeNull()
+            ->and( $this->updateManager->checkThemeUpdate( 'fresh-theme' ) )->toBeNull();
+
+        Http::assertSentCount( 1 );
+
+        $results = $this->updateManager->refreshUpdateChecks();
+
+        expect( $results['failures'] )->toBe( [] )
+            ->and( $results['updates']['fresh-theme']['version'] )->toBe( '2.0.0' )
+            // The refreshed answer replaces the cached one.
+            ->and( $this->updateManager->checkThemeUpdate( 'fresh-theme' )['version'] )->toBe( '2.0.0' );
+
+        Http::assertSentCount( 2 );
+    } );
+
+    it( 'keeps checking the remaining themes when one source fails', function (): void {
+        installTestTheme( $this->themesPath, 'a-failing-theme', [
+            'slug'    => 'a-failing-theme',
+            'name'    => 'Failing Theme',
+            'version' => '1.0.0',
+            'update'  => ['url' => 'https://licensing.example.com/failing-theme.json'],
+        ], $this->testSlugs );
+
+        installTestTheme( $this->themesPath, 'b-working-theme', [
+            'slug'    => 'b-working-theme',
+            'name'    => 'Working Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs );
+
+        Http::fake( [
+            'https://licensing.example.com/failing-theme.json' => Http::response( [], 500 ),
+            'https://api.github.com/repos/owner/repo/releases' => Http::response(
+                themeGithubReleasesResponse( 'v2.0.0', [
+                    [
+                        'name'                 => 'b-working-theme.zip',
+                        'browser_download_url' => 'https://github.com/owner/repo/releases/download/v2.0.0/b-working-theme.zip',
+                    ],
+                ] ),
+            ),
+        ] );
+
+        $results = $this->updateManager->refreshUpdateChecks();
+
+        expect( $results['failures'] )->toHaveKey( 'a-failing-theme' )
+            ->and( $results['updates'] )->toHaveKey( 'b-working-theme' )
+            ->and( $results['updates']['b-working-theme']['version'] )->toBe( '2.0.0' );
+    } );
+
+    it( 'sends a per-slug header credential to that theme\'s feed', function (): void {
+        config()->set( 'cms.themes.updateTokens', [
+            'licensed-theme' => [
+                'headers' => ['Authorization' => 'Bearer license-key'],
+            ],
+        ] );
+
+        installTestTheme( $this->themesPath, 'licensed-theme', [
+            'slug'    => 'licensed-theme',
+            'name'    => 'Licensed Theme',
+            'version' => '1.0.0',
+            'update'  => ['url' => 'https://licensing.example.com/licensed-theme.json'],
+        ], $this->testSlugs );
+
+        Http::fake( [
+            'https://licensing.example.com/licensed-theme.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://licensing.example.com/licensed-theme-2.0.0.zip',
+            ] ),
+        ] );
+
+        $this->updateManager->refreshUpdateChecks();
+
+        Http::assertSent( fn ( $request ): bool => 'https://licensing.example.com/licensed-theme.json' === $request->url()
+            && $request->hasHeader( 'Authorization', 'Bearer license-key' ) );
+    } );
+} );
+
+describe( 'cms:themes:check-updates command', function (): void {
+    it( 'reports the available updates', function (): void {
+        installTestTheme( $this->themesPath, 'command-theme', [
+            'slug'    => 'command-theme',
+            'name'    => 'Command Theme',
+            'version' => '1.0.0',
+            'update'  => ['url' => 'https://licensing.example.com/command-theme.json'],
+        ], $this->testSlugs );
+
+        Http::fake( [
+            'https://licensing.example.com/command-theme.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://licensing.example.com/command-theme-2.0.0.zip',
+            ] ),
+        ] );
+
+        $this->artisan( 'cms:themes:check-updates' )
+            ->expectsOutputToContain( 'command-theme' )
+            ->expectsOutputToContain( '1 theme update available.' )
+            ->assertExitCode( 0 );
+    } );
+
+    it( 'exits with a failure code when a source fails, after checking the rest', function (): void {
+        installTestTheme( $this->themesPath, 'a-failing-theme', [
+            'slug'    => 'a-failing-theme',
+            'name'    => 'Failing Theme',
+            'version' => '1.0.0',
+            'update'  => ['url' => 'https://licensing.example.com/failing-theme.json'],
+        ], $this->testSlugs );
+
+        installTestTheme( $this->themesPath, 'b-working-theme', [
+            'slug'    => 'b-working-theme',
+            'name'    => 'Working Theme',
+            'version' => '1.0.0',
+            'update'  => ['url' => 'https://licensing.example.com/working-theme.json'],
+        ], $this->testSlugs );
+
+        Http::fake( [
+            'https://licensing.example.com/failing-theme.json' => Http::response( [], 500 ),
+            'https://licensing.example.com/working-theme.json' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://licensing.example.com/working-theme-2.0.0.zip',
+            ] ),
+        ] );
+
+        $this->artisan( 'cms:themes:check-updates' )
+            ->expectsOutputToContain( 'Failed to check a-failing-theme' )
+            ->expectsOutputToContain( 'b-working-theme' )
+            ->assertExitCode( 1 );
+    } );
+} );

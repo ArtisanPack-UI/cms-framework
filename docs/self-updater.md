@@ -145,6 +145,45 @@ record whose recorded PID is still alive also blocks a new run. A stale marker
 from a `kill -9`'d run does not wedge the updater — liveness is checked, not
 just presence.
 
+## Custom JSON feed authentication (2.12.0)
+
+`CustomJsonUpdateSource::setAuthentication()` accepts three shapes:
+
+| Credentials | Sent as |
+|-------------|---------|
+| `'secret'` | The `?token=secret` query parameter. |
+| `['api_key' => '…', 'license' => '…']` | Query parameters, verbatim. |
+| `['headers' => ['Authorization' => 'Bearer …']]` | Request headers. An optional `query` key carries query parameters alongside them. |
+
+Header mode is opt-in: a string still means `?token=`, so existing feeds are
+unaffected. Prefer it for anything secret — a query-string credential ends up in
+URLs, access logs and proxy logs.
+
+```php
+$checker = UpdateCheckerFactory::buildUpdateChecker( $feedUrl, UpdateType::Application, 'application' );
+
+$checker->setAuthentication( [
+    'headers' => [ 'Authorization' => 'Bearer ' . config( 'services.licensing.key' ) ],
+] );
+```
+
+The same headers authenticate the archive download, so a private feed no longer
+has to hand out a pre-signed or public `download_url`. They are **scoped to the
+feed's own origin** — scheme, host and port. The feed response chooses
+`download_url`, and a redirect can name any host after that, so the headers are
+dropped from the download request, and from every redirect hop, that leaves the
+feed's origin. A feed that serves its archive from a CDN or object store on
+another host must keep issuing a pre-signed URL for it. Query-string credentials
+are never sent to `download_url`.
+
+That scoping covers the download. The feed request itself follows redirects the
+ordinary way, where the HTTP client strips `Authorization` on a cross-origin
+redirect but forwards custom header names — one more reason to carry the
+credential in `Authorization` rather than a bespoke header.
+
+Plugins and themes opt in per slug through `updateTokens` — see
+[[plugin-authoring]] and [[themes/Updating]].
+
 ## Metadata request path
 
 The feed check, single-release lookup, SHA-256 sidecar fetch, and custom JSON endpoint are issued through the internal `MetadataClient` — a raw `GuzzleHttp\Client` that bypasses Laravel's HTTP factory. This is deliberate: any userland `RequestSending`/`ResponseReceived` listener (Herd Pro's `HttpClientWatcher`, Telescope, Debugbar, custom monitoring) can block or corrupt the metadata request lifecycle, and a wedged Herd dump-server socket used to hang the updater until `max_execution_time` instead of the ~200ms round-trip.
@@ -493,3 +532,5 @@ Environment variables:
 | `php artisan update:perform` | Run the ten-step update. `--target-version=x.y.z` pins a release; `--allow-downgrade` permits a target that is not newer than the installed version; `--queue` dispatches it to a worker instead of running it here. |
 | `php artisan update:rollback` | Restore a snapshot. Takes an optional path; defaults to the newest archive in `backup_path`. `--allow-external` permits a path outside that directory; `--force` skips the confirmation prompt. |
 | `php artisan update:status` | Report the most recent run, including a queued run that no worker has claimed. Exits non-zero when it failed or was interrupted, in **both** output modes. `--json` emits the raw record; `--clear` discards it after reporting. |
+| `php artisan cms:plugins:check-updates` | Re-check every plugin against its update source, bypassing cached answers, and cache the results. Schedulable; registered but not scheduled, like `update:check-scheduled`. Exits non-zero when any plugin's check failed — the others are still checked. |
+| `php artisan cms:themes:check-updates` | The same for every installed theme. |

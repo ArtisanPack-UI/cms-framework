@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Providers;
 
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Console\Commands\CheckPluginUpdatesCommand;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Console\Commands\SyncPluginsCommand;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
@@ -63,6 +64,7 @@ class PluginsServiceProvider extends ServiceProvider
 
         if ( $this->app->runningInConsole() ) {
             $this->commands( [
+                CheckPluginUpdatesCommand::class,
                 SyncPluginsCommand::class,
             ] );
         }
