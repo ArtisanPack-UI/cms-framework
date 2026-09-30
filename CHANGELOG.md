@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12.1] - 2026-09-30
+
+No code changes from 2.12.0. This release contains the same code as 2.12.0, published with its release archive and checksum.
+
+### Fixed
+
+- **The release ships its archive and `.sha256` checksum** — the v2.12.0 GitHub release was created by hand before the release workflow ran. Releases in this repository are immutable, so the workflow could not attach `cms-framework-2.12.0.zip` or its `.sha256` sidecar, and it never notified Packagist. Without the sidecar the self-updater has no checksum and refuses the update (`cms.updates.verify_checksum`). Update to 2.12.1 instead of 2.12.0.
+
+### Changed
+
+- **The release workflow refuses a tag that already has a release** — a new `preflight` job fails within seconds, before the test run, if a release already exists for the pushed tag, and explains why.
+
 ## [2.12.0] - 2026-09-30
 
 ### Added
