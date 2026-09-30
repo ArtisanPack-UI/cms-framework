@@ -9,7 +9,29 @@ permissions:
   contents: read
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    name: Check no release exists for the tag
+
+    steps:
+      # This workflow must create the release itself. Releases in this repo are
+      # immutable once published, so a release created by hand for the tag has
+      # no archive or `.sha256` sidecar and can never get them — the updater
+      # then refuses it. Fail fast with the reason instead of after the tests.
+      - name: Refuse a tag that already has a release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::error::A release for $TAG already exists. It was not created by this workflow, and an immutable release cannot have the archive and checksum attached. Leave it in place and cut a new patch version; do not create releases by hand."
+            exit 1
+          fi
+
   test:
+    needs: preflight
     runs-on: ubuntu-latest
     timeout-minutes: 15
     name: Test before release
