@@ -720,6 +720,21 @@ It re-checks every plugin regardless of source, bypassing the cached answers,
 and caches what it learns. One plugin's source failing does not stop the others
 from being checked; the command reports each failure and exits non-zero.
 
+The command wraps `UpdateManager::refreshUpdateChecks()`, which a host can call
+directly — for example from its own queued job:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
+
+$result = app( UpdateManager::class )->refreshUpdateChecks();
+
+$result['updates'];  // array<string, array> — available updates, keyed by plugin slug
+$result['failures']; // array<string, string> — failure messages, keyed by plugin slug
+```
+
+A failed check is reported in `failures` rather than thrown, and leaves that
+plugin's previously cached answer in place.
+
 ## Testing your plugin
 
 Plugins ship their own Pest / PHPUnit test suites. A minimal `TestCase`

@@ -247,6 +247,21 @@ It re-checks every installed theme, bypassing the cached answers, and caches
 what it learns. One theme's source failing does not stop the others from being
 checked; the command reports each failure and exits non-zero.
 
+The command wraps `UpdateManager::refreshUpdateChecks()`, which a host can call
+directly:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
+
+$result = app( UpdateManager::class )->refreshUpdateChecks();
+
+$result['updates'];  // array<string, array> — available updates, keyed by theme slug
+$result['failures']; // array<string, string> — failure messages, keyed by theme slug
+```
+
+A failed check is reported in `failures` rather than thrown, and leaves that
+theme's previously cached answer in place.
+
 ## Configuration
 
 | Key | Default | Purpose |

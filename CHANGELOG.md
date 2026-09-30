@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-09-30
+
 ### Added
 
 - **Custom JSON update feeds can authenticate with headers** ([#347](https://github.com/ArtisanPack-UI/cms-framework/issues/347)) — `CustomJsonUpdateSource::setAuthentication()` accepts `['headers' => ['Authorization' => 'Bearer …']]` (with an optional `query` key), sending the credential as request headers instead of the `?token=` query parameter so it stays out of URLs and access logs. Header mode is opt-in: a string credential still becomes `?token=` and a flat array still becomes query parameters. A feed with credential headers must be `https` (unless `cms.updates.allow_insecure_transport` is on) and its redirects are not followed, so a custom header is never passed to another host. Plugins and themes opt in per slug — a `cms.plugins.updateTokens` / `cms.themes.updateTokens` entry may now be such an array as well as a token string.
