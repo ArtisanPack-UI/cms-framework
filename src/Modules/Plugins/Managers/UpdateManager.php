@@ -58,6 +58,54 @@ class UpdateManager
     }
 
     /**
+     * Re-check every plugin against its update source, bypassing cached answers.
+     *
+     * The scheduled counterpart to `checkForUpdates()`: that method serves a
+     * cached answer for `cms.plugins.updateCacheTtl`, so running it on a
+     * schedule would mostly re-read the cache. This one always asks the
+     * source and re-caches what it learns, so the admin UI reads a warm,
+     * current answer.
+     *
+     * Each plugin is checked in isolation. Plugins on one site routinely mix
+     * sources — GitHub, GitLab, a licensing server — and one source being
+     * down must not stop the others from being checked. A failed check is
+     * reported rather than thrown, and leaves that plugin's previously cached
+     * answer in place.
+     *
+     * @since 2.12.0
+     *
+     * @return array{updates: array<string, array>, failures: array<string, string>} Available updates and failure messages, both keyed by plugin slug.
+     */
+    public function refreshUpdateChecks(): array
+    {
+        $updates  = [];
+        $failures = [];
+
+        foreach ( Plugin::all() as $plugin ) {
+            try {
+                $updateInfo = $this->runUpdateCheck( $plugin, true );
+            } catch ( Throwable $e ) {
+                logger()->error( "Failed to check update for plugin: {$plugin->slug}", [
+                    'exception' => $e->getMessage(),
+                ] );
+
+                $failures[ $plugin->slug ] = $e->getMessage();
+
+                continue;
+            }
+
+            if ( null !== $updateInfo ) {
+                $updates[ $plugin->slug ] = $updateInfo;
+            }
+        }
+
+        return [
+            'updates'  => $updates,
+            'failures' => $failures,
+        ];
+    }
+
+    /**
      * Check update for specific plugin.
      *
      * Two resolution paths, in priority order:
@@ -85,29 +133,8 @@ class UpdateManager
             return null;
         }
 
-        $sourceUrl = $this->resolveUpdateSourceUrl( $plugin );
-
-        if ( null === $sourceUrl && ! isset( $plugin->meta['update_url'] ) ) {
-            return null;
-        }
-
-        $cacheKey = $this->updateCacheKey( $slug );
-        $cached   = Cache::get( $cacheKey );
-
-        // Deliberately not `Cache::remember()`: it treats a null return as a
-        // miss and re-runs the closure, so the common "no update available"
-        // answer would never be cached, and — worse — a *failed* check (a
-        // rate-limited or 5xx source) that returned null would be re-cached and
-        // served as "no update" for the whole TTL. An empty array caches the
-        // genuine "no update" answer; a thrown check caches nothing and retries.
-        if ( null !== $cached ) {
-            return is_array( $cached ) && [] !== $cached ? $cached : null;
-        }
-
         try {
-            $updateInfo = null !== $sourceUrl
-                ? $this->checkViaUpdateSource( $plugin )
-                : $this->checkViaCustomFeed( $plugin );
+            return $this->runUpdateCheck( $plugin, false );
         } catch ( Exception $e ) {
             // A transient failure must not be cached as "no update" — leaving
             // it uncached means the next call retries rather than hiding a real
@@ -118,10 +145,6 @@ class UpdateManager
 
             return null;
         }
-
-        Cache::put( $cacheKey, $updateInfo ?? [], config( 'cms.plugins.updateCacheTtl' ) );
-
-        return $updateInfo;
     }
 
     /**
@@ -401,6 +424,60 @@ class UpdateManager
     }
 
     /**
+     * Run one plugin's update check and cache the answer.
+     *
+     * Throws on a failed check instead of returning null, so callers can tell
+     * "the source said there is nothing newer" from "the source was never
+     * reached" — and so a failure is never cached as "no update".
+     *
+     * @since 2.12.0
+     *
+     * @param  Plugin  $plugin  Plugin to check.
+     * @param  bool  $fresh  Skip the cached answer and ask the source again.
+     *
+     * @throws Exception When the update source could not be reached or returned an unusable response.
+     *
+     * @return array|null Update info, or null when the plugin declares no source or is current.
+     */
+    protected function runUpdateCheck( Plugin $plugin, bool $fresh ): ?array
+    {
+        $sourceUrl = $this->resolveUpdateSourceUrl( $plugin );
+
+        if ( null === $sourceUrl && ! isset( $plugin->meta['update_url'] ) ) {
+            return null;
+        }
+
+        $cacheKey = $this->updateCacheKey( $plugin->slug );
+
+        if ( $fresh ) {
+            // `UpdateChecker` keeps its own raw entry; left in place it would
+            // answer the "fresh" check from cache.
+            Cache::forget( 'cms.' . UpdateType::Plugin->value . ".{$plugin->slug}.update_check" );
+        } else {
+            $cached = Cache::get( $cacheKey );
+
+            // Deliberately not `Cache::remember()`: it treats a null return as
+            // a miss and re-runs the closure, so the common "no update
+            // available" answer would never be cached, and — worse — a *failed*
+            // check (a rate-limited or 5xx source) that returned null would be
+            // re-cached and served as "no update" for the whole TTL. An empty
+            // array caches the genuine "no update" answer; a thrown check
+            // caches nothing and retries.
+            if ( null !== $cached ) {
+                return is_array( $cached ) && [] !== $cached ? $cached : null;
+            }
+        }
+
+        $updateInfo = null !== $sourceUrl
+            ? $this->checkViaUpdateSource( $plugin )
+            : $this->checkViaCustomFeed( $plugin );
+
+        Cache::put( $cacheKey, $updateInfo ?? [], config( 'cms.plugins.updateCacheTtl' ) );
+
+        return $updateInfo;
+    }
+
+    /**
      * Check for an update through the shared update-source abstraction.
      *
      * @param  Plugin  $plugin  Plugin to check.
@@ -432,6 +509,8 @@ class UpdateManager
      *
      * @param  Plugin  $plugin  Plugin to check.
      *
+     * @throws UpdateException When the feed answers with a non-2xx status.
+     *
      * @return array|null Raw feed payload, or null when already current.
      */
     protected function checkViaCustomFeed( Plugin $plugin ): ?array
@@ -450,8 +529,11 @@ class UpdateManager
         $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
             ->get( $feedUrl );
 
+        // Thrown, not `null`: `runUpdateCheck()` would cache a null as "no
+        // update" for the whole TTL, and a scheduled check would never report
+        // the failure.
         if ( ! $response->successful() ) {
-            return null;
+            throw UpdateException::versionCheckFailed( "Update feed returned HTTP {$response->status()}." );
         }
 
         $updateData = $response->json();

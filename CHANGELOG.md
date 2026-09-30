@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-09-30
+
+### Added
+
+- **Custom JSON update feeds can authenticate with headers** ([#347](https://github.com/ArtisanPack-UI/cms-framework/issues/347)) — `CustomJsonUpdateSource::setAuthentication()` accepts `['headers' => ['Authorization' => 'Bearer …']]` (with an optional `query` key), sending the credential as request headers instead of the `?token=` query parameter so it stays out of URLs and access logs. Header mode is opt-in: a string credential still becomes `?token=` and a flat array still becomes query parameters. A feed with credential headers must be `https` (unless `cms.updates.allow_insecure_transport` is on) and its redirects are not followed, so a custom header is never passed to another host. Plugins and themes opt in per slug — a `cms.plugins.updateTokens` / `cms.themes.updateTokens` entry may now be such an array as well as a token string.
+- **A custom JSON feed's `download_url` is fetched with the feed's auth headers** ([#347](https://github.com/ArtisanPack-UI/cms-framework/issues/347)) — so a private feed no longer has to hand out a pre-signed or public download URL. The headers are scoped to the feed's own origin (scheme, host and port): they are dropped from the download request, and from every redirect hop, that leaves it, so a credential is never forwarded to a third-party host named in the feed response.
+- **Schedulable plugin and theme update checks** ([#347](https://github.com/ArtisanPack-UI/cms-framework/issues/347)) — new `cms:plugins:check-updates` and `cms:themes:check-updates` commands re-check every extension against its update source, bypassing the cached answers, and cache the results. Like `update:check-scheduled` they are registered but not scheduled; the host wires them into its own scheduler. Each extension is checked in isolation regardless of source, so one failing source does not stop the others; failures are reported and the command exits non-zero. Backed by a new `refreshUpdateChecks()` method on both `UpdateManager`s.
+
+### Fixed
+
+- **A failed legacy `update_url` check is no longer cached as "no update"** ([#349](https://github.com/ArtisanPack-UI/cms-framework/pull/349)) — when a plugin's legacy `update_url` feed answered with a non-2xx status (a 5xx or a 429), the check returned `null` and that was cached as "no update" for the full `cms.plugins.updateCacheTtl`, replacing a previously cached real update. The check now throws, as source-backed checks already did: the cached answer is left in place, `checkPluginUpdate()` still returns `null`, and `cms:plugins:check-updates` reports the plugin as a failure.
+
+### Security
+
+- **Update-source transport errors no longer include URL credentials** ([#347](https://github.com/ArtisanPack-UI/cms-framework/issues/347)) — the HTTP client appends the request URL to connection errors, and a custom JSON feed's `?token=` travels in that URL, so a DNS or connection failure wrote the token to the log. `MetadataClient` now redacts the query string and any `user:pass@` userinfo from the message, and the invalid-JSON failure names the feed without appended credentials and with any query string or userinfo in the configured URL redacted.
+
 ## [2.11.0] - 2026-09-29
 
 ### Added

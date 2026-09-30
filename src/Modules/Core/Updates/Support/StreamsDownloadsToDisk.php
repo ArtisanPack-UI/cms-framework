@@ -6,9 +6,11 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use GuzzleHttp\Psr7\Utils;
+use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Psr\Http\Message\RequestInterface;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
 
@@ -40,17 +42,26 @@ trait StreamsDownloadsToDisk
      * to disk and closing the underlying sink stream before anyone can pull it
      * back into memory.
      *
+     * When `$credentialOrigin` is given, `$headers` are treated as credentials
+     * scoped to that origin: they are removed from the initial request and
+     * from every redirect hop whose scheme, host or port differs. A custom
+     * JSON feed names its own `download_url`, and a redirect can name any
+     * host after that, so without this a credential meant for the feed's
+     * host would be handed to whatever host the response points at (#347).
+     *
      * @since 2.5.2
+     * @since 2.12.0 Added the `$credentialOrigin` parameter.
      *
      * @param  string  $downloadUrl  Absolute URL of the release archive.
      * @param  array<string, string>  $headers  Request headers to send.
+     * @param  string|null  $credentialOrigin  Origin (see {@see originOf()}) the headers are restricted to, or null to send them unconditionally.
      *
      * @throws UpdateException When the response is not a 2xx.
      * @throws Throwable On transport errors (partial file is removed first).
      *
      * @return string Absolute path to the downloaded file.
      */
-    protected function streamDownloadToTempFile( string $downloadUrl, array $headers = [] ): string
+    protected function streamDownloadToTempFile( string $downloadUrl, array $headers = [], ?string $credentialOrigin = null ): string
     {
         $this->assertSecureDownloadUrl( $downloadUrl );
 
@@ -61,7 +72,27 @@ trait StreamsDownloadsToDisk
         }
 
         try {
-            $response = Http::withHeaders( $headers )
+            $pending = Http::withHeaders( $headers );
+
+            if ( null !== $credentialOrigin && [] !== $headers ) {
+                // `beforeSending` runs inside Guzzle's redirect middleware, so
+                // this sees the initial request and every redirect hop.
+                $pending->beforeSending( function ( Request $request ) use ( $headers, $credentialOrigin ): ?RequestInterface {
+                    if ( $this->originOf( $request->url() ) === $credentialOrigin ) {
+                        return null;
+                    }
+
+                    $psrRequest = $request->toPsrRequest();
+
+                    foreach ( array_keys( $headers ) as $name ) {
+                        $psrRequest = $psrRequest->withoutHeader( (string) $name );
+                    }
+
+                    return $psrRequest;
+                } );
+            }
+
+            $response = $pending
                 ->timeout( config( 'cms.updates.download_timeout', 300 ) )
                 // Constrain redirects to the same scheme policy as the initial
                 // URL. Validating only the URL we were handed is not enough:
@@ -135,5 +166,37 @@ trait StreamsDownloadsToDisk
         }
 
         throw UpdateException::insecureDownloadUrl( $downloadUrl );
+    }
+
+    /**
+     * Reduce a URL to its origin — scheme, host and port — for comparison.
+     *
+     * The default port is filled in so `https://example.com` and
+     * `https://example.com:443` compare equal.
+     *
+     * @since 2.12.0
+     *
+     * @param  string  $url  Absolute URL.
+     *
+     * @return string|null Normalized origin, or null when the URL has no scheme or host.
+     */
+    protected function originOf( string $url ): ?string
+    {
+        $parts = parse_url( $url );
+
+        if ( ! is_array( $parts ) ) {
+            return null;
+        }
+
+        $scheme = strtolower( (string) ( $parts['scheme'] ?? '' ) );
+        $host   = strtolower( (string) ( $parts['host'] ?? '' ) );
+
+        if ( '' === $scheme || '' === $host ) {
+            return null;
+        }
+
+        $port = $parts['port'] ?? ( 'https' === $scheme ? 443 : 80 );
+
+        return "{$scheme}://{$host}:{$port}";
     }
 }

@@ -207,6 +207,61 @@ the distributed ZIP. They are deliberately per-slug rather than one global
 token: a theme names its own update host in its own manifest, so a shared token
 would be handed to whatever host any installed theme asks for.
 
+### Header auth for custom JSON feeds (2.12.0)
+
+A string token is sent by GitHub and GitLab sources as their own auth header,
+and by a custom JSON feed as the `?token=` query parameter. To keep a custom
+feed's credential out of URLs and access logs, give an array with a `headers`
+key instead:
+
+```php
+// config/cms.php
+'themes' => [
+    'updateTokens' => [
+        'my-licensed-theme' => [
+            'headers' => [
+                'Authorization' => 'Bearer ' . env( 'MY_LICENSE_KEY' ),
+            ],
+        ],
+    ],
+],
+```
+
+The headers are sent with the feed request and with the archive download, scoped
+to the feed's own origin ( scheme, host and port ): if `download_url`, or a
+redirect from it, names a different host, the headers are dropped for that
+request. The feed URL itself must answer directly — redirects are not followed
+while credential headers are configured.
+
+## Scheduled update checks
+
+Update checks run on demand and are cached for `cms.themes.updateCacheTtl`. To
+keep those answers warm, schedule the built-in command ( *2.12.0* ):
+
+```php
+// routes/console.php
+Schedule::command( 'cms:themes:check-updates' )->daily();
+```
+
+It re-checks every installed theme, bypassing the cached answers, and caches
+what it learns. One theme's source failing does not stop the others from being
+checked; the command reports each failure and exits non-zero.
+
+The command wraps `UpdateManager::refreshUpdateChecks()`, which a host can call
+directly:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
+
+$result = app( UpdateManager::class )->refreshUpdateChecks();
+
+$result['updates'];  // array<string, array> — available updates, keyed by theme slug
+$result['failures']; // array<string, string> — failure messages, keyed by theme slug
+```
+
+A failed check is reported in `failures` rather than thrown, and leaves that
+theme's previously cached answer in place.
+
 ## Configuration
 
 | Key | Default | Purpose |
@@ -214,7 +269,7 @@ would be handed to whatever host any installed theme asks for.
 | `cms.themes.updateCacheTtl` | `43200` | Seconds an update check is cached. |
 | `cms.themes.backupPath` | `theme-backups` | Backup directory, relative to `storage_path()`. |
 | `cms.themes.maxUpdateSize` | `52428800` | Size ceiling for a downloaded update archive. Separate from `maxUploadSize`, which is an abuse control on the upload endpoint — a theme shipping images and fonts clears 10MB easily, and gating updates on the upload ceiling would leave it permanently un-updatable. |
-| `cms.themes.updateTokens` | `[]` | Per-slug tokens for private update sources. |
+| `cms.themes.updateTokens` | `[]` | Per-slug credentials for private update sources: a token string, or a `['headers' => [...]]` array for a custom JSON feed. |
 | `cms.updates.verify_checksum` | `true` | Shared with the application and plugin updaters. |
 | `cms.updates.allow_unverified_updates` | `false` | Shared; allows a release with no published digest. |
 

@@ -51,7 +51,7 @@ final class MetadataClient
      * the raw Guzzle client. Used by {@see useHttpFacadeBridge} to keep
      * `Http::fake()` in play for existing tests.
      *
-     * @var (Closure(string, array<string, string>, int): array{status: int, body: string})|null
+     * @var (Closure(string, array<string, string>, int, bool): array{status: int, body: string})|null
      *
      * @since 2.5.4
      */
@@ -73,14 +73,19 @@ final class MetadataClient
      * bridge or client override is installed.
      *
      * @since 2.5.4
+     * @since 2.12.0 Added the `$followRedirects` parameter.
      *
-     * @param  string                 $url             Absolute URL to fetch.
-     * @param  array<string, string>  $headers         Request headers.
-     * @param  int|null               $timeoutSeconds  Per-request timeout. Falls back to
-     *                                                 `cms.updates.http_timeout` (15s).
-     * @param  int                    $retries         Additional retry attempts on transport
-     *                                                 error or 5xx response. Zero means one
-     *                                                 attempt total.
+     * @param  string                 $url              Absolute URL to fetch.
+     * @param  array<string, string>  $headers          Request headers.
+     * @param  int|null               $timeoutSeconds   Per-request timeout. Falls back to
+     *                                                  `cms.updates.http_timeout` (15s).
+     * @param  int                    $retries          Additional retry attempts on transport
+     *                                                  error or 5xx response. Zero means one
+     *                                                  attempt total.
+     * @param  bool                   $followRedirects  Whether to follow redirects. Callers
+     *                                                  sending credential headers pass false:
+     *                                                  the HTTP client forwards custom header
+     *                                                  names to whatever host a redirect names.
      *
      * @throws UpdateException When every attempt fails at the transport layer.
      *
@@ -91,11 +96,12 @@ final class MetadataClient
         array $headers = [],
         ?int $timeoutSeconds = null,
         int $retries = 0,
+        bool $followRedirects = true,
     ): array {
         $timeout = $timeoutSeconds ?? (int) config( 'cms.updates.http_timeout', 15 );
 
         if ( null !== self::$responder ) {
-            return ( self::$responder )( $url, $headers, $timeout );
+            return ( self::$responder )( $url, $headers, $timeout, $followRedirects );
         }
 
         $attempts  = max( 1, $retries + 1 );
@@ -110,6 +116,7 @@ final class MetadataClient
                     'timeout'         => $timeout,
                     'connect_timeout' => $timeout,
                     'http_errors'     => false,
+                    'allow_redirects' => $followRedirects,
                 ] );
 
                 $last = [
@@ -131,8 +138,34 @@ final class MetadataClient
         }
 
         throw UpdateException::versionCheckFailed(
-            'HTTP request failed: ' . ( $lastError?->getMessage() ?? 'unknown transport error' ),
+            'HTTP request failed: ' . self::redactUrlCredentials( $lastError?->getMessage() ?? 'unknown transport error' ),
         );
+    }
+
+    /**
+     * Strip credentials from any URL quoted in a transport error message.
+     *
+     * Guzzle appends the request URI to connection errors, and a custom JSON
+     * feed's token travels in that URI's query string. The message is logged
+     * and printed by the scheduled update-check commands, so the query string
+     * and any `user:pass@` userinfo are removed while the host and path — the
+     * part an operator needs to diagnose the failure — are kept.
+     *
+     * @since 2.12.0
+     *
+     * @param  string  $message  Raw transport error message.
+     *
+     * @return string The message with URL credentials redacted.
+     */
+    public static function redactUrlCredentials( string $message ): string
+    {
+        $redacted = preg_replace(
+            [ '#(https?://)[^/\s@]+@#i', '#(https?://[^\s?\#]+)\?[^\s\#]*#i' ],
+            [ '$1[redacted]@', '$1?[redacted]' ],
+            $message,
+        );
+
+        return $redacted ?? 'transport error (details withheld)';
     }
 
     /**
@@ -146,8 +179,9 @@ final class MetadataClient
      */
     public static function useHttpFacadeBridge(): void
     {
-        self::$responder = static function ( string $url, array $headers, int $timeout ): array {
+        self::$responder = static function ( string $url, array $headers, int $timeout, bool $followRedirects = true ): array {
             $response = Http::withHeaders( $headers )
+                ->withOptions( [ 'allow_redirects' => $followRedirects ] )
                 ->timeout( $timeout )
                 ->get( $url );
 
