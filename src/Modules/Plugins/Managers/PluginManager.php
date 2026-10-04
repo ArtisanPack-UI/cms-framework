@@ -1400,9 +1400,11 @@ class PluginManager
     /**
      * Extract ZIP file to plugins directory.
      *
+     * @since 2.12.2 Refuses a slug that is already installed or present on disk before extracting.
+     *
      * @param  string  $zipPath  Path to ZIP file
      *
-     * @throws PluginInstallationException If extraction fails
+     * @throws PluginInstallationException If extraction fails or the slug is already installed
      *
      * @return string Plugin slug
      */
@@ -1440,6 +1442,21 @@ class PluginManager
             throw PluginInstallationException::extractionFailed( $slug );
         }
 
+        // Refuse before anything is written. Extracting first would overwrite an
+        // installed plugin's files and only then fail the row check, or silently
+        // replace an unregistered on-disk plugin. Mirrors the Themes module.
+        try {
+            $slugTaken = $this->isSlugTaken( $slug, $realExtractPath );
+        } catch ( PluginInstallationException $e ) {
+            $zip->close();
+            throw $e;
+        }
+
+        if ( $slugTaken ) {
+            $zip->close();
+            throw PluginInstallationException::alreadyInstalled( $slug );
+        }
+
         // Zip-slip guard: reject absolute/`..` entries and any entry outside
         // the derived slug directory. Without the slug check a plugin ZIP
         // carrying a sibling top-level folder could overwrite a different,
@@ -1466,6 +1483,42 @@ class PluginManager
         $zip->close();
 
         return $slug;
+    }
+
+    /**
+     * Determine whether a plugin slug is already claimed.
+     *
+     * A slug is claimed when the plugins directory holds any entry of that name
+     * (directory, symlink or file) or a `plugins` row records it. Both
+     * comparisons ignore case, since slugs may contain uppercase letters and an
+     * `Acme` upload must not land beside — or, on a case-insensitive
+     * filesystem, over — an installed `acme`.
+     *
+     * @since 2.12.2
+     *
+     * @param  string  $slug         Plugin slug, already validated by `validateSlug()`.
+     * @param  string  $pluginsPath  Resolved plugins directory.
+     *
+     * @throws PluginInstallationException If the plugins directory cannot be listed, so the guard fails closed.
+     *
+     * @return bool True if a filesystem entry or database row already uses the slug.
+     */
+    protected function isSlugTaken( string $slug, string $pluginsPath ): bool
+    {
+        $lowerSlug = strtolower( $slug );
+        $entries   = is_readable( $pluginsPath ) ? scandir( $pluginsPath ) : false;
+
+        if ( false === $entries ) {
+            throw PluginInstallationException::extractionFailed( $slug );
+        }
+
+        foreach ( $entries as $entry ) {
+            if ( strtolower( $entry ) === $lowerSlug ) {
+                return true;
+            }
+        }
+
+        return Plugin::whereRaw( 'LOWER(slug) = ?', [ $lowerSlug ] )->exists();
     }
 
     /**

@@ -375,3 +375,180 @@ describe( 'File System Security', function (): void {
         File::delete( $zipPath );
     } );
 } );
+
+describe( 'Already-Installed ZIP Guard', function (): void {
+    beforeEach( function (): void {
+        $this->guardZips  = [];
+        $this->guardPaths = [];
+
+        $this->buildGuardZip = function ( string $directory, string $slug, string $version ): string {
+            $zipPath = storage_path( 'app/guard-plugin-' . uniqid() . '.zip' );
+            File::ensureDirectoryExists( dirname( $zipPath ) );
+
+            $zip = new ZipArchive;
+            $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+            $zip->addFromString( $directory . '/plugin.json', json_encode( [
+                'slug'    => $slug,
+                'name'    => 'Guard Plugin',
+                'version' => $version,
+            ] ) );
+            $zip->addFromString( $directory . '/src/Changed.php', '<?php // from zip' );
+            $zip->addFromString( $directory . '/zip-only.txt', 'from zip' );
+            $zip->close();
+
+            $this->guardZips[]  = $zipPath;
+            $this->guardPaths[] = $this->pluginsPath . '/' . $directory;
+
+            return $zipPath;
+        };
+
+        $this->seedOnDiskPlugin = function ( string $slug ): array {
+            $path = $this->pluginsPath . '/' . $slug;
+            File::ensureDirectoryExists( $path . '/src' );
+
+            $files = [
+                'plugin.json'     => json_encode( ['slug' => $slug, 'name' => 'On Disk', 'version' => '1.0.0'] ),
+                'src/Changed.php' => '<?php // original',
+            ];
+
+            foreach ( $files as $relative => $contents ) {
+                File::put( $path . '/' . $relative, $contents );
+            }
+
+            $this->guardPaths[] = $path;
+
+            return $files;
+        };
+    } );
+
+    afterEach( function (): void {
+        foreach ( $this->guardZips as $zipPath ) {
+            File::delete( $zipPath );
+        }
+
+        foreach ( $this->guardPaths as $path ) {
+            File::deleteDirectory( $path );
+        }
+    } );
+
+    it( 'refuses a ZIP for an installed plugin without touching its files', function (): void {
+        $files = ( $this->seedOnDiskPlugin )( 'guard-installed' );
+        $this->manager->installFromDisk( 'guard-installed' );
+
+        $zipPath = ( $this->buildGuardZip )( 'guard-installed', 'guard-installed', '2.0.0' );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( PluginInstallationException::class, "Plugin 'guard-installed' is already installed." );
+
+        $path = $this->pluginsPath . '/guard-installed';
+        foreach ( $files as $relative => $contents ) {
+            expect( File::get( $path . '/' . $relative ) )->toBe( $contents );
+        }
+        expect( File::exists( $path . '/zip-only.txt' ) )->toBeFalse();
+        expect( Plugin::where( 'slug', 'guard-installed' )->value( 'version' ) )->toBe( '1.0.0' );
+    } );
+
+    it( 'refuses a ZIP for a plugin on disk with no row and leaves it in place', function (): void {
+        $files = ( $this->seedOnDiskPlugin )( 'guard-on-disk' );
+
+        $zipPath = ( $this->buildGuardZip )( 'guard-on-disk', 'guard-on-disk', '2.0.0' );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( PluginInstallationException::class, "Plugin 'guard-on-disk' is already installed." );
+
+        $path = $this->pluginsPath . '/guard-on-disk';
+        foreach ( $files as $relative => $contents ) {
+            expect( File::get( $path . '/' . $relative ) )->toBe( $contents );
+        }
+        expect( File::exists( $path . '/zip-only.txt' ) )->toBeFalse();
+        expect( Plugin::where( 'slug', 'guard-on-disk' )->exists() )->toBeFalse();
+    } );
+
+    it( 'refuses a ZIP for a slug that has a row but no directory', function (): void {
+        Plugin::create( [
+            'slug'         => 'guard-row-only',
+            'name'         => 'Row Only',
+            'version'      => '1.0.0',
+            'is_active'    => false,
+            'meta'         => [],
+            'installed_at' => now(),
+        ] );
+
+        $zipPath = ( $this->buildGuardZip )( 'guard-row-only', 'guard-row-only', '2.0.0' );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( PluginInstallationException::class, "Plugin 'guard-row-only' is already installed." );
+
+        expect( File::exists( $this->pluginsPath . '/guard-row-only' ) )->toBeFalse();
+        expect( Plugin::where( 'slug', 'guard-row-only' )->value( 'version' ) )->toBe( '1.0.0' );
+    } );
+
+    it( 'treats a slug that differs only by case from an on-disk plugin as taken', function (): void {
+        $files = ( $this->seedOnDiskPlugin )( 'guard-case' );
+
+        $zipPath = ( $this->buildGuardZip )( 'Guard-Case', 'Guard-Case', '2.0.0' );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( PluginInstallationException::class, "Plugin 'Guard-Case' is already installed." );
+
+        $path = $this->pluginsPath . '/guard-case';
+        foreach ( $files as $relative => $contents ) {
+            expect( File::get( $path . '/' . $relative ) )->toBe( $contents );
+        }
+        expect( Plugin::where( 'slug', 'Guard-Case' )->exists() )->toBeFalse();
+    } );
+
+    it( 'treats a slug that differs only by case from a registered plugin as taken', function (): void {
+        Plugin::create( [
+            'slug'         => 'guard-case-row',
+            'name'         => 'Case Row',
+            'version'      => '1.0.0',
+            'is_active'    => false,
+            'meta'         => [],
+            'installed_at' => now(),
+        ] );
+
+        $zipPath = ( $this->buildGuardZip )( 'GUARD-CASE-ROW', 'GUARD-CASE-ROW', '2.0.0' );
+
+        expect( fn () => $this->manager->installFromZip( $zipPath ) )
+            ->toThrow( PluginInstallationException::class, "Plugin 'GUARD-CASE-ROW' is already installed." );
+
+        expect( File::exists( $this->pluginsPath . '/GUARD-CASE-ROW' ) )->toBeFalse();
+        expect( Plugin::where( 'slug', 'GUARD-CASE-ROW' )->exists() )->toBeFalse();
+    } );
+
+    it( 'fails closed when the plugins directory cannot be listed', function (): void {
+        if ( function_exists( 'posix_geteuid' ) && 0 === posix_geteuid() ) {
+            $this->markTestSkipped( 'Root ignores directory read permissions.' );
+        }
+
+        // Write + execute but no read: realpath() still resolves, scandir() cannot list.
+        $unlistable = base_path( 'plugins-unlistable-' . uniqid() );
+        File::ensureDirectoryExists( $unlistable );
+        config( ['cms.plugins.directory' => basename( $unlistable )] );
+        chmod( $unlistable, 0300 );
+
+        $zipPath = ( $this->buildGuardZip )( 'guard-unlistable', 'guard-unlistable', '1.0.0' );
+
+        try {
+            expect( fn () => $this->manager->installFromZip( $zipPath ) )
+                ->toThrow( PluginInstallationException::class, "Failed to extract plugin 'guard-unlistable'." );
+        } finally {
+            chmod( $unlistable, 0755 );
+        }
+
+        expect( File::exists( $unlistable . '/guard-unlistable' ) )->toBeFalse();
+
+        File::deleteDirectory( $unlistable );
+    } );
+
+    it( 'still installs a ZIP for a slug that is not taken', function (): void {
+        $zipPath = ( $this->buildGuardZip )( 'guard-fresh', 'guard-fresh', '1.2.0' );
+
+        $plugin = $this->manager->installFromZip( $zipPath );
+
+        expect( $plugin->slug )->toBe( 'guard-fresh' );
+        expect( $plugin->version )->toBe( '1.2.0' );
+        expect( File::get( $this->pluginsPath . '/guard-fresh/zip-only.txt' ) )->toBe( 'from zip' );
+    } );
+} );
