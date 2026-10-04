@@ -120,6 +120,8 @@ throw PluginInstallationException::extractionFailed($slug);
 throw PluginInstallationException::alreadyInstalled($slug);
 ```
 
+`PluginManager::installFromZip()` throws `alreadyInstalled()` before extracting when the slug already has a `plugins` row or an entry in the plugins directory (case-insensitive, since 2.12.2). The plugin already in place is left untouched.
+
 **PluginNotFoundException** - Thrown when a plugin is not found
 
 ```php

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.12.2] - 2026-10-04
+
+### Fixed
+
+- **`installFromZip()` no longer extracts over an existing plugin** ([#351](https://github.com/ArtisanPack-UI/cms-framework/issues/351)) — `PluginManager::installFromZip()` extracted the archive first and only checked for an existing `plugins` row afterwards. A ZIP for an installed slug overwrote that plugin's files and then failed with `alreadyInstalled`, leaving a mix of old and new files behind a row that still recorded the old version. A ZIP for a plugin that was on disk without a row (a dev clone, or a plugin waiting for `installFromDisk()`) silently replaced it and the install succeeded. `extractZip()` now throws `PluginInstallationException::alreadyInstalled()` **before anything is written** when the plugins directory already holds an entry of that name (directory, symlink or file) or a `plugins` row records the slug, mirroring `ThemeManager`. Both comparisons ignore case, so an `Acme` upload cannot land beside or over an installed `acme`. A plugins directory that cannot be listed fails closed. The post-extraction row check stays as a backstop.
+
 ## [2.12.1] - 2026-09-30
 
 No code changes from 2.12.0. This release contains the same code as 2.12.0, published with its release archive and checksum.
