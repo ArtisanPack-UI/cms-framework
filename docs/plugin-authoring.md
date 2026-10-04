@@ -23,11 +23,19 @@ needs and points at the reference example under
 
 1. **Discovery** — The framework scans `base_path(config('cms.plugins.directory'))`
    ( default `plugins/` ) for directories containing a `plugin.json` manifest.
-2. **Install** — When a plugin is uploaded, `PluginManager::install()` validates
-   the manifest and inserts a row in the `plugins` table. Since *2.8.0*, the
+2. **Install** — When a plugin is uploaded, `PluginManager::installFromZip()`
+   extracts the archive, validates the manifest and inserts a row in the
+   `plugins` table. A plugin already on disk is registered with
+   `PluginManager::installFromDisk()` instead. Since *2.8.0*, the
    archive's declared uncompressed size is checked against
    `cms.plugins.maxUncompressedSize` (100MB default) before extraction, as a
-   zip-bomb guard; an archive that exceeds the ceiling is refused.
+   zip-bomb guard; an archive that exceeds the ceiling is refused. Since
+   *2.12.2*, a ZIP whose slug is already taken — by a `plugins` row or by any
+   entry of that name in the plugins directory, compared case-insensitively —
+   is refused with `PluginInstallationException::alreadyInstalled()` before
+   anything is extracted, so an existing plugin's files are never overwritten.
+   To ship a new version of an installed plugin, use the update flow (see
+   [Shipping updates](#shipping-updates)).
 3. **Activate** — On activation, the plugin's `service_provider` ( from
    `plugin.json` ) is registered with the container. This runs your
    `register()` and `boot()` methods, and any manifest-declared migrations.
