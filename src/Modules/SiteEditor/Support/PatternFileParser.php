@@ -6,8 +6,9 @@
  * Parses theme-shipped block-pattern PHP files. The file format mirrors WP's
  * `register_block_pattern_from_file()` convention: a leading PHP doc comment
  * carries metadata headers (`Title:`, `Slug:`, `Categories:`, `Description:`,
- * `Block Types:`), and everything after the `?>` (or after the closing `*\/`
- * when there is no PHP tag) is treated as the pattern content.
+ * `Block Types:`, `Viewport Width:`), and everything after the `?>` (or
+ * after the closing `*\/` when there is no PHP tag) is treated as the
+ * pattern content.
  *
  * @since      2.0.0
  */
@@ -22,11 +23,25 @@ namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 final class PatternFileParser
 {
     /**
+     * Narrowest `Viewport Width:` a pattern may declare, in pixels.
+     *
+     * @since 2.13.0
+     */
+    public const MIN_VIEWPORT_WIDTH = 320;
+
+    /**
+     * Widest `Viewport Width:` a pattern may declare, in pixels.
+     *
+     * @since 2.13.0
+     */
+    public const MAX_VIEWPORT_WIDTH = 2560;
+
+    /**
      * Parse a pattern file's contents into a structured payload.
      *
      * @since 2.0.0
      *
-     * @return array{title: string, slug: string|null, description: string|null, categories: array<int, string>, block_types: array<int, string>, content: string}
+     * @return array{title: string, slug: string|null, description: string|null, categories: array<int, string>, block_types: array<int, string>, viewport_width: int|null, content: string}
      */
     public static function parse( string $contents ): array
     {
@@ -34,12 +49,13 @@ final class PatternFileParser
         $content = self::extractContent( $contents );
 
         return [
-            'title'       => trim( $headers['Title'] ?? '' ),
-            'slug'        => self::nullable( $headers['Slug'] ?? null ),
-            'description' => self::nullable( $headers['Description'] ?? null ),
-            'categories'  => self::splitList( $headers['Categories'] ?? '' ),
-            'block_types' => self::splitList( $headers['Block Types'] ?? '' ),
-            'content'     => trim( $content ),
+            'title'          => trim( $headers['Title'] ?? '' ),
+            'slug'           => self::nullable( $headers['Slug'] ?? null ),
+            'description'    => self::nullable( $headers['Description'] ?? null ),
+            'categories'     => self::splitList( $headers['Categories'] ?? '' ),
+            'block_types'    => self::splitList( $headers['Block Types'] ?? '' ),
+            'viewport_width' => self::viewportWidth( $headers['Viewport Width'] ?? null ),
+            'content'        => trim( $content ),
         ];
     }
 
@@ -136,6 +152,35 @@ final class PatternFileParser
         }
 
         return array_values( array_filter( array_map( 'trim', explode( ',', $value ) ) ) );
+    }
+
+    /**
+     * Parse the `Viewport Width:` header into a pixel width.
+     *
+     * Mirrors WordPress's `viewportWidth` pattern property: the width the
+     * pattern is laid out at before a preview scales it down. Returns null
+     * when the header is missing or isn't a positive whole number (an
+     * optional `px` suffix is accepted), so consumers fall back to their
+     * default width. Valid values are clamped to
+     * {@see self::MIN_VIEWPORT_WIDTH}–{@see self::MAX_VIEWPORT_WIDTH}.
+     *
+     * @since 2.13.0
+     */
+    protected static function viewportWidth( ?string $value ): ?int
+    {
+        $value = trim( (string) $value );
+
+        if ( ! preg_match( '/^(\d+)\s*(?:px)?$/i', $value, $match ) ) {
+            return null;
+        }
+
+        $width = (int) $match[1];
+
+        if ( $width <= 0 ) {
+            return null;
+        }
+
+        return max( self::MIN_VIEWPORT_WIDTH, min( self::MAX_VIEWPORT_WIDTH, $width ) );
     }
 
     /**

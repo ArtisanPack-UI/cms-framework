@@ -178,6 +178,18 @@ describe( 'GET /api/v1/block-patterns/patterns', function (): void {
         expect( $response->json( 'source' ) )->toBe( BlockPattern::SOURCE_THEME );
         expect( $response->json( 'wp_id' ) )->toBeNull();
         expect( $response->json( 'categories' ) )->toEqual( ['featured'] );
+        expect( $response->json( 'viewport_width' ) )->toBeNull();
+    } );
+
+    it( 'exposes the Viewport Width header as viewport_width', function (): void {
+        File::put( $this->themePatterns . '/wide.php', "<?php\n/**\n * Title: Wide\n * Viewport Width: 1400\n */\n" );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/block-patterns/patterns/wide' );
+
+        $response->assertOk();
+        expect( $response->json( 'viewport_width' ) )->toBe( 1400 );
     } );
 } );
 
