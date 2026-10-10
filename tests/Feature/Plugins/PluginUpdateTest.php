@@ -597,6 +597,44 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
             File::delete( $zipPath );
         }
     } );
+    it( 'clears the caches once per deactivate/activate, not again, when updating an active plugin', function () use ( $prepareUpdate, $swapArtisan ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        $zipPath = $prepareUpdate->call( $this );
+        Plugin::where( 'slug', 'valid-plugin' )->update( [ 'is_active' => true ] );
+        $artisan = $swapArtisan();
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
+            expect( $artisan->calls )->toBe( [
+                'route:clear', 'config:clear', 'view:clear',
+                'route:clear', 'config:clear', 'view:clear',
+            ] );
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'rolls the update back when an updated-hook listener throws an Error', function () use ( $prepareUpdate, $swapArtisan ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        $zipPath = $prepareUpdate->call( $this );
+        $artisan = $swapArtisan();
+
+        $listener = function (): void {
+            throw new TypeError( 'Listener type error.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.updated', $listener );
+
+        try {
+            expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+                ->toThrow( PluginUpdateException::class, 'Listener type error.' );
+            expect( $artisan->calls )->toBe( [] );
+            expect( Plugin::where( 'slug', 'valid-plugin' )->first()->version )->toBe( '1.0.0' );
+            expect( File::exists( $this->pluginsPath . '/valid-plugin/src/Stub.php' ) )->toBeFalse();
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.updated', $listener );
+            File::delete( $zipPath );
+        }
+    } );
 } );
 
 describe( 'Reactivation failure after update (#45)', function (): void {
