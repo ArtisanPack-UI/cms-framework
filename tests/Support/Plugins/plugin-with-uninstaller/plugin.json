@@ -1,0 +1,13 @@
+{
+  "slug": "plugin-with-uninstaller",
+  "name": "Plugin With Uninstaller",
+  "version": "1.0.0",
+  "description": "Test plugin declaring an uninstall class",
+  "author": "Test Author",
+  "uninstall": "PluginWithUninstaller\\Uninstall",
+  "autoload": {
+    "psr-4": {
+      "PluginWithUninstaller\\": "src/"
+    }
+  }
+}

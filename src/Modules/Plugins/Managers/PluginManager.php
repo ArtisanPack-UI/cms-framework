@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use ReflectionClass;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -534,9 +535,11 @@ class PluginManager
      * Process:
      * 1. Deactivate if active
      * 2. Fire deletion hooks
-     * 3. Remove from database
-     * 4. Remove from filesystem (if $deleteFiles = true)
-     * 5. Clear caches
+     * 3. Invoke the manifest's `uninstall` class, if any (#358)
+     * 4. Roll back migrations (opt-in) and remove seeded permissions
+     * 5. Remove from database
+     * 6. Remove from filesystem (if $deleteFiles = true)
+     * 7. Clear caches
      *
      * @param  string  $slug  Plugin slug
      * @param  bool  $deleteFiles  Whether to delete plugin files
@@ -570,6 +573,11 @@ class PluginManager
         }
 
         doAction( 'ap.cmsFramework.plugin.deleting', $slug );
+
+        // Plugin-owned uninstall entry point (#358). Runs whether or not the
+        // plugin was active, unlike a `deleting` listener, and before the
+        // migration rollback so it can still read the plugin's own tables.
+        $this->runUninstaller( $plugin );
 
         // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
         // accidentally drop plugin-owned data.
@@ -1176,6 +1184,82 @@ class PluginManager
         if ( isset( $manifest['composer'] ) ) {
             $this->validateComposerManifestField( $manifest['composer'] );
         }
+
+        if ( isset( $manifest['uninstall'] ) ) {
+            $this->validateUninstallManifestField( $manifest['uninstall'], $manifest['autoload']['psr-4'] ?? null );
+        }
+    }
+
+    /**
+     * Validate the optional `uninstall` manifest key (#358).
+     *
+     * Shape (a fully-qualified invokable class inside the plugin):
+     *     "uninstall": "HelloWorld\\Uninstall"
+     *
+     * The class must sit under one of the plugin's own `autoload.psr-4`
+     * namespaces. `delete()` instantiates and invokes it, so a manifest must
+     * not be able to point it at an arbitrary host or vendor class.
+     *
+     * @since 2.13.0
+     *
+     * @param  mixed  $uninstall  Raw manifest value.
+     * @param  mixed  $psr4  The manifest's `autoload.psr-4` map, if any.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateUninstallManifestField( mixed $uninstall, mixed $psr4 ): void
+    {
+        if ( ! is_string( $uninstall ) || ! $this->isValidClassName( $uninstall ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid uninstall. Must be a fully-qualified, namespaced class name.' );
+        }
+
+        if ( ! $this->classIsInPluginNamespace( $uninstall, $psr4 ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid uninstall. The class must live under one of the plugin\'s autoload.psr-4 namespaces.' );
+        }
+    }
+
+    /**
+     * Whether a string is a syntactically valid, namespaced PHP class name.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $class  Candidate class name.
+     *
+     * @return bool True when the name is well-formed and has at least one namespace segment.
+     */
+    protected function isValidClassName( string $class ): bool
+    {
+        return 1 === preg_match( '/^[A-Za-z_][A-Za-z0-9_]*(\\\\[A-Za-z_][A-Za-z0-9_]*)+$/D', $class );
+    }
+
+    /**
+     * Whether a class name falls under one of a plugin's PSR-4 namespace prefixes.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $class  Fully-qualified class name.
+     * @param  mixed  $psr4  The plugin's `autoload.psr-4` map ( namespace => path ).
+     *
+     * @return bool True when the class is inside a declared plugin namespace.
+     */
+    protected function classIsInPluginNamespace( string $class, mixed $psr4 ): bool
+    {
+        if ( ! is_array( $psr4 ) ) {
+            return false;
+        }
+
+        foreach ( array_keys( $psr4 ) as $namespace ) {
+            if ( ! is_string( $namespace ) ) {
+                continue;
+            }
+
+            $prefix = rtrim( $namespace, '\\' ) . '\\';
+            if ( '\\' !== $prefix && str_starts_with( $class, $prefix ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -2107,6 +2191,102 @@ class PluginManager
         $candidate = 'ArtisanPackUI\\RBAC\\Models\\Permission';
 
         return class_exists( $candidate ) ? $candidate : null;
+    }
+
+    /**
+     * Invoke the plugin's manifest-declared uninstall class (#358).
+     *
+     * Registers the plugin's PSR-4 autoloader so the class resolves even when
+     * the plugin is inactive, resolves it from the container ( so it may
+     * type-hint constructor dependencies ), and invokes it with the plugin
+     * model. Failures are logged, never rethrown, so a broken uninstaller can
+     * not block deletion. The PSR-4 map is restored afterwards so an inactive
+     * plugin's paths do not linger once its files are removed.
+     *
+     * @since 2.13.0
+     *
+     * @param  Plugin  $plugin  The plugin being deleted.
+     */
+    protected function runUninstaller( Plugin $plugin ): void
+    {
+        $class = $plugin->uninstaller;
+        if ( null === $class ) {
+            return;
+        }
+
+        $psr4 = $plugin->meta['autoload']['psr-4'] ?? null;
+
+        // Re-check at call time: the row's meta may predate the manifest
+        // validator, and this is about to instantiate and run the class.
+        if ( ! $this->isValidClassName( $class ) || ! $this->classIsInPluginNamespace( $class, $psr4 ) ) {
+            logger()->warning( "Plugin '{$plugin->slug}' uninstall class is outside its autoload.psr-4 namespaces; skipping.", [
+                'uninstall' => $class,
+            ] );
+
+            return;
+        }
+
+        $priorPsr4 = $this->snapshotPsr4( $psr4 );
+
+        try {
+            $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
+
+            // A plugin namespace can overlap a host one ( `App\` ), or its
+            // PSR-4 path can climb out with `..`, so the namespace check alone
+            // could still resolve a host class. Refuse a file outside the
+            // plugin before it is included, then confirm the loaded definition.
+            $file = $this->classLoader->findFile( $class );
+            if ( false !== $file && ! $this->isPathInsidePluginDirectory( $file, $plugin->slug ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' is not defined inside the plugin directory." );
+            }
+
+            if ( ! class_exists( $class ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' not found." );
+            }
+
+            $definedIn = ( new ReflectionClass( $class ) )->getFileName();
+            if ( false === $definedIn || ! $this->isPathInsidePluginDirectory( $definedIn, $plugin->slug ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' is not defined inside the plugin directory." );
+            }
+
+            $uninstaller = app()->make( $class );
+            if ( ! is_callable( $uninstaller ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' is not invokable." );
+            }
+
+            $uninstaller( $plugin );
+        } catch ( Throwable $e ) {
+            logger()->error( "Failed to run uninstall for plugin: {$plugin->slug}", [
+                'uninstall' => $class,
+                'exception' => $e->getMessage(),
+            ] );
+        } finally {
+            foreach ( $priorPsr4 as $namespace => $paths ) {
+                $this->classLoader->setPsr4( $namespace, $paths );
+            }
+        }
+    }
+
+    /**
+     * Whether a file resolves to a location inside the plugin's directory.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $file  Path to check.
+     * @param  string  $slug  Plugin slug.
+     *
+     * @return bool True when the file's real path is inside the plugin directory.
+     */
+    protected function isPathInsidePluginDirectory( string $file, string $slug ): bool
+    {
+        $realPlugin = realpath( $this->getPluginsPath() . '/' . $slug );
+        $realFile   = realpath( $file );
+
+        if ( false === $realPlugin || false === $realFile ) {
+            return false;
+        }
+
+        return str_starts_with( $realFile, $realPlugin . DIRECTORY_SEPARATOR );
     }
 
     /**
