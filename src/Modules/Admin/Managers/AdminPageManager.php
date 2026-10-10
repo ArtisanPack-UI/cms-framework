@@ -59,11 +59,19 @@ class AdminPageManager
     /**
      * Creates all the registered admin page routes with security middleware.
      *
+     * The base middleware stack comes from `cms.admin.middleware` (filterable via
+     * `ap.cmsFramework.admin.middleware`) so hosts can require the same checks
+     * (email verification, two-factor, etc.) on these pages as on their own
+     * admin routes. Route names and middleware are set before the HTTP verb so
+     * they are indexed even when routes are added to a cached route collection.
+     *
      * @since 1.0.0
+     * @since 2.13.0 Reads the base middleware stack from config and names routes
+     *               before the verb.
      */
     public function registerRoutes(): void
     {
-        Route::middleware( ['web', 'auth'] )
+        Route::middleware( $this->middleware() )
             ->prefix( 'admin' )
             ->name( 'admin.' )
             ->group( function (): void {
@@ -72,14 +80,36 @@ class AdminPageManager
                     $cleanedSlug = preg_replace( '/\/\{.*?\}/', '', $slug );
                     $routeName   = str_replace( '/', '.', $cleanedSlug );
 
-                    // Create the route directly. Laravel handles the rest.
-                    $route = Route::get( $slug, $details['action'] )->name( $routeName );
-
-                    // Apply capability middleware if it exists.
-                    if ( ! empty( $details['capability'] ) ) {
-                        $route->middleware( 'can:' . $details['capability'] );
-                    }
+                    Route::name( $routeName )
+                        ->middleware( 'can:' . $details['capability'] )
+                        ->get( $slug, $details['action'] );
                 }
             } );
+    }
+
+    /**
+     * Resolves the base middleware stack applied to every admin page route.
+     *
+     * Falls back to `web` + `auth` when the configured (or filtered) stack is
+     * empty, so a misconfiguration never leaves admin pages unauthenticated.
+     *
+     * @since 2.13.0
+     *
+     * @return array<int,string> The middleware stack.
+     */
+    protected function middleware(): array
+    {
+        $default    = [ 'web', 'auth' ];
+        $middleware = applyFilters(
+            'ap.cmsFramework.admin.middleware',
+            config( 'cms.admin.middleware', $default ),
+        );
+
+        $middleware = array_values( array_filter(
+            (array) $middleware,
+            fn ( mixed $item ): bool => is_string( $item ) && '' !== $item,
+        ) );
+
+        return [] === $middleware ? $default : $middleware;
     }
 }

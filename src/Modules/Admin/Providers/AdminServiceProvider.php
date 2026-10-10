@@ -32,6 +32,11 @@ class AdminServiceProvider extends ServiceProvider
     {
         $this->app->singleton( AdminMenuManager::class, fn () => new AdminMenuManager );
         $this->app->singleton( AdminPageManager::class, fn () => new AdminPageManager );
+
+        $this->mergeConfigFrom(
+            __DIR__ . '/../config/admin.php',
+            'cms.admin',
+        );
     }
 
     /**
@@ -41,6 +46,12 @@ class AdminServiceProvider extends ServiceProvider
      */
     public function boot( Router $router ): void
     {
+        // Also tagged `cms-framework-config` so the umbrella tag publishes
+        // every module's config in one command.
+        $this->publishes( [
+            __DIR__ . '/../config/admin.php' => config_path( 'cms/admin.php' ),
+        ], [ 'cms-admin-config', 'cms-framework-config' ] );
+
         $router->aliasMiddleware( 'admin.can', CheckAdminCapability::class );
         $this->app->booted( function (): void {
             app( AdminPageManager::class )->registerRoutes();
