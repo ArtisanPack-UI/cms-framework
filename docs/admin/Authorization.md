@@ -31,7 +31,7 @@ Users get permissions through roles using the HasRolesAndPermissions trait.
 ## Middleware Integration
 
 - The Admin module registers an alias `admin.can` for the CheckAdminCapability middleware.
-- It also applies the standard `can:` middleware to routes created by AdminPageManager when a page has a `capability` configured.
+- It also applies the standard `can:` middleware to every route created by AdminPageManager. A page registered without a `capability` gets `can:access_admin_dashboard`.
 
 ### Using `admin.can` middleware manually
 
@@ -60,3 +60,45 @@ apAddAdminPage('Dashboard', 'dashboard', null, [
 ```
 
 No additional route configuration is required—the page will be protected automatically.
+
+## Admin Page Middleware Stack
+
+*Since 2.13.0.* The base middleware on every AdminPageManager route comes from
+`cms.admin.middleware` ( default `['web', 'auth']` ), with the page's
+`can:{capability}` gate always appended. Before 2.13.0 the stack was
+hard-coded to `web` + `auth`, so plugin admin pages skipped any extra checks
+the host applied to its own admin routes.
+
+Publish the config and add your host's checks:
+
+```bash
+php artisan vendor:publish --tag=cms-admin-config
+```
+
+```php
+// config/cms/admin.php
+return [
+    'middleware' => [ 'web', 'auth', 'verified', 'two-factor' ],
+];
+```
+
+Or adjust it at runtime with the `ap.cmsFramework.admin.middleware` filter:
+
+```php
+addFilter( 'ap.cmsFramework.admin.middleware', function ( array $middleware ): array {
+    $middleware[] = 'verified';
+
+    return $middleware;
+} );
+```
+
+Register the filter before the application finishes booting ( for example in
+a service provider's `boot()` ), because admin routes are registered in a
+`booted` callback. The filter always receives an array: non-string and empty
+entries are dropped from the config first, and an empty config becomes
+`['web', 'auth']`. The filtered result is cleaned the same way.
+
+The `web` + `auth` fallback applies **only when the stack is empty**. A
+non-empty stack is used exactly as given, so a value like `['web']` leaves
+admin pages without authentication. Always keep an authentication middleware
+( `auth` or `auth:<guard>` ) in the list.

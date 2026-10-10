@@ -103,9 +103,9 @@ return [
     |--------------------------------------------------------------------------
     | Auto-clear Framework Caches on Lifecycle Events
     |--------------------------------------------------------------------------
-    | If true, activate/deactivate/delete will run route:clear, config:clear
-    | and view:clear so newly (un)registered plugin routes/views take effect
-    | immediately. This is convenient in development but is a blunt hammer in
+    | If true, activate/deactivate/delete and plugin updates will run
+    | route:clear, config:clear and view:clear so newly (un)registered plugin
+    | routes/views take effect immediately. This is convenient in development but is a blunt hammer in
     | production hosts that rely on `route:cache` / `config:cache` for
     | performance — every toggle deletes the compiled cache files, causing a
     | measurable latency regression until the next deploy rebuilds them.

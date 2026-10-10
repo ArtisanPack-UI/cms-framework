@@ -1000,10 +1000,14 @@ class PluginManager
             return;
         }
 
-        // Run migrations using Artisan
+        // `$safePath` is a realpath(), so it no longer starts with base_path()
+        // when the plugins directory ( or a parent ) is a symlink — common on
+        // zero-downtime deploys that share `plugins/` between releases. Pass it
+        // as an absolute path rather than one relative to base_path().
         Artisan::call( 'migrate', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -1186,8 +1190,58 @@ class PluginManager
             $this->validateComposerManifestField( $manifest['composer'] );
         }
 
+        // array_key_exists, not isset: an explicit `null` must reach the
+        // validator and be rejected rather than skipped as absent.
+        if ( array_key_exists( 'autoload', $manifest ) ) {
+            $this->validateAutoloadManifestField( $manifest['autoload'] );
+        }
+
         if ( isset( $manifest['uninstall'] ) ) {
             $this->validateUninstallManifestField( $manifest['uninstall'], $manifest['autoload']['psr-4'] ?? null );
+        }
+    }
+
+    /**
+     * Validate the optional `autoload` manifest key.
+     *
+     * Only `psr-4` is read. Each key must be a non-empty namespace prefix that
+     * ends in a backslash — Composer's `ClassLoader` throws on anything else,
+     * and an empty prefix would append to (and on restore, replace) the host's
+     * PSR-4 fallback directories. Each path must be a relative string inside
+     * the plugin directory, since `registerAutoloader()` appends it to the
+     * plugin path.
+     *
+     * @since 2.13.0
+     *
+     * @param  mixed  $autoload  Raw manifest value.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateAutoloadManifestField( mixed $autoload ): void
+    {
+        if ( ! is_array( $autoload ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid autoload. Must be an object.' );
+        }
+
+        if ( ! array_key_exists( 'psr-4', $autoload ) ) {
+            return;
+        }
+
+        if ( ! is_array( $autoload['psr-4'] ) || ( [] !== $autoload['psr-4'] && array_is_list( $autoload['psr-4'] ) ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid autoload.psr-4. Must be an object mapping namespaces to paths.' );
+        }
+
+        foreach ( $autoload['psr-4'] as $namespace => $path ) {
+            if ( ! is_string( $namespace ) || 1 !== preg_match( '/^([A-Za-z_][A-Za-z0-9_]*\\\\)+$/D', $namespace ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid autoload.psr-4 namespace '{$namespace}'. Must be a non-empty namespace ending in a backslash (e.g. \"HelloWorld\\\\\")." );
+            }
+
+            if ( ! is_string( $path )
+                || str_starts_with( $path, '/' )
+                || str_contains( $path, '..' )
+                || 1 === preg_match( '/^[A-Za-z]:/', $path ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid autoload.psr-4 path for '{$namespace}'. Must be a relative path inside the plugin directory (no \"..\", no absolute paths)." );
+            }
         }
     }
 
@@ -1250,12 +1304,14 @@ class PluginManager
         }
 
         foreach ( array_keys( $psr4 ) as $namespace ) {
-            if ( ! is_string( $namespace ) ) {
+            // Only a well-formed prefix ( ending in a backslash ) counts:
+            // Composer's ClassLoader rejects anything else, so a class under a
+            // malformed prefix could never be autoloaded anyway.
+            if ( ! is_string( $namespace ) || '\\' === $namespace || ! str_ends_with( $namespace, '\\' ) ) {
                 continue;
             }
 
-            $prefix = rtrim( $namespace, '\\' ) . '\\';
-            if ( '\\' !== $prefix && str_starts_with( $class, $prefix ) ) {
+            if ( str_starts_with( $class, $namespace ) ) {
                 return true;
             }
         }
@@ -2266,8 +2322,16 @@ class PluginManager
                 'exception' => $e->getMessage(),
             ] );
         } finally {
+            // Never let a restore failure escape: it would abort delete()
+            // after the plugin was deactivated and the `deleting` hook fired.
             foreach ( $priorPsr4 as $namespace => $paths ) {
-                $this->classLoader->setPsr4( $namespace, $paths );
+                try {
+                    $this->classLoader->setPsr4( $namespace, $paths );
+                } catch ( Throwable $e ) {
+                    logger()->warning( "Failed restoring prior PSR-4 mapping for '{$namespace}' after uninstall of {$plugin->slug}", [
+                        'exception' => $e->getMessage(),
+                    ] );
+                }
             }
         }
     }
@@ -2316,8 +2380,9 @@ class PluginManager
         }
 
         Artisan::call( 'migrate:reset', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -2334,8 +2399,9 @@ class PluginManager
         }
 
         Artisan::call( 'migrate:rollback', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -2399,7 +2465,12 @@ class PluginManager
         $prior       = [];
         $currentMap  = $this->classLoader->getPrefixesPsr4();
         foreach ( array_keys( $psr4 ) as $namespace ) {
-            $prior[ $namespace ] = $currentMap[ $namespace ] ?? [];
+            // An empty prefix maps to Composer's fallback directories, which
+            // getPrefixesPsr4() never lists. Snapshot them separately so the
+            // restore puts the host's fallback list back instead of wiping it.
+            $prior[ $namespace ] = '' === $namespace
+                ? $this->classLoader->getFallbackDirsPsr4()
+                : ( $currentMap[ $namespace ] ?? [] );
         }
 
         return $prior;

@@ -90,11 +90,28 @@ addFilter('ap.cmsFramework.admin.dashboardWidgets', function (array $widgets, ?U
 }, 10, 2);
 ```
 
+## Admin: Page Middleware
+
+> **Added in 2.13.0** ([#357](https://github.com/ArtisanPack-UI/cms-framework/issues/357)).
+
+`AdminPageManager::registerRoutes()` passes the `cms.admin.middleware` config through `ap.cmsFramework.admin.middleware` before applying it to every admin page route. Each page's `can:{capability}` gate is appended after the filtered stack. The config is normalized before the filter runs (non-string and empty entries dropped, an empty or `null` config replaced with `['web', 'auth']`), so callbacks always receive an array. The filtered result is normalized the same way; only an empty result falls back to `['web', 'auth']`.
+
+```php
+addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
+    $middleware[] = 'verified';
+    return $middleware;
+});
+```
+
 ## Plugins: Hook Registration
 
 > **Added in 2.5.0** ([#196](https://github.com/ArtisanPack-UI/cms-framework/issues/196)).
 
 `PluginManager::activate()` fires `ap.cmsFramework.plugin.hookRegistered` immediately after the plugin's service provider registers, carrying `(string $pluginSlug, array $hooks)`. The hooks array is the optional `hooks` field from the plugin's `plugin.json` (empty array when absent) so observers still get a per-plugin signal.
+
+## Plugins: Deletion and Uninstall
+
+`PluginManager::delete()` fires `ap.cmsFramework.plugin.deleting` with `(string $slug)` before teardown and `ap.cmsFramework.plugin.deleted` with `(string $slug)` once the row and files are gone. A `deleting` listener only runs if the plugin's service provider booted in the same request, which is usually not the case for a plugin deactivated earlier. For cleanup a plugin owns, declare an `uninstall` class in `plugin.json` instead (**2.13.0**, [#358](https://github.com/ArtisanPack-UI/cms-framework/issues/358)); see [Uninstalling](plugin-authoring.md#uninstalling).
 
 ## Search: Query
 

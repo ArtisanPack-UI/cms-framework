@@ -13,9 +13,14 @@ use Illuminate\Support\Str;
  * `content_types` so consumers can render "Packages", "Add New Package" and
  * "Edit Package" instead of reusing the single `name` everywhere.
  *
- * Existing rows are backfilled with `singular_name = name` and
- * `plural_name = Str::plural( name )`. `labels` stays null — the model
- * derives the full label set from the singular / plural forms.
+ * Existing rows are backfilled with `singular_name = Str::singular( name )`
+ * and `plural_name = Str::plural( singular_name ?? name )`. `name` is
+ * conventionally the plural label ( "Pages", "Blog Posts" ); the inflector
+ * leaves a singular unchanged when singularizing and a plural unchanged when
+ * pluralizing, so either form of `name` backfills correctly. This mirrors the
+ * fallbacks in `ContentType::getSingularLabel()` / `getPluralLabel()`.
+ * `labels` stays null — the model derives the full label set from the
+ * singular / plural forms.
  *
  * @since 2.13.0
  */
@@ -53,7 +58,7 @@ return new class extends Migration {
                     $updates = [];
 
                     if ( null === $row->singular_name ) {
-                        $updates['singular_name'] = $row->name;
+                        $updates['singular_name'] = Str::singular( $row->name );
                     }
 
                     if ( null === $row->plural_name ) {

@@ -8,6 +8,7 @@ Content types allow you to define custom post types in Digital Shopfront CMS. Th
 
 - [Registering Content Types](#registering-content-types)
 - [Available Options](#available-options)
+- [Labels](#labels)
 - [Table Naming Conventions](#table-naming-conventions)
 - [Admin Pages Configuration](#admin-pages-configuration)
 - [Best Practices](#best-practices)
@@ -125,7 +126,7 @@ $contentType = ContentType::create([
 
 | Option | Type | Description |
 |--------|------|-------------|
-| `name` | string | Display name (e.g., "Blog Posts") |
+| `name` | string | Display name, conventionally the plural label (e.g., "Blog Posts") |
 | `slug` | string | Machine name (e.g., "posts") |
 | `table_name` | string | Database table name (e.g., "posts") |
 | `model_class` | string | Fully qualified model class |
@@ -134,6 +135,9 @@ $contentType = ContentType::create([
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `singular_name` | string | null | *2.13.0.* Singular label (e.g., "Product"). See [Labels](#labels) |
+| `plural_name` | string | null | *2.13.0.* Plural label (e.g., "Products"). See [Labels](#labels) |
+| `labels` | array | null | *2.13.0.* Label overrides keyed by label name. See [Labels](#labels) |
 | `description` | string | null | Description shown in admin |
 | `hierarchical` | boolean | false | Supports parent-child relationships |
 | `has_archive` | boolean | true | Has archive pages |
@@ -161,6 +165,87 @@ The `supports` array defines which features are available:
     'revisions',       // Revisions (if implemented)
 ]
 ```
+
+## Labels
+
+*Since 2.13.0.* A content type carries a WordPress-style label set so the
+admin can say "Add New Product" and "Edit Product" instead of reusing `name`
+everywhere.
+
+```php
+$contentTypeManager->register([
+    'name'          => 'Products',
+    'singular_name' => 'Product',
+    'plural_name'   => 'Products',
+    'labels'        => [
+        'add_new_item' => 'Add a Product',
+    ],
+    'slug'          => 'products',
+    // ...
+]);
+
+$contentType = $contentTypeManager->getContentType('products');
+
+$contentType->getSingularLabel();          // "Product"
+$contentType->getPluralLabel();            // "Products"
+$contentType->getLabel('edit_item');       // "Edit Product"
+$contentType->getLabel('add_new_item');    // "Add a Product" ( override )
+$contentType->getLabels();                 // the full set below
+```
+
+### Fallbacks
+
+`singular_name` and `plural_name` are optional:
+
+- **Singular** falls back to `Str::singular( name )`.
+- **Plural** falls back to `Str::plural( singular_name )` when a singular is
+  set, otherwise `Str::plural( name )`.
+
+The inflector leaves a word unchanged when it is already in the requested
+form, so a plural `name` ( "Pages", "Blog Posts" ) and a singular one
+( "Package" ) both resolve correctly. It can guess wrong for some words, e.g.
+"Media" singularizes to "Medium" and "FAQ" pluralizes to "FAQS". Set the
+labels explicitly when that matters.
+
+The 2.13.0 migration backfills `singular_name` and `plural_name` for existing
+rows with these same rules. Run `php artisan migrate` after upgrading.
+
+### Label keys
+
+| Key | Default |
+|---|---|
+| `singular_name` | singular label |
+| `plural_name` | plural label |
+| `menu_name` | plural label |
+| `add_new` | "Add New" |
+| `add_new_item` | "Add New {singular}" |
+| `new_item` | "New {singular}" |
+| `edit_item` | "Edit {singular}" |
+| `view_item` | "View {singular}" |
+| `view_items` | "View {plural}" |
+| `all_items` | "All {plural}" |
+| `search_items` | "Search {plural}" |
+| `not_found` | "No {plural} found." |
+| `not_found_in_trash` | "No {plural} found in Trash." |
+| `parent_item_colon` | "Parent {singular}:" |
+| `archives` | "{singular} Archives" |
+
+Defaults are translatable ( `__()` ). A non-empty string in `labels` replaces
+the default for its key. Blank, `null` and non-string values are ignored.
+Extra keys are passed through for consumers that define their own labels.
+
+### API
+
+The content type endpoints accept `singular_name`, `plural_name` ( each a
+nullable string, max 255 ) and `labels` ( a nullable object of at most 50
+entries; each key must match `^[a-z][a-z0-9_]{0,63}$` and each value is a
+nullable string, max 255 ). Responses include the stored `singular_name`,
+`plural_name` and `labels`, plus `resolved_labels`: the full label set with
+fallbacks and overrides applied.
+
+> **Escape labels on output.** Label values are free-form strings stored by
+> users who can create or update content types. Render them as text, not
+> HTML ( Blade's `{{ }}`, React's default text rendering ).
 
 ## Table Naming Conventions
 

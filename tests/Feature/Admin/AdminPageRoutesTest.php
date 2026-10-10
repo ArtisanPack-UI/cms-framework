@@ -72,6 +72,34 @@ it( 'falls back to web and auth when the configured stack is empty or invalid', 
     'non-string items' => [ [ '', null, 42 ] ],
 ] );
 
+it( 'hands filter callbacks a normalized array even when the config is null or invalid', function ( mixed $configured, array $expectedInput ): void {
+    config()->set( 'cms.admin.middleware', $configured );
+
+    $received = null;
+    addFilter( 'ap.cmsFramework.admin.middleware', function ( array $middleware ) use ( &$received ): array {
+        $received = $middleware;
+
+        return [ ...$middleware, 'verified' ];
+    } );
+
+    $route = registerAdminTestPage();
+
+    expect( $received )->toBe( $expectedInput )
+        ->and( $route->middleware() )->toBe( [ ...$expectedInput, 'verified', 'can:access_admin_dashboard' ] );
+} )->with( [
+    'null'             => [ null, [ 'web', 'auth' ] ],
+    'empty array'      => [ [], [ 'web', 'auth' ] ],
+    'non-string items' => [ [ 'web', '', 42, 'auth', 'verified-email' ], [ 'web', 'auth', 'verified-email' ] ],
+] );
+
+it( 'uses a non-empty stack as-is without adding auth', function (): void {
+    config()->set( 'cms.admin.middleware', [ 'web' ] );
+
+    $route = registerAdminTestPage();
+
+    expect( $route->middleware() )->toBe( [ 'web', 'can:access_admin_dashboard' ] );
+} );
+
 it( 'drops non-string entries from the configured stack', function (): void {
     config()->set( 'cms.admin.middleware', [ 'web', '', null, 'auth', 'verified' ] );
 

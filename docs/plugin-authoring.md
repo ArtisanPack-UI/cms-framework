@@ -12,6 +12,7 @@ needs and points at the reference example under
 - [Registering an admin page](#registering-an-admin-page)
 - [Registering nav entries](#registering-nav-entries)
 - [Migrations](#migrations)
+- [Uninstalling](#uninstalling)
 - [Hook subscriptions](#hook-subscriptions)
 - [Registering custom field types](#registering-custom-field-types)
 - [Injecting edit-screen panels & tabs](#injecting-edit-screen-panels--tabs)
@@ -41,7 +42,12 @@ needs and points at the reference example under
    `register()` and `boot()` methods, and any manifest-declared migrations.
 4. **Deactivate** — The plugin row is marked inactive. The service provider is
    unregistered on the next request boot.
-5. **Delete** — The plugin's directory and DB record are removed.
+5. **Delete** — `PluginManager::delete()` deactivates the plugin if needed,
+   fires `ap.cmsFramework.plugin.deleting`, runs the manifest's `uninstall`
+   class ( *2.13.0*, see [Uninstalling](#uninstalling) ), resets the plugin's
+   migrations when `rollback_migrations_on_delete` is set, removes the
+   permissions it seeded, then removes its DB record and directory and fires
+   `ap.cmsFramework.plugin.deleted`.
 
 ## `plugin.json` manifest schema
 
@@ -77,7 +83,9 @@ A plugin's root directory MUST contain a `plugin.json` file:
       "HelloWorld\\": "src/"
     }
   },
-  "migrations": "database/migrations",
+  "migrations_path": "database/migrations",
+  "rollback_migrations_on_delete": false,
+  "uninstall": "HelloWorld\\Uninstall",
   "nav_entries": [
     {
       "slug": "hello-world",
@@ -121,8 +129,10 @@ with no `register*()` call required. See
 | `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `conflicts`         | object          | Map of plugin slug to version constraint. Activation is refused when a matching plugin is installed. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Resolved from Packagist on activation. See [Composer-package dependencies](#composer-package-dependencies). |
-| `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. |
-| `migrations`        | string ( path ) | Relative path to your migrations directory. Auto-run on activate. |
+| `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. Since *2.13.0* each namespace must end in a backslash ( `"HelloWorld\\"` ) and each path must be a relative string inside the plugin ( no `..`, no absolute paths ); anything else is refused at install and update. |
+| `migrations_path`   | string ( path ) | Relative path to your migrations directory. Auto-run on activate. See [Migrations](#migrations). |
+| `rollback_migrations_on_delete` | boolean | Default `false`. When `true`, deleting the plugin reverts every migration under `migrations_path`. See [Migrations](#migrations). |
+| `uninstall`         | string ( class ) | *2.13.0*. Invokable class run on delete, even when the plugin is inactive. See [Uninstalling](#uninstalling). |
 | `federated_module`  | object          | Single federated module descriptor `{ name?, entry, exposes? }`. Auto-registered on load. See [Federated React modules](#federated-react-modules). |
 | `nav_entries`       | array           | List of static nav entries `{ slug, label, url?, icon?, permission?, order?, ... }`. Auto-registered on load; equivalent to calling `registerNavEntry()` from your provider. |
 | `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
@@ -328,9 +338,13 @@ your provider has already registered the same `slug`.
 
 ## Migrations
 
-Set `"migrations": "database/migrations"` in your manifest to have the
-framework load your migrations on activation. Prefer schema-only changes;
+Set `"migrations_path": "database/migrations"` in your manifest to have the
+framework run your migrations on activation. Prefer schema-only changes;
 data seeding belongs in a separate seeder invoked via an install hook.
+
+> **Key name.** Earlier versions of this guide and of the hello-world example
+> used `"migrations"`. The framework has only ever read `migrations_path`; a
+> manifest using `migrations` had its migrations silently skipped.
 
 ```php
 <?php
@@ -356,6 +370,89 @@ return new class extends Migration
     }
 };
 ```
+
+### Dropping your tables on delete
+
+Plugin tables survive deletion by default, so reinstalling a plugin keeps its
+data. Set `"rollback_migrations_on_delete": true` to have `delete()` revert
+your migrations. Since *2.13.0* this runs `migrate:reset` scoped to your
+`migrations_path`, so **every** migration the plugin ran is reverted, whatever
+batch it ran in. Before 2.13.0 it ran `migrate:rollback`, which only reverted
+the last global batch and left your tables behind once any other migration had
+run.
+
+**Give your migration files unique names.** Laravel's `migrations` table
+records only each file's basename, not its path. If a plugin migration shares
+a basename with a host or package migration, resetting the plugin runs your
+`down()` and deletes that shared row, so the host migration looks un-run.
+Prefix the descriptive part with your slug:
+
+```text
+database/migrations/2026_01_01_000000_hello_world_create_greetings_table.php
+```
+
+## Uninstalling
+
+Since *2.13.0*, a plugin can declare an invokable class that cleans up when it
+is deleted:
+
+```json
+"uninstall": "HelloWorld\\Uninstall"
+```
+
+```php
+<?php
+
+namespace HelloWorld;
+
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+
+final class Uninstall
+{
+    public function __invoke( Plugin $plugin ): void
+    {
+        // Remove settings rows, cached tokens, files under storage/, etc.
+    }
+}
+```
+
+Use it for anything your plugin keeps outside its own tables. Listening to
+`ap.cmsFramework.plugin.deleting` is not enough: that hook only reaches a
+plugin whose service provider booted in the same request, and plugins are
+usually deactivated first and deleted later.
+
+How it runs:
+
+- `delete()` registers your PSR-4 autoloader, resolves the class from the
+  container ( so its constructor may type-hint dependencies ) and invokes it
+  with the `Plugin` model.
+- It runs whether or not the plugin is active, and whether or not files are
+  being deleted ( `delete( $slug, false )` ).
+- It runs after the `deleting` hook and **before** the migration reset,
+  permission removal and file deletion, so your tables and files are still
+  there.
+- A missing, non-invokable or throwing class is logged and never blocks the
+  delete.
+
+Constraints checked at install and update, and again at delete:
+
+- The value must be a fully qualified, namespaced class name with no leading
+  backslash.
+- The class must live under one of your `autoload.psr-4` namespaces.
+
+Checked only at delete, when the class is loaded:
+
+- The class file must exist and sit inside your plugin directory. A namespace
+  that overlaps a host namespace ( `App\` ) or a PSR-4 path that climbs out of
+  the plugin cannot reach host code.
+
+Install does not check that the class file exists. A missing file passes
+install, then at delete the error is logged and cleanup is skipped, so ship
+the file and test your uninstaller before releasing.
+
+> **Trust.** Deleting a plugin runs its `uninstall` class even if the plugin
+> was never activated. Installing, activating and deleting all require the
+> same `manage-plugins` ability, so only install plugins you trust.
 
 ## Hook subscriptions
 

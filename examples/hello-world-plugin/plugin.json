@@ -21,7 +21,8 @@
             "HelloWorld\\": "src/"
         }
     },
-    "migrations": "database/migrations",
+    "migrations_path": "database/migrations",
+    "uninstall": "HelloWorld\\Uninstall",
     "nav_entries": [
         {
             "slug": "hello-world-manifest-nav",

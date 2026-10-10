@@ -187,9 +187,12 @@ jobs:
             exit 0
           fi
 
+          # No --retry: curl would also retry a POST that timed out after the
+          # docs site accepted it, queueing the import twice. Re-run this job
+          # if the import fails.
           for IMPORT in import-docs import-changelog; do
             echo "Triggering $IMPORT for $DOCS_PACKAGE_SLUG"
-            curl --fail-with-body -sS --retry 3 -X POST \
+            curl --fail-with-body -sS --connect-timeout 10 --max-time 60 -X POST \
               "https://docs.artisanpackui.dev/api/v1/packages/${DOCS_PACKAGE_SLUG}/${IMPORT}" \
               -H "Authorization: Bearer ${DOCS_API_TOKEN}" \
               -H "Accept: application/json"

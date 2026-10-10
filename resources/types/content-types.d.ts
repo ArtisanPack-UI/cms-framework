@@ -119,11 +119,11 @@ export interface ContentTypeLabels {
 export interface ContentTypeResponse {
 	/** The content type ID. */
 	id: number;
-	/** The human-readable name. */
+	/** The human-readable name, conventionally the plural label (e.g. "Pages"). */
 	name: string;
-	/** The stored singular label, if set (e.g. "Package"). */
+	/** The stored singular label, if set (e.g. "Package"). When null, `resolved_labels.singular_name` is the singularized `name`. */
 	singular_name: string | null;
-	/** The stored plural label, if set (e.g. "Packages"). */
+	/** The stored plural label, if set (e.g. "Packages"). When null, `resolved_labels.plural_name` is the pluralized `singular_name` or `name`. */
 	plural_name: string | null;
 	/** Stored label overrides keyed by label name (e.g. `add_new_item`). */
 	labels: Record<string, string | null> | null;
