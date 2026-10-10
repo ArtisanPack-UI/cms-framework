@@ -17,12 +17,16 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * ContentType Model
  *
  * @property int $id
  * @property string $name
+ * @property string|null $singular_name
+ * @property string|null $plural_name
+ * @property array<string, string|null>|null $labels
  * @property string $slug
  * @property string $table_name
  * @property string $model_class
@@ -55,6 +59,9 @@ class ContentType extends Model
      */
     protected $fillable = [
         'name',
+        'singular_name',
+        'plural_name',
+        'labels',
         'slug',
         'table_name',
         'model_class',
@@ -113,6 +120,82 @@ class ContentType extends Model
     }
 
     /**
+     * Get the singular label ( e.g. "Package" ), falling back to `name`.
+     *
+     * @since 2.13.0
+     */
+    public function getSingularLabel(): string
+    {
+        return $this->filledString( $this->singular_name ) ?? (string) $this->name;
+    }
+
+    /**
+     * Get the plural label ( e.g. "Packages" ), falling back to the
+     * pluralized singular label.
+     *
+     * @since 2.13.0
+     */
+    public function getPluralLabel(): string
+    {
+        return $this->filledString( $this->plural_name ) ?? Str::plural( $this->getSingularLabel() );
+    }
+
+    /**
+     * Get the full label set, modelled on WordPress's post type `labels`.
+     *
+     * Defaults are derived from the singular / plural labels; any non-empty
+     * string in the `labels` column overrides the default for its key, and
+     * extra keys are passed through for consumers that define their own.
+     *
+     * @since 2.13.0
+     *
+     * @return array<string, string>
+     */
+    public function getLabels(): array
+    {
+        $singular = $this->getSingularLabel();
+        $plural   = $this->getPluralLabel();
+
+        $defaults = [
+            'singular_name'      => $singular,
+            'plural_name'        => $plural,
+            'menu_name'          => $plural,
+            'add_new'            => __( 'Add New' ),
+            'add_new_item'       => __( 'Add New :singular', [ 'singular' => $singular ] ),
+            'new_item'           => __( 'New :singular', [ 'singular' => $singular ] ),
+            'edit_item'          => __( 'Edit :singular', [ 'singular' => $singular ] ),
+            'view_item'          => __( 'View :singular', [ 'singular' => $singular ] ),
+            'view_items'         => __( 'View :plural', [ 'plural' => $plural ] ),
+            'all_items'          => __( 'All :plural', [ 'plural' => $plural ] ),
+            'search_items'       => __( 'Search :plural', [ 'plural' => $plural ] ),
+            'not_found'          => __( 'No :plural found.', [ 'plural' => $plural ] ),
+            'not_found_in_trash' => __( 'No :plural found in Trash.', [ 'plural' => $plural ] ),
+            'parent_item_colon'  => __( 'Parent :singular:', [ 'singular' => $singular ] ),
+            'archives'           => __( ':singular Archives', [ 'singular' => $singular ] ),
+        ];
+
+        $overrides = array_filter(
+            is_array( $this->labels ) ? $this->labels : [],
+            fn ( $value, $key ): bool => is_string( $key ) && null !== $this->filledString( $value ),
+            ARRAY_FILTER_USE_BOTH,
+        );
+
+        return array_merge( $defaults, $overrides );
+    }
+
+    /**
+     * Get a single label by key, or null when the key is unknown.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $key  Label key, e.g. `add_new_item`.
+     */
+    public function getLabel( string $key ): ?string
+    {
+        return $this->getLabels()[ $key ] ?? null;
+    }
+
+    /**
      * Hand the DB-persisted `supports` array to {@see HasSupports}. Falling
      * back to `null` when the column is empty lets the trait's default
      * resolution ( `[title, editor]` minimum ) kick in for legacy rows that
@@ -143,6 +226,17 @@ class ContentType extends Model
             'show_in_admin' => 'boolean',
             'supports'      => 'array',
             'metadata'      => 'array',
+            'labels'        => 'array',
         ];
+    }
+
+    /**
+     * Return the value when it is a non-blank string, otherwise null.
+     *
+     * @since 2.13.0
+     */
+    private function filledString( mixed $value ): ?string
+    {
+        return is_string( $value ) && '' !== trim( $value ) ? $value : null;
     }
 }
