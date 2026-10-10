@@ -840,6 +840,37 @@ $result['failures']; // array<string, string> — failure messages, keyed by plu
 A failed check is reported in `failures` rather than thrown, and leaves that
 plugin's previously cached answer in place.
 
+### Applying an update
+
+`UpdateManager::updatePlugin( $slug )` installs the latest available version
+and returns `false` when there is nothing newer than the installed version:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
+
+$updated = app( UpdateManager::class )->updatePlugin( 'hello-world' );
+```
+
+It fires `ap.cmsFramework.plugin.updating`, backs up the plugin directory,
+deactivates the plugin if it was active, downloads and verifies the archive,
+extracts it, re-validates the new `plugin.json` (its `slug` must match the
+plugin being updated), saves the new version and manifest, reactivates the
+plugin, and fires `ap.cmsFramework.plugin.updated`.
+
+**Rollback.** If any step fails, the backup is restored and the `plugins` row
+is reverted to the old version, manifest and active state, then a
+`PluginUpdateException` is thrown. Since 2.13.0 this covers any `Throwable`,
+not just exceptions, so an `Error` such as a `TypeError` from an `updated`
+listener or the plugin's own provider also rolls the update back instead of
+leaving it half-applied.
+
+**Framework caches (2.13.0).** With `cms.plugins.autoClearFrameworkCaches` on,
+a successful update runs `route:clear`, `config:clear` and `view:clear`, so
+routes the new version adds or renames resolve under `route:cache`. The clear
+runs after the `updated` hook. An active plugin is already cleared by the
+deactivate / activate around the update, so the extra clear only runs for an
+inactive one. See [Configuration](./Configuration.md#plugin-framework-cache-clearing).
+
 ## Testing your plugin
 
 Plugins ship their own Pest / PHPUnit test suites. A minimal `TestCase`
