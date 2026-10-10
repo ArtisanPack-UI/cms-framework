@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
@@ -467,6 +468,111 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
         // Files restored from backup: the on-disk manifest is the 1.0.0 original.
         $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
         expect( $onDisk['version'] )->toBe( '1.0.0' );
+
+        File::delete( $zipPath );
+    } );
+} );
+
+describe( 'Framework cache clearing on update (#359)', function (): void {
+    // Install an inactive valid-plugin at 1.0.0 and fake a 2.0.0 update whose
+    // manifest carries $manifestOverrides. Inactive so the reactivate step is
+    // skipped and any clear observed comes from the update itself.
+    $prepareUpdate = function ( array $manifestOverrides = [] ): string {
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
+
+        $zip = new ZipArchive;
+        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( array_merge( [
+            'slug'        => 'valid-plugin',
+            'name'        => 'Valid Test Plugin',
+            'version'     => '2.0.0',
+            'description' => 'Updated plugin',
+            'author'      => 'Test Author',
+        ], $manifestOverrides ) ) );
+        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
+        $zip->close();
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => hash( 'sha256', File::get( $zipPath ) ),
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
+        ] );
+
+        return $zipPath;
+    };
+
+    // Stand a recording double in for the Artisan facade. Testbench's console
+    // kernel is `final`, so `Artisan::shouldReceive()` cannot mock it.
+    $swapArtisan = function (): object {
+        $artisan = new class {
+            public array $calls = [];
+
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                $this->calls[] = $command;
+
+                return 0;
+            }
+        };
+
+        Artisan::swap( $artisan );
+
+        return $artisan;
+    };
+
+    it( 'clears the route, config and view caches after an update when the flag is on', function () use ( $prepareUpdate, $swapArtisan ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        $zipPath = $prepareUpdate->call( $this );
+        $artisan = $swapArtisan();
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
+        expect( $artisan->calls )->toBe( ['route:clear', 'config:clear', 'view:clear'] );
+
+        File::delete( $zipPath );
+    } );
+
+    it( 'leaves the framework caches alone after an update when the flag is off', function () use ( $prepareUpdate, $swapArtisan ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => false] );
+        $zipPath = $prepareUpdate->call( $this );
+        $artisan = $swapArtisan();
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
+        expect( $artisan->calls )->toBe( [] );
+
+        File::delete( $zipPath );
+    } );
+
+    it( 'does not clear the framework caches when the update is rolled back', function () use ( $prepareUpdate, $swapArtisan ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        $zipPath = $prepareUpdate->call( $this, [
+            'migrations_path' => '../../database/migrations',
+        ] );
+        $artisan = $swapArtisan();
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class );
+        expect( $artisan->calls )->toBe( [] );
 
         File::delete( $zipPath );
     } );

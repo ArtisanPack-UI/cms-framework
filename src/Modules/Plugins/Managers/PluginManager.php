@@ -805,6 +805,27 @@ class PluginManager
     }
 
     /**
+     * Clear Laravel's route/config/view caches so stale plugin registrations
+     * don't linger after activation state changes (#182).
+     *
+     * Public so `UpdateManager` can run the same clear after an update (#359).
+     *
+     * @since 2.13.0 Visibility widened from protected to public.
+     */
+    public function clearFrameworkCaches(): void
+    {
+        foreach ( ['route:clear', 'config:clear', 'view:clear'] as $command ) {
+            try {
+                Artisan::call( $command );
+            } catch ( Throwable $e ) {
+                logger()->warning( "Framework cache clear failed for {$command}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+    }
+
+    /**
      * Bridge a freshly registered plugin provider's declarative manifest fields
      * (`nav_entries`, `federated_module`) into the runtime PluginRegistry.
      *
@@ -1585,23 +1606,6 @@ class PluginManager
     protected function clearCaches(): void
     {
         Cache::forget( config( 'cms.plugins.cacheKey' ) );
-    }
-
-    /**
-     * Clear Laravel's route/config/view caches so stale plugin registrations
-     * don't linger after activation state changes (#182).
-     */
-    protected function clearFrameworkCaches(): void
-    {
-        foreach ( ['route:clear', 'config:clear', 'view:clear'] as $command ) {
-            try {
-                Artisan::call( $command );
-            } catch ( Throwable $e ) {
-                logger()->warning( "Framework cache clear failed for {$command}", [
-                    'exception' => $e->getMessage(),
-                ] );
-            }
-        }
     }
 
     /**

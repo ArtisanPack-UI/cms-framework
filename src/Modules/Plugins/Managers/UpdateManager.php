@@ -328,6 +328,14 @@ class UpdateManager
             //    also covers every rollback path.
             Cache::forget( $this->updateCacheKey( $slug ) );
 
+            // 9. Clear the route/config/view caches like activate, deactivate
+            //    and delete do (#359). An update that adds or renames routes
+            //    otherwise leaves a stale `route:cache` in place, and its new
+            //    named routes don't exist until someone runs `optimize`.
+            if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+                $this->pluginManager->clearFrameworkCaches();
+            }
+
             doAction( 'ap.cmsFramework.plugin.updated', $slug, $updateInfo['version'] );
 
             return true;
