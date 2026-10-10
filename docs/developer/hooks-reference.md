@@ -128,6 +128,25 @@ addFilter('ap.admin.menuStructure', function ($menuStructure) {
 });
 ```
 
+#### `ap.cmsFramework.admin.middleware`
+
+*Since 2.13.0.* Modify the base middleware stack applied to every admin page route registered through `AdminPageManager`. Each page's `can:{capability}` middleware is appended after it.
+
+**Parameters:**
+- `$middleware` (array) - The `cms.admin.middleware` config value ( default `['web', 'auth']` )
+
+**Returns:** array - Middleware names. Non-string and empty entries are dropped; an empty result falls back to `['web', 'auth']`.
+
+**Example:**
+
+```php
+addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
+    $middleware[] = 'verified';
+
+    return $middleware;
+});
+```
+
 ## Action Hooks
 
 Action hooks allow you to execute code at specific points in the application lifecycle.
