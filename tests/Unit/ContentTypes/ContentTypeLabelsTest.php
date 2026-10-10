@@ -66,6 +66,21 @@ test( 'creating with only a name keeps working and derives labels from it', func
         ->and( $contentType->getPluralLabel() )->toBe( 'Packages' );
 } );
 
+test( 'a plural name derives singular labels', function ( string $name, string $singular, string $plural ): void {
+    $contentType = new ContentType( [ 'name' => $name ] );
+
+    expect( $contentType->getSingularLabel() )->toBe( $singular )
+        ->and( $contentType->getPluralLabel() )->toBe( $plural )
+        ->and( $contentType->getLabel( 'add_new_item' ) )->toBe( "Add New {$singular}" )
+        ->and( $contentType->getLabel( 'edit_item' ) )->toBe( "Edit {$singular}" )
+        ->and( $contentType->getLabel( 'all_items' ) )->toBe( "All {$plural}" );
+} )->with( [
+    'Pages'        => [ 'Pages', 'Page', 'Pages' ],
+    'Blog Posts'   => [ 'Blog Posts', 'Blog Post', 'Blog Posts' ],
+    'Case Studies' => [ 'Case Studies', 'Case Study', 'Case Studies' ],
+    'Package'      => [ 'Package', 'Package', 'Packages' ],
+] );
+
 test( 'the plural label falls back to the pluralized singular label', function (): void {
     $contentType = new ContentType( [ 'name' => 'Inventory', 'singular_name' => 'Case Study' ] );
 

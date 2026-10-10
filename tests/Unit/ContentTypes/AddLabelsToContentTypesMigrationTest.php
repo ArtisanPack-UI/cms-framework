@@ -48,22 +48,30 @@ test( 'the migration adds the label columns', function (): void {
     expect( Schema::hasColumns( 'content_types', [ 'singular_name', 'plural_name', 'labels' ] ) )->toBeTrue();
 } );
 
-test( 'the up migration backfills singular and plural names from name', function (): void {
+test( 'the up migration backfills singular and plural names from a singular or plural name', function (): void {
     rerunAddLabelsMigration( 'down' );
 
     insertLegacyContentTypeRow( 'Package', 'package' );
     insertLegacyContentTypeRow( 'Case Study', 'case-study' );
+    insertLegacyContentTypeRow( 'Pages', 'legacy-pages' );
+    insertLegacyContentTypeRow( 'Blog Posts', 'legacy-posts' );
 
     rerunAddLabelsMigration( 'up' );
 
     $package   = DB::table( 'content_types' )->where( 'slug', 'package' )->first();
     $caseStudy = DB::table( 'content_types' )->where( 'slug', 'case-study' )->first();
+    $pages     = DB::table( 'content_types' )->where( 'slug', 'legacy-pages' )->first();
+    $posts     = DB::table( 'content_types' )->where( 'slug', 'legacy-posts' )->first();
 
     expect( $package->singular_name )->toBe( 'Package' )
         ->and( $package->plural_name )->toBe( 'Packages' )
         ->and( $package->labels )->toBeNull()
         ->and( $caseStudy->singular_name )->toBe( 'Case Study' )
-        ->and( $caseStudy->plural_name )->toBe( 'Case Studies' );
+        ->and( $caseStudy->plural_name )->toBe( 'Case Studies' )
+        ->and( $pages->singular_name )->toBe( 'Page' )
+        ->and( $pages->plural_name )->toBe( 'Pages' )
+        ->and( $posts->singular_name )->toBe( 'Blog Post' )
+        ->and( $posts->plural_name )->toBe( 'Blog Posts' );
 } );
 
 test( 'the backfill leaves already-set labels alone', function (): void {

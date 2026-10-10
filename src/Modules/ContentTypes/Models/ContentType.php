@@ -120,24 +120,35 @@ class ContentType extends Model
     }
 
     /**
-     * Get the singular label ( e.g. "Package" ), falling back to `name`.
+     * Get the singular label ( e.g. "Package" ).
+     *
+     * Falls back to the singularized `name`. `name` is conventionally the
+     * plural, menu-style label ( "Pages", "Blog Posts" ), and singularizing a
+     * name that is already singular leaves it unchanged, so either form of
+     * `name` yields the right singular. Set `singular_name` explicitly when the
+     * inflector guesses wrong ( e.g. "Media" singularizes to "Medium" ).
      *
      * @since 2.13.0
      */
     public function getSingularLabel(): string
     {
-        return $this->filledString( $this->singular_name ) ?? (string) $this->name;
+        return $this->filledString( $this->singular_name ) ?? Str::singular( (string) $this->name );
     }
 
     /**
-     * Get the plural label ( e.g. "Packages" ), falling back to the
-     * pluralized singular label.
+     * Get the plural label ( e.g. "Packages" ).
+     *
+     * Falls back to the pluralized `singular_name` when one is set, otherwise
+     * to the pluralized `name`. Pluralizing a name that is already plural
+     * leaves it unchanged, so "Pages" stays "Pages" and "Package" becomes
+     * "Packages".
      *
      * @since 2.13.0
      */
     public function getPluralLabel(): string
     {
-        return $this->filledString( $this->plural_name ) ?? Str::plural( $this->getSingularLabel() );
+        return $this->filledString( $this->plural_name )
+            ?? Str::plural( $this->filledString( $this->singular_name ) ?? (string) $this->name );
     }
 
     /**
