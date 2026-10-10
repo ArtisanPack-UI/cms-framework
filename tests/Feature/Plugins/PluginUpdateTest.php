@@ -576,6 +576,27 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
 
         File::delete( $zipPath );
     } );
+
+    it( 'does not clear the framework caches when an updated-hook listener throws and the update rolls back', function () use ( $prepareUpdate, $swapArtisan ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        $zipPath = $prepareUpdate->call( $this );
+        $artisan = $swapArtisan();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Listener failed.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.updated', $listener );
+
+        try {
+            expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+                ->toThrow( PluginUpdateException::class );
+            expect( $artisan->calls )->toBe( [] );
+            expect( Plugin::where( 'slug', 'valid-plugin' )->first()->version )->toBe( '1.0.0' );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.updated', $listener );
+            File::delete( $zipPath );
+        }
+    } );
 } );
 
 describe( 'Reactivation failure after update (#45)', function (): void {
