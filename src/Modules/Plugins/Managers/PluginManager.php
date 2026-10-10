@@ -584,7 +584,7 @@ class PluginManager
         // accidentally drop plugin-owned data.
         if ( $plugin->rollback_migrations_on_delete && isset( $plugin->meta['migrations_path'] ) ) {
             try {
-                $this->rollbackMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+                $this->resetMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
             } catch ( Throwable $e ) {
                 logger()->error( "Failed to rollback migrations for plugin: {$slug}", [
                     'exception' => $e->getMessage(),
@@ -2295,8 +2295,36 @@ class PluginManager
     }
 
     /**
-     * Roll back a plugin's migrations. Used on deletion (#182) when the plugin
-     * has opted into `rollback_migrations_on_delete`.
+     * Revert every migration a plugin has run, regardless of batch. Used on
+     * deletion (#182) when the plugin has opted into
+     * `rollback_migrations_on_delete`.
+     *
+     * `migrate:rollback` only reverts the last global batch, so any migration
+     * run after the plugin's activation would leave its tables behind (#355).
+     * `migrate:reset` scoped to the plugin's path reverts all of them.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $slug  Plugin slug.
+     * @param  string  $migrationsPath  Relative path to the migrations directory.
+     */
+    protected function resetMigrations( string $slug, string $migrationsPath ): void
+    {
+        $safePath = $this->resolveSecureMigrationsPath( $slug, $migrationsPath );
+        if ( null === $safePath ) {
+            return;
+        }
+
+        Artisan::call( 'migrate:reset', [
+            '--path'  => str_replace( base_path(), '', $safePath ),
+            '--force' => true,
+        ] );
+    }
+
+    /**
+     * Roll back the plugin migrations in the last batch. Used to undo a failed
+     * activation (#182), where only the batch that activation just ran should
+     * be reverted.
      */
     protected function rollbackMigrations( string $slug, string $migrationsPath ): void
     {
