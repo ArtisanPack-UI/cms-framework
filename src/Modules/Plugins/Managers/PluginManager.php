@@ -20,6 +20,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+use ArtisanPackUI\Rbac\Models\Permission as RbacPermission;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
 use Composer\Semver\Semver;
@@ -2184,13 +2185,17 @@ class PluginManager
     /**
      * Best-effort locator for artisanpack-ui/rbac's Permission model.
      *
+     * Referenced via `::class` rather than a string literal so the name always
+     * matches the declared casing — Composer's autoloader is case-sensitive, so
+     * a mis-cased name only resolves if the class happens to be loaded already.
+     *
+     * @since 2.13.0 Uses the correctly-cased `ArtisanPackUI\Rbac` namespace.
+     *
      * @return class-string|null
      */
     protected function rbacPermissionModel(): ?string
     {
-        $candidate = 'ArtisanPackUI\\RBAC\\Models\\Permission';
-
-        return class_exists( $candidate ) ? $candidate : null;
+        return class_exists( RbacPermission::class ) ? RbacPermission::class : null;
     }
 
     /**
