@@ -1000,10 +1000,14 @@ class PluginManager
             return;
         }
 
-        // Run migrations using Artisan
+        // `$safePath` is a realpath(), so it no longer starts with base_path()
+        // when the plugins directory ( or a parent ) is a symlink — common on
+        // zero-downtime deploys that share `plugins/` between releases. Pass it
+        // as an absolute path rather than one relative to base_path().
         Artisan::call( 'migrate', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -2374,8 +2378,9 @@ class PluginManager
         }
 
         Artisan::call( 'migrate:reset', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -2392,8 +2397,9 @@ class PluginManager
         }
 
         Artisan::call( 'migrate:rollback', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 

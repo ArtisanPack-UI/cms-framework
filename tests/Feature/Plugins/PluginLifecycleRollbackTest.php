@@ -185,3 +185,51 @@ it( 'leaves plugin migrations in place when opt-in flag is absent', function ():
     // Table persists because we did not opt in to rollback.
     expect( Schema::hasTable( 'plugin_test_table' ) )->toBeTrue();
 } );
+
+it( 'runs and resets plugin migrations when the plugins directory is a symlink outside base_path', function (): void {
+    $realPluginsPath = sys_get_temp_dir() . '/cms-plugins-symlink-target-' . uniqid();
+    $linkPath        = base_path( 'symlinked-plugins' );
+
+    File::ensureDirectoryExists( $realPluginsPath );
+    File::copyDirectory(
+        $this->testPluginsPath . '/plugin-with-migrations',
+        $realPluginsPath . '/plugin-with-migrations',
+    );
+
+    if ( File::exists( $linkPath ) || is_link( $linkPath ) ) {
+        File::delete( $linkPath );
+    }
+
+    if ( ! @symlink( $realPluginsPath, $linkPath ) ) {
+        File::deleteDirectory( $realPluginsPath );
+        $this->markTestSkipped( 'Symlinks are not supported on this platform.' );
+    }
+
+    config()->set( 'cms.plugins.directory', 'symlinked-plugins' );
+
+    $manifest                                  = json_decode( File::get( $realPluginsPath . '/plugin-with-migrations/plugin.json' ), true );
+    $manifest['rollback_migrations_on_delete'] = true;
+
+    Plugin::create( [
+        'slug'      => $manifest['slug'],
+        'name'      => $manifest['name'],
+        'version'   => $manifest['version'],
+        'is_active' => false,
+        'meta'      => $manifest,
+    ] );
+
+    try {
+        $this->manager->activate( 'plugin-with-migrations' );
+
+        expect( Schema::hasTable( 'plugin_test_table' ) )->toBeTrue();
+
+        $this->manager->delete( 'plugin-with-migrations' );
+
+        expect( Schema::hasTable( 'plugin_test_table' ) )->toBeFalse();
+    } finally {
+        if ( is_link( $linkPath ) ) {
+            unlink( $linkPath );
+        }
+        File::deleteDirectory( $realPluginsPath );
+    }
+} );
