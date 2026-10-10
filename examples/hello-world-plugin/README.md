@@ -11,12 +11,13 @@ and is not a Composer package. Copy the tree into your host application's
 
 | Piece | File |
 | ----- | ---- |
-| Manifest schema, including `requires`, `autoload`, `nav_entries`, `federated_module` | [`plugin.json`](./plugin.json) |
+| Manifest schema, including `requires`, `autoload`, `migrations_path`, `uninstall`, `nav_entries`, `federated_module` | [`plugin.json`](./plugin.json) |
 | Base `PluginServiceProvider` usage, admin page, nav entry, federated module | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
 | Custom field type registration ( `map_picker` ) via `apRegisterFieldType()` | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
 | Edit-screen panel registration via `ap.admin.contentEdit.panels` | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
 | Action-hook subscription ( `ap.contentTypes.created` ) | [`src/HelloWorldServiceProvider.php`](./src/HelloWorldServiceProvider.php) |
 | Migration path — plugin ships its own schema | [`database/migrations/`](./database/migrations/) |
+| Uninstall class — cleanup that runs on delete, even when inactive | [`src/Uninstall.php`](./src/Uninstall.php) |
 | Blade admin page | [`resources/views/admin/index.blade.php`](./resources/views/admin/index.blade.php) |
 
 ## Two admin-page flavors, one plugin

@@ -466,6 +466,15 @@ describe( 'autoload', function (): void {
         'absolute path'               => [ [ 'psr-4' => [ 'TestPlugin\\' => '/var/www/src' ] ], 'relative path inside the plugin directory' ],
     ] );
 
+    it( 'accepts the hello-world example manifest', function (): void {
+        $manifest = json_decode( file_get_contents( __DIR__ . '/../../../examples/hello-world-plugin/plugin.json' ), true );
+
+        expect( $manifest['migrations_path'] )->toBe( 'database/migrations' )
+            ->and( $manifest['uninstall'] )->toBe( 'HelloWorld\\Uninstall' )
+            ->and( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
     it( 'rejects an uninstall class whose only matching namespace lacks a trailing backslash', function (): void {
         $manifest = array_merge( $this->base, [
             'autoload'  => [ 'psr-4' => [ 'TestPlugin' => 'src/' ] ],
