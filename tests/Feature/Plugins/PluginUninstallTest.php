@@ -207,3 +207,60 @@ it( 'restores the PSR-4 map after running an inactive plugin\'s uninstall class'
     expect( $this->uninstallCalls )->toHaveCount( 1 )
         ->and( $classLoader->getPrefixesPsr4()['PluginWithUninstaller\\'] ?? [] )->toBe( [] );
 } );
+
+it( 'skips the uninstall class on a legacy row whose psr-4 prefix lacks a trailing backslash', function (): void {
+    ( $this->createPlugin )( [ 'autoload' => [ 'psr-4' => [ 'PluginWithUninstaller' => 'src/' ] ] ] );
+
+    Log::shouldReceive( 'warning' )
+        ->once()
+        ->withArgs( fn ( string $message ): bool => str_contains( $message, 'outside its autoload.psr-4 namespaces' ) );
+
+    $deleted = false;
+    addAction( 'ap.cmsFramework.plugin.deleted', function () use ( &$deleted ): void {
+        $deleted = true;
+    } );
+
+    expect( $this->manager->delete( 'plugin-with-uninstaller' ) )->toBeTrue()
+        ->and( $deleted )->toBeTrue()
+        ->and( $this->uninstallCalls )->toBe( [] )
+        ->and( Plugin::where( 'slug', 'plugin-with-uninstaller' )->exists() )->toBeFalse();
+} );
+
+it( 'completes the delete when a malformed psr-4 prefix makes the autoloader restore throw', function (): void {
+    ( $this->createPlugin )( [
+        'autoload' => [ 'psr-4' => [ 'PluginWithUninstaller\\' => 'src/', 'Broken' => 'src/' ] ],
+    ] );
+
+    Log::shouldReceive( 'error' )
+        ->once()
+        ->withArgs( fn ( string $message ): bool => str_contains( $message, 'Failed to run uninstall' ) );
+    Log::shouldReceive( 'warning' )
+        ->once()
+        ->withArgs( fn ( string $message ): bool => str_contains( $message, "Failed restoring prior PSR-4 mapping for 'Broken'" ) );
+
+    expect( $this->manager->delete( 'plugin-with-uninstaller' ) )->toBeTrue()
+        ->and( Plugin::where( 'slug', 'plugin-with-uninstaller' )->exists() )->toBeFalse()
+        ->and( File::exists( $this->pluginPath ) )->toBeFalse();
+} );
+
+it( 'restores the host\'s PSR-4 fallback directories when a legacy row declares an empty prefix', function (): void {
+    ( $this->createPlugin )( [
+        'autoload' => [ 'psr-4' => [ '' => 'src/', 'PluginWithUninstaller\\' => 'src/' ] ],
+    ] );
+
+    $classLoader = collect( spl_autoload_functions() )
+        ->first( fn ( mixed $autoloader ): bool => is_array( $autoloader ) && $autoloader[0] instanceof ClassLoader )[0];
+
+    $fallbackBefore = $classLoader->getFallbackDirsPsr4();
+    $classLoader->setPsr4( '', [ ...$fallbackBefore, sys_get_temp_dir() . '/issue-f4-host-fallback' ] );
+    $hostFallback = $classLoader->getFallbackDirsPsr4();
+
+    try {
+        $this->manager->delete( 'plugin-with-uninstaller' );
+
+        expect( $this->uninstallCalls )->toHaveCount( 1 )
+            ->and( $classLoader->getFallbackDirsPsr4() )->toBe( $hostFallback );
+    } finally {
+        $classLoader->setPsr4( '', $fallbackBefore );
+    }
+} );

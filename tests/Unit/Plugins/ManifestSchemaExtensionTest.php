@@ -442,6 +442,41 @@ describe( 'uninstall', function (): void {
     } );
 } );
 
+describe( 'autoload', function (): void {
+    it( 'accepts a psr-4 map of namespaces to relative paths', function (): void {
+        $manifest = array_merge( $this->base, [ 'autoload' => [ 'psr-4' => [ 'TestPlugin\\' => 'src/', 'TestPlugin\\Lib\\' => 'lib' ] ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a malformed autoload block', function ( mixed $autoload, string $reason ): void {
+        $manifest = array_merge( $this->base, [ 'autoload' => $autoload ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, $reason );
+    } )->with( [
+        'non-array autoload'          => [ 'src/', 'Invalid autoload.' ],
+        'psr-4 list'                  => [ [ 'psr-4' => [ 'src/' ] ], 'Invalid autoload.psr-4.' ],
+        'namespace without backslash' => [ [ 'psr-4' => [ 'TestPlugin' => 'src/' ] ], 'ending in a backslash' ],
+        'empty namespace'             => [ [ 'psr-4' => [ '' => 'src/' ] ], 'ending in a backslash' ],
+        'lone backslash'              => [ [ 'psr-4' => [ '\\' => 'src/' ] ], 'ending in a backslash' ],
+        'array path'                  => [ [ 'psr-4' => [ 'TestPlugin\\' => [ 'src/' ] ] ], 'relative path inside the plugin directory' ],
+        'traversal path'              => [ [ 'psr-4' => [ 'TestPlugin\\' => '../src/' ] ], 'relative path inside the plugin directory' ],
+        'absolute path'               => [ [ 'psr-4' => [ 'TestPlugin\\' => '/var/www/src' ] ], 'relative path inside the plugin directory' ],
+    ] );
+
+    it( 'rejects an uninstall class whose only matching namespace lacks a trailing backslash', function (): void {
+        $manifest = array_merge( $this->base, [
+            'autoload'  => [ 'psr-4' => [ 'TestPlugin' => 'src/' ] ],
+            'uninstall' => 'TestPlugin\\Uninstall',
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class );
+    } );
+} );
+
 describe( 'Plugin model accessors', function (): void {
     it( 'exposes the new manifest fields ergonomically', function (): void {
         $plugin = new Plugin( [
