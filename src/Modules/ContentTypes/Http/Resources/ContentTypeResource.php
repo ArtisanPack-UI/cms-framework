@@ -43,6 +43,10 @@ class ContentTypeResource extends JsonResource
         return [
             'id'                  => $this->id,
             'name'                => $this->name,
+            'singular_name'       => $this->singular_name,
+            'plural_name'         => $this->plural_name,
+            'labels'              => $this->labels,
+            'resolved_labels'     => $this->getLabels(),
             'slug'                => $this->slug,
             'table_name'          => $this->table_name,
             'model_class'         => $this->model_class,

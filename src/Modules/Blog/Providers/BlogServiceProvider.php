@@ -107,6 +107,8 @@ class BlogServiceProvider extends ServiceProvider
 
         $contentTypeManager->register( [
             'name'          => 'Blog Posts',
+            'singular_name' => 'Post',
+            'plural_name'   => 'Posts',
             'slug'          => 'posts',
             'table_name'    => 'posts',
             'model_class'   => Post::class,

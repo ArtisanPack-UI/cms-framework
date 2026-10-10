@@ -91,6 +91,29 @@ export type ContentTypeSupport =
 // ---------------------------------------------------------------------------
 
 /**
+ * Resolved content type labels returned by ContentTypeResource.
+ */
+export interface ContentTypeLabels {
+	singular_name: string;
+	plural_name: string;
+	menu_name: string;
+	add_new: string;
+	add_new_item: string;
+	new_item: string;
+	edit_item: string;
+	view_item: string;
+	view_items: string;
+	all_items: string;
+	search_items: string;
+	not_found: string;
+	not_found_in_trash: string;
+	parent_item_colon: string;
+	archives: string;
+	/** Any extra keys supplied as overrides. */
+	[key: string]: string;
+}
+
+/**
  * Content type response shape returned by ContentTypeResource.
  */
 export interface ContentTypeResponse {
@@ -98,6 +121,14 @@ export interface ContentTypeResponse {
 	id: number;
 	/** The human-readable name. */
 	name: string;
+	/** The stored singular label, if set (e.g. "Package"). */
+	singular_name: string | null;
+	/** The stored plural label, if set (e.g. "Packages"). */
+	plural_name: string | null;
+	/** Stored label overrides keyed by label name (e.g. `add_new_item`). */
+	labels: Record<string, string | null> | null;
+	/** The full label set with defaults derived from the singular/plural labels and overrides applied. */
+	resolved_labels: ContentTypeLabels;
 	/** The URL-friendly slug (unique identifier). */
 	slug: string;
 	/** The database table name for this content type's entries. */
@@ -222,6 +253,12 @@ export interface TaxonomyResponse {
 export interface ContentTypeRequestData {
 	/** The content type name (required, max 255). */
 	name: string;
+	/** The singular label (max 255). */
+	singular_name?: string | null;
+	/** The plural label (max 255). */
+	plural_name?: string | null;
+	/** Label overrides keyed by snake_case label name (max 50 keys, each value max 255). */
+	labels?: Record<string, string | null> | null;
 	/** The URL-friendly slug (required, unique, lowercase alphanumeric with hyphens). */
 	slug: string;
 	/** The database table name (required, lowercase alphanumeric with underscores). */
