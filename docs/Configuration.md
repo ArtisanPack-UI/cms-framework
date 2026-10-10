@@ -118,7 +118,8 @@ Set it to match the stack your own admin routes use, so plugin pages can't be
 reached by users who haven't verified their email or completed two-factor
 enrolment. Keep an authentication middleware ( `auth` or `auth:<guard>` ) in
 the list. An empty list, or one with no non-empty strings, falls back to
-`web` + `auth`. The `ap.cmsFramework.admin.middleware` filter can change the
+`web` + `auth`, but a non-empty list without `auth` ( e.g. `['web']` ) is used
+as-is and leaves admin pages unauthenticated. The `ap.cmsFramework.admin.middleware` filter can change the
 stack at runtime. See [Admin Authorization](admin/Authorization.md).
 
 ### Plugin Framework Cache Clearing

@@ -94,7 +94,11 @@ addFilter( 'ap.cmsFramework.admin.middleware', function ( array $middleware ): a
 
 Register the filter before the application finishes booting ( for example in
 a service provider's `boot()` ), because admin routes are registered in a
-`booted` callback. Non-string and empty entries are dropped; if nothing is
-left, the stack falls back to `web` + `auth`, so a misconfiguration never
-leaves admin pages unauthenticated. Keep an authentication middleware in the
-list.
+`booted` callback. The filter always receives an array: non-string and empty
+entries are dropped from the config first, and an empty config becomes
+`['web', 'auth']`. The filtered result is cleaned the same way.
+
+The `web` + `auth` fallback applies **only when the stack is empty**. A
+non-empty stack is used exactly as given, so a value like `['web']` leaves
+admin pages without authentication. Always keep an authentication middleware
+( `auth` or `auth:<guard>` ) in the list.

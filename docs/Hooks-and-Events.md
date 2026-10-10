@@ -94,7 +94,7 @@ addFilter('ap.cmsFramework.admin.dashboardWidgets', function (array $widgets, ?U
 
 > **Added in 2.13.0** ([#357](https://github.com/ArtisanPack-UI/cms-framework/issues/357)).
 
-`AdminPageManager::registerRoutes()` passes the `cms.admin.middleware` config through `ap.cmsFramework.admin.middleware` before applying it to every admin page route. Each page's `can:{capability}` gate is appended after the filtered stack. Non-string and empty entries are dropped, and an empty result falls back to `['web', 'auth']`.
+`AdminPageManager::registerRoutes()` passes the `cms.admin.middleware` config through `ap.cmsFramework.admin.middleware` before applying it to every admin page route. Each page's `can:{capability}` gate is appended after the filtered stack. The config is normalized before the filter runs (non-string and empty entries dropped, an empty or `null` config replaced with `['web', 'auth']`), so callbacks always receive an array. The filtered result is normalized the same way; only an empty result falls back to `['web', 'auth']`.
 
 ```php
 addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {

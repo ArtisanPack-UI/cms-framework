@@ -133,9 +133,9 @@ addFilter('ap.admin.menuStructure', function ($menuStructure) {
 *Since 2.13.0.* Modify the base middleware stack applied to every admin page route registered through `AdminPageManager`. Each page's `can:{capability}` middleware is appended after it.
 
 **Parameters:**
-- `$middleware` (array) - The `cms.admin.middleware` config value ( default `['web', 'auth']` )
+- `$middleware` (array) - The `cms.admin.middleware` config value, normalized before the filter runs: non-string and empty entries are dropped, and an empty or `null` config becomes `['web', 'auth']`. Callbacks always receive a list of strings.
 
-**Returns:** array - Middleware names. Non-string and empty entries are dropped; an empty result falls back to `['web', 'auth']`.
+**Returns:** array - Middleware names. Non-string and empty entries are dropped; an empty result falls back to `['web', 'auth']`. A non-empty result is used as-is, so keep an authentication middleware in it.
 
 **Example:**
 

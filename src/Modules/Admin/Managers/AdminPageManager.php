@@ -90,8 +90,12 @@ class AdminPageManager
     /**
      * Resolves the base middleware stack applied to every admin page route.
      *
-     * Falls back to `web` + `auth` when the configured (or filtered) stack is
-     * empty, so a misconfiguration never leaves admin pages unauthenticated.
+     * The configured value is normalized to a list of non-empty strings, and
+     * replaced with `web` + `auth` when that leaves it empty, before it reaches
+     * the `ap.cmsFramework.admin.middleware` filter, so callbacks always get an
+     * array. The filtered result is normalized the same way. The fallback only
+     * applies to an empty stack: a non-empty stack without an authentication
+     * middleware ( e.g. `['web']` ) is used as-is.
      *
      * @since 2.13.0
      *
@@ -100,16 +104,30 @@ class AdminPageManager
     protected function middleware(): array
     {
         $default    = [ 'web', 'auth' ];
-        $middleware = applyFilters(
-            'ap.cmsFramework.admin.middleware',
-            config( 'cms.admin.middleware', $default ),
-        );
+        $middleware = $this->normalizeMiddleware( config( 'cms.admin.middleware', $default ) );
 
-        $middleware = array_values( array_filter(
-            (array) $middleware,
-            fn ( mixed $item ): bool => is_string( $item ) && '' !== $item,
+        $middleware = $this->normalizeMiddleware( applyFilters(
+            'ap.cmsFramework.admin.middleware',
+            [] === $middleware ? $default : $middleware,
         ) );
 
         return [] === $middleware ? $default : $middleware;
+    }
+
+    /**
+     * Reduces a middleware value to a list of non-empty strings.
+     *
+     * @since 2.13.0
+     *
+     * @param  mixed  $middleware  Raw configured or filtered value.
+     *
+     * @return array<int,string> The non-empty string entries, re-indexed.
+     */
+    protected function normalizeMiddleware( mixed $middleware ): array
+    {
+        return array_values( array_filter(
+            (array) $middleware,
+            fn ( mixed $item ): bool => is_string( $item ) && '' !== $item,
+        ) );
     }
 }

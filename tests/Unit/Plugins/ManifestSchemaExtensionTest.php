@@ -457,6 +457,8 @@ describe( 'autoload', function (): void {
             ->toThrow( PluginValidationException::class, $reason );
     } )->with( [
         'non-array autoload'          => [ 'src/', 'Invalid autoload.' ],
+        'null autoload'               => [ null, 'Invalid autoload.' ],
+        'null psr-4'                  => [ [ 'psr-4' => null ], 'Invalid autoload.psr-4.' ],
         'psr-4 list'                  => [ [ 'psr-4' => [ 'src/' ] ], 'Invalid autoload.psr-4.' ],
         'namespace without backslash' => [ [ 'psr-4' => [ 'TestPlugin' => 'src/' ] ], 'ending in a backslash' ],
         'empty namespace'             => [ [ 'psr-4' => [ '' => 'src/' ] ], 'ending in a backslash' ],

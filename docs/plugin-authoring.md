@@ -434,14 +434,21 @@ How it runs:
 - A missing, non-invokable or throwing class is logged and never blocks the
   delete.
 
-Constraints, checked at install and update and again at delete:
+Constraints checked at install and update, and again at delete:
 
 - The value must be a fully qualified, namespaced class name with no leading
   backslash.
-- The class must live under one of your `autoload.psr-4` namespaces, and its
-  file must sit inside your plugin directory. A namespace that overlaps a host
-  namespace ( `App\\` ) or a PSR-4 path that climbs out of the plugin cannot
-  reach host code.
+- The class must live under one of your `autoload.psr-4` namespaces.
+
+Checked only at delete, when the class is loaded:
+
+- The class file must exist and sit inside your plugin directory. A namespace
+  that overlaps a host namespace ( `App\` ) or a PSR-4 path that climbs out of
+  the plugin cannot reach host code.
+
+Install does not check that the class file exists. A missing file passes
+install, then at delete the error is logged and cleanup is skipped, so ship
+the file and test your uninstaller before releasing.
 
 > **Trust.** Deleting a plugin runs its `uninstall` class even if the plugin
 > was never activated. Installing, activating and deleting all require the

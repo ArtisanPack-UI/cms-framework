@@ -1190,7 +1190,9 @@ class PluginManager
             $this->validateComposerManifestField( $manifest['composer'] );
         }
 
-        if ( isset( $manifest['autoload'] ) ) {
+        // array_key_exists, not isset: an explicit `null` must reach the
+        // validator and be rejected rather than skipped as absent.
+        if ( array_key_exists( 'autoload', $manifest ) ) {
             $this->validateAutoloadManifestField( $manifest['autoload'] );
         }
 
@@ -1221,7 +1223,7 @@ class PluginManager
             throw PluginValidationException::invalidManifest( 'Invalid autoload. Must be an object.' );
         }
 
-        if ( ! isset( $autoload['psr-4'] ) ) {
+        if ( ! array_key_exists( 'psr-4', $autoload ) ) {
             return;
         }
 
