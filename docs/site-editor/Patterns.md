@@ -12,7 +12,7 @@ The patterns module surfaces both theme-shipped patterns (PHP files) and user-au
 
 Patterns occupy two disjoint sources rather than a file/DB merge:
 
-- **Theme patterns** — PHP files at `themes/{active}/patterns/{slug}.php` with a leading WP-style header doc-comment (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`). Read-only at runtime; the body after the doc-comment becomes the pattern content.
+- **Theme patterns** — PHP files at `themes/{active}/patterns/{slug}.php` with a leading WP-style header doc-comment (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`, `Viewport Width:`). Read-only at runtime; the body after the doc-comment becomes the pattern content.
 - **User patterns** — DB rows in `block_patterns` with columns `id`, `slug`, `theme` (nullable), `title`, `description`, `source`, `synced` (bool), `categories` (JSON), `block_types` (JSON), `block_content` (JSON via `HasBlockContent`), `author_id`, timestamps.
 
 User-pattern slugs carry a `user/` prefix at storage time — this guarantees a theme pattern named `hero` and a user pattern named `hero` do not collide in the merged inserter map. The REST surface presents the unprefixed user-facing slug; the storage form is exposed as `name` on the unsynced response (mirroring WP's namespaced pattern names).
@@ -29,6 +29,7 @@ Theme patterns are parsed by `PatternFileParser` from PHP files of the form:
  * Categories: featured, cta
  * Description: A simple call-to-action block.
  * Block Types: core/group
+ * Viewport Width: 1200
  */
 ?>
 <!-- wp:group {"layout":{"type":"constrained"}} -->
@@ -40,7 +41,15 @@ Theme patterns are parsed by `PatternFileParser` from PHP files of the form:
 <!-- /wp:group -->
 ```
 
-The parser regexes are anchored — the doc-comment must lead the file. Everything after the closing `?>` (or after the closing `*/` when there is no PHP tag) becomes the pattern content. Recognized header keys: `Title:`, `Slug:`, `Categories:` (comma-separated), `Description:`, `Block Types:` (comma-separated).
+The parser regexes are anchored — the doc-comment must lead the file. Everything after the closing `?>` (or after the closing `*/` when there is no PHP tag) becomes the pattern content. Recognized header keys: `Title:`, `Slug:`, `Categories:` (comma-separated), `Description:`, `Block Types:` (comma-separated), `Viewport Width:`.
+
+### Viewport width
+
+> **Added in 2.13.0.**
+
+`Viewport Width:` mirrors WordPress's `viewportWidth` pattern property: the width, in pixels, the pattern is laid out at before an inserter preview scales it down. The value must be a positive whole number with an optional `px` suffix (`1200` or `1200px`). Valid values are clamped to 320–2560 (`PatternFileParser::MIN_VIEWPORT_WIDTH` / `MAX_VIEWPORT_WIDTH`). A missing or invalid header yields `null`, meaning "use the client's default width".
+
+The parsed value is exposed as `viewport_width` on the `/block-patterns/patterns` responses, as `ResolvedPattern::$viewportWidth`, and in `toFilterMap()` entries. User patterns have no header, so their `viewport_width` is always `null`, including user patterns cloned from a theme pattern.
 
 ## Sync semantics
 

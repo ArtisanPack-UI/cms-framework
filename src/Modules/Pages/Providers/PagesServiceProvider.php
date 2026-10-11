@@ -81,6 +81,8 @@ class PagesServiceProvider extends ServiceProvider
 
         $contentTypeManager->register( [
             'name'          => 'Pages',
+            'singular_name' => 'Page',
+            'plural_name'   => 'Pages',
             'slug'          => 'pages',
             'table_name'    => 'pages',
             'model_class'   => Page::class,

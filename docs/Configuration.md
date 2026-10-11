@@ -8,7 +8,7 @@ The CMS Framework provides flexible configuration options to customize its behav
 
 ## Configuration Files
 
-The framework publishes four configuration files. Publish all of them with the
+The framework publishes five configuration files. Publish all of them with the
 umbrella tag:
 
 ```bash
@@ -18,6 +18,7 @@ php artisan vendor:publish --tag=cms-framework-config
 | File | Config key | Also published by |
 |---|---|---|
 | `config/artisanpack/cms-framework.php` | `artisanpack.cms-framework` | `artisanpack-package-config` |
+| `config/cms/admin.php` | `cms.admin` | `cms-admin-config` |
 | `config/cms/themes.php` | `cms.themes` | `cms-themes-config` |
 | `config/cms/plugins.php` | `cms.plugins` | `cms-plugins-config` |
 | `config/cms/updates.php` | `cms.updates` | `cms-updates-config` |
@@ -26,7 +27,7 @@ The main configuration file is `config/artisanpack/cms-framework.php`, which
 carries `user_model` and `openapi`. The "Advanced Configuration" sections below
 describe code-level customization rather than keys in that file.
 
-The three `cms-*-config` tags each publish exactly the one file beside them.
+The four `cms-*-config` tags each publish exactly the one file beside them.
 `artisanpack-package-config` is shared across the whole ArtisanPack UI
 ecosystem — it publishes this framework's config *and* the config of every
 other installed ArtisanPack UI package.
@@ -94,6 +95,41 @@ protected function casts(): array
     ];
 }
 ```
+
+### Admin Page Middleware
+
+*Since 2.13.0.* Every admin page registered through `AdminPageManager`,
+including pages added by plugins, sits behind the `cms.admin.middleware`
+stack, with the page's `can:{capability}` gate appended:
+
+```php
+// config/cms/admin.php
+return [
+    'middleware' => [
+        'web',
+        'auth',
+        'verified',
+        'two-factor',
+    ],
+];
+```
+
+Set it to match the stack your own admin routes use, so plugin pages can't be
+reached by users who haven't verified their email or completed two-factor
+enrolment. Keep an authentication middleware ( `auth` or `auth:<guard>` ) in
+the list. An empty list, or one with no non-empty strings, falls back to
+`web` + `auth`, but a non-empty list without `auth` ( e.g. `['web']` ) is used
+as-is and leaves admin pages unauthenticated. The `ap.cmsFramework.admin.middleware` filter can change the
+stack at runtime. See [Admin Authorization](admin/Authorization.md).
+
+### Plugin Framework Cache Clearing
+
+`cms.plugins.autoClearFrameworkCaches` ( env `PLUGINS_AUTO_CLEAR_FRAMEWORK_CACHES`,
+default `false` ) runs `route:clear`, `config:clear` and `view:clear` after a
+plugin is activated, deactivated or deleted, and since 2.13.0 after an
+inactive plugin is updated ( an active plugin's update already clears through
+its deactivate/activate ). It's convenient in development, but in production
+it deletes the compiled caches that `route:cache` / `config:cache` built.
 
 ## Advanced Configuration
 

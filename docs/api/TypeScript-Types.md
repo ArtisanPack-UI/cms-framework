@@ -77,7 +77,7 @@ Each module file exports types matching its API responses. Some key examples:
 
 - **`blog.d.ts`**: `PostResponse`, `PostRequestData`, `PostCategoryResponse`, `PostTagResponse`, `PostAuthorResponse`
 - **`pages.d.ts`**: `PageResponse`, `PageRequestData`, `PageCategoryResponse`, `PageTagResponse`, `BreadcrumbItem`
-- **`content-types.d.ts`**: `ContentTypeResponse`, `CustomFieldResponse`, `TaxonomyResponse`, `FieldType`, `ColumnType`, `ContentStatus`
+- **`content-types.d.ts`**: `ContentTypeResponse`, `ContentTypeLabels` ( *2.13.0*, the `resolved_labels` shape ), `CustomFieldResponse`, `TaxonomyResponse`, `FieldType`, `ColumnType`, `ContentStatus`
 - **`users.d.ts`**: `UserResponse`, `RoleResponse`, `PermissionResponse`, `RoleSummary`, `PermissionSummary`
 - **`settings.d.ts`**: `SettingResponse`, `SettingRequestData`, `SettingType`
 - **`notifications.d.ts`**: `NotificationResponse`, `NotificationPreferenceResponse`, `NotificationType`

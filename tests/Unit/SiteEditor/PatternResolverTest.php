@@ -100,6 +100,29 @@ PHP );
             ->and( $result->blocks[0]['innerBlocks'][1]['blockName'] )->toBe( 'core/paragraph' );
     } );
 
+    it( 'carries the Viewport Width header on theme patterns', function (): void {
+        File::put( $this->themeFiles . '/wide.php', <<<'PHP'
+<?php
+/**
+ * Title: Wide
+ * Viewport Width: 1400
+ */
+?>
+<!-- wp:paragraph --><p>Wide</p><!-- /wp:paragraph -->
+PHP );
+
+        File::put( $this->themeFiles . '/plain.php', "<?php\n/**\n * Title: Plain\n */\n" );
+
+        expect( $this->resolver->resolve( 'wide' )->viewportWidth )->toBe( 1400 )
+            ->and( $this->resolver->resolve( 'plain' )->viewportWidth )->toBeNull();
+    } );
+
+    it( 'leaves the viewport width null on user patterns', function (): void {
+        BlockPattern::create( ['slug' => 'callout', 'title' => 'Callout', 'source' => BlockPattern::SOURCE_USER] );
+
+        expect( $this->resolver->resolve( 'callout' )->viewportWidth )->toBeNull();
+    } );
+
     it( 'falls back to a humanized slug when the theme file omits the Title header', function (): void {
         File::put( $this->themeFiles . '/no-title.php', <<<'PHP'
 <?php
@@ -274,6 +297,7 @@ PHP );
                 'categories',
                 'block_types',
                 'wp_id',
+                'viewport_width',
             ] )
             ->and( $map['hero']['slug'] )->toBe( 'hero' )
             ->and( $map['hero']['source'] )->toBe( BlockPattern::SOURCE_THEME )

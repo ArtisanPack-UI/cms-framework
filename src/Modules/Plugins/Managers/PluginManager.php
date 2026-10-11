@@ -20,6 +20,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
+use ArtisanPackUI\Rbac\Models\Permission as RbacPermission;
 use Composer\Autoload\ClassLoader;
 use Composer\InstalledVersions;
 use Composer\Semver\Semver;
@@ -29,6 +30,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use ReflectionClass;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -534,9 +536,11 @@ class PluginManager
      * Process:
      * 1. Deactivate if active
      * 2. Fire deletion hooks
-     * 3. Remove from database
-     * 4. Remove from filesystem (if $deleteFiles = true)
-     * 5. Clear caches
+     * 3. Invoke the manifest's `uninstall` class, if any (#358)
+     * 4. Roll back migrations (opt-in) and remove seeded permissions
+     * 5. Remove from database
+     * 6. Remove from filesystem (if $deleteFiles = true)
+     * 7. Clear caches
      *
      * @param  string  $slug  Plugin slug
      * @param  bool  $deleteFiles  Whether to delete plugin files
@@ -571,11 +575,16 @@ class PluginManager
 
         doAction( 'ap.cmsFramework.plugin.deleting', $slug );
 
+        // Plugin-owned uninstall entry point (#358). Runs whether or not the
+        // plugin was active, unlike a `deleting` listener, and before the
+        // migration rollback so it can still read the plugin's own tables.
+        $this->runUninstaller( $plugin );
+
         // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
         // accidentally drop plugin-owned data.
         if ( $plugin->rollback_migrations_on_delete && isset( $plugin->meta['migrations_path'] ) ) {
             try {
-                $this->rollbackMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+                $this->resetMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
             } catch ( Throwable $e ) {
                 logger()->error( "Failed to rollback migrations for plugin: {$slug}", [
                     'exception' => $e->getMessage(),
@@ -805,6 +814,27 @@ class PluginManager
     }
 
     /**
+     * Clear Laravel's route/config/view caches so stale plugin registrations
+     * don't linger after activation state changes (#182).
+     *
+     * Public so `UpdateManager` can run the same clear after an update (#359).
+     *
+     * @since 2.13.0 Visibility widened from protected to public.
+     */
+    public function clearFrameworkCaches(): void
+    {
+        foreach ( ['route:clear', 'config:clear', 'view:clear'] as $command ) {
+            try {
+                Artisan::call( $command );
+            } catch ( Throwable $e ) {
+                logger()->warning( "Framework cache clear failed for {$command}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+    }
+
+    /**
      * Bridge a freshly registered plugin provider's declarative manifest fields
      * (`nav_entries`, `federated_module`) into the runtime PluginRegistry.
      *
@@ -970,10 +1000,14 @@ class PluginManager
             return;
         }
 
-        // Run migrations using Artisan
+        // `$safePath` is a realpath(), so it no longer starts with base_path()
+        // when the plugins directory ( or a parent ) is a symlink — common on
+        // zero-downtime deploys that share `plugins/` between releases. Pass it
+        // as an absolute path rather than one relative to base_path().
         Artisan::call( 'migrate', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -1155,6 +1189,134 @@ class PluginManager
         if ( isset( $manifest['composer'] ) ) {
             $this->validateComposerManifestField( $manifest['composer'] );
         }
+
+        // array_key_exists, not isset: an explicit `null` must reach the
+        // validator and be rejected rather than skipped as absent.
+        if ( array_key_exists( 'autoload', $manifest ) ) {
+            $this->validateAutoloadManifestField( $manifest['autoload'] );
+        }
+
+        if ( isset( $manifest['uninstall'] ) ) {
+            $this->validateUninstallManifestField( $manifest['uninstall'], $manifest['autoload']['psr-4'] ?? null );
+        }
+    }
+
+    /**
+     * Validate the optional `autoload` manifest key.
+     *
+     * Only `psr-4` is read. Each key must be a non-empty namespace prefix that
+     * ends in a backslash — Composer's `ClassLoader` throws on anything else,
+     * and an empty prefix would append to (and on restore, replace) the host's
+     * PSR-4 fallback directories. Each path must be a relative string inside
+     * the plugin directory, since `registerAutoloader()` appends it to the
+     * plugin path.
+     *
+     * @since 2.13.0
+     *
+     * @param  mixed  $autoload  Raw manifest value.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateAutoloadManifestField( mixed $autoload ): void
+    {
+        if ( ! is_array( $autoload ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid autoload. Must be an object.' );
+        }
+
+        if ( ! array_key_exists( 'psr-4', $autoload ) ) {
+            return;
+        }
+
+        if ( ! is_array( $autoload['psr-4'] ) || ( [] !== $autoload['psr-4'] && array_is_list( $autoload['psr-4'] ) ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid autoload.psr-4. Must be an object mapping namespaces to paths.' );
+        }
+
+        foreach ( $autoload['psr-4'] as $namespace => $path ) {
+            if ( ! is_string( $namespace ) || 1 !== preg_match( '/^([A-Za-z_][A-Za-z0-9_]*\\\\)+$/D', $namespace ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid autoload.psr-4 namespace '{$namespace}'. Must be a non-empty namespace ending in a backslash (e.g. \"HelloWorld\\\\\")." );
+            }
+
+            if ( ! is_string( $path )
+                || str_starts_with( $path, '/' )
+                || str_contains( $path, '..' )
+                || 1 === preg_match( '/^[A-Za-z]:/', $path ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid autoload.psr-4 path for '{$namespace}'. Must be a relative path inside the plugin directory (no \"..\", no absolute paths)." );
+            }
+        }
+    }
+
+    /**
+     * Validate the optional `uninstall` manifest key (#358).
+     *
+     * Shape (a fully-qualified invokable class inside the plugin):
+     *     "uninstall": "HelloWorld\\Uninstall"
+     *
+     * The class must sit under one of the plugin's own `autoload.psr-4`
+     * namespaces. `delete()` instantiates and invokes it, so a manifest must
+     * not be able to point it at an arbitrary host or vendor class.
+     *
+     * @since 2.13.0
+     *
+     * @param  mixed  $uninstall  Raw manifest value.
+     * @param  mixed  $psr4  The manifest's `autoload.psr-4` map, if any.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateUninstallManifestField( mixed $uninstall, mixed $psr4 ): void
+    {
+        if ( ! is_string( $uninstall ) || ! $this->isValidClassName( $uninstall ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid uninstall. Must be a fully-qualified, namespaced class name.' );
+        }
+
+        if ( ! $this->classIsInPluginNamespace( $uninstall, $psr4 ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid uninstall. The class must live under one of the plugin\'s autoload.psr-4 namespaces.' );
+        }
+    }
+
+    /**
+     * Whether a string is a syntactically valid, namespaced PHP class name.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $class  Candidate class name.
+     *
+     * @return bool True when the name is well-formed and has at least one namespace segment.
+     */
+    protected function isValidClassName( string $class ): bool
+    {
+        return 1 === preg_match( '/^[A-Za-z_][A-Za-z0-9_]*(\\\\[A-Za-z_][A-Za-z0-9_]*)+$/D', $class );
+    }
+
+    /**
+     * Whether a class name falls under one of a plugin's PSR-4 namespace prefixes.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $class  Fully-qualified class name.
+     * @param  mixed  $psr4  The plugin's `autoload.psr-4` map ( namespace => path ).
+     *
+     * @return bool True when the class is inside a declared plugin namespace.
+     */
+    protected function classIsInPluginNamespace( string $class, mixed $psr4 ): bool
+    {
+        if ( ! is_array( $psr4 ) ) {
+            return false;
+        }
+
+        foreach ( array_keys( $psr4 ) as $namespace ) {
+            // Only a well-formed prefix ( ending in a backslash ) counts:
+            // Composer's ClassLoader rejects anything else, so a class under a
+            // malformed prefix could never be autoloaded anyway.
+            if ( ! is_string( $namespace ) || '\\' === $namespace || ! str_ends_with( $namespace, '\\' ) ) {
+                continue;
+            }
+
+            if ( str_starts_with( $class, $namespace ) ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -1585,23 +1747,6 @@ class PluginManager
     protected function clearCaches(): void
     {
         Cache::forget( config( 'cms.plugins.cacheKey' ) );
-    }
-
-    /**
-     * Clear Laravel's route/config/view caches so stale plugin registrations
-     * don't linger after activation state changes (#182).
-     */
-    protected function clearFrameworkCaches(): void
-    {
-        foreach ( ['route:clear', 'config:clear', 'view:clear'] as $command ) {
-            try {
-                Artisan::call( $command );
-            } catch ( Throwable $e ) {
-                logger()->warning( "Framework cache clear failed for {$command}", [
-                    'exception' => $e->getMessage(),
-                ] );
-            }
-        }
     }
 
     /**
@@ -2096,18 +2241,155 @@ class PluginManager
     /**
      * Best-effort locator for artisanpack-ui/rbac's Permission model.
      *
+     * Referenced via `::class` rather than a string literal so the name always
+     * matches the declared casing — Composer's autoloader is case-sensitive, so
+     * a mis-cased name only resolves if the class happens to be loaded already.
+     *
+     * @since 2.13.0 Uses the correctly-cased `ArtisanPackUI\Rbac` namespace.
+     *
      * @return class-string|null
      */
     protected function rbacPermissionModel(): ?string
     {
-        $candidate = 'ArtisanPackUI\\RBAC\\Models\\Permission';
-
-        return class_exists( $candidate ) ? $candidate : null;
+        return class_exists( RbacPermission::class ) ? RbacPermission::class : null;
     }
 
     /**
-     * Roll back a plugin's migrations. Used on deletion (#182) when the plugin
-     * has opted into `rollback_migrations_on_delete`.
+     * Invoke the plugin's manifest-declared uninstall class (#358).
+     *
+     * Registers the plugin's PSR-4 autoloader so the class resolves even when
+     * the plugin is inactive, resolves it from the container ( so it may
+     * type-hint constructor dependencies ), and invokes it with the plugin
+     * model. Failures are logged, never rethrown, so a broken uninstaller can
+     * not block deletion. The PSR-4 map is restored afterwards so an inactive
+     * plugin's paths do not linger once its files are removed.
+     *
+     * @since 2.13.0
+     *
+     * @param  Plugin  $plugin  The plugin being deleted.
+     */
+    protected function runUninstaller( Plugin $plugin ): void
+    {
+        $class = $plugin->uninstaller;
+        if ( null === $class ) {
+            return;
+        }
+
+        $psr4 = $plugin->meta['autoload']['psr-4'] ?? null;
+
+        // Re-check at call time: the row's meta may predate the manifest
+        // validator, and this is about to instantiate and run the class.
+        if ( ! $this->isValidClassName( $class ) || ! $this->classIsInPluginNamespace( $class, $psr4 ) ) {
+            logger()->warning( "Plugin '{$plugin->slug}' uninstall class is outside its autoload.psr-4 namespaces; skipping.", [
+                'uninstall' => $class,
+            ] );
+
+            return;
+        }
+
+        $priorPsr4 = $this->snapshotPsr4( $psr4 );
+
+        try {
+            $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
+
+            // A plugin namespace can overlap a host one ( `App\` ), or its
+            // PSR-4 path can climb out with `..`, so the namespace check alone
+            // could still resolve a host class. Refuse a file outside the
+            // plugin before it is included, then confirm the loaded definition.
+            $file = $this->classLoader->findFile( $class );
+            if ( false !== $file && ! $this->isPathInsidePluginDirectory( $file, $plugin->slug ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' is not defined inside the plugin directory." );
+            }
+
+            if ( ! class_exists( $class ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' not found." );
+            }
+
+            $definedIn = ( new ReflectionClass( $class ) )->getFileName();
+            if ( false === $definedIn || ! $this->isPathInsidePluginDirectory( $definedIn, $plugin->slug ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' is not defined inside the plugin directory." );
+            }
+
+            $uninstaller = app()->make( $class );
+            if ( ! is_callable( $uninstaller ) ) {
+                throw new RuntimeException( "Uninstall class '{$class}' is not invokable." );
+            }
+
+            $uninstaller( $plugin );
+        } catch ( Throwable $e ) {
+            logger()->error( "Failed to run uninstall for plugin: {$plugin->slug}", [
+                'uninstall' => $class,
+                'exception' => $e->getMessage(),
+            ] );
+        } finally {
+            // Never let a restore failure escape: it would abort delete()
+            // after the plugin was deactivated and the `deleting` hook fired.
+            foreach ( $priorPsr4 as $namespace => $paths ) {
+                try {
+                    $this->classLoader->setPsr4( $namespace, $paths );
+                } catch ( Throwable $e ) {
+                    logger()->warning( "Failed restoring prior PSR-4 mapping for '{$namespace}' after uninstall of {$plugin->slug}", [
+                        'exception' => $e->getMessage(),
+                    ] );
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether a file resolves to a location inside the plugin's directory.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $file  Path to check.
+     * @param  string  $slug  Plugin slug.
+     *
+     * @return bool True when the file's real path is inside the plugin directory.
+     */
+    protected function isPathInsidePluginDirectory( string $file, string $slug ): bool
+    {
+        $realPlugin = realpath( $this->getPluginsPath() . '/' . $slug );
+        $realFile   = realpath( $file );
+
+        if ( false === $realPlugin || false === $realFile ) {
+            return false;
+        }
+
+        return str_starts_with( $realFile, $realPlugin . DIRECTORY_SEPARATOR );
+    }
+
+    /**
+     * Revert every migration a plugin has run, regardless of batch. Used on
+     * deletion (#182) when the plugin has opted into
+     * `rollback_migrations_on_delete`.
+     *
+     * `migrate:rollback` only reverts the last global batch, so any migration
+     * run after the plugin's activation would leave its tables behind (#355).
+     * `migrate:reset` scoped to the plugin's path reverts all of them.
+     *
+     * @since 2.13.0
+     *
+     * @param  string  $slug  Plugin slug.
+     * @param  string  $migrationsPath  Relative path to the migrations directory.
+     */
+    protected function resetMigrations( string $slug, string $migrationsPath ): void
+    {
+        $safePath = $this->resolveSecureMigrationsPath( $slug, $migrationsPath );
+        if ( null === $safePath ) {
+            return;
+        }
+
+        Artisan::call( 'migrate:reset', [
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
+        ] );
+    }
+
+    /**
+     * Roll back the plugin migrations in the last batch. Used to undo a failed
+     * activation (#182), where only the batch that activation just ran should
+     * be reverted.
      */
     protected function rollbackMigrations( string $slug, string $migrationsPath ): void
     {
@@ -2117,8 +2399,9 @@ class PluginManager
         }
 
         Artisan::call( 'migrate:rollback', [
-            '--path'  => str_replace( base_path(), '', $safePath ),
-            '--force' => true,
+            '--path'     => $safePath,
+            '--realpath' => true,
+            '--force'    => true,
         ] );
     }
 
@@ -2182,7 +2465,12 @@ class PluginManager
         $prior       = [];
         $currentMap  = $this->classLoader->getPrefixesPsr4();
         foreach ( array_keys( $psr4 ) as $namespace ) {
-            $prior[ $namespace ] = $currentMap[ $namespace ] ?? [];
+            // An empty prefix maps to Composer's fallback directories, which
+            // getPrefixesPsr4() never lists. Snapshot them separately so the
+            // restore puts the host's fallback list back instead of wiping it.
+            $prior[ $namespace ] = '' === $namespace
+                ? $this->classLoader->getFallbackDirsPsr4()
+                : ( $currentMap[ $namespace ] ?? [] );
         }
 
         return $prior;

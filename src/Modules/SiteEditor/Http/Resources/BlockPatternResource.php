@@ -35,20 +35,24 @@ final class BlockPatternResource
             // namespaced slug — `theme/header` for theme patterns, or the
             // `user/{slug}` storage form for user patterns. Mirrors WP's
             // expectation that `name` is globally unique across the inserter.
-            'name'        => $pattern->slug,
-            'slug'        => $pattern->userFacingSlug,
-            'title'       => $pattern->title,
-            'description' => $pattern->description ?? '',
-            'content'     => $pattern->rawContent,
-            'categories'  => $pattern->categories,
-            'block_types' => $pattern->blockTypes,
-            'source'      => $pattern->source,
-            'synced'      => $pattern->synced,
-            'theme'       => $pattern->theme,
-            'wp_id'       => BlockPattern::SOURCE_USER === $pattern->source ? $pattern->wpId() : null,
-            'modified'    => null !== $pattern->model
+            'name'           => $pattern->slug,
+            'slug'           => $pattern->userFacingSlug,
+            'title'          => $pattern->title,
+            'description'    => $pattern->description ?? '',
+            'content'        => $pattern->rawContent,
+            'categories'     => $pattern->categories,
+            'block_types'    => $pattern->blockTypes,
+            'source'         => $pattern->source,
+            'synced'         => $pattern->synced,
+            'theme'          => $pattern->theme,
+            'wp_id'          => BlockPattern::SOURCE_USER === $pattern->source ? $pattern->wpId() : null,
+            'modified'       => null !== $pattern->model
                 ? optional( $pattern->model->updated_at )->toIso8601String()
                 : null,
+            // Preview layout width from a theme file's `Viewport Width:`
+            // header; null means "use the client default" (WP's
+            // `viewportWidth` pattern property).
+            'viewport_width' => $pattern->viewportWidth,
         ];
     }
 

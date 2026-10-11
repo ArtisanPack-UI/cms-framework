@@ -330,6 +330,18 @@ class UpdateManager
 
             doAction( 'ap.cmsFramework.plugin.updated', $slug, $updateInfo['version'] );
 
+            // 9. Clear the route/config/view caches like activate, deactivate
+            //    and delete do (#359). An update that adds or renames routes
+            //    otherwise leaves a stale `route:cache` in place, and its new
+            //    named routes don't exist until someone runs `optimize`. An
+            //    active plugin was already cleared by the deactivate/activate
+            //    around the update, so only an inactive one needs it here.
+            //    Runs after the `updated` hook so an inactive plugin's rolled
+            //    back update ( a listener that throws ) never clears.
+            if ( ! $wasActive && config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+                $this->pluginManager->clearFrameworkCaches();
+            }
+
             return true;
         } catch ( IncompatiblePluginException $e ) {
             // The DB row was already updated with the new manifest at step 6,
@@ -377,6 +389,16 @@ class UpdateManager
             $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
 
             throw PluginUpdateException::downloadFailed( $slug );
+        } catch ( Throwable $e ) {
+            // An `Error` ( e.g. a TypeError from an `updated` listener or the
+            // plugin's own provider ) is not an Exception, and would otherwise
+            // leave the update half-applied with no restore. It is never a
+            // network failure, so surface its message instead of
+            // `downloadFailed()`.
+            $this->restoreFromBackup( $plugin->slug, $backupPath );
+            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+
+            throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } finally {
             // Remove the downloaded archive on every outcome — success and each
             // rollback path — so repeated failed updates don't accumulate ZIPs

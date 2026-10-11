@@ -117,6 +117,20 @@ class Plugin extends Model
     }
 
     /**
+     * Invokable uninstall class declared under the manifest `uninstall` key (#358).
+     *
+     * @since 2.13.0
+     *
+     * @return string|null Fully-qualified class name, or null when none is declared.
+     */
+    public function getUninstallerAttribute(): ?string
+    {
+        $value = $this->meta['uninstall'] ?? null;
+
+        return is_string( $value ) && '' !== $value ? $value : null;
+    }
+
+    /**
      * Plugin dependencies declared under `requires.plugins`.
      *
      * @return array<string,string> Map of dependency slug to version constraint.

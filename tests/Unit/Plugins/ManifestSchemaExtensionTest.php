@@ -386,6 +386,108 @@ describe( 'composer', function (): void {
     } );
 } );
 
+describe( 'uninstall', function (): void {
+    beforeEach( function (): void {
+        $this->base['autoload'] = [ 'psr-4' => [ 'TestPlugin\\' => 'src/' ] ];
+    } );
+
+    it( 'accepts an invokable class inside the plugin namespace', function (): void {
+        $manifest = array_merge( $this->base, [ 'uninstall' => 'TestPlugin\\Uninstall' ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'accepts a class in a nested plugin namespace', function (): void {
+        $manifest = array_merge( $this->base, [ 'uninstall' => 'TestPlugin\\Lifecycle\\Uninstall' ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a malformed class name', function ( mixed $uninstall ): void {
+        $manifest = array_merge( $this->base, [ 'uninstall' => $uninstall ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'fully-qualified, namespaced class name' );
+    } )->with( [
+        'non-string'         => [ [ 'TestPlugin\\Uninstall' ] ],
+        'empty string'       => [ '' ],
+        'un-namespaced'      => [ 'Uninstall' ],
+        'leading backslash'  => [ '\\TestPlugin\\Uninstall' ],
+        'trailing backslash' => [ 'TestPlugin\\' ],
+        'file path'          => [ 'src/uninstall.php' ],
+    ] );
+
+    it( 'rejects a class outside the plugin namespace', function (): void {
+        $manifest = array_merge( $this->base, [ 'uninstall' => 'Illuminate\\Support\\Str' ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'autoload.psr-4 namespaces' );
+    } );
+
+    it( 'rejects a class sharing only a name prefix with the plugin namespace', function (): void {
+        $manifest = array_merge( $this->base, [ 'uninstall' => 'TestPluginEvil\\Uninstall' ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'autoload.psr-4 namespaces' );
+    } );
+
+    it( 'rejects an uninstall class when the plugin declares no autoload', function (): void {
+        $manifest = array_merge( $this->base, [ 'uninstall' => 'TestPlugin\\Uninstall' ] );
+        unset( $manifest['autoload'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'autoload.psr-4 namespaces' );
+    } );
+} );
+
+describe( 'autoload', function (): void {
+    it( 'accepts a psr-4 map of namespaces to relative paths', function (): void {
+        $manifest = array_merge( $this->base, [ 'autoload' => [ 'psr-4' => [ 'TestPlugin\\' => 'src/', 'TestPlugin\\Lib\\' => 'lib' ] ] ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects a malformed autoload block', function ( mixed $autoload, string $reason ): void {
+        $manifest = array_merge( $this->base, [ 'autoload' => $autoload ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, $reason );
+    } )->with( [
+        'non-array autoload'          => [ 'src/', 'Invalid autoload.' ],
+        'null autoload'               => [ null, 'Invalid autoload.' ],
+        'null psr-4'                  => [ [ 'psr-4' => null ], 'Invalid autoload.psr-4.' ],
+        'psr-4 list'                  => [ [ 'psr-4' => [ 'src/' ] ], 'Invalid autoload.psr-4.' ],
+        'namespace without backslash' => [ [ 'psr-4' => [ 'TestPlugin' => 'src/' ] ], 'ending in a backslash' ],
+        'empty namespace'             => [ [ 'psr-4' => [ '' => 'src/' ] ], 'ending in a backslash' ],
+        'lone backslash'              => [ [ 'psr-4' => [ '\\' => 'src/' ] ], 'ending in a backslash' ],
+        'array path'                  => [ [ 'psr-4' => [ 'TestPlugin\\' => [ 'src/' ] ] ], 'relative path inside the plugin directory' ],
+        'traversal path'              => [ [ 'psr-4' => [ 'TestPlugin\\' => '../src/' ] ], 'relative path inside the plugin directory' ],
+        'absolute path'               => [ [ 'psr-4' => [ 'TestPlugin\\' => '/var/www/src' ] ], 'relative path inside the plugin directory' ],
+    ] );
+
+    it( 'accepts the hello-world example manifest', function (): void {
+        $manifest = json_decode( file_get_contents( __DIR__ . '/../../../examples/hello-world-plugin/plugin.json' ), true );
+
+        expect( $manifest['migrations_path'] )->toBe( 'database/migrations' )
+            ->and( $manifest['uninstall'] )->toBe( 'HelloWorld\\Uninstall' )
+            ->and( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects an uninstall class whose only matching namespace lacks a trailing backslash', function (): void {
+        $manifest = array_merge( $this->base, [
+            'autoload'  => [ 'psr-4' => [ 'TestPlugin' => 'src/' ] ],
+            'uninstall' => 'TestPlugin\\Uninstall',
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class );
+    } );
+} );
+
 describe( 'Plugin model accessors', function (): void {
     it( 'exposes the new manifest fields ergonomically', function (): void {
         $plugin = new Plugin( [
@@ -415,7 +517,19 @@ describe( 'Plugin model accessors', function (): void {
             ->and( $plugin->federated_module )->toBeNull()
             ->and( $plugin->nav_entries )->toBe( [] )
             ->and( $plugin->declared_permissions )->toBe( [] )
-            ->and( $plugin->rollback_migrations_on_delete )->toBeFalse();
+            ->and( $plugin->rollback_migrations_on_delete )->toBeFalse()
+            ->and( $plugin->uninstaller )->toBeNull();
+    } );
+
+    it( 'exposes the uninstall class', function (): void {
+        $plugin = new Plugin( [
+            'slug'    => 'x',
+            'name'    => 'X',
+            'version' => '1.0.0',
+            'meta'    => [ 'uninstall' => 'XPlugin\\Uninstall' ],
+        ] );
+
+        expect( $plugin->uninstaller )->toBe( 'XPlugin\\Uninstall' );
     } );
 
     it( 'exposes dependency and conflict manifest fields', function (): void {

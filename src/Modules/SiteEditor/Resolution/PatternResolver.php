@@ -259,6 +259,7 @@ class PatternResolver
             categories     : $parsed['categories'],
             blockTypes     : $parsed['block_types'],
             model          : null,
+            viewportWidth  : $parsed['viewport_width'],
         );
     }
 

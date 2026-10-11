@@ -79,13 +79,13 @@ apAddSubAdminPage(
 
 ## Routing and Authorization
 
-- All admin routes are registered automatically under the `/admin` prefix with the `web` and `auth` middleware.
-- Pages with a `capability` option are protected with Laravel's `can:` middleware.
+- All admin routes are registered automatically under the `/admin` prefix with the `cms.admin.middleware` stack ( default `web` + `auth`; configurable since 2.13.0, see [Admin Authorization](Authorization.md#admin-page-middleware-stack) ).
+- Every page is protected with Laravel's `can:` middleware, using its `capability` option or `access_admin_dashboard` when none is given.
 - Route names are automatically created from the slug:
   - `dashboard` → route name `admin.dashboard`
   - `posts/create` → route name `admin.posts.create`
 
-Behind the scenes, AdminPageManager::registerRoutes() creates the routes during application boot.
+Behind the scenes, AdminPageManager::registerRoutes() creates the routes during application boot. Since 2.13.0 the route name and middleware are set before the HTTP verb, so `route( 'admin.<slug>' )` also resolves when routes are cached with `route:cache`.
 
 `action` is handed to `Route::get()` unchanged, so it must be something Laravel accepts as a route action: a closure, an invokable controller class, a `Class@method` string, or a `[Controller::class, 'method']` array. A Blade view name is **not** one of them — wrap it yourself:
 

@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\ContentTypes\Http\Requests;
 
+use Closure;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -53,6 +54,39 @@ class ContentTypeRequest extends FormRequest
         return [
             'name' => [
                 'required',
+                'string',
+                'max:255',
+            ],
+            'singular_name' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'plural_name' => [
+                'nullable',
+                'string',
+                'max:255',
+            ],
+            'labels' => [
+                'nullable',
+                'array',
+                'max:50',
+                function ( string $attribute, mixed $value, Closure $fail ): void {
+                    if ( ! is_array( $value ) ) {
+                        return;
+                    }
+
+                    foreach ( array_keys( $value ) as $key ) {
+                        if ( ! is_string( $key ) || 1 !== preg_match( '/^[a-z][a-z0-9_]{0,63}$/', $key ) ) {
+                            $fail( __( 'Each label key must start with a lowercase letter and contain only lowercase letters, numbers, and underscores ( max 64 characters ).' ) );
+
+                            return;
+                        }
+                    }
+                },
+            ],
+            'labels.*' => [
+                'nullable',
                 'string',
                 'max:255',
             ],
@@ -137,6 +171,7 @@ class ContentTypeRequest extends FormRequest
             'table_name.required'  => __( 'The table name is required.' ),
             'table_name.regex'     => __( 'The table name must be lowercase letters, numbers, and underscores only.' ),
             'model_class.required' => __( 'The model class is required.' ),
+            'labels.max'           => __( 'A content type may define at most :max labels.' ),
         ];
     }
 
@@ -151,6 +186,9 @@ class ContentTypeRequest extends FormRequest
     {
         return [
             'name'          => __( 'name' ),
+            'singular_name' => __( 'singular name' ),
+            'plural_name'   => __( 'plural name' ),
+            'labels'        => __( 'labels' ),
             'slug'          => __( 'slug' ),
             'table_name'    => __( 'table name' ),
             'model_class'   => __( 'model class' ),

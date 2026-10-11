@@ -44,6 +44,11 @@ final class ResolvedPattern
      * @param  array<int, string>  $categories  Pattern category slugs.
      * @param  array<int, string>  $blockTypes  WP `blockTypes` hint for the inserter.
      * @param  BlockPattern|null  $model  The DB row when `source === 'user'`; null otherwise.
+     * @param  int|null  $viewportWidth  Width in pixels the pattern is laid out at
+     *                                   for previews, from a theme file's
+     *                                   `Viewport Width:` header. Null means
+     *                                   "use the consumer's default" and is
+     *                                   always null for user patterns.
      */
     public function __construct(
         public readonly string $slug,
@@ -58,6 +63,7 @@ final class ResolvedPattern
         public readonly array $categories,
         public readonly array $blockTypes,
         public readonly ?BlockPattern $model,
+        public readonly ?int $viewportWidth = null,
     ) {
     }
 
@@ -84,15 +90,16 @@ final class ResolvedPattern
     public function toFilterEntry(): array
     {
         return [
-            'slug'        => $this->slug,
-            'title'       => $this->title,
-            'raw_content' => $this->rawContent,
-            'blocks'      => $this->blocks,
-            'source'      => $this->source,
-            'synced'      => $this->synced,
-            'categories'  => $this->categories,
-            'block_types' => $this->blockTypes,
-            'wp_id'       => $this->wpId(),
+            'slug'           => $this->slug,
+            'title'          => $this->title,
+            'raw_content'    => $this->rawContent,
+            'blocks'         => $this->blocks,
+            'source'         => $this->source,
+            'synced'         => $this->synced,
+            'categories'     => $this->categories,
+            'block_types'    => $this->blockTypes,
+            'wp_id'          => $this->wpId(),
+            'viewport_width' => $this->viewportWidth,
         ];
     }
 }
