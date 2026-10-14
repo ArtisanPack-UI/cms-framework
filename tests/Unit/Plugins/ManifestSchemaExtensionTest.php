@@ -130,6 +130,20 @@ describe( 'federated_module', function (): void {
         'protocol-relative' => '//cdn.example.com/remoteEntry.js',
         'other scheme'      => 'javascript:alert(1)',
         'windows drive'     => 'C:/plugins/remoteEntry.js',
+        'space in file'     => 'dist/remote entry.js',
+        'encoded file'      => 'dist/remote%20entry.js',
+        'dot-file entry'    => 'dist/.remoteEntry.js',
+        'query string'      => 'dist/remoteEntry.js?v=1',
+    ] );
+
+    it( 'accepts a relative entry whose directory starts with a dot or whose file uses @', function ( string $entry ): void {
+        $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } )->with( [
+        'dot directory' => '.output/remoteEntry.js',
+        'at sign'       => 'dist/remote@entry_v1-x.js',
     ] );
 
     it( 'rejects a non-string or empty boot_module and name', function ( string $key, mixed $value ): void {

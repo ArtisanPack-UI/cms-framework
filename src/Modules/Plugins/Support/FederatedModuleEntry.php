@@ -45,6 +45,12 @@ class FederatedModuleEntry
      * and manifest. Absolute paths, URL schemes, protocol-relative URLs,
      * backslashes, null bytes and `.` / `..` segments are refused.
      *
+     * The file name becomes the asset URL's `{path}`, so it must match the
+     * route's character set ( letters, digits, `.`, `_`, `@`, `-` ) and must
+     * not start with a dot, which the asset controller refuses to serve.
+     * Directory segments never appear in the URL and are not restricted
+     * further.
+     *
      * @since 2.14.0
      *
      * @param  string  $entry  The entry value.
@@ -65,6 +71,10 @@ class FederatedModuleEntry
             if ( '' === $segment || '.' === $segment || '..' === $segment ) {
                 return false;
             }
+        }
+
+        if ( 1 !== preg_match( '#^[A-Za-z0-9_@-][A-Za-z0-9._@-]*$#D', end( $segments ) ) ) {
+            return false;
         }
 
         return count( $segments ) >= 2;

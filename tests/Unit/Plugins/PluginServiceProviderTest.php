@@ -743,7 +743,22 @@ it( 'refuses an entry the asset route could not serve safely', function ( string
     'backslashes'       => 'dist\\remoteEntry.js',
     'other scheme'      => 'javascript:alert(1)',
     'protocol-relative' => '//cdn.example.com/remoteEntry.js',
+    'space in file'     => 'dist/remote entry.js',
 ] );
+
+it( 'builds an asset URL the plugins.assets route matches, without encoding the file name', function (): void {
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', 'dist/remote@entry.js' ),
+    );
+
+    $provider->boot();
+
+    $entry = app( PluginRegistry::class )->federatedModules()['reports']['entry'];
+
+    expect( $entry )->toBe( url( 'plugins/reports-plugin/assets/remote@entry.js' ) )
+        ->and( app( 'router' )->getRoutes()->match( Request::create( $entry ) )->getName() )->toBe( 'plugins.assets' );
+} );
 
 it( 'passes a root-relative entry URL through unchanged', function (): void {
     $provider = manifestProvider(

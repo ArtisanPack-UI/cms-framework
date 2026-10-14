@@ -333,7 +333,10 @@ abstract class PluginServiceProvider extends ServiceProvider
 
         // Built with url() rather than route(): plugins register while the
         // framework is still booting, before the `plugins.assets` route loads.
-        return url( 'plugins/' . rawurlencode( $slug ) . '/assets/' . rawurlencode( $file ) );
+        // The file name is left unencoded: isServableRelativePath() limited it
+        // to the route's URL-safe character set, and encoding `@` as `%40`
+        // would only obscure the URL.
+        return url( 'plugins/' . rawurlencode( $slug ) . '/assets/' . $file );
     }
 
     /**
