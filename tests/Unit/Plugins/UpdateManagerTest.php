@@ -910,18 +910,41 @@ describe( 'Legacy update_url feed responses (#373)', function (): void {
             ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
     } );
 
-    it( 'fails on a redirect without following it', function (): void {
+    it( 'fails when a redirect lands on an HTML login page', function (): void {
         Http::fake( [
             'https://example.com/updates/legacy-plugin' => Http::response( '', 302, ['Location' => 'https://example.com/login'] ),
             'https://example.com/login'                 => Http::response( '<html>Log in</html>', 200, ['Content-Type' => 'text/html'] ),
         ] );
 
         expect( $this->updateManager->refreshUpdateChecks()['failures'] )
-            ->toBe( ['legacy-plugin' => UpdateException::versionCheckFailed( 'Update feed returned HTTP 302.' )->getMessage()] )
+            ->toBe( ['legacy-plugin' => UpdateException::invalidJsonResponse( 'https://example.com/updates/legacy-plugin' )->getMessage()] )
             ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' ) )->toBeNull()
             ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
+    } );
 
-        Http::assertNotSent( fn ( $request ): bool => 'https://example.com/login' === $request->url() );
+    it( 'follows an https redirect to the JSON feed', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( '', 302, ['Location' => 'https://cdn.example.net/feed.json'] ),
+            'https://cdn.example.net/feed.json'         => Http::response( [
+                'version'      => '9.0.0',
+                'download_url' => 'https://cdn.example.net/legacy-plugin-9.0.0.zip',
+            ] ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )->toBe( [] )
+            ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' )['version'] )->toBe( '9.0.0' );
+    } );
+
+    it( 'fails after too many redirects', function (): void {
+        Http::fake( [
+            'https://example.com/*' => Http::response( '', 302, ['Location' => 'https://example.com/loop?token=abc123'] ),
+        ] );
+
+        $failure = $this->updateManager->refreshUpdateChecks()['failures']['legacy-plugin'];
+
+        expect( $failure )->toBe( UpdateException::versionCheckFailed( 'Update feed redirected to a non-https location or too many times.' )->getMessage() )
+            ->not->toContain( 'abc123' )
+            ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
     } );
 
     it( 'asks the feed for JSON', function (): void {
@@ -998,7 +1021,7 @@ describe( 'Legacy update_url feed responses (#373)', function (): void {
         expect( $this->updateManager->refreshUpdateChecks() )
             ->toBe( [
                 'updates'  => [],
-                'failures' => ['legacy-plugin' => UpdateException::versionCheckFailed( 'Update feed returned HTTP 301.' )->getMessage()],
+                'failures' => ['legacy-plugin' => UpdateException::versionCheckFailed( 'Update feed redirected to a non-https location or too many times.' )->getMessage()],
             ] );
 
         Http::assertNotSent( fn ( $request ): bool => 'http://example.com/updates/legacy-plugin' === $request->url() );

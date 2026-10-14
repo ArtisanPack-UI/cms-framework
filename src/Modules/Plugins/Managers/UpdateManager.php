@@ -19,6 +19,8 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Exception;
+use GuzzleHttp\Exception\RequestException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -530,12 +532,13 @@ class UpdateManager
     /**
      * Check for an update through the legacy custom JSON feed.
      *
-     * @since 2.14.0 Rejects redirects, non-JSON bodies, and a missing `version` instead of reporting "up to date".
+     * @since 2.14.0 Rejects non-JSON bodies, a missing `version` and redirects off https instead of reporting
+     *              "up to date".
      *
      * @param  Plugin  $plugin  Plugin to check.
      *
-     * @throws UpdateException When the feed answers with a non-2xx status (redirects included), a body that
-     *                         is not a JSON object, or no usable `version`.
+     * @throws UpdateException When the feed answers with a non-2xx status, redirects off https or more than five
+     *                         times, or returns a body that is not a JSON object or has no usable `version`.
      *
      * @return array|null Raw feed payload, or null when already current.
      */
@@ -552,13 +555,36 @@ class UpdateManager
             return null;
         }
 
-        // Ask for JSON and refuse to follow redirects: a Laravel feed behind
-        // auth otherwise answers a `302` to its login page, which the client
-        // would follow to a `200 text/html` that reads as "no update".
-        $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
-            ->acceptJson()
-            ->withoutRedirecting()
-            ->get( $feedUrl );
+        // Follow redirects ( release-download URLs and CDNs answer `302` ), but
+        // never off https: the feed carries the download URL and its sha256,
+        // so a downgrade would let a network attacker choose both. A feed
+        // behind auth that redirects to its login page still fails below,
+        // since the page is not a JSON object.
+        try {
+            $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
+                ->acceptJson()
+                ->withOptions( [
+                    'allow_redirects' => [
+                        'max'       => 5,
+                        'strict'    => true,
+                        'referer'   => false,
+                        'protocols' => config( 'cms.updates.allow_insecure_transport', false )
+                            ? ['http', 'https']
+                            : ['https'],
+                    ],
+                ] )
+                ->get( $feedUrl );
+        } catch ( ConnectionException | RequestException $e ) {
+            // Guzzle throws, rather than returning the 3xx, for a redirect to a
+            // disallowed protocol or past the limit, and Laravel may wrap that
+            // in a ConnectionException. The target is left out of the message:
+            // it may carry a token. Real connection failures rethrow as before.
+            if ( $this->isRefusedRedirect( $e ) ) {
+                throw UpdateException::versionCheckFailed( 'Update feed redirected to a non-https location or too many times.' );
+            }
+
+            throw $e;
+        }
 
         // Thrown, not `null`: `runUpdateCheck()` would cache a null as "no
         // update" for the whole TTL, and a scheduled check would never report
@@ -591,6 +617,30 @@ class UpdateManager
         return null;
     }
 
+
+    /**
+     * Whether a failed feed request is a redirect the client refused to
+     * follow: off https, or past the redirect limit.
+     *
+     * Guzzle raises both as a `RequestException` carrying the 3xx response;
+     * Laravel's client may wrap it in a `ConnectionException`.
+     *
+     * @since 2.14.0
+     *
+     * @param  ConnectionException|RequestException  $e  The exception the request raised.
+     */
+    protected function isRefusedRedirect( ConnectionException|RequestException $e ): bool
+    {
+        $cause = $e instanceof ConnectionException ? $e->getPrevious() : $e;
+
+        if ( ! $cause instanceof RequestException || ! $cause->hasResponse() ) {
+            return false;
+        }
+
+        $status = $cause->getResponse()->getStatusCode();
+
+        return $status >= 300 && $status < 400;
+    }
     /**
      * Build an update checker for a plugin's declared source.
      *
