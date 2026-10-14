@@ -136,11 +136,24 @@ it deletes the compiled caches that `route:cache` / `config:cache` built.
 `cms.plugins.appVersion` ( env `CMS_APP_VERSION`, default `null` ), *2.14.0*,
 is the host application's own semver version. A plugin's `min_app_version`
 manifest key is compared against it on activation. The framework cannot detect
-it, so set it from your application's own version, e.g.
-`'appVersion' => config( 'keystone.version' )`. While it is `null`,
+it, so set `CMS_APP_VERSION`, or set the key from a service provider's
+`register()` method: `config( [ 'cms.plugins.appVersion' => config( 'keystone.version' ) ] )`.
+Don't read another file's key with `config()` inside `config/cms/plugins.php`:
+config files load in name order, so the value may not exist yet and resolves to
+`null`. While it is `null`,
 `min_app_version` checks are skipped with a logged warning and the
 `ap.cmsFramework.plugin.versionCheckSkipped` action. See
 [Versioning & host compatibility](plugin-authoring.md#versioning--host-compatibility).
+
+### Plugin Asset Route
+
+`cms.plugins.assetRoute` ( env `CMS_PLUGINS_ASSET_ROUTE`, default `true` ),
+*2.14.0*, registers the public `GET /plugins/{slug}/assets/{path}` route
+( `plugins.assets` ) that serves the build of a plugin whose
+`federated_module.entry` is a relative path. Set it to `false` when the host
+serves plugin assets itself. A host with a GET catch-all route must exclude the
+`plugins/` prefix from it. See
+[Serving your bundle](plugin-authoring.md#serving-your-bundle).
 
 ## Advanced Configuration
 
