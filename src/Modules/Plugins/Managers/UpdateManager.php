@@ -617,7 +617,6 @@ class UpdateManager
         return null;
     }
 
-
     /**
      * Whether a failed feed request is a redirect the client refused to
      * follow: off https, or past the redirect limit.
@@ -641,6 +640,7 @@ class UpdateManager
 
         return $status >= 300 && $status < 400;
     }
+
     /**
      * Build an update checker for a plugin's declared source.
      *

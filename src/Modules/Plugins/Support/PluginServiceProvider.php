@@ -371,7 +371,7 @@ abstract class PluginServiceProvider extends ServiceProvider
      *
      * @param  string  $entryPath  The entry as declared.
      *
-     * @return string|false|null
+     * @return false|string|null
      */
     protected function filesystemEntryToUrlPath( string $entryPath ): string|false|null
     {
