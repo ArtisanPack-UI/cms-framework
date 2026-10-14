@@ -744,6 +744,7 @@ it( 'refuses an entry the asset route could not serve safely', function ( string
     'other scheme'      => 'javascript:alert(1)',
     'protocol-relative' => '//cdn.example.com/remoteEntry.js',
     'space in file'     => 'dist/remote entry.js',
+    'url credentials'   => 'https://user:pass@cdn.example.com/remoteEntry.js',
 ] );
 
 it( 'builds an asset URL the plugins.assets route matches, without encoding the file name', function (): void {
