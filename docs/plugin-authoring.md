@@ -97,6 +97,7 @@ A plugin's root directory MUST contain a `plugin.json` file:
     }
   ],
   "federated_module": {
+    "name": "helloWorldAdmin",
     "entry": "dist/remoteEntry.js",
     "exposes": ["./HelloWorldPanel"]
   }
@@ -136,7 +137,7 @@ with no `register*()` call required. See
 | `migrations_path`   | string ( path ) | Relative path to your migrations directory. Auto-run on activate. See [Migrations](#migrations). |
 | `rollback_migrations_on_delete` | boolean | Default `false`. When `true`, deleting the plugin reverts every migration under `migrations_path`. See [Migrations](#migrations). |
 | `uninstall`         | string ( class ) | *2.13.0*. Invokable class run on delete, even when the plugin is inactive. See [Uninstalling](#uninstalling). |
-| `federated_module`  | object          | Single federated module descriptor `{ name?, entry, exposes? }`. Auto-registered on load. See [Federated React modules](#federated-react-modules). |
+| `federated_module`  | object          | Single federated module descriptor `{ name?, entry, exposes?, boot_module? }`. `entry` is an `https` URL ( plain `http` only for a localhost dev server ) or a path inside a subdirectory of the plugin such as `dist/remoteEntry.js`, which the framework serves. `exposes` is a **list** of module ids. `boot_module` ( *2.14.0* ) is an exposed module the host preloads. Unknown keys are logged. Auto-registered on load. See [Federated React modules](#federated-react-modules). |
 | `nav_entries`       | array           | List of static nav entries `{ slug, label, url?, icon?, permission?, order?, ... }`. Auto-registered on load; equivalent to calling `registerNavEntry()` from your provider. |
 | `update`            | object          | Where self-updates come from. See [Shipping updates](#shipping-updates). |
 | `update_url`        | string ( URL )  | Legacy custom JSON update feed. Superseded by `update`; still honored. |
@@ -198,7 +199,7 @@ Available helpers:
 
 - `registerAdminPage( string $slug, array $config )` — attach an admin page to the shared `AdminMenuManager`. `view` for Blade, `component` for federated React.
 - `registerNavEntry( array $entry )` — add an idempotent nav entry to the container-bound `PluginRegistry`.
-- `registerFederatedModule( string $name, string $entryPath, array $exposes = [] )` — declare a Module Federation entry hosts can consume.
+- `registerFederatedModule( string $name, string $entryPath, array $exposes = [], ?string $bootModule = null )` — declare a Module Federation entry hosts can consume. `$entryPath` is an absolute URL, a root-relative URL on the host, or a path relative to the plugin directory ( `dist/remoteEntry.js` ), which the framework serves. Pass the relative path, not `pluginPath()`, which returns a filesystem path. `$bootModule` is *2.14.0*.
 - `pluginPath( ?string $subpath = null )` — resolve a path within your plugin directory.
 - `pluginConfig( ?string $key = null )` — read the plugin's `plugin.json`; dot-notation supported.
 - `pluginSlug()` — resolves from your manifest.
@@ -538,15 +539,102 @@ plugins consume federated modules the plugin has declared through:
 - **Manifest** — a `federated_module` object in `plugin.json`. The framework
   auto-registers it on load, keyed by the descriptor's optional `name` (falling
   back to the plugin slug). Declaration alone is enough.
-- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes )`
+- **Programmatic** — `$this->registerFederatedModule( $name, $entry, $exposes, $bootModule )`
   in `boot()`. A programmatic registration wins: a manifest module is skipped
   when the same name is already registered.
+
+Hosts read the registered descriptors from the `ap.plugins.federatedModules`
+filter, keyed by remote name: `{ entry, exposes?, bootModule? }`. `entry` is
+always a URL the browser can load ( see below ).
 
 Declaring a module makes it *resolvable* by the host; it does not, by itself,
 place it on a page. To surface a federated module as an admin page, pair the
 declaration with `registerAdminPage( component: )` and hydrate it per the
 [federated admin-page contract](#the-federated-admin-page-contract) — either the
 Blade mount or the filter bridge, depending on the host.
+
+### The `entry`
+
+*2.14.0.* The manifest's `entry` must be one of:
+
+- An absolute `https` URL, e.g. a CDN: `https://cdn.example.com/acme/remoteEntry.js`.
+- A plain `http` URL to a loopback dev server ( `localhost`, `*.localhost`,
+  `127.0.0.1`, `[::1]` ), e.g. `http://localhost:5174/remoteEntry.js` while
+  running `vite`.
+- A path inside a **subdirectory** of the plugin, e.g. `dist/remoteEntry.js`.
+  The framework serves it for you ( see [Serving your bundle](#serving-your-bundle) ).
+  The file name may use letters, digits, `.`, `_`, `@` and `-`, and must not
+  start with a dot. `..`, a leading `/`, backslashes and query strings are
+  refused.
+
+URLs with credentials ( `https://user:pass@…` ) are refused. `registerFederatedModule()`
+additionally accepts a root-relative URL on the host ( `/build/remoteEntry.js` ),
+which is passed through unchanged. An absolute filesystem path inside the
+plugin ( e.g. from `pluginPath()` ) is treated as the matching relative path, one
+under `public_path()` as its root-relative URL, and any other filesystem path is
+logged and not registered, so a server path never reaches the browser.
+
+`exposes` is a **list** of the module ids your federation build exposes, e.g.
+`["./SettingsPage"]`, not the `{ "./SettingsPage": "./src/SettingsPage.tsx" }`
+map from the build config.
+
+### `boot_module`
+
+*2.14.0.* `boot_module` names an exposed module the host loads before the first
+plugin page mounts, typically `./boot`, so the plugin can register its JS hooks
+before the host emits its first action. It does not need to be listed in
+`exposes`. The descriptor carries it as `bootModule`. See the `hooks-js`
+"Plugin `bootModule` recipe" for the module itself.
+
+### Serving your bundle
+
+*2.14.0.* When `entry` is a relative path, the framework publishes the entry's
+directory on a public route, `GET /plugins/{slug}/assets/{path}`
+( `plugins.assets` ), and registers the absolute URL, e.g.
+`https://example.com/plugins/acme/assets/remoteEntry.js`. Your plugin needs no
+asset controller of its own.
+
+- Only active plugins are served. Everything else returns an empty `404`.
+- Only the entry's own directory is published, which is why the entry must sit
+  in a subdirectory: an entry at the plugin root would publish your source and
+  manifest. A plugin publishes one asset directory.
+- Files must resolve inside that directory ( symlinks that escape it are
+  refused ) and have one of these extensions: `js`, `mjs`, `css`, `map`,
+  `json`, `wasm`, `svg`, `png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`, `woff`,
+  `woff2`, `ttf`, `otf`. Dot-files and dot-directories ( `.vite/` ) are never
+  served.
+- Files whose name carries a bundler content hash ( Vite's `index-BxQ3k9aZ.js`,
+  webpack's `main.3f9a1c2e.js` ) are cached as `immutable` for a year. The
+  entry and every other file are sent `no-cache` with an ETag and
+  Last-Modified, so they revalidate and a plugin update is picked up on the
+  next load.
+- Every file is sent with `X-Content-Type-Options: nosniff`. SVGs are also
+  sandboxed with a CSP and sent as attachments, so `<img src>` works but
+  opening one directly cannot run script.
+
+The route is public, like the theme asset route: a federation runtime fetches
+the bundle before any admin page exists to gate it. Do not put secrets in your
+build. Source maps ( `.map` ) are served if you ship them.
+
+### Host integration
+
+- **Catch-all routes.** The asset route registers after every provider has
+  booted, after the host's `routes/web.php`. A host with a GET catch-all
+  ( e.g. CMS pages at `/{path}` ) must exclude the `plugins/` prefix, or the
+  catch-all answers first and every plugin bundle fails to load:
+
+  ```php
+  Route::get( '/{path}', [PageController::class, 'show'] )
+      ->where( 'path', '^(?!plugins($|/)).+$' );
+  ```
+
+- **Plugins with their own asset route.** Because the framework route loads
+  last, a plugin that registers its own `/plugins/{slug}/assets/{path}` route
+  from `boot()` keeps matching first.
+- **Opting out.** A host that serves plugin assets itself can set
+  `cms.plugins.assetRoute` ( env `CMS_PLUGINS_ASSET_ROUTE` ) to `false`. A
+  relative entry still resolves to `/plugins/{slug}/assets/…`, so the host's
+  route must answer that URL.
 
 An example Module Federation config, Vite build, and remoteEntry contract live
 in the Keystone CMS docs. See
@@ -599,11 +687,21 @@ endpoints return `409` with code `plugin_incompatible` and the details:
 ```
 
 The framework cannot detect the host application's version, so the host
-supplies it in `config/cms/plugins.php`:
+supplies it, either through the `CMS_APP_VERSION` environment variable or from
+a service provider's `register()` method:
 
 ```php
-'appVersion' => config( 'keystone.version' ),
+public function register(): void
+{
+    config( [ 'cms.plugins.appVersion' => config( 'keystone.version' ) ] );
+}
 ```
+
+Do not write `'appVersion' => config( 'keystone.version' )` in
+`config/cms/plugins.php`: config files load in name order, so `keystone.php`
+has not loaded yet and the value is `null`, which silently skips every
+`min_app_version` check. ( `config( 'app.version' )` happens to work there,
+only because `app` sorts before `cms`. )
 
 **A check that cannot run is skipped, not failed.** When the version to compare
 against is unknown ( the host sets no `appVersion`, or cms-framework runs from a

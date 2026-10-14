@@ -113,6 +113,40 @@ describe( 'min_framework_version', function (): void {
         expect( $this->manager->activate( 'versioned-plugin' ) )->toBeTrue();
     } );
 
+    it( 'activates a plugin whose minimum is the framework\'s own composer.json version', function (): void {
+        $version = json_decode( (string) file_get_contents( __DIR__ . '/../../../composer.json' ), true )['version'];
+
+        ( $this->makePlugin )( ['min_framework_version' => $version] );
+
+        expect( $this->manager->activate( 'versioned-plugin' ) )->toBeTrue();
+    } );
+
+    it( 'declares a composer.json version no older than any @since tag in src', function (): void {
+        // composer.json `version` is the framework version min_framework_version
+        // is compared against. Shipping a release without bumping it would
+        // refuse plugins that require the release they run on.
+        $version = json_decode( (string) file_get_contents( __DIR__ . '/../../../composer.json' ), true )['version'];
+        $newest  = '0.0.0';
+
+        $files = new RecursiveIteratorIterator( new RecursiveDirectoryIterator( __DIR__ . '/../../../src', FilesystemIterator::SKIP_DOTS ) );
+
+        foreach ( $files as $file ) {
+            if ( 'php' !== $file->getExtension() ) {
+                continue;
+            }
+
+            preg_match_all( '/@since\s+(\d+\.\d+\.\d+)/', (string) file_get_contents( $file->getPathname() ), $matches );
+
+            foreach ( $matches[1] as $since ) {
+                if ( version_compare( $since, $newest, '>' ) ) {
+                    $newest = $since;
+                }
+            }
+        }
+
+        expect( version_compare( $version, $newest, '>=' ) )->toBeTrue( "composer.json version {$version} is older than @since {$newest}." );
+    } );
+
     it( 'still enforces the deprecated min_host_version alias against cms-framework', function (): void {
         ( $this->makePlugin )( ['min_host_version' => '999.0.0'] );
 
