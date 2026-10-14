@@ -88,6 +88,18 @@ export type {
 
 // Plugins module
 export type {
+	DiscoveredPlugin,
+	FederatedModuleDescriptor,
+	PluginAuthor,
+	PluginCheckDependenciesResponse,
+	PluginCircularDependencyResponse,
+	PluginConflictEntry,
+	PluginDependenciesResponse,
+	PluginDependencyStatus,
+	PluginDependentsResponse,
+	PluginIncompatibleResponse,
+	PluginManifestRequires,
 	PluginResponse,
+	PluginVersionMismatch,
 	UpdateType,
 } from './plugins';
