@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUp
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
@@ -529,9 +530,12 @@ class UpdateManager
     /**
      * Check for an update through the legacy custom JSON feed.
      *
+     * @since 2.14.0 Rejects redirects, non-JSON bodies, and a missing `version` instead of reporting "up to date".
+     *
      * @param  Plugin  $plugin  Plugin to check.
      *
-     * @throws UpdateException When the feed answers with a non-2xx status.
+     * @throws UpdateException When the feed answers with a non-2xx status (redirects included), a body that
+     *                         is not a JSON object, or no usable `version`.
      *
      * @return array|null Raw feed payload, or null when already current.
      */
@@ -548,7 +552,12 @@ class UpdateManager
             return null;
         }
 
+        // Ask for JSON and refuse to follow redirects: a Laravel feed behind
+        // auth otherwise answers a `302` to its login page, which the client
+        // would follow to a `200 text/html` that reads as "no update".
         $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
+            ->acceptJson()
+            ->withoutRedirecting()
             ->get( $feedUrl );
 
         // Thrown, not `null`: `runUpdateCheck()` would cache a null as "no
@@ -560,7 +569,22 @@ class UpdateManager
 
         $updateData = $response->json();
 
-        if ( $this->isUpdateAvailable( $plugin->version, $updateData['version'] ?? '' ) ) {
+        if ( ! is_array( $updateData ) || ( [] !== $updateData && array_is_list( $updateData ) ) ) {
+            // The message is logged and reported by the scheduled check, so
+            // strip any token the feed URL carries.
+            throw UpdateException::invalidJsonResponse( MetadataClient::redactUrlCredentials( $feedUrl ) );
+        }
+
+        $latestVersion = $this->nonEmptyString( $updateData['version'] ?? null );
+
+        if ( null === $latestVersion ) {
+            throw UpdateException::missingRequiredField( 'version' );
+        }
+
+        if ( $this->isUpdateAvailable( $plugin->version, $latestVersion ) ) {
+            // `updatePlugin()` writes this version to the plugin row.
+            $updateData['version'] = $latestVersion;
+
             return $updateData;
         }
 
