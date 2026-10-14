@@ -53,6 +53,12 @@ Variations are theme-only for 2.0.0. Each variation lives at `themes/{active}/st
 - `settings.color.gradients` → `--wp--preset--gradient--{slug}`.
 - `settings.custom` → `--wp--custom--{nested}--{kebab-key}` (recursive flattening).
 
+### Preset classes
+
+Each palette, font-size and gradient preset also gets the WordPress utility classes that point at its custom property: `.has-{slug}-color`, `.has-{slug}-background-color`, `.has-{slug}-border-color`, `.has-{slug}-font-size` and `.has-{slug}-gradient-background`, all `!important`.
+
+A palette slug named `text`, `link` or `border` produces a `.has-{slug}-color` class that is also a block-support marker (`has-text-color`, `has-link-color`, `has-border-color`), which blocks carry for any custom color. Since 2.14.1 each of those slugs gets an exact `.has-{slug}-color-preset` rule, which visual-editor 1.14.1's Blade renderer targets by adding that class to blocks that pick the slug as their text color. The `.has-{slug}-color` rule is kept as a zero-specificity (`:where()`) fallback for markup the renderer doesn't build, such as the editor canvas: it skips elements with an inline `color:`, requires `has-text-color` for `link` / `border`, and is emitted after every other color rule with `text` last. In that markup a `link` / `border` text pick looks the same as a `text` pick plus a link or border color, so it resolves to `text`. Before 2.14.1 the slug's color was forced onto every block with a custom text, link or border color.
+
 ### Styles walker
 
 The `styles` walker is registry-based against WP `theme.json` v3. The same registry feeds root, element, and block rules — so per-element and per-block styles get the same coverage the root does. Covered keys:
@@ -89,7 +95,7 @@ WP-canonical `var:preset|category|slug` shorthand is translated into real `var(-
 
 ### Caching
 
-Output is cached on a content-hash key derived from the resolved styles tree, keyed with a `SCHEMA_VERSION` constant that bumps whenever the emitter's output shape changes (v4 as of 2.5.0). Invalidation is event-driven:
+Output is cached on a content-hash key derived from the resolved styles tree, keyed with a `SCHEMA_VERSION` constant that bumps whenever the emitter's output shape changes (v5 as of 2.14.1). Invalidation is event-driven:
 
 - The `GlobalStyles` model is saved or deleted (model observer in `SiteEditorServiceProvider`).
 - The theme switches (the next resolve produces a new content hash; the prior entry ages out passively under the cache TTL).

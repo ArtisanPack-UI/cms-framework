@@ -34,6 +34,12 @@ cms-framework's `2026_04_28_000001_add_block_content_to_posts_table.php` and `_t
 
 `block_content` is **not** in the `$fillable` array on `Post` or `Page` — block trees flow through the visual-editor pipeline, not mass assignment. Direct calls to `$post->block_content = [...]; $post->save();` still work.
 
+## Rendered content and block bindings
+
+`Post` and `Page` also use `HasRenderedBlockContent`, which adds a `rendered_content` accessor (and `renderContent()`) that renders the block tree through visual-editor's Blade `BlockRenderer`. visual-editor's `core/post-content` block reads it, so a template's post-content area shows the record's body.
+
+Since 2.14.1 the render passes a visual-editor `BindingContext` for the model, so block bindings inside the body (`custom_field`, `post_core`, `relation`) resolve against the record that owns the content. Before 2.14.1 they always fell back to their static values when rendered through a template, because `rendered_content` is read before the template's own render sets a binding context. The binding sources' visibility rules still apply: `$hidden` columns, columns missing from a non-empty `$visible`, and untyped relation methods resolve to empty.
+
 ## Filter registration
 
 When visual-editor is installed, `SiteEditorServiceProvider` registers cms-framework's resolvers against the `ap.visual-editor.*` filter family:

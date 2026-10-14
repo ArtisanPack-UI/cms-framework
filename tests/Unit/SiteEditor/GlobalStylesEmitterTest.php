@@ -182,6 +182,74 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
             ->and( $css )->toContain( '.has-accent-soft-color { color: var(--wp--preset--color--accent-soft) !important; }' );
     } );
 
+    it( 'scopes color rules that collide with block-support markers to real picks of that slug', function (): void {
+        // `has-text-color` is both the `text` slug's class and the marker
+        // every block with a custom text color carries. A plain rule for
+        // it overrides `.has-base-color` when emitted later, beats a custom
+        // inline color through `!important`, and (for `link` / `border`)
+        // recolors the text of blocks that only set a link or border color.
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'base', 'color' => '#111827'],
+                        ['slug' => 'text', 'color' => '#ffffff'],
+                        ['slug' => 'link', 'color' => '#00e5ff'],
+                        ['slug' => 'border', 'color' => '#374151'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )
+            ->toContain( '.has-base-color { color: var(--wp--preset--color--base) !important; }' )
+            ->toContain( ':where(.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"])) { color: var(--wp--preset--color--text) !important; }' )
+            ->toContain( ':where(.has-link-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"])) { color: var(--wp--preset--color--link) !important; }' )
+            ->toContain( ':where(.has-border-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"])) { color: var(--wp--preset--color--border) !important; }' )
+            ->toContain( '.has-text-background-color { background-color: var(--wp--preset--color--text) !important; }' )
+            ->not->toMatch( '/(^|\s)\.has-(text|link|border)-color \{/' );
+    } );
+
+    it( 'emits exact marker-slug pick rules and puts the text fallback after the link and border fallbacks', function (): void {
+        // A block that picked `text` and also has a border or link color
+        // carries `has-text-color has-border-color` / `has-link-color`, so
+        // both fallbacks match at equal (zero) specificity and the later
+        // one wins. The Blade renderer adds `has-text-color-preset` for an
+        // exact match; for other markup the `text` fallback comes last.
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'text', 'color' => '#ffffff'],
+                        ['slug' => 'border', 'color' => '#374151'],
+                        ['slug' => 'link', 'color' => '#00e5ff'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        $textPick       = strpos( $css, '.has-text-color-preset {' );
+        $linkFallback   = strpos( $css, ':where(.has-link-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"]))' );
+        $borderFallback = strpos( $css, ':where(.has-border-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"]))' );
+        $textFallback   = strpos( $css, ':where(.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"]))' );
+
+        expect( $css )
+            ->toContain( '.has-text-color-preset { color: var(--wp--preset--color--text) !important; }' )
+            ->toContain( '.has-border-color-preset { color: var(--wp--preset--color--border) !important; }' )
+            ->toContain( '.has-link-color-preset { color: var(--wp--preset--color--link) !important; }' )
+            ->and( $textPick )->toBeLessThan( $linkFallback )
+            ->and( $linkFallback )->toBeLessThan( $borderFallback )
+            ->and( $borderFallback )->toBeLessThan( $textFallback );
+    } );
+
     it( 'emits `.has-{slug}-font-size` rules for each font-size preset (Keystone #53)', function (): void {
         $resolved = makeResolved(
             settings: [
@@ -810,7 +878,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v4.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v5.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();

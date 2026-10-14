@@ -50,6 +50,16 @@ trait HasRenderedBlockContent
     protected const BLOCK_RENDERER_CLASS = 'ArtisanPackUI\\VisualEditorRendererBlade\\BlockRenderer';
 
     /**
+     * Fully-qualified class name of the visual-editor binding context.
+     *
+     * Kept as a string for the same soft-integration reason as
+     * {@see self::BLOCK_RENDERER_CLASS}.
+     *
+     * @since 2.14.1
+     */
+    protected const BINDING_CONTEXT_CLASS = 'ArtisanPackUI\\VisualEditor\\Services\\Bindings\\BindingContext';
+
+    /**
      * Eloquent accessor for `$model->rendered_content`.
      *
      * Visual-editor's `PostResolver::resolveContent()` prefers this attribute
@@ -74,6 +84,7 @@ trait HasRenderedBlockContent
      * empty string.
      *
      * @since 2.2.0
+     * @since 2.14.1 Renders with a binding context for the model, so block bindings resolve.
      */
     public function renderContent(): string
     {
@@ -84,7 +95,7 @@ trait HasRenderedBlockContent
                 try {
                     $renderer = app( self::BLOCK_RENDERER_CLASS );
 
-                    return $renderer->render( $blocks );
+                    return $renderer->render( $blocks, $this->blockBindingContext() );
                 } catch ( Throwable ) {
                     // Renderer installed but failed to resolve or render —
                     // fall through to the pre-rendered string fallback below.
@@ -120,6 +131,26 @@ trait HasRenderedBlockContent
         $rendered = is_string( $content ) ? $content : '';
 
         return $this->resolveDynamicContentTokens( $rendered );
+    }
+
+    /**
+     * The binding context the model's own block tree resolves against.
+     *
+     * Block bindings (`custom_field`, `post_core`, `relation`) read from
+     * the record that owns the content. This accessor runs before the
+     * template's own render pass starts (visual-editor's `PostResolver`
+     * reads `rendered_content` while stamping `core/post-content`), so
+     * without an explicit context every binding in the body falls back
+     * to its authored static value. Null when visual-editor's binding
+     * layer isn't installed.
+     *
+     * @since 2.14.1
+     */
+    protected function blockBindingContext(): ?object
+    {
+        $contextClass = self::BINDING_CONTEXT_CLASS;
+
+        return class_exists( $contextClass ) ? new $contextClass( $this ) : null;
     }
 
     /**
