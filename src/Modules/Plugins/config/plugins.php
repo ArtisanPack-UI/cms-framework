@@ -13,6 +13,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Host Application Version
+    |--------------------------------------------------------------------------
+    | The host application's own semver version (e.g. Keystone CMS 1.2.0), which
+    | a plugin's `min_app_version` manifest key is compared against. The
+    | framework cannot detect it, so the host supplies it, e.g.:
+    |
+    |     'appVersion' => config( 'keystone.version' ),
+    |
+    | When null, `min_app_version` checks are skipped: a warning is logged and
+    | `ap.cmsFramework.plugin.versionCheckSkipped` fires. A plugin's
+    | `min_framework_version` is separate and always compared against the
+    | cms-framework package version.
+    */
+    'appVersion' => env( 'CMS_APP_VERSION' ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Required Manifest Files
     |--------------------------------------------------------------------------
     | Files that must exist for a directory to be considered a valid plugin.

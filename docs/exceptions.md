@@ -138,6 +138,17 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationExcept
 throw new PluginValidationException("Invalid plugin manifest.");
 ```
 
+**IncompatiblePluginException** - Thrown on activation when the host is older than a plugin's declared minimum version
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+
+throw IncompatiblePluginException::forVersion($slug, $required, $frameworkVersion); // min_framework_version
+throw IncompatiblePluginException::forAppVersion($slug, $required, $appVersion);    // min_app_version (2.14.0)
+```
+
+`$e->constraint` is `framework` or `app`; `$e->requiredVersion` and `$e->hostVersion` carry the two versions compared. `min_framework_version` (and its deprecated `min_host_version` alias) is compared against the cms-framework package version, `min_app_version` against the host's `cms.plugins.appVersion`.
+
 **PluginUpdateException** - Thrown during plugin updates
 
 ```php

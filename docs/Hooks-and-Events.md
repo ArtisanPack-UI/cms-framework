@@ -109,6 +109,12 @@ addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
 
 `PluginManager::activate()` fires `ap.cmsFramework.plugin.hookRegistered` immediately after the plugin's service provider registers, carrying `(string $pluginSlug, array $hooks)`. The hooks array is the optional `hooks` field from the plugin's `plugin.json` (empty array when absent) so observers still get a per-plugin signal.
 
+## Plugins: Skipped Version Checks
+
+> **Added in 2.14.0** ([#372](https://github.com/ArtisanPack-UI/cms-framework/issues/372)).
+
+`PluginManager::activate()` fires `ap.cmsFramework.plugin.versionCheckSkipped` when a plugin declares `min_framework_version` (or the deprecated `min_host_version`) or `min_app_version`, but the version to compare against is unknown or not a comparable semver. Activation goes ahead. The payload is `(string $pluginSlug, array $details)`, where `$details` holds `constraint` (`framework` or `app`), `required_version`, `host_version` (`null` when unresolved) and `reason` (`unresolved` or `not_semver`). A warning is logged as well; listen to the action to surface the skip in an admin UI. See [Versioning & host compatibility](plugin-authoring.md#versioning--host-compatibility).
+
 ## Plugins: Deletion and Uninstall
 
 `PluginManager::delete()` fires `ap.cmsFramework.plugin.deleting` with `(string $slug)` before teardown and `ap.cmsFramework.plugin.deleted` with `(string $slug)` once the row and files are gone. A `deleting` listener only runs if the plugin's service provider booted in the same request, which is usually not the case for a plugin deactivated earlier. For cleanup a plugin owns, declare an `uninstall` class in `plugin.json` instead (**2.13.0**, [#358](https://github.com/ArtisanPack-UI/cms-framework/issues/358)); see [Uninstalling](plugin-authoring.md#uninstalling).

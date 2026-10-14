@@ -50,7 +50,7 @@ class DependencyResolver
         $target = $graph[ $slug ] ?? [];
 
         // Host-framework constraint. Skipped when the host version cannot be
-        // resolved, mirroring the permissive min_host_version policy so a
+        // resolved, mirroring the permissive min_framework_version policy so a
         // path-repo dev checkout doesn't false-fail every plugin.
         $hostRequirement = $target['requires_host'] ?? null;
         if ( is_string( $hostRequirement ) && null !== $hostVersion
