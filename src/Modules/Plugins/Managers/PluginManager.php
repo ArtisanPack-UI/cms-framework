@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\FederatedModuleEntry;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Rbac\Models\Permission as RbacPermission;
 use Composer\Autoload\ClassLoader;
@@ -1126,15 +1127,7 @@ class PluginManager
         }
 
         if ( isset( $manifest['federated_module'] ) ) {
-            $federated = $manifest['federated_module'];
-            if ( ! is_array( $federated )
-                || empty( $federated['entry'] )
-                || ! is_string( $federated['entry'] ) ) {
-                throw PluginValidationException::invalidManifest( 'Invalid federated_module. Must be an object with a non-empty string "entry".' );
-            }
-            if ( isset( $federated['exposes'] ) && ! is_array( $federated['exposes'] ) ) {
-                throw PluginValidationException::invalidManifest( 'Invalid federated_module.exposes. Must be an array of module names.' );
-            }
+            $this->validateFederatedModuleManifestField( $manifest['federated_module'], ( string ) $manifest['slug'] );
         }
 
         if ( isset( $manifest['nav_entries'] ) ) {
@@ -1493,6 +1486,72 @@ class PluginManager
             if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
                 throw PluginValidationException::invalidManifest( "Invalid {$field}['{$slug}']. Version constraint must be a non-empty string." );
             }
+        }
+    }
+
+    /**
+     * Validate the optional `federated_module` manifest key.
+     *
+     * `entry` must be an absolute `https` URL, or a path inside a subdirectory
+     * of the plugin ( e.g. `dist/remoteEntry.js` ), which the framework serves
+     * through its plugin asset route. `name` and `boot_module` must be
+     * non-empty strings, and `exposes` a list of non-empty strings. Unknown
+     * keys are logged rather than refused, so a misspelled key such as
+     * `bootModule` is visible instead of silently ignored.
+     *
+     * @since 2.14.0
+     *
+     * @param  mixed  $federated  Raw `federated_module` value from the manifest.
+     * @param  string  $slug  The plugin slug, for log context.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateFederatedModuleManifestField( mixed $federated, string $slug ): void
+    {
+        if ( ! is_array( $federated )
+            || empty( $federated['entry'] )
+            || ! is_string( $federated['entry'] ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid federated_module. Must be an object with a non-empty string "entry".' );
+        }
+
+        $entry = $federated['entry'];
+
+        if ( ! FederatedModuleEntry::isAbsoluteUrl( $entry, true )
+            && ! FederatedModuleEntry::isServableRelativePath( $entry ) ) {
+            throw PluginValidationException::invalidManifest(
+                'Invalid federated_module.entry. Use an absolute https URL, or a path inside a subdirectory of the plugin '
+                . '( e.g. "dist/remoteEntry.js" ) with no "..", no leading "/" and no backslashes.',
+            );
+        }
+
+        foreach ( [ 'name', 'boot_module' ] as $key ) {
+            if ( array_key_exists( $key, $federated )
+                && ( ! is_string( $federated[ $key ] ) || '' === trim( $federated[ $key ] ) ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid federated_module.{$key}. Must be a non-empty string." );
+            }
+        }
+
+        if ( array_key_exists( 'exposes', $federated ) ) {
+            $exposes = $federated['exposes'];
+
+            if ( ! is_array( $exposes ) || false === array_is_list( $exposes ) ) {
+                throw PluginValidationException::invalidManifest( 'Invalid federated_module.exposes. Must be a list of module names.' );
+            }
+
+            foreach ( $exposes as $index => $module ) {
+                if ( ! is_string( $module ) || '' === trim( $module ) ) {
+                    throw PluginValidationException::invalidManifest( "Invalid federated_module.exposes[{$index}]. Each module name must be a non-empty string." );
+                }
+            }
+        }
+
+        $unknown = array_diff( array_keys( $federated ), [ 'name', 'entry', 'exposes', 'boot_module' ] );
+
+        if ( [] !== $unknown ) {
+            logger()->warning( 'Plugin manifest federated_module declares unknown keys, which are ignored. Known keys: name, entry, exposes, boot_module.', [
+                'plugin' => $slug,
+                'keys'   => array_values( $unknown ),
+            ] );
         }
     }
 

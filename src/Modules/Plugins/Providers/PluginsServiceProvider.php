@@ -74,6 +74,11 @@ class PluginsServiceProvider extends ServiceProvider
         // Load API routes
         $this->loadRoutesFrom( __DIR__ . '/../routes/api.php' );
 
+        // The plugin asset route loads after every provider has booted, so a
+        // plugin that still registers its own `/plugins/{slug}/assets/{path}`
+        // route from boot() is matched first rather than shadowed by this one.
+        $this->app->booted( fn () => $this->loadRoutesFrom( __DIR__ . '/../routes/web.php' ) );
+
         // Load migrations
         $this->loadMigrationsFrom( __DIR__ . '/../../../database/migrations' );
 

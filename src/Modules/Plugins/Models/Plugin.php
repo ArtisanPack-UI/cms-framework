@@ -109,7 +109,7 @@ class Plugin extends Model
     /**
      * Federated frontend module descriptor from the manifest.
      *
-     * @return array{entry:string,exposes?:array<int,string>}|null
+     * @return array{name?:string,entry:string,exposes?:array<int,string>,boot_module?:string}|null
      */
     public function getFederatedModuleAttribute(): ?array
     {

@@ -11,6 +11,7 @@ use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 
 beforeEach( function (): void {
@@ -434,7 +435,7 @@ it( 'exposes federated modules via a filter', function (): void {
     $modules = applyFilters( 'ap.plugins.federatedModules', [] );
 
     expect( $modules )->toHaveKey( 'reports' )
-        ->and( $modules['reports']['entry'] )->toBe( 'dist/remoteEntry.js' )
+        ->and( $modules['reports']['entry'] )->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) )
         ->and( $modules['reports']['exposes'] )->toBe( ['./App'] );
 } );
 
@@ -499,9 +500,9 @@ function manifestProvider( array $manifest, ?Closure $boot = null ): PluginServi
             $this->registerNavEntry( $entry );
         }
 
-        public function imperativeFederatedModule( string $name, string $entry, array $exposes = [] ): void
+        public function imperativeFederatedModule( string $name, string $entry, array $exposes = [], ?string $bootModule = null ): void
         {
-            $this->registerFederatedModule( $name, $entry, $exposes );
+            $this->registerFederatedModule( $name, $entry, $exposes, $bootModule );
         }
 
         protected function loadManifest(): array
@@ -547,7 +548,7 @@ it( 'auto-registers a manifest federated_module keyed by the plugin slug', funct
     $modules = applyFilters( 'ap.plugins.federatedModules', [] );
 
     expect( $modules )->toHaveKey( 'reports-plugin' )
-        ->and( $modules['reports-plugin']['entry'] )->toBe( 'dist/remoteEntry.js' )
+        ->and( $modules['reports-plugin']['entry'] )->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) )
         ->and( $modules['reports-plugin']['exposes'] )->toBe( ['./App', './Panel'] );
 } );
 
@@ -640,6 +641,171 @@ it( 'lets an imperative federated module override a manifest one regardless of o
 
     $modules = app( PluginRegistry::class )->federatedModules();
 
-    expect( $modules['reports-plugin']['entry'] )->toBe( 'dist/imperative.js' )
+    expect( $modules['reports-plugin']['entry'] )->toBe( url( 'plugins/reports-plugin/assets/imperative.js' ) )
         ->and( $modules['reports-plugin']['exposes'] )->toBe( ['./App'] );
+} );
+
+it( 'bridges a manifest boot_module as the descriptor bootModule', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'reports-plugin',
+        'federated_module' => [
+            'entry'       => 'dist/remoteEntry.js',
+            'exposes'     => ['./settings'],
+            'boot_module' => './boot',
+        ],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    $module = app( PluginRegistry::class )->federatedModules()['reports-plugin'];
+
+    expect( $module['bootModule'] )->toBe( './boot' )
+        ->and( $module['exposes'] )->toBe( ['./settings'] );
+} );
+
+it( 'omits bootModule when the manifest declares none', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'reports-plugin',
+        'federated_module' => ['entry' => 'dist/remoteEntry.js'],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    expect( app( PluginRegistry::class )->federatedModules()['reports-plugin'] )->not->toHaveKey( 'bootModule' );
+} );
+
+it( 'publishes a relative entry directory on the plugin asset route', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'reports-plugin',
+        'federated_module' => ['entry' => 'dist/assets/remoteEntry.js'],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules()['reports-plugin']['entry'] )
+        ->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) )
+        ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBe( [
+            'directory' => base_path( 'plugins/reports-plugin/dist/assets' ),
+            'entry'     => 'remoteEntry.js',
+        ] );
+} );
+
+it( 'passes an absolute entry URL through without publishing an asset directory', function (): void {
+    $provider = manifestProvider( [
+        'slug'             => 'reports-plugin',
+        'federated_module' => ['entry' => 'https://cdn.example.com/reports/remoteEntry.js'],
+    ] );
+
+    $provider->bridgeManifestRegistrations();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules()['reports-plugin']['entry'] )->toBe( 'https://cdn.example.com/reports/remoteEntry.js' )
+        ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBeNull();
+} );
+
+it( 'accepts a boot module on an imperative registration', function (): void {
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', 'https://cdn.example.com/remoteEntry.js', ['./App', 7, ''], './boot' ),
+    );
+
+    $provider->boot();
+
+    expect( app( PluginRegistry::class )->federatedModules()['reports'] )->toBe( [
+        'entry'      => 'https://cdn.example.com/remoteEntry.js',
+        'exposes'    => ['./App'],
+        'bootModule' => './boot',
+    ] );
+} );
+
+it( 'refuses an entry the asset route could not serve safely', function ( string $entry ): void {
+    Log::spy();
+
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', $entry ),
+    );
+
+    $provider->boot();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules() )->toBeEmpty()
+        ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBeNull();
+
+    Log::shouldHaveReceived( 'warning' )->once();
+} )->with( [
+    'plugin root file'  => 'remoteEntry.js',
+    'traversal'         => 'dist/../../secrets/remoteEntry.js',
+    'backslashes'       => 'dist\\remoteEntry.js',
+    'other scheme'      => 'javascript:alert(1)',
+    'protocol-relative' => '//cdn.example.com/remoteEntry.js',
+    'space in file'     => 'dist/remote entry.js',
+] );
+
+it( 'builds an asset URL the plugins.assets route matches, without encoding the file name', function (): void {
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', 'dist/remote@entry.js' ),
+    );
+
+    $provider->boot();
+
+    $entry = app( PluginRegistry::class )->federatedModules()['reports']['entry'];
+
+    expect( $entry )->toBe( url( 'plugins/reports-plugin/assets/remote@entry.js' ) )
+        ->and( app( 'router' )->getRoutes()->match( Request::create( $entry ) )->getName() )->toBe( 'plugins.assets' );
+} );
+
+it( 'passes a root-relative entry URL through unchanged', function (): void {
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', '/build/remoteEntry.js' ),
+    );
+
+    $provider->boot();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules()['reports']['entry'] )->toBe( '/build/remoteEntry.js' )
+        ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBeNull();
+} );
+
+it( 'refuses a second, different asset directory for the same plugin', function (): void {
+    Log::spy();
+
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        function ( $p ): void {
+            $p->imperativeFederatedModule( 'reports', 'dist/remoteEntry.js' );
+            $p->imperativeFederatedModule( 'reports-extra', 'build/remoteEntry.js' );
+        },
+    );
+
+    $provider->boot();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules() )->toHaveKey( 'reports' )->not->toHaveKey( 'reports-extra' )
+        ->and( $registry->assetDirectory( 'reports-plugin' )['directory'] )->toBe( base_path( 'plugins/reports-plugin/dist' ) );
+
+    Log::shouldHaveReceived( 'warning' )->once();
+} );
+
+it( 'refuses a relative entry when the manifest has no slug', function (): void {
+    Log::spy();
+
+    $provider = manifestProvider(
+        [],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', 'dist/remoteEntry.js' ),
+    );
+
+    $provider->boot();
+
+    expect( app( PluginRegistry::class )->federatedModules() )->toBeEmpty();
+
+    Log::shouldHaveReceived( 'warning' )->once();
 } );
