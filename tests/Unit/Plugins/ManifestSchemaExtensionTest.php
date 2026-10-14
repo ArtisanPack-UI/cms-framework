@@ -127,6 +127,10 @@ describe( 'federated_module', function (): void {
         'absolute path'     => '/var/www/remoteEntry.js',
         'backslashes'       => 'dist\\remoteEntry.js',
         'plaintext http'    => 'http://cdn.example.com/remoteEntry.js',
+        'http lookalike'    => 'http://localhost.evil.com/remoteEntry.js',
+        'credentials'       => 'https://user:pass@cdn.example.com/remoteEntry.js',
+        'space in url'      => 'https://cdn.example.com/remote entry.js',
+        'trailing newline'  => "https://cdn.example.com/remoteEntry.js\n",
         'protocol-relative' => '//cdn.example.com/remoteEntry.js',
         'other scheme'      => 'javascript:alert(1)',
         'windows drive'     => 'C:/plugins/remoteEntry.js',
@@ -135,6 +139,27 @@ describe( 'federated_module', function (): void {
         'dot-file entry'    => 'dist/.remoteEntry.js',
         'query string'      => 'dist/remoteEntry.js?v=1',
     ] );
+
+    it( 'accepts a plain http entry only for a loopback dev server', function ( string $entry ): void {
+        $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } )->with( [
+        'localhost'       => 'http://localhost:5174/remoteEntry.js',
+        'localhost name'  => 'http://reports.localhost/remoteEntry.js',
+        'ipv4 loopback'   => 'http://127.0.0.1:5174/remoteEntry.js',
+        'ipv6 loopback'   => 'http://[::1]:5174/remoteEntry.js',
+    ] );
+
+    it( 'names the list shape when exposes is a map', function (): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'exposes' => ['./Page' => './src/Page.tsx']],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, '["./Page"]' );
+    } );
 
     it( 'accepts a relative entry whose directory starts with a dot or whose file uses @', function ( string $entry ): void {
         $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );

@@ -32,9 +32,13 @@ whichever flavor fits its stack.
 - **Federated React flavor** — `registerFederatedModule()` +
   `registerAdminPage()` with a `component` key. Requires a host that ships a
   Module Federation runtime — for example, the Keystone CMS. The
-  `dist/remoteEntry.js` path referenced in `plugin.json` is intentionally
+  `dist/remoteEntry.js` build referenced in `plugin.json` is intentionally
   omitted here; Keystone's docs cover the full federated-plugin build
   ( Vite / Module Federation config, remote-entry contract, host loader ).
+  Once you build it, the framework ( 2.14.0+ ) serves `dist/` at
+  `/plugins/hello-world/assets/` and hands hosts the absolute
+  `…/plugins/hello-world/assets/remoteEntry.js` URL, so the plugin needs no
+  asset controller of its own.
 
 ## Trying it in a host app
 

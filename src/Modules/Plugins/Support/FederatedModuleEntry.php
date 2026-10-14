@@ -24,6 +24,10 @@ class FederatedModuleEntry
     /**
      * Whether the entry is an absolute `http` or `https` URL with a host.
      *
+     * The whole value must be a well-formed URL ( no whitespace, no control
+     * characters ), and credentials ( `https://user:pass@host` ) are refused,
+     * since the entry reaches the browser.
+     *
      * @since 2.14.0
      *
      * @param  string  $entry  The entry value.
@@ -31,9 +35,43 @@ class FederatedModuleEntry
      */
     public static function isAbsoluteUrl( string $entry, bool $httpsOnly = false ): bool
     {
-        $pattern = $httpsOnly ? '#^https://[^/\s]+#i' : '#^https?://[^/\s]+#i';
+        $parts = self::parseUrl( $entry );
 
-        return 1 === preg_match( $pattern, $entry );
+        if ( null === $parts ) {
+            return false;
+        }
+
+        return in_array( $parts['scheme'], $httpsOnly ? ['https'] : ['http', 'https'], true );
+    }
+
+    /**
+     * Whether the entry is an absolute `http` URL to a loopback host, i.e. a
+     * local dev server such as `vite --port 5174`.
+     *
+     * Loopback hosts are `localhost`, any `*.localhost` name, `127.0.0.0/8`
+     * and `[::1]`. Traffic to them never leaves the machine, so plaintext
+     * `http` is safe to allow there.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $entry  The entry value.
+     */
+    public static function isLoopbackHttpUrl( string $entry ): bool
+    {
+        $parts = self::parseUrl( $entry );
+
+        if ( null === $parts || 'http' !== $parts['scheme'] ) {
+            return false;
+        }
+
+        $host = $parts['host'];
+
+        if ( 'localhost' === $host || str_ends_with( $host, '.localhost' ) || '[::1]' === $host ) {
+            return true;
+        }
+
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var( FILTER_VALIDATE_IP ) is the validation; only its boolean result is used.
+        return false !== filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) && str_starts_with( $host, '127.' );
     }
 
     /**
@@ -78,5 +116,40 @@ class FederatedModuleEntry
         }
 
         return count( $segments ) >= 2;
+    }
+
+    /**
+     * Parse an absolute `http(s)` URL into its lower-cased scheme and host.
+     *
+     * Returns null for anything that is not a well-formed absolute URL with
+     * a host, or that carries credentials.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $entry  The entry value.
+     *
+     * @return array{scheme:string,host:string}|null
+     */
+    protected static function parseUrl( string $entry ): ?array
+    {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var( FILTER_VALIDATE_URL ) is the validation; only its boolean result is used.
+        if ( false === filter_var( $entry, FILTER_VALIDATE_URL ) ) {
+            return null;
+        }
+
+        $parts = parse_url( $entry );
+
+        if ( ! is_array( $parts )
+            || ! isset( $parts['scheme'], $parts['host'] )
+            || '' === $parts['host']
+            || isset( $parts['user'] )
+            || isset( $parts['pass'] ) ) {
+            return null;
+        }
+
+        return [
+            'scheme' => strtolower( $parts['scheme'] ),
+            'host'   => strtolower( $parts['host'] ),
+        ];
     }
 }

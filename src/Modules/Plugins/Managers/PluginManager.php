@@ -1492,9 +1492,10 @@ class PluginManager
     /**
      * Validate the optional `federated_module` manifest key.
      *
-     * `entry` must be an absolute `https` URL, or a path inside a subdirectory
-     * of the plugin ( e.g. `dist/remoteEntry.js` ), which the framework serves
-     * through its plugin asset route. `name` and `boot_module` must be
+     * `entry` must be an absolute `https` URL, a plain `http` URL to a
+     * loopback dev server ( `http://localhost:5174/remoteEntry.js` ), or a
+     * path inside a subdirectory of the plugin ( e.g. `dist/remoteEntry.js` ),
+     * which the framework serves through its plugin asset route. `name` and `boot_module` must be
      * non-empty strings, and `exposes` a list of non-empty strings. Unknown
      * keys are logged rather than refused, so a misspelled key such as
      * `bootModule` is visible instead of silently ignored.
@@ -1517,10 +1518,12 @@ class PluginManager
         $entry = $federated['entry'];
 
         if ( ! FederatedModuleEntry::isAbsoluteUrl( $entry, true )
+            && ! FederatedModuleEntry::isLoopbackHttpUrl( $entry )
             && ! FederatedModuleEntry::isServableRelativePath( $entry ) ) {
             throw PluginValidationException::invalidManifest(
-                'Invalid federated_module.entry. Use an absolute https URL, or a path inside a subdirectory of the plugin '
-                . '( e.g. "dist/remoteEntry.js" ) with no "..", no leading "/" and no backslashes.',
+                'Invalid federated_module.entry. Use an absolute https URL ( plain http only for a localhost dev server ), '
+                . 'or a path inside a subdirectory of the plugin ( e.g. "dist/remoteEntry.js" ) with no "..", no leading "/" '
+                . 'and no backslashes.',
             );
         }
 
@@ -1535,7 +1538,10 @@ class PluginManager
             $exposes = $federated['exposes'];
 
             if ( ! is_array( $exposes ) || false === array_is_list( $exposes ) ) {
-                throw PluginValidationException::invalidManifest( 'Invalid federated_module.exposes. Must be a list of module names.' );
+                throw PluginValidationException::invalidManifest(
+                    'Invalid federated_module.exposes. Must be a list of module names, e.g. ["./Page"]; '
+                    . 'a { "./Page": "./src/Page.tsx" } map from the federation build config is not accepted.',
+                );
             }
 
             foreach ( $exposes as $index => $module ) {
