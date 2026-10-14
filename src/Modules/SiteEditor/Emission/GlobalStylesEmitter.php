@@ -68,9 +68,9 @@ class GlobalStylesEmitter
      * .wp-block-artisanpack-card h2, …`) so the child selector stays
      * scoped to the block (#208).
      *
-     * v5: wrap the `.has-{slug}-color` rule for the `text`, `link` and
-     * `border` slugs in `:where()` so it no longer overrides a block's
-     * picked color through the matching block-support marker class.
+     * v5: scope the `.has-{slug}-color` rule for the `text`, `link` and
+     * `border` slugs to real picks of that slug so it no longer overrides
+     * a block's own color through the matching block-support marker.
      */
     private const SCHEMA_VERSION = 'v5';
 
@@ -81,6 +81,16 @@ class GlobalStylesEmitter
      * @since 2.14.1
      */
     private const MARKER_COLOR_SLUGS = ['text', 'link', 'border'];
+
+    /**
+     * Attribute selectors matching an inline `color:` declaration in the
+     * forms the renderers (`color: #fff; …`) and the block editor
+     * (`color:#fff;…`) serialize it, without matching `background-color`
+     * or `border-color`. See {@see self::colorUtilitySelector()}.
+     *
+     * @since 2.14.1
+     */
+    private const INLINE_COLOR_ATTRIBUTE_SELECTORS = '[style^="color:"], [style*=" color:"], [style*=";color:"]';
 
     /**
      * Flat theme.json → CSS property map for scalar-leaf declarations.
@@ -284,12 +294,18 @@ class GlobalStylesEmitter
      *
      * The `text`, `link` and `border` slugs produce a class that is also
      * a block-support marker (`has-text-color`, `has-link-color`,
-     * `has-border-color`), which every block with a custom text, link or
-     * border color carries. A plain rule for one of them overrides the
-     * color the author picked whenever it's emitted after that pick's own
-     * `.has-{slug}-color` rule, so it's wrapped in `:where()`: zero
-     * specificity lets the picked slug win, and a block whose pick really
-     * is `text` keeps it through `!important`. Mirrors visual-editor's
+     * `has-border-color`). Blocks carry those markers for any custom
+     * text, link or border color, so a plain rule for one of these slugs
+     * forces its color onto blocks that never picked it: a palette pick
+     * emitted earlier in the sheet, a custom hex color (an inline
+     * `color:` loses to any `!important` rule), and the text of a block
+     * that only set a link or border color.
+     *
+     * The colliding selector only matches a real text-color pick of that
+     * slug: `link` / `border` also require `has-text-color` (every text
+     * pick adds it), elements with an inline `color:` are skipped, and
+     * `:where()` keeps it at zero specificity so another palette slug's
+     * class wins. Mirrors visual-editor's
      * `PresetRegistry::colorUtilitySelector()`.
      *
      * @since 2.14.1
@@ -298,7 +314,15 @@ class GlobalStylesEmitter
     {
         $selector = '.has-' . $slug . '-color';
 
-        return in_array( $slug, self::MARKER_COLOR_SLUGS, true ) ? ':where(' . $selector . ')' : $selector;
+        if ( ! in_array( $slug, self::MARKER_COLOR_SLUGS, true ) ) {
+            return $selector;
+        }
+
+        if ( 'text' !== $slug ) {
+            $selector .= '.has-text-color';
+        }
+
+        return ':where(' . $selector . ':not(' . self::INLINE_COLOR_ATTRIBUTE_SELECTORS . '))';
     }
 
     /**

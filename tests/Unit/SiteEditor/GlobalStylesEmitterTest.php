@@ -182,11 +182,12 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
             ->and( $css )->toContain( '.has-accent-soft-color { color: var(--wp--preset--color--accent-soft) !important; }' );
     } );
 
-    it( 'drops color rules that collide with block-support markers to zero specificity', function (): void {
+    it( 'scopes color rules that collide with block-support markers to real picks of that slug', function (): void {
         // `has-text-color` is both the `text` slug's class and the marker
         // every block with a custom text color carries. A plain rule for
-        // it would override `.has-base-color` on a button that picked
-        // `base` whenever it's emitted later in the sheet.
+        // it overrides `.has-base-color` when emitted later, beats a custom
+        // inline color through `!important`, and (for `link` / `border`)
+        // recolors the text of blocks that only set a link or border color.
         $resolved = makeResolved(
             settings: [
                 'color' => [
@@ -206,11 +207,11 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
 
         expect( $css )
             ->toContain( '.has-base-color { color: var(--wp--preset--color--base) !important; }' )
-            ->toContain( ':where(.has-text-color) { color: var(--wp--preset--color--text) !important; }' )
-            ->toContain( ':where(.has-link-color) { color: var(--wp--preset--color--link) !important; }' )
-            ->toContain( ':where(.has-border-color) { color: var(--wp--preset--color--border) !important; }' )
+            ->toContain( ':where(.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"])) { color: var(--wp--preset--color--text) !important; }' )
+            ->toContain( ':where(.has-link-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"])) { color: var(--wp--preset--color--link) !important; }' )
+            ->toContain( ':where(.has-border-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"])) { color: var(--wp--preset--color--border) !important; }' )
             ->toContain( '.has-text-background-color { background-color: var(--wp--preset--color--text) !important; }' )
-            ->not->toMatch( '/(^|\s)\.has-text-color \{/' );
+            ->not->toMatch( '/(^|\s)\.has-(text|link|border)-color \{/' );
     } );
 
     it( 'emits `.has-{slug}-font-size` rules for each font-size preset (Keystone #53)', function (): void {
