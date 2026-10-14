@@ -32,11 +32,13 @@ use Symfony\Component\HttpFoundation\Response;
  * and the resolved file must stay inside that directory, carry an allowed
  * extension and be a regular file. Anything else 404s.
  *
- * The federation entry ( e.g. `remoteEntry.js` ) keeps a stable URL while
- * its contents change on every build, so it is sent `no-cache` with an ETag
- * and Last-Modified, and a matching conditional request gets a 304. Every
- * other file is a content-hashed chunk whose URL changes on rebuild, so it is
- * cached as `immutable` for a year.
+ * A file whose name carries a bundler content hash ( `index-BxQ3k9aZ.js` )
+ * changes URL on every rebuild, so it is cached as `immutable` for a year.
+ * Everything else keeps a stable URL while its contents change: the
+ * federation entry ( e.g. `remoteEntry.js` ), `mf-manifest.json`, Vite
+ * `public/` copies, a library-mode `style.css`. Those are sent `no-cache`
+ * with an ETag and Last-Modified, and a matching conditional request gets a
+ * 304, so a plugin update is picked up on the next load.
  *
  * @since 2.14.0
  */
@@ -70,6 +72,16 @@ class PluginAssetsController extends Controller
         'ttf'   => 'font/ttf',
         'otf'   => 'font/otf',
     ];
+
+    /**
+     * Matches the last name segment before the extension that may be a
+     * bundler content hash: Vite/Rollup `[name]-[hash].[ext]` or webpack
+     * `[name].[contenthash].[ext]`. {@see isContentHashed()} applies the rest
+     * of the heuristic.
+     *
+     * @since 2.14.0
+     */
+    protected const HASH_SEGMENT_PATTERN = '#[.-]([A-Za-z0-9_]{8,64})\.[A-Za-z0-9]+$#D';
 
     /**
      * Stream a file from a plugin's registered asset directory.
@@ -128,7 +140,13 @@ class PluginAssetsController extends Controller
 
         $response->setPublic();
 
-        if ( $root . DIRECTORY_SEPARATOR . $assets['entry'] !== $requested ) {
+        // Compare resolved paths: the entry may itself be a symlink ( pnpm or
+        // workspace builds ), and the stable-named entry must never be cached
+        // as immutable.
+        $entry   = realpath( $root . DIRECTORY_SEPARATOR . $assets['entry'] );
+        $isEntry = false !== $entry && $entry === $requested;
+
+        if ( ! $isEntry && $this->isContentHashed( basename( $requested ) ) ) {
             $response->setMaxAge( 31536000 );
             $response->setImmutable();
 
@@ -141,6 +159,35 @@ class PluginAssetsController extends Controller
         $response->isNotModified( $request );
 
         return $response;
+    }
+
+    /**
+     * Whether a file name carries a bundler content hash, so its URL changes
+     * whenever its contents do.
+     *
+     * The hash segment ( see {@see HASH_SEGMENT_PATTERN} ) must contain a
+     * digit, and either an uppercase letter ( Vite's base64 hashes ) or only
+     * hex digits ( webpack's `[contenthash]` ). A word such as `-version2` or
+     * `-HelloWorldPanel` is therefore not taken for a hash. A hash this
+     * misses is only revalidated, never served stale.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $fileName  The file name, without directories.
+     */
+    protected function isContentHashed( string $fileName ): bool
+    {
+        if ( 1 !== preg_match( self::HASH_SEGMENT_PATTERN, $fileName, $matches ) ) {
+            return false;
+        }
+
+        $segment = $matches[1];
+
+        if ( 1 !== preg_match( '/\d/', $segment ) ) {
+            return false;
+        }
+
+        return 1 === preg_match( '/[A-Z]/', $segment ) || 1 === preg_match( '/^[0-9a-f]+$/D', $segment );
     }
 
     /**
