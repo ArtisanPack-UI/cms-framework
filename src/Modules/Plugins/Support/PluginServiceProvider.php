@@ -375,14 +375,17 @@ abstract class PluginServiceProvider extends ServiceProvider
      */
     protected function filesystemEntryToUrlPath( string $entryPath ): string|false|null
     {
-        $basePath = rtrim( base_path(), '/\\' ) . '/';
+        // Compare with forward slashes throughout: on Windows, Laravel joins
+        // base_path() / pluginPath() / public_path() with backslashes.
+        $entryPath = str_replace( '\\', '/', $entryPath );
+        $basePath  = $this->normalizedRoot( base_path() );
 
         if ( ! str_starts_with( $entryPath, $basePath ) ) {
             return null;
         }
 
         try {
-            $pluginRoot = rtrim( $this->pluginPath(), '/' ) . '/';
+            $pluginRoot = $this->normalizedRoot( $this->pluginPath() );
         } catch ( RuntimeException ) {
             $pluginRoot = null;
         }
@@ -391,7 +394,7 @@ abstract class PluginServiceProvider extends ServiceProvider
             return substr( $entryPath, strlen( $pluginRoot ) );
         }
 
-        $publicRoot = rtrim( public_path(), '/\\' ) . '/';
+        $publicRoot = $this->normalizedRoot( public_path() );
 
         if ( str_starts_with( $entryPath, $publicRoot ) ) {
             return '/' . substr( $entryPath, strlen( $publicRoot ) );
@@ -400,6 +403,19 @@ abstract class PluginServiceProvider extends ServiceProvider
         return false;
     }
 
+
+    /**
+     * A directory path with forward slashes and exactly one trailing slash,
+     * for prefix comparisons.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $path  The directory path.
+     */
+    protected function normalizedRoot( string $path ): string
+    {
+        return rtrim( str_replace( '\\', '/', $path ), '/' ) . '/';
+    }
     /**
      * Bridge the manifest's singular `federated_module` object.
      *

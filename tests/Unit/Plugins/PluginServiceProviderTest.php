@@ -794,6 +794,20 @@ it( 'serves a filesystem path inside the plugin as its plugin-relative entry', f
         ] );
 } );
 
+it( 'matches a backslash-separated filesystem path, as Laravel builds them on Windows', function (): void {
+    $entry = str_replace( '/', '\\', base_path( 'plugins/reports-plugin/dist/remoteEntry.js' ) );
+
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', $entry ),
+    );
+
+    $provider->boot();
+
+    expect( app( PluginRegistry::class )->federatedModules()['reports']['entry'] )
+        ->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) );
+} );
+
 it( 'maps a filesystem path under public_path() to its root-relative URL', function (): void {
     $provider = manifestProvider(
         ['slug' => 'reports-plugin'],
