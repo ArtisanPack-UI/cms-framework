@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.14.1] - 2026-10-14
+
+### Fixed
+
+- **Block bindings in post content resolve against the record** — `HasRenderedBlockContent::renderContent()` (the `rendered_content` accessor visual-editor's `core/post-content` block reads) now renders with a visual-editor `BindingContext` for the model. `custom_field`, `post_core` and `relation` bindings inside a record's body previously fell back to their static values on the front end, because the accessor runs before the template's own render sets a binding context. Soft integration as before: with no visual-editor installed nothing changes, and visual-editor versions before 1.14.0 ignore the context.
+- **`text` / `link` / `border` palette slugs no longer override picked colors** — those slugs' `.has-{slug}-color` rules share their class name with the `has-text-color` / `has-link-color` / `has-border-color` block-support markers, so `GlobalStylesEmitter` forced the slug's color onto every block with a custom color (e.g. a button with a palette text color rendered in the theme's `text` color). The rules now only match a real text-color pick of that slug: `link` / `border` also require `has-text-color`, elements with an inline `color:` are skipped, and `:where()` keeps them at zero specificity. The emitter's cache schema version moves to `v5`, so cached CSS regenerates on upgrade. Pairs with visual-editor 1.14.1.
+
 ## [2.14.0] - 2026-10-14
 
 ### Added
