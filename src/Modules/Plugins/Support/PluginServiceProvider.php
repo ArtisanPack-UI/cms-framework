@@ -228,19 +228,112 @@ abstract class PluginServiceProvider extends ServiceProvider
      * Register a Module Federation entry so host apps that support runtime-loaded
      * React pages can discover and mount plugin frontend modules.
      *
+     * `$entryPath` is an absolute `http(s)` URL or a root-relative URL such as
+     * `/build/remoteEntry.js`, both used as-is, or a path relative to the
+     * plugin directory such as `dist/assets/remoteEntry.js`.
+     * A relative entry's directory is published through the framework's
+     * plugin asset route and the descriptor carries the absolute URL
+     * `/plugins/{slug}/assets/remoteEntry.js`, so the plugin needs no asset
+     * controller of its own. The relative entry must sit in a subdirectory
+     * of the plugin, and a plugin can publish only one asset directory. An
+     * entry that breaks either rule is logged and not registered.
+     *
+     * @since 2.14.0 Added `$bootModule` and relative-entry resolution.
+     *
+     * @param  string  $name  The federation remote name.
+     * @param  string  $entryPath  Absolute or root-relative URL, or path relative to the plugin directory.
      * @param  array<int,string>  $exposes  Optional list of exposed module names.
+     * @param  string|null  $bootModule  Optional exposed module the host preloads before the first page mounts ( e.g. `./boot` ).
      */
-    protected function registerFederatedModule( string $name, string $entryPath, array $exposes = [] ): void
+    protected function registerFederatedModule( string $name, string $entryPath, array $exposes = [], ?string $bootModule = null ): void
     {
+        $entry = $this->resolveFederatedEntry( $name, $entryPath );
+
+        if ( null === $entry ) {
+            return;
+        }
+
         $descriptor = [
-            'entry' => $entryPath,
+            'entry' => $entry,
         ];
 
+        $exposes = array_values( array_filter( $exposes, static fn ( $module ): bool => is_string( $module ) && '' !== $module ) );
+
         if ( ! empty( $exposes ) ) {
-            $descriptor['exposes'] = array_values( $exposes );
+            $descriptor['exposes'] = $exposes;
+        }
+
+        if ( null !== $bootModule && '' !== $bootModule ) {
+            $descriptor['bootModule'] = $bootModule;
         }
 
         $this->pluginRegistry()->setFederatedModule( $name, $descriptor );
+    }
+
+    /**
+     * Turn a federated module entry into the absolute URL hosts load.
+     *
+     * An absolute `http(s)` URL or a root-relative URL passes through. A
+     * servable relative path publishes its directory on the plugin asset route
+     * and resolves to that route's URL. Anything else is logged and returns null, as does a second
+     * asset directory for the same plugin, since the route serves one
+     * directory per plugin.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $name  The federation remote name, for log context.
+     * @param  string  $entryPath  The entry as declared.
+     *
+     * @return string|null The absolute entry URL, or null when it cannot be served.
+     */
+    protected function resolveFederatedEntry( string $name, string $entryPath ): ?string
+    {
+        // A root-relative URL ( `/build/remoteEntry.js` ) is the host's own
+        // path, which a provider could always register before 2.14.0, so it
+        // passes through unchanged. Manifest validation still refuses it.
+        if ( FederatedModuleEntry::isAbsoluteUrl( $entryPath )
+            || 1 === preg_match( '#^/[^/\\\\]#', $entryPath ) ) {
+            return $entryPath;
+        }
+
+        $context = [
+            'provider' => static::class,
+            'module'   => $name,
+            'entry'    => $entryPath,
+        ];
+
+        if ( ! FederatedModuleEntry::isServableRelativePath( $entryPath ) ) {
+            logger()->warning( 'Federated module not registered: its entry must be an absolute http(s) URL, a root-relative URL, or a path inside a subdirectory of the plugin ( e.g. dist/remoteEntry.js ).', $context );
+
+            return null;
+        }
+
+        try {
+            $slug = $this->pluginSlug();
+        } catch ( RuntimeException ) {
+            logger()->warning( 'Federated module not registered: a relative entry needs the plugin slug from plugin.json to build its asset URL.', $context );
+
+            return null;
+        }
+
+        $directory = $this->pluginPath( dirname( $entryPath ) );
+        $file      = basename( $entryPath );
+        $registry  = $this->pluginRegistry();
+        $existing  = $registry->assetDirectory( $slug );
+
+        if ( null !== $existing && $existing['directory'] !== $directory ) {
+            logger()->warning( 'Federated module not registered: the plugin already publishes a different asset directory, and only one is served per plugin.', $context + [
+                'published' => $existing['directory'],
+            ] );
+
+            return null;
+        }
+
+        $registry->setAssetDirectory( $slug, $directory, $file );
+
+        // Built with url() rather than route(): plugins register while the
+        // framework is still booting, before the `plugins.assets` route loads.
+        return url( 'plugins/' . rawurlencode( $slug ) . '/assets/' . rawurlencode( $file ) );
     }
 
     /**
@@ -252,7 +345,12 @@ abstract class PluginServiceProvider extends ServiceProvider
      * slug — the singular field models one federated module per plugin. An
      * already-registered name is left untouched so imperative registrations win.
      *
+     * The manifest's snake_case `boot_module` is passed through as the
+     * descriptor's `bootModule`, and a relative `entry` is resolved to the
+     * plugin asset route's URL by {@see registerFederatedModule()}.
+     *
      * @since 2.10.0
+     * @since 2.14.0 Bridges `boot_module` and resolves relative entries.
      *
      * @param  array<string,mixed>  $manifest
      */
@@ -276,7 +374,11 @@ abstract class PluginServiceProvider extends ServiceProvider
             ? array_values( array_filter( $module['exposes'], 'is_string' ) )
             : [];
 
-        $this->registerFederatedModule( $name, $module['entry'], $exposes );
+        $bootModule = ( isset( $module['boot_module'] ) && is_string( $module['boot_module'] ) )
+            ? $module['boot_module']
+            : null;
+
+        $this->registerFederatedModule( $name, $module['entry'], $exposes, $bootModule );
     }
 
     /**

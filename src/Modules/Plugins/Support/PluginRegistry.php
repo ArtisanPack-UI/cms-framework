@@ -29,9 +29,17 @@ class PluginRegistry
     /**
      * Federated module descriptors keyed by name.
      *
-     * @var array<string,array{entry:string,exposes?:array<int,string>}>
+     * @var array<string,array{entry:string,exposes?:array<int,string>,bootModule?:string}>
      */
     protected array $federatedModules = [];
+
+    /**
+     * Public asset directories keyed by plugin slug, served by the plugin
+     * asset route.
+     *
+     * @var array<string,array{directory:string,entry:string}>
+     */
+    protected array $assetDirectories = [];
 
     /**
      * Register (or overwrite) a nav entry by slug.
@@ -56,7 +64,7 @@ class PluginRegistry
     /**
      * Register (or overwrite) a federated module descriptor by name.
      *
-     * @param  array{entry:string,exposes?:array<int,string>}  $descriptor
+     * @param  array{entry:string,exposes?:array<int,string>,bootModule?:string}  $descriptor
      */
     public function setFederatedModule( string $name, array $descriptor ): void
     {
@@ -66,10 +74,44 @@ class PluginRegistry
     /**
      * All registered federated module descriptors.
      *
-     * @return array<string,array{entry:string,exposes?:array<int,string>}>
+     * @return array<string,array{entry:string,exposes?:array<int,string>,bootModule?:string}>
      */
     public function federatedModules(): array
     {
         return $this->federatedModules;
+    }
+
+    /**
+     * Expose a plugin directory through the plugin asset route.
+     *
+     * Only directories registered here are ever served, which also limits the
+     * route to plugins whose provider booted ( active plugins ).
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $slug  The plugin slug.
+     * @param  string  $directory  Absolute path of the directory to serve.
+     * @param  string  $entry  File name of the federation entry inside it, served with a revalidating cache policy.
+     */
+    public function setAssetDirectory( string $slug, string $directory, string $entry ): void
+    {
+        $this->assetDirectories[ $slug ] = [
+            'directory' => $directory,
+            'entry'     => $entry,
+        ];
+    }
+
+    /**
+     * The asset directory registered for a plugin, if any.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $slug  The plugin slug.
+     *
+     * @return array{directory:string,entry:string}|null
+     */
+    public function assetDirectory( string $slug ): ?array
+    {
+        return $this->assetDirectories[ $slug ] ?? null;
     }
 }

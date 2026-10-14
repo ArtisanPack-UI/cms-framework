@@ -5,6 +5,7 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use Illuminate\Support\Facades\Log;
 
 beforeEach( function (): void {
     $this->manager = new PluginManager;
@@ -93,11 +94,96 @@ describe( 'federated_module', function (): void {
 
     it( 'rejects a non-array exposes', function (): void {
         $manifest = array_merge( $this->base, [
-            'federated_module' => ['entry' => 'x.js', 'exposes' => 'oops'],
+            'federated_module' => ['entry' => 'dist/x.js', 'exposes' => 'oops'],
         ] );
 
         expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
             ->toThrow( PluginValidationException::class, 'exposes' );
+    } );
+
+    it( 'accepts a full descriptor with an absolute https entry', function (): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => [
+                'name'        => 'testPlugin',
+                'entry'       => 'https://cdn.example.com/remoteEntry.js',
+                'exposes'     => ['./settings'],
+                'boot_module' => './boot',
+            ],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects an entry the framework cannot serve or load', function ( string $entry ): void {
+        $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid federated_module.entry' );
+    } )->with( [
+        'plugin root file'  => 'remoteEntry.js',
+        'traversal'         => 'dist/../../remoteEntry.js',
+        'dot segment'       => './dist/remoteEntry.js',
+        'absolute path'     => '/var/www/remoteEntry.js',
+        'backslashes'       => 'dist\\remoteEntry.js',
+        'plaintext http'    => 'http://cdn.example.com/remoteEntry.js',
+        'protocol-relative' => '//cdn.example.com/remoteEntry.js',
+        'other scheme'      => 'javascript:alert(1)',
+        'windows drive'     => 'C:/plugins/remoteEntry.js',
+    ] );
+
+    it( 'rejects a non-string or empty boot_module and name', function ( string $key, mixed $value ): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', $key => $value],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, "Invalid federated_module.{$key}" );
+    } )->with( [
+        'boot_module array' => ['boot_module', ['./boot']],
+        'boot_module empty' => ['boot_module', ' '],
+        'name integer'      => ['name', 5],
+    ] );
+
+    it( 'rejects exposes items that are not non-empty strings', function ( array $exposes ): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'exposes' => $exposes],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid federated_module.exposes' );
+    } )->with( [
+        'integer item'      => [['./App', 3]],
+        'empty item'        => [['']],
+        'associative array' => [['app' => './App']],
+    ] );
+
+    it( 'logs unknown keys instead of ignoring them silently', function (): void {
+        Log::spy();
+
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'bootModule' => './boot'],
+        ] );
+
+        invokeMethod( $this->manager, 'validateManifest', [$manifest] );
+
+        Log::shouldHaveReceived( 'warning' )
+            ->withArgs( fn ( string $message, array $context ): bool => str_contains( $message, 'unknown keys' )
+                && ['bootModule'] === $context['keys']
+                && 'test-plugin' === $context['plugin'] )
+            ->once();
+    } );
+
+    it( 'does not log for a descriptor using only known keys', function (): void {
+        Log::spy();
+
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'boot_module' => './boot'],
+        ] );
+
+        invokeMethod( $this->manager, 'validateManifest', [$manifest] );
+
+        Log::shouldNotHaveReceived( 'warning' );
     } );
 } );
 
