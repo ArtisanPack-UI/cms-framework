@@ -275,9 +275,16 @@ abstract class PluginServiceProvider extends ServiceProvider
      *
      * An absolute `http(s)` URL or a root-relative URL passes through. A
      * servable relative path publishes its directory on the plugin asset route
-     * and resolves to that route's URL. Anything else is logged and returns null, as does a second
-     * asset directory for the same plugin, since the route serves one
-     * directory per plugin.
+     * and resolves to that route's URL. Anything else is logged and returns
+     * null, as does a second asset directory for the same plugin, since the
+     * route serves one directory per plugin.
+     *
+     * An absolute filesystem path is never emitted as a URL, since that would
+     * hand the server's install path to the browser and never load. One inside
+     * the plugin directory ( the pre-2.14 `$this->pluginPath( 'dist/remoteEntry.js' )`
+     * pattern ) is treated as the equivalent plugin-relative path, and one
+     * under `public_path()` as the matching root-relative URL. Any other path
+     * under `base_path()` is logged and refused.
      *
      * @since 2.14.0
      *
@@ -288,6 +295,19 @@ abstract class PluginServiceProvider extends ServiceProvider
      */
     protected function resolveFederatedEntry( string $name, string $entryPath ): ?string
     {
+        $filesystemEntry = $this->filesystemEntryToUrlPath( $entryPath );
+
+        if ( false === $filesystemEntry ) {
+            logger()->warning( 'Federated module not registered: its entry is a filesystem path outside the plugin and public directories, which cannot be served as a URL.', [
+                'provider' => static::class,
+                'module'   => $name,
+            ] );
+
+            return null;
+        }
+
+        $entryPath = $filesystemEntry ?? $entryPath;
+
         // A root-relative URL ( `/build/remoteEntry.js` ) is the host's own
         // path, which a provider could always register before 2.14.0, so it
         // passes through unchanged. Manifest validation still refuses it.
@@ -337,6 +357,47 @@ abstract class PluginServiceProvider extends ServiceProvider
         // to the route's URL-safe character set, and encoding `@` as `%40`
         // would only obscure the URL.
         return url( 'plugins/' . rawurlencode( $slug ) . '/assets/' . $file );
+    }
+
+    /**
+     * Map an absolute filesystem path entry to the path a URL can carry.
+     *
+     * Returns the plugin-relative path for a file inside the plugin directory,
+     * the root-relative URL for a file under `public_path()`, `false` for any
+     * other path under `base_path()`, and null when the entry is not a
+     * filesystem path at all.
+     *
+     * @since 2.14.0
+     *
+     * @param  string  $entryPath  The entry as declared.
+     *
+     * @return string|false|null
+     */
+    protected function filesystemEntryToUrlPath( string $entryPath ): string|false|null
+    {
+        $basePath = rtrim( base_path(), '/\\' ) . '/';
+
+        if ( ! str_starts_with( $entryPath, $basePath ) ) {
+            return null;
+        }
+
+        try {
+            $pluginRoot = rtrim( $this->pluginPath(), '/' ) . '/';
+        } catch ( RuntimeException ) {
+            $pluginRoot = null;
+        }
+
+        if ( null !== $pluginRoot && str_starts_with( $entryPath, $pluginRoot ) ) {
+            return substr( $entryPath, strlen( $pluginRoot ) );
+        }
+
+        $publicRoot = rtrim( public_path(), '/\\' ) . '/';
+
+        if ( str_starts_with( $entryPath, $publicRoot ) ) {
+            return '/' . substr( $entryPath, strlen( $publicRoot ) );
+        }
+
+        return false;
     }
 
     /**

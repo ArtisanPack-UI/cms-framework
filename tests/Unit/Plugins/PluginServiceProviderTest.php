@@ -774,6 +774,56 @@ it( 'passes a root-relative entry URL through unchanged', function (): void {
         ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBeNull();
 } );
 
+it( 'serves a filesystem path inside the plugin as its plugin-relative entry', function (): void {
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', base_path( 'plugins/reports-plugin/dist/remoteEntry.js' ) ),
+    );
+
+    $provider->boot();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules()['reports']['entry'] )
+        ->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) )
+        ->not->toContain( base_path() )
+        ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBe( [
+            'directory' => base_path( 'plugins/reports-plugin/dist' ),
+            'entry'     => 'remoteEntry.js',
+        ] );
+} );
+
+it( 'maps a filesystem path under public_path() to its root-relative URL', function (): void {
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', public_path( 'build/remoteEntry.js' ) ),
+    );
+
+    $provider->boot();
+
+    $registry = app( PluginRegistry::class );
+
+    expect( $registry->federatedModules()['reports']['entry'] )->toBe( '/build/remoteEntry.js' )
+        ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBeNull();
+} );
+
+it( 'never registers any other filesystem path as an entry URL', function (): void {
+    Log::spy();
+
+    $provider = manifestProvider(
+        ['slug' => 'reports-plugin'],
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', base_path( 'storage/app/remoteEntry.js' ) ),
+    );
+
+    $provider->boot();
+
+    expect( app( PluginRegistry::class )->federatedModules() )->toBeEmpty();
+
+    Log::shouldHaveReceived( 'warning' )->once()->withArgs(
+        fn ( string $message, array $context ): bool => ! str_contains( json_encode( $context, JSON_UNESCAPED_SLASHES ), base_path() ),
+    );
+} );
+
 it( 'refuses a second, different asset directory for the same plugin', function (): void {
     Log::spy();
 
