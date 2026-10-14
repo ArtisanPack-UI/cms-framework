@@ -13,6 +13,46 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Host Application Version
+    |--------------------------------------------------------------------------
+    | The host application's own semver version (e.g. Keystone CMS 1.2.0), which
+    | a plugin's `min_app_version` manifest key is compared against. The
+    | framework cannot detect it, so the host supplies it, either through the
+    | CMS_APP_VERSION environment variable or from a service provider's
+    | register() method, once every config file has loaded:
+    |
+    |     config( [ 'cms.plugins.appVersion' => config( 'keystone.version' ) ] );
+    |
+    | Do not read another file's key with config() here: config files load in
+    | name order, so `keystone.version` does not exist yet when this file
+    | loads and the value would be null. `app.version` happens to work only
+    | because `app` sorts before `cms`.
+    |
+    | When null, `min_app_version` checks are skipped: a warning is logged and
+    | `ap.cmsFramework.plugin.versionCheckSkipped` fires. A plugin's
+    | `min_framework_version` is separate and always compared against the
+    | cms-framework package version.
+    */
+    'appVersion' => env( 'CMS_APP_VERSION' ),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Plugin Asset Route
+    |--------------------------------------------------------------------------
+    | When true, the framework registers the public
+    | `/plugins/{slug}/assets/{path}` route ( `plugins.assets` ), which serves
+    | the build directory of a plugin whose `federated_module.entry` is a
+    | relative path. Set it to false when the host serves plugin assets
+    | itself. A relative entry still resolves to that URL, so the host's own
+    | route must answer it.
+    |
+    | A host with a GET catch-all route ( e.g. CMS pages at `/{path}` ) must
+    | exclude the `plugins/` prefix from it, or the catch-all answers first.
+    */
+    'assetRoute' => env( 'CMS_PLUGINS_ASSET_ROUTE', true ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Required Manifest Files
     |--------------------------------------------------------------------------
     | Files that must exist for a directory to be considered a valid plugin.

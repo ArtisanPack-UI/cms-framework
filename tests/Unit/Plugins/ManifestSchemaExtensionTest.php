@@ -5,6 +5,7 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use Illuminate\Support\Facades\Log;
 
 beforeEach( function (): void {
     $this->manager = new PluginManager;
@@ -31,6 +32,49 @@ describe( 'min_host_version', function (): void {
     } );
 } );
 
+describe( 'min_framework_version and min_app_version', function (): void {
+    it( 'accepts valid semvers', function ( string $key ): void {
+        $manifest = array_merge( $this->base, [$key => '2.4.0'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } )->with( ['min_framework_version', 'min_app_version'] );
+
+    it( 'rejects malformed version strings', function ( string $key ): void {
+        $manifest = array_merge( $this->base, [$key => '2.4'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, "Invalid {$key}" );
+    } )->with( ['min_framework_version', 'min_app_version'] );
+
+    it( 'rejects a non-string version', function (): void {
+        $manifest = array_merge( $this->base, ['min_app_version' => 2] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid min_app_version' );
+    } );
+
+    it( 'accepts the deprecated alias alongside min_framework_version when they agree', function (): void {
+        $manifest = array_merge( $this->base, [
+            'min_framework_version' => '2.4.0',
+            'min_host_version'      => '2.4.0',
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects the deprecated alias when it disagrees with min_framework_version', function (): void {
+        $manifest = array_merge( $this->base, [
+            'min_framework_version' => '2.4.0',
+            'min_host_version'      => '1.0.0',
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'must match it when both are declared' );
+    } );
+} );
+
 describe( 'federated_module', function (): void {
     it( 'accepts an entry-only descriptor', function (): void {
         $manifest = array_merge( $this->base, [
@@ -50,11 +94,135 @@ describe( 'federated_module', function (): void {
 
     it( 'rejects a non-array exposes', function (): void {
         $manifest = array_merge( $this->base, [
-            'federated_module' => ['entry' => 'x.js', 'exposes' => 'oops'],
+            'federated_module' => ['entry' => 'dist/x.js', 'exposes' => 'oops'],
         ] );
 
         expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
             ->toThrow( PluginValidationException::class, 'exposes' );
+    } );
+
+    it( 'accepts a full descriptor with an absolute https entry', function (): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => [
+                'name'        => 'testPlugin',
+                'entry'       => 'https://cdn.example.com/remoteEntry.js',
+                'exposes'     => ['./settings'],
+                'boot_module' => './boot',
+            ],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects an entry the framework cannot serve or load', function ( string $entry ): void {
+        $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid federated_module.entry' );
+    } )->with( [
+        'plugin root file'  => 'remoteEntry.js',
+        'traversal'         => 'dist/../../remoteEntry.js',
+        'dot segment'       => './dist/remoteEntry.js',
+        'absolute path'     => '/var/www/remoteEntry.js',
+        'backslashes'       => 'dist\\remoteEntry.js',
+        'plaintext http'    => 'http://cdn.example.com/remoteEntry.js',
+        'http lookalike'    => 'http://localhost.evil.com/remoteEntry.js',
+        'credentials'       => 'https://user:pass@cdn.example.com/remoteEntry.js',
+        'space in url'      => 'https://cdn.example.com/remote entry.js',
+        'trailing newline'  => "https://cdn.example.com/remoteEntry.js\n",
+        'protocol-relative' => '//cdn.example.com/remoteEntry.js',
+        'other scheme'      => 'javascript:alert(1)',
+        'windows drive'     => 'C:/plugins/remoteEntry.js',
+        'space in file'     => 'dist/remote entry.js',
+        'encoded file'      => 'dist/remote%20entry.js',
+        'dot-file entry'    => 'dist/.remoteEntry.js',
+        'query string'      => 'dist/remoteEntry.js?v=1',
+    ] );
+
+    it( 'accepts a plain http entry only for a loopback dev server', function ( string $entry ): void {
+        $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } )->with( [
+        'localhost'       => 'http://localhost:5174/remoteEntry.js',
+        'localhost name'  => 'http://reports.localhost/remoteEntry.js',
+        'ipv4 loopback'   => 'http://127.0.0.1:5174/remoteEntry.js',
+        'ipv6 loopback'   => 'http://[::1]:5174/remoteEntry.js',
+    ] );
+
+    it( 'names the list shape when exposes is a map', function (): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'exposes' => ['./Page' => './src/Page.tsx']],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, '["./Page"]' );
+    } );
+
+    it( 'accepts a relative entry whose directory starts with a dot or whose file uses @', function ( string $entry ): void {
+        $manifest = array_merge( $this->base, ['federated_module' => ['entry' => $entry]] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } )->with( [
+        'dot directory' => '.output/remoteEntry.js',
+        'at sign'       => 'dist/remote@entry_v1-x.js',
+    ] );
+
+    it( 'rejects a non-string or empty boot_module and name', function ( string $key, mixed $value ): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', $key => $value],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, "Invalid federated_module.{$key}" );
+    } )->with( [
+        'boot_module array' => ['boot_module', ['./boot']],
+        'boot_module empty' => ['boot_module', ' '],
+        'name integer'      => ['name', 5],
+    ] );
+
+    it( 'rejects exposes items that are not non-empty strings', function ( array $exposes ): void {
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'exposes' => $exposes],
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid federated_module.exposes' );
+    } )->with( [
+        'integer item'      => [['./App', 3]],
+        'empty item'        => [['']],
+        'associative array' => [['app' => './App']],
+    ] );
+
+    it( 'logs unknown keys instead of ignoring them silently', function (): void {
+        Log::spy();
+
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'bootModule' => './boot'],
+        ] );
+
+        invokeMethod( $this->manager, 'validateManifest', [$manifest] );
+
+        Log::shouldHaveReceived( 'warning' )
+            ->withArgs( fn ( string $message, array $context ): bool => str_contains( $message, 'unknown keys' )
+                && ['bootModule'] === $context['keys']
+                && 'test-plugin' === $context['plugin'] )
+            ->once();
+    } );
+
+    it( 'does not log for a descriptor using only known keys', function (): void {
+        Log::spy();
+
+        $manifest = array_merge( $this->base, [
+            'federated_module' => ['entry' => 'dist/remoteEntry.js', 'boot_module' => './boot'],
+        ] );
+
+        invokeMethod( $this->manager, 'validateManifest', [$manifest] );
+
+        Log::shouldNotHaveReceived( 'warning' );
     } );
 } );
 
@@ -510,10 +678,23 @@ describe( 'Plugin model accessors', function (): void {
             ->and( $plugin->rollback_migrations_on_delete )->toBeTrue();
     } );
 
+    it( 'reads min_framework_version, falling back to the deprecated min_host_version', function (): void {
+        $canonical = new Plugin( ['meta' => ['min_framework_version' => '2.14.0', 'min_app_version' => '1.2.0']] );
+        $legacy    = new Plugin( ['meta' => ['min_host_version' => '2.4.0']] );
+
+        expect( $canonical->min_framework_version )->toBe( '2.14.0' )
+            ->and( $canonical->min_host_version )->toBe( '2.14.0' )
+            ->and( $canonical->min_app_version )->toBe( '1.2.0' )
+            ->and( $legacy->min_framework_version )->toBe( '2.4.0' )
+            ->and( $legacy->min_app_version )->toBeNull();
+    } );
+
     it( 'returns sensible defaults when manifest fields are absent', function (): void {
         $plugin = new Plugin( ['slug' => 'x', 'name' => 'X', 'version' => '1.0.0', 'meta' => []] );
 
         expect( $plugin->min_host_version )->toBeNull()
+            ->and( $plugin->min_framework_version )->toBeNull()
+            ->and( $plugin->min_app_version )->toBeNull()
             ->and( $plugin->federated_module )->toBeNull()
             ->and( $plugin->nav_entries )->toBe( [] )
             ->and( $plugin->declared_permissions )->toBe( [] )

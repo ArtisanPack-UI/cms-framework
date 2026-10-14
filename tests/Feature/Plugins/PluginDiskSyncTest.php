@@ -176,6 +176,35 @@ describe( 'syncFromDisk', function (): void {
             ->and( $row->is_active )->toBeTrue();
     } );
 
+    it( 'reports a federated_module the 2.14 rules refuse and leaves the row untouched', function (): void {
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        $this->manager->installFromDisk( 'valid-plugin' );
+        $this->manager->activate( 'valid-plugin' );
+
+        // A map-shaped `exposes`, copied from a federation build config, was
+        // accepted before 2.14.0.
+        $manifestPath                 = $this->pluginsPath . '/valid-plugin/plugin.json';
+        $manifest                     = json_decode( File::get( $manifestPath ), true );
+        $manifest['version']          = '1.1.0';
+        $manifest['federated_module'] = [
+            'entry'   => 'dist/remoteEntry.js',
+            'exposes' => ['./Page' => './src/Page.tsx'],
+        ];
+        File::put( $manifestPath, json_encode( $manifest ) );
+
+        $result = collect( $this->manager->syncFromDisk() )->firstWhere( 'slug', 'valid-plugin' );
+        $row    = Plugin::where( 'slug', 'valid-plugin' )->first();
+
+        expect( $result['status'] )->toBe( 'failed' )
+            ->and( $result['message'] )->toContain( 'federated_module.exposes' )->toContain( '["./Page"]' )
+            ->and( $row->version )->toBe( '1.0.0' )
+            ->and( $row->is_active )->toBeTrue();
+    } );
+
     it( 'reports a failure when a manifest is invalid and installs nothing for it', function (): void {
         File::copyDirectory(
             $this->testPluginsPath . '/valid-plugin',

@@ -19,6 +19,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\ComposerPackageResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResolver;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\DependencyResult;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\FederatedModuleEntry;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Support\PluginServiceProvider;
 use ArtisanPackUI\Rbac\Models\Permission as RbacPermission;
 use Composer\Autoload\ClassLoader;
@@ -1107,23 +1108,26 @@ class PluginManager
      */
     protected function validateOptionalManifestFields( array $manifest ): void
     {
-        if ( isset( $manifest['min_host_version'] ) ) {
-            if ( ! is_string( $manifest['min_host_version'] )
-                || ! preg_match( '/^\d+\.\d+\.\d+$/', $manifest['min_host_version'] ) ) {
-                throw PluginValidationException::invalidManifest( 'Invalid min_host_version format. Use semantic versioning (e.g., 1.0.0).' );
+        foreach ( ['min_framework_version', 'min_host_version', 'min_app_version'] as $key ) {
+            if ( isset( $manifest[ $key ] ) ) {
+                if ( ! is_string( $manifest[ $key ] )
+                    || ! preg_match( '/^\d+\.\d+\.\d+$/', $manifest[ $key ] ) ) {
+                    throw PluginValidationException::invalidManifest( "Invalid {$key} format. Use semantic versioning (e.g., 1.0.0)." );
+                }
             }
         }
 
+        // `min_host_version` is the deprecated alias of `min_framework_version`.
+        // Declaring both is allowed so a plugin can still be checked on hosts
+        // older than 2.14.0, which only read the alias, but different values
+        // leave it unclear which one the author meant.
+        if ( isset( $manifest['min_framework_version'], $manifest['min_host_version'] )
+            && $manifest['min_framework_version'] !== $manifest['min_host_version'] ) {
+            throw PluginValidationException::invalidManifest( 'min_host_version is a deprecated alias of min_framework_version and must match it when both are declared.' );
+        }
+
         if ( isset( $manifest['federated_module'] ) ) {
-            $federated = $manifest['federated_module'];
-            if ( ! is_array( $federated )
-                || empty( $federated['entry'] )
-                || ! is_string( $federated['entry'] ) ) {
-                throw PluginValidationException::invalidManifest( 'Invalid federated_module. Must be an object with a non-empty string "entry".' );
-            }
-            if ( isset( $federated['exposes'] ) && ! is_array( $federated['exposes'] ) ) {
-                throw PluginValidationException::invalidManifest( 'Invalid federated_module.exposes. Must be an array of module names.' );
-            }
+            $this->validateFederatedModuleManifestField( $manifest['federated_module'], ( string ) $manifest['slug'] );
         }
 
         if ( isset( $manifest['nav_entries'] ) ) {
@@ -1482,6 +1486,78 @@ class PluginManager
             if ( ! is_string( $constraint ) || '' === trim( $constraint ) ) {
                 throw PluginValidationException::invalidManifest( "Invalid {$field}['{$slug}']. Version constraint must be a non-empty string." );
             }
+        }
+    }
+
+    /**
+     * Validate the optional `federated_module` manifest key.
+     *
+     * `entry` must be an absolute `https` URL, a plain `http` URL to a
+     * loopback dev server ( `http://localhost:5174/remoteEntry.js` ), or a
+     * path inside a subdirectory of the plugin ( e.g. `dist/remoteEntry.js` ),
+     * which the framework serves through its plugin asset route. `name` and `boot_module` must be
+     * non-empty strings, and `exposes` a list of non-empty strings. Unknown
+     * keys are logged rather than refused, so a misspelled key such as
+     * `bootModule` is visible instead of silently ignored.
+     *
+     * @since 2.14.0
+     *
+     * @param  mixed  $federated  Raw `federated_module` value from the manifest.
+     * @param  string  $slug  The plugin slug, for log context.
+     *
+     * @throws PluginValidationException If the key is malformed.
+     */
+    protected function validateFederatedModuleManifestField( mixed $federated, string $slug ): void
+    {
+        if ( ! is_array( $federated )
+            || empty( $federated['entry'] )
+            || ! is_string( $federated['entry'] ) ) {
+            throw PluginValidationException::invalidManifest( 'Invalid federated_module. Must be an object with a non-empty string "entry".' );
+        }
+
+        $entry = $federated['entry'];
+
+        if ( ! FederatedModuleEntry::isAbsoluteUrl( $entry, true )
+            && ! FederatedModuleEntry::isLoopbackHttpUrl( $entry )
+            && ! FederatedModuleEntry::isServableRelativePath( $entry ) ) {
+            throw PluginValidationException::invalidManifest(
+                'Invalid federated_module.entry. Use an absolute https URL ( plain http only for a localhost dev server ), '
+                . 'or a path inside a subdirectory of the plugin ( e.g. "dist/remoteEntry.js" ) with no "..", no leading "/" '
+                . 'and no backslashes.',
+            );
+        }
+
+        foreach ( [ 'name', 'boot_module' ] as $key ) {
+            if ( array_key_exists( $key, $federated )
+                && ( ! is_string( $federated[ $key ] ) || '' === trim( $federated[ $key ] ) ) ) {
+                throw PluginValidationException::invalidManifest( "Invalid federated_module.{$key}. Must be a non-empty string." );
+            }
+        }
+
+        if ( array_key_exists( 'exposes', $federated ) ) {
+            $exposes = $federated['exposes'];
+
+            if ( ! is_array( $exposes ) || false === array_is_list( $exposes ) ) {
+                throw PluginValidationException::invalidManifest(
+                    'Invalid federated_module.exposes. Must be a list of module names, e.g. ["./Page"]; '
+                    . 'a { "./Page": "./src/Page.tsx" } map from the federation build config is not accepted.',
+                );
+            }
+
+            foreach ( $exposes as $index => $module ) {
+                if ( ! is_string( $module ) || '' === trim( $module ) ) {
+                    throw PluginValidationException::invalidManifest( "Invalid federated_module.exposes[{$index}]. Each module name must be a non-empty string." );
+                }
+            }
+        }
+
+        $unknown = array_diff( array_keys( $federated ), [ 'name', 'entry', 'exposes', 'boot_module' ] );
+
+        if ( [] !== $unknown ) {
+            logger()->warning( 'Plugin manifest federated_module declares unknown keys, which are ignored. Known keys: name, entry, exposes, boot_module.', [
+                'plugin' => $slug,
+                'keys'   => array_values( $unknown ),
+            ] );
         }
     }
 
@@ -2081,41 +2157,120 @@ class PluginManager
     }
 
     /**
-     * Assert that the framework version installed in the host satisfies the
-     * plugin's declared minimum host version (#183).
+     * Assert that the host satisfies the plugin's declared minimum versions:
+     * `min_framework_version` (or its deprecated `min_host_version` alias)
+     * against the cms-framework package version (#183), and `min_app_version`
+     * against the host application's `cms.plugins.appVersion` (#372).
      *
      * @throws IncompatiblePluginException When the host is older than required.
      */
     protected function assertHostVersionCompatible( Plugin $plugin ): void
     {
-        $required = $plugin->min_host_version;
+        $this->assertMinimumVersion(
+            $plugin,
+            IncompatiblePluginException::CONSTRAINT_FRAMEWORK,
+            $plugin->min_framework_version,
+            fn (): ?string => $this->resolveHostFrameworkVersion(),
+        );
+
+        $this->assertMinimumVersion(
+            $plugin,
+            IncompatiblePluginException::CONSTRAINT_APP,
+            $plugin->min_app_version,
+            fn (): ?string => $this->resolveHostAppVersion(),
+        );
+    }
+
+    /**
+     * Compare one declared minimum version against the version the host
+     * provides, throwing when the host is older.
+     *
+     * When the host version is unknown or not a comparable semver the check is
+     * skipped rather than failed — refusing every plugin on, say, a path-repo
+     * dev checkout would be worse than best-effort activation. A skip is logged
+     * and announced through `ap.cmsFramework.plugin.versionCheckSkipped` so a
+     * host can surface it somewhere more visible than the log.
+     *
+     * @since 2.14.0
+     *
+     * @param  Plugin  $plugin  The plugin being activated.
+     * @param  string  $constraint  `framework` or `app`.
+     * @param  string|null  $required  Declared minimum version, or null when none.
+     * @param  callable(): ?string  $resolveHostVersion  Resolves the version to compare against.
+     *
+     * @throws IncompatiblePluginException When the host is older than required.
+     */
+    protected function assertMinimumVersion( Plugin $plugin, string $constraint, ?string $required, callable $resolveHostVersion ): void
+    {
         if ( null === $required ) {
             return;
         }
 
-        $hostVersion = $this->resolveHostFrameworkVersion();
+        $key         = IncompatiblePluginException::CONSTRAINT_APP === $constraint ? 'min_app_version' : 'min_framework_version';
+        $hostVersion = $resolveHostVersion();
+
         if ( null === $hostVersion ) {
-            // Unknown host version (e.g. path-repo dev checkout). Log so it's
-            // visible, then be permissive — the framework itself is running, so
-            // outright refusing every plugin here would be worse than
-            // best-effort activation.
-            logger()->warning( "Skipping min_host_version check for plugin '{$plugin->slug}': host framework version unresolved." );
+            $this->reportSkippedVersionCheck( $plugin, $constraint, $required, null, 'unresolved', IncompatiblePluginException::CONSTRAINT_APP === $constraint
+                ? "Skipping {$key} check for plugin '{$plugin->slug}': the host application does not set cms.plugins.appVersion."
+                : "Skipping {$key} check for plugin '{$plugin->slug}': cms-framework version unresolved." );
 
             return;
         }
 
         $normalizedHost = $this->normalizeSemver( $hostVersion );
         if ( null === $normalizedHost ) {
-            // Same permissive policy for parseable-but-non-semver host versions
-            // (dev-main, 2.4.x-dev). Consistent with the null-host branch above.
-            logger()->warning( "Skipping min_host_version check for plugin '{$plugin->slug}': host version '{$hostVersion}' is not a comparable semver." );
+            // Parseable-but-non-semver versions (dev-main, 2.4.x-dev) get the
+            // same permissive policy as an unresolved one.
+            $this->reportSkippedVersionCheck( $plugin, $constraint, $required, $hostVersion, 'not_semver', "Skipping {$key} check for plugin '{$plugin->slug}': host version '{$hostVersion}' is not a comparable semver." );
 
             return;
         }
 
         if ( version_compare( $normalizedHost, $required, '<' ) ) {
-            throw IncompatiblePluginException::forVersion( $plugin->slug, $required, $hostVersion );
+            throw IncompatiblePluginException::CONSTRAINT_APP === $constraint
+                ? IncompatiblePluginException::forAppVersion( $plugin->slug, $required, $hostVersion )
+                : IncompatiblePluginException::forVersion( $plugin->slug, $required, $hostVersion );
         }
+    }
+
+    /**
+     * Log a skipped minimum-version check and fire
+     * `ap.cmsFramework.plugin.versionCheckSkipped`.
+     *
+     * @since 2.14.0
+     *
+     * @param  Plugin  $plugin  The plugin being activated.
+     * @param  string  $constraint  `framework` or `app`.
+     * @param  string  $required  Declared minimum version.
+     * @param  string|null  $hostVersion  Host version, or null when unresolved.
+     * @param  string  $reason  `unresolved` or `not_semver`.
+     * @param  string  $message  Log message.
+     */
+    protected function reportSkippedVersionCheck( Plugin $plugin, string $constraint, string $required, ?string $hostVersion, string $reason, string $message ): void
+    {
+        logger()->warning( $message );
+
+        doAction( 'ap.cmsFramework.plugin.versionCheckSkipped', $plugin->slug, [
+            'constraint'       => $constraint,
+            'required_version' => $required,
+            'host_version'     => $hostVersion,
+            'reason'           => $reason,
+        ] );
+    }
+
+    /**
+     * Resolve the host application's version from `cms.plugins.appVersion`.
+     *
+     * The framework cannot know the application's version on its own, so the
+     * host (e.g. Keystone CMS) supplies it. Returns null when unset.
+     *
+     * @since 2.14.0
+     */
+    protected function resolveHostAppVersion(): ?string
+    {
+        $version = config( 'cms.plugins.appVersion' );
+
+        return is_string( $version ) && '' !== trim( $version ) ? trim( $version ) : null;
     }
 
     /**

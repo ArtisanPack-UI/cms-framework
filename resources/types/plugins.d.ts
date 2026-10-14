@@ -202,3 +202,50 @@ export interface PluginCircularDependencyResponse {
 	/** Per-slug dependency status computed before the cycle was hit. */
 	results: Record<string, PluginDependencyStatus & { installed: boolean }>;
 }
+
+// ---------------------------------------------------------------------------
+// Host compatibility & federated modules (#371, #372)
+// ---------------------------------------------------------------------------
+
+/**
+ * Error response when a plugin's declared minimum version is newer than the
+ * host provides (HTTP 409), from `POST /api/v1/plugins/{slug}/activate` and
+ * `POST /api/v1/plugins/{slug}/update`.
+ *
+ * @since 2.14.0
+ */
+export interface PluginIncompatibleResponse {
+	/** Human-readable failure message (English; localize from the fields below). */
+	message: string;
+	/** Machine-readable error code. */
+	code: 'plugin_incompatible';
+	/** The plugin slug. */
+	plugin: string;
+	/**
+	 * Which minimum failed: `framework` for `min_framework_version` (or the
+	 * deprecated `min_host_version`), `app` for `min_app_version`.
+	 */
+	constraint: 'framework' | 'app';
+	/** The minimum version the manifest declared. */
+	required_version: string;
+	/** The version the host is running: cms-framework's, or the host application's. */
+	host_version: string;
+}
+
+/**
+ * A federated module descriptor as exposed through the
+ * `ap.plugins.federatedModules` filter, keyed by remote name.
+ *
+ * @since 2.14.0
+ */
+export interface FederatedModuleDescriptor {
+	/**
+	 * URL of the federation entry. A plugin-relative manifest entry resolves
+	 * to `…/plugins/{slug}/assets/remoteEntry.js`.
+	 */
+	entry: string;
+	/** Exposed module ids, e.g. `./SettingsPage`. */
+	exposes?: string[];
+	/** Exposed module the host preloads before the first page mounts, e.g. `./boot`. */
+	bootModule?: string;
+}

@@ -177,7 +177,19 @@ Standard RESTful resource routes for managing taxonomies (categories, tags, etc.
 | POST | `/{slug}/update` | `PluginsController@update` | `api.plugins.update` | `auth`, `can:manage-plugins` | Update plugin |
 | DELETE | `/{slug}` | `PluginsController@destroy` | `api.plugins.destroy` | `auth`, `can:manage-plugins` | Delete plugin |
 
-**Error shape**: since *2.8.0*, every failing action endpoint returns `422` with Laravel's standard `errors` bag — keyed by `plugin_zip` for the install upload and by `slug` for the actions taken against an installed plugin — so Inertia consumers get field-level errors. The one exception is activating a plugin whose `min_host_version` the host does not satisfy, which keeps its dedicated `409` response and its structured `code` / `required_version` / `host_version` payload.
+**Error shape**: since *2.8.0*, every failing action endpoint returns `422` with Laravel's standard `errors` bag — keyed by `plugin_zip` for the install upload and by `slug` for the actions taken against an installed plugin — so Inertia consumers get field-level errors. The one exception is activating or updating a plugin whose `min_framework_version` ( formerly `min_host_version` ) or `min_app_version` the host does not satisfy, which returns a dedicated `409` response with a structured `code` / `constraint` / `required_version` / `host_version` payload. `constraint` ( *2.14.0* ) is `framework` or `app`.
+
+### Plugin Assets (Web) *(2.14.0)*
+
+Public, outside the API prefix, with no middleware. It serves the build
+directory of an active plugin whose `federated_module.entry` is a relative path;
+anything else returns an empty `404`. Disable it with `cms.plugins.assetRoute`.
+It loads after every provider boots, so a host with a GET catch-all must exclude
+the `plugins/` prefix. See [Serving your bundle](plugin-authoring.md#serving-your-bundle).
+
+| Method | URI | Controller Method | Route Name | Middleware | Description |
+|--------|-----|-------------------|------------|------------|-------------|
+| GET | `/plugins/{slug}/assets/{path}` | `PluginAssetsController@show` | `plugins.assets` | none (public) | Serve a plugin's federation bundle |
 
 ---
 
@@ -187,6 +199,14 @@ Standard RESTful resource routes for managing taxonomies (categories, tags, etc.
 **Middleware**: `auth`
 
 Standard RESTful resource routes for theme management.
+
+### Theme Assets (Web) *(2.5.0)*
+
+Public, outside the API prefix, with no middleware. It serves static files from a theme's `assets/` directory.
+
+| Method | URI | Controller Method | Route Name | Middleware | Description |
+|--------|-----|-------------------|------------|------------|-------------|
+| GET | `/themes/{slug}/assets/{path}` | `ThemeAssetsController@show` | `themes.assets` | none (public) | Serve a theme asset |
 
 ---
 

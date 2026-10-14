@@ -60,11 +60,48 @@ class Plugin extends Model
     }
 
     /**
-     * Minimum framework version this plugin declares support for.
+     * Minimum cms-framework version this plugin declares support for.
+     *
+     * Reads `min_framework_version`, falling back to the deprecated
+     * `min_host_version` alias when only the old key is declared.
+     *
+     * @since 2.14.0
+     */
+    public function getMinFrameworkVersionAttribute(): ?string
+    {
+        foreach ( ['min_framework_version', 'min_host_version'] as $key ) {
+            $value = $this->meta[ $key ] ?? null;
+            if ( is_string( $value ) ) {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Minimum cms-framework version this plugin declares support for.
+     *
+     * @deprecated 2.14.0 Use `min_framework_version`. Despite its name, this
+     *             has always been compared against the cms-framework version,
+     *             not the host application's version.
      */
     public function getMinHostVersionAttribute(): ?string
     {
-        $value = $this->meta['min_host_version'] ?? null;
+        return $this->min_framework_version;
+    }
+
+    /**
+     * Minimum host-application version this plugin declares support for.
+     *
+     * Compared against `cms.plugins.appVersion`, which the host application
+     * (e.g. Keystone CMS) supplies.
+     *
+     * @since 2.14.0
+     */
+    public function getMinAppVersionAttribute(): ?string
+    {
+        $value = $this->meta['min_app_version'] ?? null;
 
         return is_string( $value ) ? $value : null;
     }
@@ -72,7 +109,7 @@ class Plugin extends Model
     /**
      * Federated frontend module descriptor from the manifest.
      *
-     * @return array{entry:string,exposes?:array<int,string>}|null
+     * @return array{name?:string,entry:string,exposes?:array<int,string>,boot_module?:string}|null
      */
     public function getFederatedModuleAttribute(): ?array
     {

@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
 beforeEach( function (): void {
@@ -881,6 +882,169 @@ describe( 'Scheduled Update Checks', function (): void {
             && $request->hasHeader( 'Authorization', 'Bearer license-key' ) );
         Http::assertSent( fn ( $request ): bool => 'https://other.example.net/other.json' === $request->url()
             && ! $request->hasHeader( 'Authorization' ) );
+    } );
+} );
+
+describe( 'Legacy update_url feed responses (#373)', function (): void {
+    beforeEach( function (): void {
+        Plugin::create( [
+            'slug'    => 'legacy-plugin',
+            'name'    => 'Legacy Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update_url' => 'https://example.com/updates/legacy-plugin'],
+        ] );
+    } );
+
+    it( 'fails and caches nothing when the feed answers with HTML', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response(
+                '<!DOCTYPE html><html><body>Log in</body></html>',
+                200,
+                ['Content-Type' => 'text/html; charset=UTF-8'],
+            ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )
+            ->toBe( ['legacy-plugin' => UpdateException::invalidJsonResponse( 'https://example.com/updates/legacy-plugin' )->getMessage()] )
+            ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' ) )->toBeNull()
+            ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
+    } );
+
+    it( 'fails when a redirect lands on an HTML login page', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( '', 302, ['Location' => 'https://example.com/login'] ),
+            'https://example.com/login'                 => Http::response( '<html>Log in</html>', 200, ['Content-Type' => 'text/html'] ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )
+            ->toBe( ['legacy-plugin' => UpdateException::invalidJsonResponse( 'https://example.com/updates/legacy-plugin' )->getMessage()] )
+            ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' ) )->toBeNull()
+            ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
+    } );
+
+    it( 'follows an https redirect to the JSON feed', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( '', 302, ['Location' => 'https://cdn.example.net/feed.json'] ),
+            'https://cdn.example.net/feed.json'         => Http::response( [
+                'version'      => '9.0.0',
+                'download_url' => 'https://cdn.example.net/legacy-plugin-9.0.0.zip',
+            ] ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )->toBe( [] )
+            ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' )['version'] )->toBe( '9.0.0' );
+    } );
+
+    it( 'fails after too many redirects', function (): void {
+        Http::fake( [
+            'https://example.com/*' => Http::response( '', 302, ['Location' => 'https://example.com/loop?token=abc123'] ),
+        ] );
+
+        $failure = $this->updateManager->refreshUpdateChecks()['failures']['legacy-plugin'];
+
+        expect( $failure )->toBe( UpdateException::versionCheckFailed( 'Update feed redirected to a non-https location or too many times.' )->getMessage() )
+            ->not->toContain( 'abc123' )
+            ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
+    } );
+
+    it( 'asks the feed for JSON', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( ['version' => '1.0.0'] ),
+        ] );
+
+        $this->updateManager->checkPluginUpdate( 'legacy-plugin' );
+
+        Http::assertSent( fn ( $request ): bool => 'https://example.com/updates/legacy-plugin' === $request->url()
+            && $request->hasHeader( 'Accept', 'application/json' ) );
+    } );
+
+    it( 'fails when the JSON is a list rather than an object', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( [['version' => '2.0.0']] ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )
+            ->toBe( ['legacy-plugin' => UpdateException::invalidJsonResponse( 'https://example.com/updates/legacy-plugin' )->getMessage()] )
+            ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
+    } );
+
+    it( 'fails with missingRequiredField when the version is absent or unusable', function ( array $payload ): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( $payload ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks()['failures'] )
+            ->toBe( ['legacy-plugin' => UpdateException::missingRequiredField( 'version' )->getMessage()] )
+            ->and( $this->updateManager->checkPluginUpdate( 'legacy-plugin' ) )->toBeNull()
+            ->and( Cache::has( 'plugin.update.legacy-plugin' ) )->toBeFalse();
+    } )->with( [
+        'empty object'    => [[]],
+        'missing version' => [['download_url' => 'https://example.com/legacy-plugin-2.0.0.zip']],
+        'blank version'   => [['version' => '  ']],
+        'non-string'      => [['version' => 2]],
+    ] );
+
+    it( 'reports and caches the update when the feed version is newer', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/legacy-plugin-2.0.0.zip',
+            ] ),
+        ] );
+
+        expect( $this->updateManager->checkPluginUpdate( 'legacy-plugin' )['version'] )->toBe( '2.0.0' )
+            ->and( Cache::get( 'plugin.update.legacy-plugin' )['version'] )->toBe( '2.0.0' );
+    } );
+
+    it( 'redacts credentials from the feed URL in the failure message', function (): void {
+        Plugin::where( 'slug', 'legacy-plugin' )->update( [
+            'meta' => ['update_url' => 'https://user:secret@example.com/updates/legacy-plugin?token=abc123'],
+        ] );
+
+        Http::fake( [
+            'example.com/*' => Http::response( '<html>Log in</html>', 200, ['Content-Type' => 'text/html'] ),
+        ] );
+
+        $failure = $this->updateManager->refreshUpdateChecks()['failures']['legacy-plugin'];
+
+        expect( $failure )->toContain( 'example.com/updates/legacy-plugin' )
+            ->not->toContain( 'secret' )
+            ->not->toContain( 'abc123' );
+    } );
+
+    it( 'refuses a redirect that downgrades the feed to http', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( '', 301, ['Location' => 'http://example.com/updates/legacy-plugin'] ),
+            'http://example.com/updates/legacy-plugin'  => Http::response( ['version' => '9.0.0', 'download_url' => 'http://evil.example/x.zip'] ),
+        ] );
+
+        expect( $this->updateManager->refreshUpdateChecks() )
+            ->toBe( [
+                'updates'  => [],
+                'failures' => ['legacy-plugin' => UpdateException::versionCheckFailed( 'Update feed redirected to a non-https location or too many times.' )->getMessage()],
+            ] );
+
+        Http::assertNotSent( fn ( $request ): bool => 'http://example.com/updates/legacy-plugin' === $request->url() );
+    } );
+
+    it( 'returns the trimmed version so the plugin row is not saved with whitespace', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( [
+                'version'      => " 2.0.0\n",
+                'download_url' => 'https://example.com/legacy-plugin-2.0.0.zip',
+            ] ),
+        ] );
+
+        expect( $this->updateManager->checkPluginUpdate( 'legacy-plugin' )['version'] )->toBe( '2.0.0' );
+    } );
+
+    it( 'caches "no update" when the feed version is the same', function (): void {
+        Http::fake( [
+            'https://example.com/updates/legacy-plugin' => Http::response( ['version' => '1.0.0'] ),
+        ] );
+
+        expect( $this->updateManager->checkPluginUpdate( 'legacy-plugin' ) )->toBeNull()
+            ->and( Cache::get( 'plugin.update.legacy-plugin' ) )->toBe( [] );
     } );
 } );
 

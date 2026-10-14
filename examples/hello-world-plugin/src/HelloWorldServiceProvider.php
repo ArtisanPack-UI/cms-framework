@@ -46,9 +46,12 @@ final class HelloWorldServiceProvider extends PluginServiceProvider
             'order'      => 60,
         ] );
 
+        // A path relative to the plugin directory: the framework serves
+        // `dist/` at `/plugins/hello-world/assets/` and registers that URL.
+        // Pass a URL, not `$this->pluginPath()`, which is a filesystem path.
         $this->registerFederatedModule(
             'helloWorldAdmin',
-            $this->pluginPath( 'dist/remoteEntry.js' ),
+            'dist/remoteEntry.js',
             ['./HelloWorldPanel', './MapPickerEditor'],
         );
 

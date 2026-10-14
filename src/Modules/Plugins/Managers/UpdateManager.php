@@ -8,6 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUp
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
@@ -18,6 +19,8 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginValidationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Exception;
+use GuzzleHttp\Exception\RequestException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
@@ -345,7 +348,7 @@ class UpdateManager
             return true;
         } catch ( IncompatiblePluginException $e ) {
             // The DB row was already updated with the new manifest at step 6,
-            // but the reactivate at step 7 rejected the new min_host_version.
+            // but the reactivate at step 7 rejected the new min_framework_version / min_app_version.
             // Restore files AND DB so the plugin isn't stranded pointing at a
             // version whose files no longer exist.
             $this->restoreFromBackup( $plugin->slug, $backupPath );
@@ -529,9 +532,13 @@ class UpdateManager
     /**
      * Check for an update through the legacy custom JSON feed.
      *
+     * @since 2.14.0 Rejects non-JSON bodies, a missing `version` and redirects off https instead of reporting
+     *              "up to date".
+     *
      * @param  Plugin  $plugin  Plugin to check.
      *
-     * @throws UpdateException When the feed answers with a non-2xx status.
+     * @throws UpdateException When the feed answers with a non-2xx status, redirects off https or more than five
+     *                         times, or returns a body that is not a JSON object or has no usable `version`.
      *
      * @return array|null Raw feed payload, or null when already current.
      */
@@ -548,8 +555,36 @@ class UpdateManager
             return null;
         }
 
-        $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
-            ->get( $feedUrl );
+        // Follow redirects ( release-download URLs and CDNs answer `302` ), but
+        // never off https: the feed carries the download URL and its sha256,
+        // so a downgrade would let a network attacker choose both. A feed
+        // behind auth that redirects to its login page still fails below,
+        // since the page is not a JSON object.
+        try {
+            $response = Http::timeout( config( 'cms.plugins.updateCheckTimeout' ) )
+                ->acceptJson()
+                ->withOptions( [
+                    'allow_redirects' => [
+                        'max'       => 5,
+                        'strict'    => true,
+                        'referer'   => false,
+                        'protocols' => config( 'cms.updates.allow_insecure_transport', false )
+                            ? ['http', 'https']
+                            : ['https'],
+                    ],
+                ] )
+                ->get( $feedUrl );
+        } catch ( ConnectionException | RequestException $e ) {
+            // Guzzle throws, rather than returning the 3xx, for a redirect to a
+            // disallowed protocol or past the limit, and Laravel may wrap that
+            // in a ConnectionException. The target is left out of the message:
+            // it may carry a token. Real connection failures rethrow as before.
+            if ( $this->isRefusedRedirect( $e ) ) {
+                throw UpdateException::versionCheckFailed( 'Update feed redirected to a non-https location or too many times.' );
+            }
+
+            throw $e;
+        }
 
         // Thrown, not `null`: `runUpdateCheck()` would cache a null as "no
         // update" for the whole TTL, and a scheduled check would never report
@@ -560,11 +595,50 @@ class UpdateManager
 
         $updateData = $response->json();
 
-        if ( $this->isUpdateAvailable( $plugin->version, $updateData['version'] ?? '' ) ) {
+        if ( ! is_array( $updateData ) || ( [] !== $updateData && array_is_list( $updateData ) ) ) {
+            // The message is logged and reported by the scheduled check, so
+            // strip any token the feed URL carries.
+            throw UpdateException::invalidJsonResponse( MetadataClient::redactUrlCredentials( $feedUrl ) );
+        }
+
+        $latestVersion = $this->nonEmptyString( $updateData['version'] ?? null );
+
+        if ( null === $latestVersion ) {
+            throw UpdateException::missingRequiredField( 'version' );
+        }
+
+        if ( $this->isUpdateAvailable( $plugin->version, $latestVersion ) ) {
+            // `updatePlugin()` writes this version to the plugin row.
+            $updateData['version'] = $latestVersion;
+
             return $updateData;
         }
 
         return null;
+    }
+
+    /**
+     * Whether a failed feed request is a redirect the client refused to
+     * follow: off https, or past the redirect limit.
+     *
+     * Guzzle raises both as a `RequestException` carrying the 3xx response;
+     * Laravel's client may wrap it in a `ConnectionException`.
+     *
+     * @since 2.14.0
+     *
+     * @param  ConnectionException|RequestException  $e  The exception the request raised.
+     */
+    protected function isRefusedRedirect( ConnectionException|RequestException $e ): bool
+    {
+        $cause = $e instanceof ConnectionException ? $e->getPrevious() : $e;
+
+        if ( ! $cause instanceof RequestException || ! $cause->hasResponse() ) {
+            return false;
+        }
+
+        $status = $cause->getResponse()->getStatusCode();
+
+        return $status >= 300 && $status < 400;
     }
 
     /**
