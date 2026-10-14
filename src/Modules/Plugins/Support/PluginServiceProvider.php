@@ -403,7 +403,6 @@ abstract class PluginServiceProvider extends ServiceProvider
         return false;
     }
 
-
     /**
      * A directory path with forward slashes and exactly one trailing slash,
      * for prefix comparisons.
@@ -416,6 +415,7 @@ abstract class PluginServiceProvider extends ServiceProvider
     {
         return rtrim( str_replace( '\\', '/', $path ), '/' ) . '/';
     }
+
     /**
      * Bridge the manifest's singular `federated_module` object.
      *
