@@ -131,6 +131,17 @@ inactive plugin is updated ( an active plugin's update already clears through
 its deactivate/activate ). It's convenient in development, but in production
 it deletes the compiled caches that `route:cache` / `config:cache` built.
 
+### Host Application Version
+
+`cms.plugins.appVersion` ( env `CMS_APP_VERSION`, default `null` ), *2.14.0*,
+is the host application's own semver version. A plugin's `min_app_version`
+manifest key is compared against it on activation. The framework cannot detect
+it, so set it from your application's own version, e.g.
+`'appVersion' => config( 'keystone.version' )`. While it is `null`,
+`min_app_version` checks are skipped with a logged warning and the
+`ap.cmsFramework.plugin.versionCheckSkipped` action. See
+[Versioning & host compatibility](plugin-authoring.md#versioning--host-compatibility).
+
 ## Advanced Configuration
 
 ### Custom Route Prefix

@@ -345,7 +345,7 @@ class UpdateManager
             return true;
         } catch ( IncompatiblePluginException $e ) {
             // The DB row was already updated with the new manifest at step 6,
-            // but the reactivate at step 7 rejected the new min_host_version.
+            // but the reactivate at step 7 rejected the new min_framework_version / min_app_version.
             // Restore files AND DB so the plugin isn't stranded pointing at a
             // version whose files no longer exist.
             $this->restoreFromBackup( $plugin->slug, $backupPath );

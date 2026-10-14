@@ -31,6 +31,49 @@ describe( 'min_host_version', function (): void {
     } );
 } );
 
+describe( 'min_framework_version and min_app_version', function (): void {
+    it( 'accepts valid semvers', function ( string $key ): void {
+        $manifest = array_merge( $this->base, [$key => '2.4.0'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } )->with( ['min_framework_version', 'min_app_version'] );
+
+    it( 'rejects malformed version strings', function ( string $key ): void {
+        $manifest = array_merge( $this->base, [$key => '2.4'] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, "Invalid {$key}" );
+    } )->with( ['min_framework_version', 'min_app_version'] );
+
+    it( 'rejects a non-string version', function (): void {
+        $manifest = array_merge( $this->base, ['min_app_version' => 2] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'Invalid min_app_version' );
+    } );
+
+    it( 'accepts the deprecated alias alongside min_framework_version when they agree', function (): void {
+        $manifest = array_merge( $this->base, [
+            'min_framework_version' => '2.4.0',
+            'min_host_version'      => '2.4.0',
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->not->toThrow( PluginValidationException::class );
+    } );
+
+    it( 'rejects the deprecated alias when it disagrees with min_framework_version', function (): void {
+        $manifest = array_merge( $this->base, [
+            'min_framework_version' => '2.4.0',
+            'min_host_version'      => '1.0.0',
+        ] );
+
+        expect( fn () => invokeMethod( $this->manager, 'validateManifest', [$manifest] ) )
+            ->toThrow( PluginValidationException::class, 'must match it when both are declared' );
+    } );
+} );
+
 describe( 'federated_module', function (): void {
     it( 'accepts an entry-only descriptor', function (): void {
         $manifest = array_merge( $this->base, [
@@ -510,10 +553,23 @@ describe( 'Plugin model accessors', function (): void {
             ->and( $plugin->rollback_migrations_on_delete )->toBeTrue();
     } );
 
+    it( 'reads min_framework_version, falling back to the deprecated min_host_version', function (): void {
+        $canonical = new Plugin( ['meta' => ['min_framework_version' => '2.14.0', 'min_app_version' => '1.2.0']] );
+        $legacy    = new Plugin( ['meta' => ['min_host_version' => '2.4.0']] );
+
+        expect( $canonical->min_framework_version )->toBe( '2.14.0' )
+            ->and( $canonical->min_host_version )->toBe( '2.14.0' )
+            ->and( $canonical->min_app_version )->toBe( '1.2.0' )
+            ->and( $legacy->min_framework_version )->toBe( '2.4.0' )
+            ->and( $legacy->min_app_version )->toBeNull();
+    } );
+
     it( 'returns sensible defaults when manifest fields are absent', function (): void {
         $plugin = new Plugin( ['slug' => 'x', 'name' => 'X', 'version' => '1.0.0', 'meta' => []] );
 
         expect( $plugin->min_host_version )->toBeNull()
+            ->and( $plugin->min_framework_version )->toBeNull()
+            ->and( $plugin->min_app_version )->toBeNull()
             ->and( $plugin->federated_module )->toBeNull()
             ->and( $plugin->nav_entries )->toBe( [] )
             ->and( $plugin->declared_permissions )->toBe( [] )

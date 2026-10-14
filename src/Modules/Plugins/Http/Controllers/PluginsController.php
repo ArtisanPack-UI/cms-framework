@@ -129,9 +129,10 @@ class PluginsController extends Controller
     /**
      * Activates an installed plugin.
      *
-     * A plugin that declares a `min_host_version` the host does not satisfy
-     * keeps its dedicated 409 response, whose structured payload carries the
-     * version numbers a generic error bag cannot express.
+     * A plugin that declares a `min_framework_version` or `min_app_version`
+     * the host does not satisfy keeps its dedicated 409 response, whose
+     * structured payload carries the version numbers a generic error bag
+     * cannot express.
      *
      * Endpoint: POST /api/v1/plugins/{slug}/activate
      *
@@ -152,6 +153,7 @@ class PluginsController extends Controller
                 'message'          => $e->getMessage(),
                 'code'             => 'plugin_incompatible',
                 'plugin'           => $e->pluginSlug,
+                'constraint'       => $e->constraint,
                 'required_version' => $e->requiredVersion,
                 'host_version'     => $e->hostVersion,
             ], 409 );
@@ -300,13 +302,15 @@ class PluginsController extends Controller
             $updated = $this->updateManager->updatePlugin( $slug );
         } catch ( IncompatiblePluginException $e ) {
             // `UpdateManager` rethrows this one as-is: the new version's
-            // `min_host_version` is not satisfied. Render the same structured 409
-            // that `activate()` does, whose payload carries the version numbers a
-            // generic error bag cannot express, instead of a generic 422.
+            // `min_framework_version` / `min_app_version` is not satisfied.
+            // Render the same structured 409 that `activate()` does, whose
+            // payload carries the version numbers a generic error bag cannot
+            // express, instead of a generic 422.
             return response()->json( [
                 'message'          => $e->getMessage(),
                 'code'             => 'plugin_incompatible',
                 'plugin'           => $e->pluginSlug,
+                'constraint'       => $e->constraint,
                 'required_version' => $e->requiredVersion,
                 'host_version'     => $e->hostVersion,
             ], 409 );

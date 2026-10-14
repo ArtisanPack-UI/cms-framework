@@ -340,6 +340,8 @@ ship a Module Federation runtime — React admin components.
 - Start with the [Plugin Author Guide](./docs/plugin-authoring.md).
 - Copy the [`examples/hello-world-plugin/`](./examples/hello-world-plugin/) skeleton for a working reference.
 
+A plugin can declare a minimum version for both things it runs inside. `min_framework_version` is the minimum **cms-framework** version, and `min_app_version` is the minimum **host application** version, compared against the host's `cms.plugins.appVersion` config. `min_host_version` is a deprecated alias of `min_framework_version`: despite its name, it never checked the host application's version. See [Versioning & host compatibility](./docs/plugin-authoring.md#versioning--host-compatibility).
+
 ## Experimental Features
 
 The following features are **experimental** and should be used with caution in

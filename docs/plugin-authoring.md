@@ -126,6 +126,9 @@ with no `register*()` call required. See
 | `author`            | object\|string  | `{ name, email?, url? }`, or a plain name string. |
 | `homepage`          | string ( URL )  | Documentation or marketing URL. |
 | `license`           | string          | SPDX identifier ( `MIT`, `Apache-2.0`, etc. ). |
+| `min_framework_version` | string ( semver ) | *2.14.0*. Minimum **cms-framework** package version, e.g. `"2.14.0"`. Not the host application's version; use `min_app_version` for that. Enforced on activation. See [Versioning & host compatibility](#versioning--host-compatibility). |
+| `min_host_version`  | string ( semver ) | **Deprecated** since *2.14.0*: alias of `min_framework_version`. Despite the name, it is compared against the cms-framework version, not the host application's. |
+| `min_app_version`   | string ( semver ) | *2.14.0*. Minimum version of the **host application** ( e.g. Keystone CMS ), compared against the host's `cms.plugins.appVersion` config. Enforced on activation. See [Versioning & host compatibility](#versioning--host-compatibility). |
 | `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `conflicts`         | object          | Map of plugin slug to version constraint. Activation is refused when a matching plugin is installed. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Resolved from Packagist on activation. See [Composer-package dependencies](#composer-package-dependencies). |
@@ -553,17 +556,84 @@ Keystone can consume.
 
 ## Versioning & host compatibility
 
-Semver your plugin. Declare host-compatibility in `plugin.json`:
+Semver your plugin. A plugin runs inside two versioned things, and the manifest
+can declare a minimum for each:
+
+| Key | Compared against | Where the version comes from |
+| --- | --- | --- |
+| `min_framework_version` | The **cms-framework** package | The framework's `composer.json`, then Composer's `InstalledVersions`. |
+| `min_app_version` | The **host application** ( e.g. Keystone CMS ) | The host's `cms.plugins.appVersion` config. |
 
 ```json
-"requires": {
-    "cms-framework": "^2.4",
-    "php": "^8.2"
+"min_framework_version": "2.14.0",
+"min_app_version": "1.2.0"
+```
+
+> **`min_host_version` is the minimum _cms-framework_ version, not the host
+> application's.** It was renamed to `min_framework_version` in *2.14.0* and is
+> still honored as a deprecated alias. A plugin that wrote
+> `"min_host_version": "1.0.0"` meaning "Keystone 1.0" was checked against
+> cms-framework 2.x, which always passes. Use `min_app_version` for the host
+> application.
+>
+> Hosts running cms-framework older than *2.14.0* read only `min_host_version`
+> and ignore `min_framework_version` and `min_app_version`. To keep a framework
+> minimum enforced there, declare `min_host_version` with the same value as
+> `min_framework_version` ( or use a `requires.cms-framework` constraint, below ).
+> Declaring both keys with different values is refused at validation.
+
+`PluginManager::activate()` checks both before any state changes and throws
+`IncompatiblePluginException` when the host is older than required. Its
+`constraint` property is `framework` or `app`. Over HTTP the activate and update
+endpoints return `409` with code `plugin_incompatible` and the details:
+
+```json
+{
+    "message": "Plugin 'google' requires host application version 1.2.0 or higher; host is running 1.1.0.",
+    "code": "plugin_incompatible",
+    "plugin": "google",
+    "constraint": "app",
+    "required_version": "1.2.0",
+    "host_version": "1.1.0"
 }
 ```
 
-`PluginManager::install()` refuses installation when the running framework
-version does not satisfy the `cms-framework` constraint.
+The framework cannot detect the host application's version, so the host
+supplies it in `config/cms/plugins.php`:
+
+```php
+'appVersion' => config( 'keystone.version' ),
+```
+
+**A check that cannot run is skipped, not failed.** When the version to compare
+against is unknown ( the host sets no `appVersion`, or cms-framework runs from a
+path-repo checkout with no resolvable version ) or is not a comparable semver
+( `dev-main` ), activation goes ahead. The framework logs a warning and fires
+the `ap.cmsFramework.plugin.versionCheckSkipped` action so a host can surface
+it in its admin UI:
+
+```php
+addAction( 'ap.cmsFramework.plugin.versionCheckSkipped', function ( string $slug, array $details ): void {
+    // $details = [
+    //     'constraint'       => 'app',        // or 'framework'
+    //     'required_version' => '1.2.0',
+    //     'host_version'     => null,         // null when unresolved
+    //     'reason'           => 'unresolved', // or 'not_semver'
+    // ];
+} );
+```
+
+For a range rather than a minimum, declare a constraint under `requires`
+instead. It is checked against the cms-framework version on activation, and an
+unmet constraint fails with `plugin_dependencies_unsatisfied` ( see
+[Plugin dependencies & conflicts](#plugin-dependencies--conflicts) ):
+
+```json
+"requires": {
+    "cms-framework": "^2.14",
+    "php": "^8.2"
+}
+```
 
 ## Plugin dependencies & conflicts
 
