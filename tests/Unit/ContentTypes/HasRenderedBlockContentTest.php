@@ -24,18 +24,43 @@ namespace ArtisanPackUI\VisualEditorRendererBlade {
 
             public static bool $throwOnRender = false;
 
+            public static mixed $lastBindingContext = null;
+
             /**
              * @param  array<int, array<string, mixed>>  $tree
              */
-            public function render( array $tree ): string
+            public function render( array $tree, mixed $bindingContext = null ): string
             {
-                self::$lastTree = $tree;
+                self::$lastTree           = $tree;
+                self::$lastBindingContext = $bindingContext;
 
                 if ( self::$throwOnRender ) {
                     throw new \RuntimeException( 'stub renderer failure' );
                 }
 
                 return self::$stubOutput;
+            }
+        }
+    }
+}
+
+namespace ArtisanPackUI\VisualEditor\Services\Bindings {
+
+    if ( ! class_exists( BindingContext::class, false ) ) {
+        /**
+         * Test-only stand-in for visual-editor's BindingContext, which is
+         * not autoloadable in this suite for the same reason as the
+         * BlockRenderer stub above.
+         */
+        class BindingContext
+        {
+            public function __construct( protected ?\Illuminate\Database\Eloquent\Model $model = null )
+            {
+            }
+
+            public function model(): ?\Illuminate\Database\Eloquent\Model
+            {
+                return $this->model;
             }
         }
     }
@@ -48,6 +73,7 @@ namespace {
     use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
     use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
     use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
+    use ArtisanPackUI\VisualEditor\Services\Bindings\BindingContext;
     use ArtisanPackUI\VisualEditorRendererBlade\BlockRenderer;
     use Illuminate\Database\Eloquent\Model;
 
@@ -57,6 +83,8 @@ namespace {
         BlockRenderer::$lastTree      = null;
         BlockRenderer::$stubOutput    = '<p>stubbed render</p>';
         BlockRenderer::$throwOnRender = false;
+
+        BlockRenderer::$lastBindingContext = null;
     } );
 
     test( 'rendered_content accessor walks block tree through the renderer', function (): void {
@@ -82,6 +110,32 @@ namespace {
 
         expect( $post->fresh()->rendered_content )->toBe( '<p>stubbed render</p>' );
         expect( BlockRenderer::$lastTree )->toBe( $blocks );
+    } );
+
+    test( 'rendered_content renders with a binding context for the model', function (): void {
+        $user = TestUser::create( [
+            'name'     => 'Author',
+            'email'    => 'author@example.com',
+            'password' => 'password',
+        ] );
+
+        $post = Post::create( [
+            'title'     => 'Bound Post',
+            'slug'      => 'bound-post',
+            'author_id' => $user->id,
+            'status'    => 'draft',
+        ] );
+
+        $post->setBlockContent( [
+            ['blockName' => 'core/paragraph', 'attrs' => [], 'innerHTML' => '<p>Hi</p>'],
+        ] );
+        $post->save();
+
+        $fresh = $post->fresh();
+        $fresh->rendered_content;
+
+        expect( BlockRenderer::$lastBindingContext )->toBeInstanceOf( BindingContext::class );
+        expect( BlockRenderer::$lastBindingContext->model() )->toBe( $fresh );
     } );
 
     test( 'renderContent() method returns the same value as the accessor', function (): void {

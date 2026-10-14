@@ -67,8 +67,20 @@ class GlobalStylesEmitter
      * selector (`.wp-block-quote a`, `.wp-block-artisanpack-card h1,
      * .wp-block-artisanpack-card h2, …`) so the child selector stays
      * scoped to the block (#208).
+     *
+     * v5: wrap the `.has-{slug}-color` rule for the `text`, `link` and
+     * `border` slugs in `:where()` so it no longer overrides a block's
+     * picked color through the matching block-support marker class.
      */
-    private const SCHEMA_VERSION = 'v4';
+    private const SCHEMA_VERSION = 'v5';
+
+    /**
+     * Palette slugs whose `.has-{slug}-color` rule shares its name with a
+     * block-support marker class. See {@see self::colorUtilitySelector()}.
+     *
+     * @since 2.14.1
+     */
+    private const MARKER_COLOR_SLUGS = ['text', 'link', 'border'];
 
     /**
      * Flat theme.json → CSS property map for scalar-leaf declarations.
@@ -268,6 +280,28 @@ class GlobalStylesEmitter
     }
 
     /**
+     * Selector for a palette slug's `.has-{slug}-color` rule.
+     *
+     * The `text`, `link` and `border` slugs produce a class that is also
+     * a block-support marker (`has-text-color`, `has-link-color`,
+     * `has-border-color`), which every block with a custom text, link or
+     * border color carries. A plain rule for one of them overrides the
+     * color the author picked whenever it's emitted after that pick's own
+     * `.has-{slug}-color` rule, so it's wrapped in `:where()`: zero
+     * specificity lets the picked slug win, and a block whose pick really
+     * is `text` keeps it through `!important`. Mirrors visual-editor's
+     * `PresetRegistry::colorUtilitySelector()`.
+     *
+     * @since 2.14.1
+     */
+    protected function colorUtilitySelector( string $slug ): string
+    {
+        $selector = '.has-' . $slug . '-color';
+
+        return in_array( $slug, self::MARKER_COLOR_SLUGS, true ) ? ':where(' . $selector . ')' : $selector;
+    }
+
+    /**
      * Emit `.has-{slug}-color`, `-background-color`, `-border-color`,
      * `-font-size`, and `-gradient-background` rules that bind each
      * preset slug to its matching `--wp--preset--*` custom property.
@@ -293,7 +327,7 @@ class GlobalStylesEmitter
         foreach ( $this->presetSlugs( $palette, 'color' ) as $slug ) {
             $var = '--wp--preset--color--' . $slug;
 
-            $rules[] = '.has-' . $slug . '-color { color: var(' . $var . ') !important; }';
+            $rules[] = $this->colorUtilitySelector( $slug ) . ' { color: var(' . $var . ') !important; }';
             $rules[] = '.has-' . $slug . '-background-color { background-color: var(' . $var . ') !important; }';
             $rules[] = '.has-' . $slug . '-border-color { border-color: var(' . $var . ') !important; }';
         }
