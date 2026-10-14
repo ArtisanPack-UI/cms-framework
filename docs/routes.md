@@ -177,7 +177,7 @@ Standard RESTful resource routes for managing taxonomies (categories, tags, etc.
 | POST | `/{slug}/update` | `PluginsController@update` | `api.plugins.update` | `auth`, `can:manage-plugins` | Update plugin |
 | DELETE | `/{slug}` | `PluginsController@destroy` | `api.plugins.destroy` | `auth`, `can:manage-plugins` | Delete plugin |
 
-**Error shape**: since *2.8.0*, every failing action endpoint returns `422` with Laravel's standard `errors` bag — keyed by `plugin_zip` for the install upload and by `slug` for the actions taken against an installed plugin — so Inertia consumers get field-level errors. The one exception is activating a plugin whose `min_framework_version` ( formerly `min_host_version` ) or `min_app_version` the host does not satisfy, which keeps its dedicated `409` response and its structured `code` / `constraint` / `required_version` / `host_version` payload. `constraint` ( *2.14.0* ) is `framework` or `app`.
+**Error shape**: since *2.8.0*, every failing action endpoint returns `422` with Laravel's standard `errors` bag — keyed by `plugin_zip` for the install upload and by `slug` for the actions taken against an installed plugin — so Inertia consumers get field-level errors. The one exception is activating or updating a plugin whose `min_framework_version` ( formerly `min_host_version` ) or `min_app_version` the host does not satisfy, which returns a dedicated `409` response with a structured `code` / `constraint` / `required_version` / `host_version` payload. `constraint` ( *2.14.0* ) is `framework` or `app`.
 
 ---
 
