@@ -70,6 +70,7 @@ class FederatedModuleEntry
             return true;
         }
 
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var( FILTER_VALIDATE_IP ) is the validation; only its boolean result is used.
         return false !== filter_var( $host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 ) && str_starts_with( $host, '127.' );
     }
 
@@ -131,6 +132,7 @@ class FederatedModuleEntry
      */
     protected static function parseUrl( string $entry ): ?array
     {
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- filter_var( FILTER_VALIDATE_URL ) is the validation; only its boolean result is used.
         if ( false === filter_var( $entry, FILTER_VALIDATE_URL ) ) {
             return null;
         }
