@@ -76,11 +76,13 @@ class GlobalStylesEmitter
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
-     * block-support marker class. See {@see self::colorUtilitySelector()}.
+     * block-support marker class. See {@see self::colorUtilityRules()}.
+     * Listed in emission order: `text` comes last so its fallback rule
+     * wins the cases markup alone can't disambiguate.
      *
      * @since 2.14.1
      */
-    private const MARKER_COLOR_SLUGS = ['text', 'link', 'border'];
+    private const MARKER_COLOR_SLUGS = ['link', 'border', 'text'];
 
     /**
      * Attribute selectors matching an inline `color:` declaration in the
@@ -290,23 +292,67 @@ class GlobalStylesEmitter
     }
 
     /**
+     * The `.has-{slug}-color` rules for a palette, in emission order.
+     *
+     * Ordinary slugs get the plain WordPress rule. The `text`, `link` and
+     * `border` slugs produce a class that is also a block-support marker
+     * (`has-text-color`, `has-link-color`, `has-border-color`), which
+     * blocks carry for any custom text, link or border color, so a plain
+     * rule would force the slug's color onto blocks that never picked it.
+     * Each of those slugs gets two rules instead:
+     *
+     *  - `.has-{slug}-color-preset` — the exact pick, which visual-editor's
+     *    Blade renderer adds when a block picks the slug as its text color.
+     *  - a zero-specificity fallback ({@see self::colorUtilitySelector()})
+     *    for markup the renderer doesn't build (the editor canvas, saved
+     *    Gutenberg HTML), where the class set is the only signal. The
+     *    fallbacks come last, `text` after `link` / `border`, so a block
+     *    that picked `text` and also has a link or border color keeps its
+     *    text color.
+     *
+     * Mirrors visual-editor's `PresetRegistry::colorUtilityRules()`.
+     *
+     * @since 2.14.1
+     *
+     * @param  array<int, string>  $slugs  Kebab-cased palette slugs, in palette order.
+     *
+     * @return array<int, string>
+     */
+    protected function colorUtilityRules( array $slugs ): array
+    {
+        $rules = [];
+
+        foreach ( array_unique( $slugs ) as $slug ) {
+            if ( ! in_array( $slug, self::MARKER_COLOR_SLUGS, true ) ) {
+                $rules[] = '.has-' . $slug . '-color { color: var(--wp--preset--color--' . $slug . ') !important; }';
+            }
+        }
+
+        foreach ( self::MARKER_COLOR_SLUGS as $slug ) {
+            if ( in_array( $slug, $slugs, true ) ) {
+                $rules[] = '.has-' . $slug . '-color-preset { color: var(--wp--preset--color--' . $slug . ') !important; }';
+            }
+        }
+
+        foreach ( self::MARKER_COLOR_SLUGS as $slug ) {
+            if ( in_array( $slug, $slugs, true ) ) {
+                $rules[] = $this->colorUtilitySelector( $slug ) . ' { color: var(--wp--preset--color--' . $slug . ') !important; }';
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
      * Selector for a palette slug's `.has-{slug}-color` rule.
      *
-     * The `text`, `link` and `border` slugs produce a class that is also
-     * a block-support marker (`has-text-color`, `has-link-color`,
-     * `has-border-color`). Blocks carry those markers for any custom
-     * text, link or border color, so a plain rule for one of these slugs
-     * forces its color onto blocks that never picked it: a palette pick
-     * emitted earlier in the sheet, a custom hex color (an inline
-     * `color:` loses to any `!important` rule), and the text of a block
-     * that only set a link or border color.
-     *
-     * The colliding selector only matches a real text-color pick of that
-     * slug: `link` / `border` also require `has-text-color` (every text
-     * pick adds it), elements with an inline `color:` are skipped, and
-     * `:where()` keeps it at zero specificity so another palette slug's
-     * class wins. Mirrors visual-editor's
-     * `PresetRegistry::colorUtilitySelector()`.
+     * Ordinary slugs keep the plain class. For the marker slugs this is
+     * the fallback rule's selector (see {@see self::colorUtilityRules()}):
+     * `link` / `border` also require `has-text-color` (every text pick
+     * adds it), elements with an inline `color:` (a custom color) are
+     * skipped, and `:where()` keeps it at zero specificity so another
+     * palette slug's class or the exact `.has-{slug}-color-preset` rule
+     * wins. Mirrors visual-editor's `PresetRegistry::colorUtilitySelector()`.
      *
      * @since 2.14.1
      */
@@ -348,13 +394,16 @@ class GlobalStylesEmitter
             ? $settings['color']['palette']
             : [];
 
-        foreach ( $this->presetSlugs( $palette, 'color' ) as $slug ) {
+        $colorSlugs = $this->presetSlugs( $palette, 'color' );
+
+        foreach ( $colorSlugs as $slug ) {
             $var = '--wp--preset--color--' . $slug;
 
-            $rules[] = $this->colorUtilitySelector( $slug ) . ' { color: var(' . $var . ') !important; }';
             $rules[] = '.has-' . $slug . '-background-color { background-color: var(' . $var . ') !important; }';
             $rules[] = '.has-' . $slug . '-border-color { border-color: var(' . $var . ') !important; }';
         }
+
+        array_push( $rules, ...$this->colorUtilityRules( $colorSlugs ) );
 
         $fontSizes = is_array( $settings['typography']['fontSizes'] ?? null )
             ? $settings['typography']['fontSizes']

@@ -214,6 +214,42 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
             ->not->toMatch( '/(^|\s)\.has-(text|link|border)-color \{/' );
     } );
 
+    it( 'emits exact marker-slug pick rules and puts the text fallback after the link and border fallbacks', function (): void {
+        // A block that picked `text` and also has a border or link color
+        // carries `has-text-color has-border-color` / `has-link-color`, so
+        // both fallbacks match at equal (zero) specificity and the later
+        // one wins. The Blade renderer adds `has-text-color-preset` for an
+        // exact match; for other markup the `text` fallback comes last.
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'text', 'color' => '#ffffff'],
+                        ['slug' => 'border', 'color' => '#374151'],
+                        ['slug' => 'link', 'color' => '#00e5ff'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        $textPick       = strpos( $css, '.has-text-color-preset {' );
+        $linkFallback   = strpos( $css, ':where(.has-link-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"]))' );
+        $borderFallback = strpos( $css, ':where(.has-border-color.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"]))' );
+        $textFallback   = strpos( $css, ':where(.has-text-color:not([style^="color:"], [style*=" color:"], [style*=";color:"]))' );
+
+        expect( $css )
+            ->toContain( '.has-text-color-preset { color: var(--wp--preset--color--text) !important; }' )
+            ->toContain( '.has-border-color-preset { color: var(--wp--preset--color--border) !important; }' )
+            ->toContain( '.has-link-color-preset { color: var(--wp--preset--color--link) !important; }' )
+            ->and( $textPick )->toBeLessThan( $linkFallback )
+            ->and( $linkFallback )->toBeLessThan( $borderFallback )
+            ->and( $borderFallback )->toBeLessThan( $textFallback );
+    } );
+
     it( 'emits `.has-{slug}-font-size` rules for each font-size preset (Keystone #53)', function (): void {
         $resolved = makeResolved(
             settings: [
