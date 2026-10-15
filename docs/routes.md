@@ -238,7 +238,7 @@ See [[settings/Site Settings]] for the envelope shape.
 **Base Path**: `/api/v1/`
 **Middleware**: `auth:sanctum`, plus `AuthorizeSiteEditorAccess` *(2.15.0)*
 
-Since *2.15.0* every Site Editor route needs the `read` ability (`manage-content`, or the structure ability), and every create, update and delete also needs its group's ability: `manage-themes` for templates, template parts, global styles, menus, menu items and menu locations, `manage-content` for patterns and synced blocks. Users without them get `403`. See [[site-editor/API Reference#authorization]].
+Since *2.15.0* every Site Editor route needs the `read` ability (`manage-content`, or the structure ability), and every create, update and delete also needs its group's ability: `manage-themes` for templates, template parts, global styles, menus, menu items and menu locations, `manage-content` for patterns and synced blocks. Users without them get `403`. See [API Reference: Authorization](site-editor/API-Reference.md#authorization).
 
 The Site Editor module exposes WP-shape endpoints for templates, parts, patterns, global styles, and menus. See [[site-editor/API Reference]] for the full listing and response shapes.
 

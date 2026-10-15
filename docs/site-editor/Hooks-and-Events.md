@@ -80,7 +80,7 @@ The output is cached on a content-hash key; the cache busts on `GlobalStyles` mo
 | `ap.cmsFramework.abilities.siteEditor.structure` | `(string $ability)` | 2.15.0 | Ability for writes to templates, template parts, global styles and menus. Default `manage-themes`. |
 | `ap.cmsFramework.abilities.siteEditor.content` | `(string $ability)` | 2.15.0 | Ability for writes to patterns and synced blocks. Default `manage-content`. |
 
-See [[site-editor/API Reference#authorization]] for how the abilities combine.
+See [API Reference: Authorization](API-Reference.md#authorization) for how the abilities combine.
 
 ```php
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;

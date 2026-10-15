@@ -15,7 +15,7 @@ Themes may now ship an optional `themes/{slug}/editor.css` alongside the existin
 
 Use `editor.css` for bare element selectors (`h1`, `blockquote`, `pre`) that should apply on the site-editor canvas without leaking into inspector-panel mini-previews.
 
-Since 2.15.0 the global-styles element rules use WordPress's flat `:root :where(…)` specificity (0,1,0). A bare element selector (0,0,1) in `style.css` or `editor.css` no longer overrides a `theme.json` element style for the same element, even though it loads later. Set those values in `theme.json`, or use a class selector. See [[site-editor/Global-Styles#specificity]].
+Since 2.15.0 the global-styles element rules use WordPress's flat `:root :where(…)` specificity (0,1,0). A bare element selector (0,0,1) in `style.css` or `editor.css` no longer overrides a `theme.json` element style for the same element, even though it loads later. Set those values in `theme.json`, or use a class selector. See [Global Styles: Specificity](../site-editor/Global-Styles.md#specificity).
 
 ## Reading theme stylesheets from PHP
 

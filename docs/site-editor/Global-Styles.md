@@ -197,7 +197,7 @@ Themes opt in by including `@cmsGlobalStyles` in their root layout. The directiv
 
 ## REST endpoints
 
-Singleton-per-theme — no `{slug}` segment. Since 2.15.0 every endpoint needs the Site Editor `read` ability, and `PUT` / `DELETE` also need the `structure` ability (`manage-themes` by default); see [[site-editor/API Reference#authorization]].
+Singleton-per-theme — no `{slug}` segment. Since 2.15.0 every endpoint needs the Site Editor `read` ability, and `PUT` / `DELETE` also need the `structure` ability (`manage-themes` by default); see [API Reference: Authorization](API-Reference.md#authorization).
 
 | Method | Path | Purpose |
 |---|---|---|

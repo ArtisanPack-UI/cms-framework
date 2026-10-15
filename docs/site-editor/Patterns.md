@@ -98,7 +98,7 @@ Theme patterns are always `synced = false`. Cross-state conversion happens throu
 
 A theme pattern can be cloned to an editable user pattern via `PatternResolver::cloneToUser($slug)` — used by the admin "edit" affordance on theme patterns. The clone copies the title, description, categories, block types, block content and, since 2.15.0, the inserter headers (`keywords`, `inserter`, `template_types`, `post_types`, `viewport_width`) from the theme file into a new user-source DB row. Before 2.15.0 the clone had no block content.
 
-Writes need the Site Editor `content` ability (`manage-content` by default) and reads the `read` ability; see [[site-editor/API Reference#authorization]].
+Writes need the Site Editor `content` ability (`manage-content` by default) and reads the `read` ability; see [API Reference: Authorization](API-Reference.md#authorization).
 
 ## Resolver
 
