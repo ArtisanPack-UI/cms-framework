@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v6.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v7.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1283,4 +1283,188 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
             ->and( $css )->toContain( '.wp-block-quote h1:focus, .wp-block-quote h2:focus, .wp-block-quote h3:focus, .wp-block-quote h4:focus, .wp-block-quote h5:focus, .wp-block-quote h6:focus {' )
             ->and( $css )->not->toContain( ".wp-block-quote a {\n" );
     } );
+} );
+
+describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (): void {
+    dataset( 'break-out values', [
+        'rule break'      => ['red;}body{display:none'],
+        'style tag'       => ['red</style><script>'],
+        'open brace'      => ['red{display:none'],
+        'comment open'    => ['red /* display:none'],
+        'comment close'   => ['red */ display:none'],
+        'backslash'       => ['red\\3b display:none'],
+        'unclosed quote'  => ['"red display:none'],
+        'single quote'    => ["'red display:none"],
+        'open paren'      => ['rgb(0, 0, 0 display:none'],
+        'close paren'     => ['red) display:none'],
+        'newline'         => ["red\ndisplay:none"],
+    ] );
+
+    it( 'drops unsafe settings.custom values and keeps safe siblings', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['bad' => $value, 'nested' => ['bad' => $value, 'ok' => '2rem'], 'ok' => '1.5']],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '--wp--custom--bad' )
+            ->and( $css )->not->toContain( '--wp--custom--nested--bad' )
+            ->and( $css )->not->toContain( 'display:none' )
+            ->and( $css )->toContain( '--wp--custom--nested--ok: 2rem;' )
+            ->and( $css )->toContain( '--wp--custom--ok: 1.5;' );
+    } )->with( 'break-out values' );
+
+    it( 'drops unsafe root styles values in every walker', function ( string $value ): void {
+        $resolved = makeResolved(
+            styles: [
+                'color'   => ['text' => $value, 'background' => '#abcdef'],
+                'border'  => [
+                    'radius' => ['topLeft' => $value, 'topRight' => '4px'],
+                    'top'    => ['color' => $value, 'width' => '1px'],
+                ],
+                'spacing' => [
+                    'padding' => ['top' => $value, 'left' => '8px'],
+                    'margin'  => $value,
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( 'display:none' )
+            ->and( $css )->not->toContain( "\tcolor:" )
+            ->and( $css )->not->toContain( 'border-top-left-radius' )
+            ->and( $css )->not->toContain( 'border-top-color' )
+            ->and( $css )->not->toContain( 'padding-top' )
+            ->and( $css )->not->toContain( "\tmargin:" )
+            ->and( $css )->toContain( 'background-color: #abcdef;' )
+            ->and( $css )->toContain( 'border-top-right-radius: 4px;' )
+            ->and( $css )->toContain( 'border-top-width: 1px;' )
+            ->and( $css )->toContain( 'padding-left: 8px;' );
+    } )->with( 'break-out values' );
+
+    it( 'drops unsafe values under elements and their pseudo states', function ( string $value ): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'link' => [
+                        'color'  => ['text' => $value],
+                        ':hover' => ['color' => ['text' => $value]],
+                    ],
+                    'button' => [
+                        'color'  => ['text' => $value, 'background' => '#111111'],
+                        ':focus' => ['color' => ['text' => $value, 'background' => '#222222']],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( 'display:none' )
+            ->and( $css )->not->toContain( 'a {' )
+            ->and( $css )->not->toContain( 'a:hover {' )
+            ->and( $css )->toContain( ".wp-element-button, .wp-block-button__link {\n\tbackground-color: #111111;\n}" )
+            ->and( $css )->toContain( ".wp-element-button:focus, .wp-block-button__link:focus {\n\tbackground-color: #222222;\n}" );
+    } )->with( 'break-out values' );
+
+    it( 'drops unsafe values under blocks and block elements', function ( string $value ): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/quote' => [
+                        'color'    => ['text' => $value, 'background' => '#333333'],
+                        'elements' => [
+                            'link' => [
+                                'color'  => ['text' => $value],
+                                ':hover' => ['color' => ['text' => $value]],
+                            ],
+                        ],
+                    ],
+                    'core/pullquote' => [
+                        'typography' => ['fontFamily' => $value],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( 'display:none' )
+            ->and( $css )->toContain( ".wp-block-quote {\n\tbackground-color: #333333;\n}" )
+            ->and( $css )->not->toContain( '.wp-block-quote a' )
+            ->and( $css )->not->toContain( '.wp-block-pullquote' );
+    } )->with( 'break-out values' );
+
+    it( 'keeps valid declaration values', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color'  => ['palette' => [['slug' => 'primary', 'color' => '#000000']]],
+                'custom' => [
+                    'fontStack' => '"Source Serif 4", \'Times New Roman\', serif',
+                    'gutter'    => 'calc(1rem + 2vw)',
+                    'accent'    => 'var(--wp--preset--color--primary)',
+                ],
+            ],
+            styles: [
+                'color'      => ['text' => 'var:preset|color|primary', 'background' => 'var(--wp--preset--color--primary)'],
+                'typography' => ['fontFamily' => '"Source Serif 4", \'Times New Roman\', serif'],
+                'spacing'    => ['padding' => ['top' => 'calc(var(--wp--custom--gutter) * 2)']],
+                'shadow'     => 'var:preset|shadow|natural',
+                'blocks'     => [
+                    'core/quote' => ['border' => ['radius' => 'min(4px, 1vw)']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--custom--font-stack: "Source Serif 4", \'Times New Roman\', serif;' )
+            ->and( $css )->toContain( '--wp--custom--gutter: calc(1rem + 2vw);' )
+            ->and( $css )->toContain( '--wp--custom--accent: var(--wp--preset--color--primary);' )
+            ->and( $css )->toContain( "\tcolor: var(--wp--preset--color--primary);" )
+            ->and( $css )->toContain( 'background-color: var(--wp--preset--color--primary);' )
+            ->and( $css )->toContain( 'font-family: "Source Serif 4", \'Times New Roman\', serif;' )
+            ->and( $css )->toContain( 'padding-top: calc(var(--wp--custom--gutter) * 2);' )
+            ->and( $css )->toContain( 'box-shadow: var(--wp--preset--shadow--natural);' )
+            ->and( $css )->toContain( ".wp-block-quote {\n\tborder-radius: min(4px, 1vw);\n}" );
+    } );
+
+    it( 'skips block keys outside the block-name charset', function ( string $blockName ): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    $blockName           => ['color' => ['text' => '#111111']],
+                    'artisanpack/card-2' => ['color' => ['text' => '#222222']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '#111111' )
+            ->and( $css )->not->toContain( 'display:none' )
+            ->and( $css )->toContain( ".wp-block-artisanpack-card-2 {\n\tcolor: #222222;\n}" );
+    } )->with( [
+        'rule injection in name'      => ['core/x{}body{display:none}'],
+        'rule injection in namespace' => ['x{}body{display:none}/quote'],
+        'html tag'                    => ['core/x<script>'],
+        'selector combinator'         => ['core/quote > p'],
+        'comma'                       => ['core/quote,body'],
+        'uppercase'                   => ['Core/Quote'],
+        'underscore'                  => ['my_plugin/card'],
+        'dot'                         => ['core/quote.evil'],
+    ] );
 } );
