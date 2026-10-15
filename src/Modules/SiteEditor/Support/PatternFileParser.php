@@ -6,7 +6,8 @@
  * Parses theme-shipped block-pattern PHP files. The file format mirrors WP's
  * `register_block_pattern_from_file()` convention: a leading PHP doc comment
  * carries metadata headers (`Title:`, `Slug:`, `Categories:`, `Description:`,
- * `Block Types:`, `Viewport Width:`), and everything after the `?>` (or
+ * `Block Types:`, `Viewport Width:`, `Keywords:`, `Inserter:`,
+ * `Template Types:`, `Post Types:`), and everything after the `?>` (or
  * after the closing `*\/` when there is no PHP tag) is treated as the
  * pattern content.
  *
@@ -40,8 +41,9 @@ final class PatternFileParser
      * Parse a pattern file's contents into a structured payload.
      *
      * @since 2.0.0
+     * @since 2.15.0 Adds `keywords`, `inserter`, `template_types` and `post_types`.
      *
-     * @return array{title: string, slug: string|null, description: string|null, categories: array<int, string>, block_types: array<int, string>, viewport_width: int|null, content: string}
+     * @return array{title: string, slug: string|null, description: string|null, categories: array<int, string>, block_types: array<int, string>, viewport_width: int|null, keywords: array<int, string>, inserter: bool, template_types: array<int, string>, post_types: array<int, string>|null, content: string}
      */
     public static function parse( string $contents ): array
     {
@@ -55,6 +57,10 @@ final class PatternFileParser
             'categories'     => self::splitList( $headers['Categories'] ?? '' ),
             'block_types'    => self::splitList( $headers['Block Types'] ?? '' ),
             'viewport_width' => self::viewportWidth( $headers['Viewport Width'] ?? null ),
+            'keywords'       => self::splitList( $headers['Keywords'] ?? '' ),
+            'inserter'       => self::inserter( $headers['Inserter'] ?? null ),
+            'template_types' => self::splitList( $headers['Template Types'] ?? '' ),
+            'post_types'     => self::postTypes( $headers['Post Types'] ?? null ),
             'content'        => trim( $content ),
         ];
     }
@@ -181,6 +187,38 @@ final class PatternFileParser
         }
 
         return max( self::MIN_VIEWPORT_WIDTH, min( self::MAX_VIEWPORT_WIDTH, $width ) );
+    }
+
+    /**
+     * Parse the `Inserter:` header into WordPress's `inserter` flag.
+     *
+     * Mirrors `_register_theme_block_patterns()`: a missing or empty
+     * header leaves the pattern visible, `yes` / `true` keep it visible,
+     * and any other value (`no`, `false`, …) hides it from the inserter.
+     *
+     * @since 2.15.0
+     */
+    protected static function inserter( ?string $value ): bool
+    {
+        $value = strtolower( trim( (string) $value ) );
+
+        return '' === $value || in_array( $value, ['yes', 'true'], true );
+    }
+
+    /**
+     * Parse the `Post Types:` header into a lower-cased post-type list,
+     * or null when the header is missing or empty so the pattern stays
+     * unscoped (offered for every post type).
+     *
+     * @since 2.15.0
+     *
+     * @return array<int, string>|null
+     */
+    protected static function postTypes( ?string $value ): ?array
+    {
+        $postTypes = self::splitList( strtolower( (string) $value ) );
+
+        return [] === $postTypes ? null : array_values( array_unique( $postTypes ) );
     }
 
     /**
