@@ -175,6 +175,100 @@ describe( 'GlobalStylesResolver::variations()', function (): void {
     it( 'returns an empty array when the styles directory is missing', function (): void {
         expect( $this->resolver->variations() )->toBe( [] );
     } );
+
+    it( 'skips block style variation partials that declare blockTypes (#389)', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/card.json', json_encode( [
+            'version'    => 3,
+            'title'      => 'Card',
+            'slug'       => 'card',
+            'blockTypes' => ['core/group'],
+            'styles'     => ['color' => ['background' => '#0f172a']],
+        ] ) );
+        File::put( $this->stylesDir . '/dark.json', json_encode( [
+            'slug'   => 'dark',
+            'styles' => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        expect( array_column( $this->resolver->variations(), 'slug' ) )->toBe( ['dark'] );
+    } );
+
+    it( 'skips partials that declare blockTypes in any form, as WordPress does (#389)', function ( mixed $blockTypes ): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/card.json', json_encode( [
+            'slug'       => 'card',
+            'blockTypes' => $blockTypes,
+            'styles'     => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        expect( $this->resolver->variations() )->toBe( [] );
+    } )->with( [
+        'empty list' => [[]],
+        'string'     => ['core/group'],
+    ] );
+
+    it( 'keeps partials whose blockTypes is null (#389)', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/dark.json', json_encode( [
+            'slug'       => 'dark',
+            'blockTypes' => null,
+            'styles'     => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        expect( array_column( $this->resolver->variations(), 'slug' ) )->toBe( ['dark'] );
+    } );
+} );
+
+describe( 'GlobalStylesResolver block style variation partials (#389)', function (): void {
+    it( 'does not apply a stored pick of a block style variation partial', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/card.json', json_encode( [
+            'version'    => 3,
+            'title'      => 'Card',
+            'slug'       => 'card',
+            'blockTypes' => ['core/group'],
+            'styles'     => ['color' => ['background' => '#0f172a']],
+        ] ) );
+
+        GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'card',
+        ] );
+
+        $resolved = $this->resolver->resolve();
+
+        expect( $resolved->styles['color']['background'] )->toBe( '#ffffff' )
+            ->and( $resolved->styles['color']['text'] )->toBe( '#222222' )
+            ->and( $resolved->variation )->toBeNull()
+            ->and( GlobalStyles::query()->first()->variation )->toBe( 'card' );
+    } );
+
+    it( 'reports no variation when the stored variation file is gone', function (): void {
+        GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'deleted',
+        ] );
+
+        expect( $this->resolver->resolve()->variation )->toBeNull();
+    } );
+
+    it( 'still reports a stored variation that loads', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/dark.json', json_encode( [
+            'slug'   => 'dark',
+            'styles' => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'dark',
+        ] );
+
+        $resolved = $this->resolver->resolve();
+
+        expect( $resolved->variation )->toBe( 'dark' )
+            ->and( $resolved->styles['color']['background'] )->toBe( '#111111' );
+    } );
 } );
 
 describe( 'GlobalStylesResolver::update() / revert()', function (): void {

@@ -8,7 +8,7 @@ use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    $this->user        = TestUser::factory()->create();
+    $this->user        = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
     $this->themesPath  = base_path( 'themes' );
     $this->themeSlug   = 'test-theme';
     $this->themeParts  = $this->themesPath . '/' . $this->themeSlug . '/parts';

@@ -116,10 +116,13 @@ class PatternResolver
 
     /**
      * Clone a theme pattern into a new user-source DB row. The new row uses
-     * the same user-facing slug and inherits title / description / categories /
-     * block types from the theme file.
+     * the same user-facing slug and inherits the title, description,
+     * categories, block types, block content and the inserter headers
+     * (keywords, inserter, template types, post types, viewport width)
+     * from the theme file.
      *
      * @since 2.0.0
+     * @since 2.15.0 Copies the block content and the inserter headers.
      *
      * @throws RuntimeException When no theme pattern exists for the slug.
      */
@@ -132,14 +135,20 @@ class PatternResolver
         }
 
         return BlockPattern::create( [
-            'slug'        => $themePattern->userFacingSlug,
-            'theme'       => null,
-            'title'       => $themePattern->title,
-            'description' => $themePattern->description,
-            'source'      => BlockPattern::SOURCE_USER,
-            'synced'      => false,
-            'categories'  => $themePattern->categories,
-            'block_types' => $themePattern->blockTypes,
+            'slug'           => $themePattern->userFacingSlug,
+            'theme'          => null,
+            'title'          => $themePattern->title,
+            'description'    => $themePattern->description,
+            'source'         => BlockPattern::SOURCE_USER,
+            'synced'         => false,
+            'categories'     => $themePattern->categories,
+            'block_types'    => $themePattern->blockTypes,
+            'keywords'       => $themePattern->keywords,
+            'inserter'       => $themePattern->inserter,
+            'template_types' => $themePattern->templateTypes,
+            'post_types'     => $themePattern->postTypes,
+            'viewport_width' => $themePattern->viewportWidth,
+            'block_content'  => $themePattern->blocks,
         ] );
     }
 
@@ -147,6 +156,7 @@ class PatternResolver
      * Build a {@see ResolvedPattern} from a user-source DB row.
      *
      * @since 2.0.0
+     * @since 2.15.0 Reads the inserter header columns.
      */
     protected function fromUserRow( BlockPattern $row ): ResolvedPattern
     {
@@ -165,7 +175,39 @@ class PatternResolver
             categories     : is_array( $row->categories ) ? array_values( array_filter( $row->categories, 'is_string' ) ) : [],
             blockTypes     : is_array( $row->block_types ) ? array_values( array_filter( $row->block_types, 'is_string' ) ) : [],
             model          : $row,
+            viewportWidth  : is_int( $row->viewport_width ) ? $row->viewport_width : null,
+            keywords       : $this->stringList( $row->keywords ),
+            inserter       : false !== $row->inserter,
+            templateTypes  : $this->stringList( $row->template_types ),
+            postTypes      : $this->postTypeList( $row->post_types ),
         );
+    }
+
+    /**
+     * The string entries of a JSON list column, or `[]` when it's unset.
+     *
+     * @since 2.15.0
+     *
+     * @return array<int, string>
+     */
+    protected function stringList( mixed $value ): array
+    {
+        return is_array( $value ) ? array_values( array_filter( $value, 'is_string' ) ) : [];
+    }
+
+    /**
+     * A stored `post_types` list, lower-cased and de-duplicated like the
+     * `Post Types:` header, or null (every post type) when it's empty.
+     *
+     * @since 2.15.0
+     *
+     * @return array<int, string>|null
+     */
+    protected function postTypeList( mixed $value ): ?array
+    {
+        $postTypes = array_values( array_unique( array_map( 'strtolower', $this->stringList( $value ) ) ) );
+
+        return [] === $postTypes ? null : $postTypes;
     }
 
     /**
@@ -260,6 +302,10 @@ class PatternResolver
             blockTypes     : $parsed['block_types'],
             model          : null,
             viewportWidth  : $parsed['viewport_width'],
+            keywords       : $parsed['keywords'],
+            inserter       : $parsed['inserter'],
+            templateTypes  : $parsed['template_types'],
+            postTypes      : $parsed['post_types'],
         );
     }
 

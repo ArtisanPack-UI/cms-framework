@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    $this->user        = TestUser::factory()->create();
+    $this->user        = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
     $this->themesPath  = base_path( 'themes' );
     $this->themeSlug   = 'test-theme';
     $this->themeRoot   = $this->themesPath . '/' . $this->themeSlug;
@@ -189,6 +189,30 @@ describe( 'GET /api/v1/global-styles/variations', function (): void {
         expect( $response->json() )->toHaveCount( 1 )
             ->and( $response->json( '0.slug' ) )->toBe( 'dark' )
             ->and( $response->json( '0.title' ) )->toBe( 'Dark' );
+    } );
+
+    it( 'leaves out block style variation partials (#389)', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/card.json', json_encode( [
+            'version'    => 3,
+            'title'      => 'Card',
+            'slug'       => 'card',
+            'blockTypes' => ['core/group'],
+            'styles'     => ['color' => ['background' => '#0f172a']],
+        ] ) );
+        File::put( $this->stylesDir . '/dark.json', json_encode( [
+            'slug'   => 'dark',
+            'title'  => 'Dark',
+            'styles' => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        $this->actingAs( $this->user );
+
+        $response = $this->getJson( '/api/v1/global-styles/variations' );
+
+        $response->assertOk();
+        expect( $response->json() )->toHaveCount( 1 )
+            ->and( $response->json( '0.slug' ) )->toBe( 'dark' );
     } );
 } );
 

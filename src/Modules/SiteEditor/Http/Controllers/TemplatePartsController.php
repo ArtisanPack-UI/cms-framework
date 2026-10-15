@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\TemplatePartRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\TemplateResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\TemplatePart;
@@ -30,6 +31,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Template Parts', weight: 31 )]
 class TemplatePartsController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -84,7 +87,7 @@ class TemplatePartsController extends Controller
 
         try {
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplatePartRequest Form Request; Eloquent parameter-binds create().
-            $part = TemplatePart::create( $this->normalizeAttributes( $theme, $request->validated() ) );
+            $part = TemplatePart::create( $this->filterBlockContentForCreate( $this->normalizeAttributes( $theme, $request->validated() ), 'template-part' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return response()->json( [
@@ -183,6 +186,7 @@ class TemplatePartsController extends Controller
             ->first();
 
         if ( null !== $existing ) {
+            $validated = $this->filterBlockContent( $validated, $existing, 'template-part' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -192,7 +196,7 @@ class TemplatePartsController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return TemplatePart::create( $attributes );
+            return TemplatePart::create( $this->filterBlockContentForCreate( $attributes, 'template-part' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -205,6 +209,7 @@ class TemplatePartsController extends Controller
                 ->where( 'slug', $slug )
                 ->firstOrFail();
 
+            $validated = $this->filterBlockContent( $validated, $existing, 'template-part' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -250,23 +255,30 @@ class TemplatePartsController extends Controller
     }
 
     /**
-     * Detect a unique-constraint violation on a {@see QueryException}.
+     * Whether the query failed on a unique constraint, by each driver's
+     * own unique-violation signal: PostgreSQL SQLSTATE `23505`, MySQL /
+     * MariaDB driver code 1062, SQL Server driver codes 2601 / 2627, or a
+     * SQLite message that starts with `UNIQUE constraint failed`.
      *
-     * MySQL/MariaDB report SQLSTATE 23000 + driver code 1062; PostgreSQL
-     * reports SQLSTATE 23505; SQLite (used in tests) raises 23000 with
-     * 'UNIQUE constraint failed' in the message.
+     * SQLSTATE `23000` alone covers every integrity violation (a NOT NULL
+     * or foreign-key failure too), and the exception message and some
+     * driver diagnostics (PostgreSQL's `Failing row contains (…)`) carry
+     * row values, so the word "unique" anywhere in them proves nothing.
      *
      * @since 2.0.0
+     * @since 2.15.0 Matches only driver-specific unique-violation signals.
      */
     protected function isUniqueViolation( QueryException $e ): bool
     {
-        $sqlState = $e->getCode();
-
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ( '23505' === (string) $e->getCode() ) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique' );
+        if ( in_array( $e->errorInfo[1] ?? null, [1062, 2601, 2627], true ) ) {
+            return true;
+        }
+
+        return str_starts_with( strtolower( (string) ( $e->errorInfo[2] ?? '' ) ), 'unique constraint failed' );
     }
 
     /**

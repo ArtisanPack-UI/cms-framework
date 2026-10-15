@@ -2,6 +2,7 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission\GlobalStylesEmitter;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\GlobalStyles;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -29,7 +30,7 @@ afterEach( function (): void {
     File::deleteDirectory( $this->themeRoot );
 } );
 
-it( 'neutralizes `</style>` payloads so user input cannot break out of the style block', function (): void {
+it( 'drops `</style>` payloads so user input cannot break out of the style block', function (): void {
     $this->mock( ThemeManager::class, function ( $mock ): void {
         $mock->shouldReceive( 'getActiveTheme' )->andReturn( [
             'name'   => 'Test',
@@ -49,7 +50,22 @@ it( 'neutralizes `</style>` payloads so user input cannot break out of the style
     $rendered = Blade::render( '@cmsGlobalStyles' );
 
     // The `</style` literal must not appear inside the emitted block (case
-    // insensitive — HTML5 closes raw-text tags case-insensitively).
+    // insensitive — HTML5 closes raw-text tags case-insensitively). The
+    // emitter drops the unsafe value outright (#385).
+    $stripped = substr( $rendered, 0, strrpos( $rendered, '</style>' ) );
+
+    expect( stripos( $stripped, '</style' ) )->toBe( false )
+        ->and( $stripped )->not->toContain( '<script>' )
+        ->and( $stripped )->not->toContain( 'alert(1)' );
+} );
+
+it( 'escapes `</` sequences in emitter output as a second line of defense', function (): void {
+    $this->mock( GlobalStylesEmitter::class, function ( $mock ): void {
+        $mock->shouldReceive( 'emit' )->andReturn( ':root { --x: red; }</style><script>alert(1)</script>' );
+    } );
+
+    $rendered = Blade::render( '@cmsGlobalStyles' );
+
     $stripped = substr( $rendered, 0, strrpos( $rendered, '</style>' ) );
 
     expect( stripos( $stripped, '</style' ) )->toBe( false )

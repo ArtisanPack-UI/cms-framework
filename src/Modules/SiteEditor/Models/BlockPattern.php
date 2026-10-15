@@ -36,6 +36,11 @@ use Illuminate\Support\Carbon;
  * @property bool $synced
  * @property array<int, string>|null $categories
  * @property array<int, string>|null $block_types
+ * @property array<int, string>|null $keywords
+ * @property bool $inserter
+ * @property array<int, string>|null $template_types
+ * @property array<int, string>|null $post_types
+ * @property int|null $viewport_width
  * @property array<int, array<string, mixed>>|null $block_content
  * @property int|null $author_id
  * @property Carbon $created_at
@@ -97,6 +102,11 @@ class BlockPattern extends Model
         'synced',
         'categories',
         'block_types',
+        'keywords',
+        'inserter',
+        'template_types',
+        'post_types',
+        'viewport_width',
         'block_content',
         'author_id',
     ];
@@ -208,13 +218,19 @@ class BlockPattern extends Model
 
     /**
      * @since 2.0.0
+     * @since 2.15.0 Casts the pattern-header columns.
      */
     protected function casts(): array
     {
         return [
-            'synced'      => 'boolean',
-            'categories'  => 'array',
-            'block_types' => 'array',
+            'synced'         => 'boolean',
+            'categories'     => 'array',
+            'block_types'    => 'array',
+            'keywords'       => 'array',
+            'inserter'       => 'boolean',
+            'template_types' => 'array',
+            'post_types'     => 'array',
+            'viewport_width' => 'integer',
         ];
     }
 }

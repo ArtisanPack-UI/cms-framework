@@ -23,6 +23,7 @@ final class SyncedPatternResource
 {
     /**
      * @since 2.0.0
+     * @since 2.15.0 Adds `keywords`, `inserter`, `template_types`, `post_types` and `viewport_width`.
      *
      * @return array<string, mixed>
      */
@@ -46,6 +47,11 @@ final class SyncedPatternResource
             'wp_pattern_sync_status' => '',
             'categories'             => $pattern->categories,
             'block_types'            => $pattern->blockTypes,
+            'keywords'               => $pattern->keywords,
+            'inserter'               => $pattern->inserter,
+            'template_types'         => $pattern->templateTypes,
+            'post_types'             => $pattern->postTypes,
+            'viewport_width'         => $pattern->viewportWidth,
             'author'                 => null !== $pattern->model ? (int) ( $pattern->model->author_id ?? 0 ) : 0,
             'modified'               => null !== $pattern->model
                 ? optional( $pattern->model->updated_at )->toIso8601String()

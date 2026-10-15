@@ -45,7 +45,13 @@ class GlobalStylesResolver
      * active theme but no DB row, returns a resolved object backed by
      * `theme.json` defaults plus any default variation declared by the theme.
      *
+     * A stored variation slug that no longer loads (its file is gone, or
+     * it's a block style variation partial) resolves as no variation, so
+     * the reported `variation` always matches what was applied. The DB
+     * row keeps the stored slug.
+     *
      * @since 2.0.0
+     * @since 2.15.0 Reports `variation: null` when the stored variation doesn't load.
      */
     public function resolve(): ?ResolvedGlobalStyles
     {
@@ -61,6 +67,7 @@ class GlobalStylesResolver
             ? $row->variation
             : null;
         $variationData   = null !== $variationSlug ? $this->loadVariation( $theme['slug'], $variationSlug ) : null;
+        $variationSlug   = null !== $variationData ? $variationSlug : null;
 
         $defaultSettings = is_array( $theme['settings'] ?? null ) ? $theme['settings'] : [];
         $defaultStyles   = is_array( $theme['styles'] ?? null ) ? $theme['styles'] : [];
@@ -88,10 +95,13 @@ class GlobalStylesResolver
      * List declared variations from the active theme's `styles/` directory.
      *
      * Each entry is the parsed variation JSON (typically containing `title`,
-     * `slug`, `description`, `settings`, `styles`). Returns an empty array
-     * when there is no active theme or no `styles/` directory.
+     * `slug`, `description`, `settings`, `styles`). Block style variation
+     * partials ({@see self::isBlockStyleVariation()}) are skipped. Returns
+     * an empty array when there is no active theme or no `styles/`
+     * directory.
      *
      * @since 2.0.0
+     * @since 2.15.0 Skips block style variation partials.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -119,7 +129,7 @@ class GlobalStylesResolver
             $contents = File::get( $file->getRealPath() );
             $decoded  = json_decode( $contents, true );
 
-            if ( ! is_array( $decoded ) ) {
+            if ( ! is_array( $decoded ) || $this->isBlockStyleVariation( $decoded ) ) {
                 continue;
             }
 
@@ -212,9 +222,11 @@ class GlobalStylesResolver
 
     /**
      * Load the variation JSON file for the given theme + slug. Returns null
-     * when the file does not exist or fails to decode.
+     * when the file does not exist, fails to decode, or is a block style
+     * variation partial, so a stored pick of one applies nothing.
      *
      * @since 2.0.0
+     * @since 2.15.0 Ignores block style variation partials.
      *
      * @return array<string, mixed>|null
      */
@@ -232,7 +244,25 @@ class GlobalStylesResolver
 
         $decoded = json_decode( File::get( $path ), true );
 
-        return is_array( $decoded ) ? $decoded : null;
+        return is_array( $decoded ) && ! $this->isBlockStyleVariation( $decoded ) ? $decoded : null;
+    }
+
+    /**
+     * Whether a decoded `styles/*.json` partial is a block style variation
+     * (theme.json v3): it declares `blockTypes`, whatever its value. Those
+     * share the `styles/` directory with theme style variations but style
+     * only the listed blocks, so they're never listed or applied as a
+     * whole-theme variation (#389). Matches WordPress's
+     * `WP_Theme_JSON_Resolver::style_variation_has_scope()` and
+     * visual-editor's `BlockStyleVariationParser`.
+     *
+     * @since 2.15.0
+     *
+     * @param  array<string, mixed>  $partial
+     */
+    protected function isBlockStyleVariation( array $partial ): bool
+    {
+        return isset( $partial['blockTypes'] );
     }
 
     /**

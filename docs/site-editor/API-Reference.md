@@ -4,7 +4,7 @@ title: Site Editor - API Reference
 
 # Site Editor API Reference
 
-All site-editor REST endpoints live under `/api/v1/` and require authentication via Laravel Sanctum (`auth:sanctum` middleware).
+All site-editor REST endpoints live under `/api/v1/`, require authentication via Laravel Sanctum (`auth:sanctum` middleware) and, since 2.15.0, the Site Editor abilities described under [Authorization](#authorization).
 
 > **Added in 2.0.0.**
 
@@ -92,9 +92,47 @@ Singleton-per-theme — no `{slug}` segment.
 | PUT | `/api/v1/menu-locations/{location}` | Assign a menu to a location (body: `{ "menu": <id> }`) |
 | DELETE | `/api/v1/menu-locations/{location}` | Unassign |
 
+## Pattern fields
+
+Since 2.15.0 every pattern response (`/block-patterns/patterns`, theme and user, and `/blocks`) carries the WordPress pattern-header fields:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `keywords` | `string[]` | Inserter search terms (`Keywords:` header). |
+| `inserter` | `bool` | `false` hides the pattern from the inserter (`Inserter:` header). Defaults to `true`. |
+| `template_types` | `string[]` | Template types the pattern suits (`Template Types:` header). |
+| `post_types` | `string[] \| null` | Post types the pattern is offered for (`Post Types:` header); `null` means every post type. |
+| `viewport_width` | `int \| null` | Preview layout width (`Viewport Width:` header); `null` means the client default. |
+
+`POST` / `PUT` on `/block-patterns/patterns` and `/blocks` accept the same fields for user patterns. `post_types` entries must be lowercase post-type keys (`[a-z0-9_-]`, up to 20 characters), `viewport_width` must be 320–2560 and `inserter` must be a boolean when sent (omit it to keep the current value); anything else is a `422`. See [[site-editor/Patterns]].
+
 ## Authentication
 
 All site-editor endpoints use the `auth:sanctum` middleware. Pass a Sanctum bearer token in the `Authorization: Bearer {token}` header. Sanctum SPA cookies also work — both are accepted on every endpoint.
+
+## Authorization
+
+> **Added in 2.15.0.** Before 2.15.0 any authenticated user could read and write every Site Editor endpoint.
+
+Authenticated users also need a Site Editor ability, checked by the `AuthorizeSiteEditorAccess` middleware (and again by each Form Request). The abilities follow WordPress's REST permissions:
+
+| Group | Endpoints | Default ability | WordPress analogue |
+|---|---|---|---|
+| `read` | Every endpoint, `GET` included | `manage-content` (a user with the `structure` ability also passes) | `edit_posts` |
+| `structure` | `POST` / `PUT` / `DELETE` on templates, template parts, global styles, menus, menu items and menu locations | `manage-themes` | `edit_theme_options` |
+| `content` | `POST` / `PUT` / `DELETE` on block patterns and synced blocks | `manage-content` | `edit_posts` |
+
+A user without the ability gets `403`. `PermissionsTableSeeder` grants `admin` both abilities and `editor` `manage-content`, so editors can read the Site Editor and manage patterns but can't change site structure. Grant the abilities to any custom role that uses the Site Editor.
+
+Each default is filterable, resolved per request through `SiteEditorAbilities::for()`:
+
+```php
+addFilter( 'ap.cmsFramework.abilities.siteEditor.read', fn (): string => 'view-site-editor' );
+addFilter( 'ap.cmsFramework.abilities.siteEditor.structure', fn (): string => 'edit-site' );
+addFilter( 'ap.cmsFramework.abilities.siteEditor.content', fn (): string => 'manage-patterns' );
+```
+
+visual-editor's own Site Editor routes (`/visual-editor/api/...`) don't use these abilities; they go through its `EnsureSiteEditorAccess` gate.
 
 ## Error responses
 
@@ -102,6 +140,6 @@ Site-editor endpoints follow the framework's standard JSON error envelope. See [
 
 Notable status codes:
 
-- **403 Forbidden** — Attempting to PUT/DELETE a theme-sourced pattern.
+- **403 Forbidden** — The user lacks the Site Editor ability for the request (since 2.15.0; see [Authorization](#authorization)), or the request PUTs/DELETEs a theme-sourced pattern.
 - **409 Conflict** — POST to `/templates` or `/template-parts` when a `(theme, slug)` row already exists.
 - **422 Unprocessable Entity** — Form validation failures (invalid area, slug mismatch on PUT, invalid menu item type, etc.).

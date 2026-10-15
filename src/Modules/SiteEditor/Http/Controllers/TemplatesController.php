@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\TemplateRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\TemplateResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
@@ -30,6 +31,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Templates', weight: 30 )]
 class TemplatesController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -84,7 +87,7 @@ class TemplatesController extends Controller
 
         try {
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplateRequest Form Request; Eloquent parameter-binds create().
-            $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
+            $template = Template::create( $this->filterBlockContentForCreate( $this->normalizeAttributes( $theme, $request->validated() ), 'template' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return response()->json( [
@@ -198,6 +201,7 @@ class TemplatesController extends Controller
             ->first();
 
         if ( null !== $existing ) {
+            $validated = $this->filterBlockContent( $validated, $existing, 'template' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -207,7 +211,7 @@ class TemplatesController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return Template::create( $attributes );
+            return Template::create( $this->filterBlockContentForCreate( $attributes, 'template' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -220,6 +224,7 @@ class TemplatesController extends Controller
                 ->where( 'slug', $slug )
                 ->firstOrFail();
 
+            $validated = $this->filterBlockContent( $validated, $existing, 'template' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -268,23 +273,30 @@ class TemplatesController extends Controller
     }
 
     /**
-     * Detect a unique-constraint violation on a {@see QueryException}.
+     * Whether the query failed on a unique constraint, by each driver's
+     * own unique-violation signal: PostgreSQL SQLSTATE `23505`, MySQL /
+     * MariaDB driver code 1062, SQL Server driver codes 2601 / 2627, or a
+     * SQLite message that starts with `UNIQUE constraint failed`.
      *
-     * MySQL/MariaDB report SQLSTATE 23000 + driver code 1062; PostgreSQL
-     * reports SQLSTATE 23505; SQLite (used in tests) raises 23000 with
-     * 'UNIQUE constraint failed' in the message.
+     * SQLSTATE `23000` alone covers every integrity violation (a NOT NULL
+     * or foreign-key failure too), and the exception message and some
+     * driver diagnostics (PostgreSQL's `Failing row contains (…)`) carry
+     * row values, so the word "unique" anywhere in them proves nothing.
      *
      * @since 2.0.0
+     * @since 2.15.0 Matches only driver-specific unique-violation signals.
      */
     protected function isUniqueViolation( QueryException $e ): bool
     {
-        $sqlState = $e->getCode();
-
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ( '23505' === (string) $e->getCode() ) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique' );
+        if ( in_array( $e->errorInfo[1] ?? null, [1062, 2601, 2627], true ) ) {
+            return true;
+        }
+
+        return str_starts_with( strtolower( (string) ( $e->errorInfo[2] ?? '' ) ), 'unique constraint failed' );
     }
 
     /**

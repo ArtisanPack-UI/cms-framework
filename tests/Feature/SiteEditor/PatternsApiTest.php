@@ -8,7 +8,7 @@ use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    $this->user          = TestUser::factory()->create();
+    $this->user          = grantPermissions( TestUser::factory()->create(), 'manage-content' );
     $this->themesPath    = base_path( 'themes' );
     $this->themeSlug     = 'test-theme';
     $this->themePatterns = $this->themesPath . '/' . $this->themeSlug . '/patterns';
@@ -191,6 +191,31 @@ describe( 'GET /api/v1/block-patterns/patterns', function (): void {
         $response->assertOk();
         expect( $response->json( 'viewport_width' ) )->toBe( 1400 );
     } );
+
+    it( 'exposes the Keywords, Inserter, Template Types and Post Types headers (#383)', function (): void {
+        File::put(
+            $this->themePatterns . '/scoped.php',
+            "<?php\n/**\n * Title: Scoped\n * Keywords: hero, banner\n * Inserter: no\n * Template Types: front-page\n * Post Types: page\n */\n",
+        );
+        File::put( $this->themePatterns . '/plain.php', "<?php\n/**\n * Title: Plain\n */\n" );
+
+        $this->actingAs( $this->user );
+
+        $scoped = $this->getJson( '/api/v1/block-patterns/patterns/scoped' );
+        $plain  = $this->getJson( '/api/v1/block-patterns/patterns/plain' );
+
+        $scoped->assertOk();
+        expect( $scoped->json( 'keywords' ) )->toBe( ['hero', 'banner'] );
+        expect( $scoped->json( 'inserter' ) )->toBeFalse();
+        expect( $scoped->json( 'template_types' ) )->toBe( ['front-page'] );
+        expect( $scoped->json( 'post_types' ) )->toBe( ['page'] );
+
+        $plain->assertOk();
+        expect( $plain->json( 'keywords' ) )->toBe( [] );
+        expect( $plain->json( 'inserter' ) )->toBeTrue();
+        expect( $plain->json( 'template_types' ) )->toBe( [] );
+        expect( $plain->json( 'post_types' ) )->toBeNull();
+    } );
 } );
 
 describe( 'POST /api/v1/block-patterns/patterns', function (): void {
@@ -208,6 +233,74 @@ describe( 'POST /api/v1/block-patterns/patterns', function (): void {
             BlockPattern::where( 'slug', 'user/new-pattern' )->where( 'synced', false )->exists(),
         )->toBeTrue();
     } );
+
+    it( 'stores and returns the inserter header fields', function (): void {
+        $this->actingAs( $this->user );
+
+        $response = $this->postJson( '/api/v1/block-patterns/patterns', [
+            'slug'           => 'scoped',
+            'title'          => 'Scoped',
+            'keywords'       => ['hero'],
+            'inserter'       => false,
+            'template_types' => ['front-page'],
+            'post_types'     => ['page'],
+            'viewport_width' => 1200,
+        ] );
+
+        $response->assertCreated()
+            ->assertJsonPath( 'keywords', ['hero'] )
+            ->assertJsonPath( 'inserter', false )
+            ->assertJsonPath( 'template_types', ['front-page'] )
+            ->assertJsonPath( 'post_types', ['page'] )
+            ->assertJsonPath( 'viewport_width', 1200 );
+    } );
+
+    it( 'returns the inserter header fields on synced blocks', function (): void {
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/blocks', [
+            'slug'           => 'cta',
+            'title'          => 'CTA',
+            'keywords'       => ['signup'],
+            'inserter'       => false,
+            'post_types'     => ['post'],
+            'viewport_width' => 800,
+        ] )->assertCreated()
+            ->assertJsonPath( 'keywords', ['signup'] )
+            ->assertJsonPath( 'inserter', false )
+            ->assertJsonPath( 'template_types', [] )
+            ->assertJsonPath( 'post_types', ['post'] )
+            ->assertJsonPath( 'viewport_width', 800 );
+    } );
+
+    it( 'still answers a duplicate slug with 409 when the title says unique', function (): void {
+        $this->actingAs( $this->user );
+
+        $payload = ['slug' => 'unique-hero', 'title' => 'A unique hero'];
+
+        $this->postJson( '/api/v1/block-patterns/patterns', $payload )->assertCreated();
+        $this->postJson( '/api/v1/block-patterns/patterns', $payload )->assertStatus( 409 );
+    } );
+
+    it( 'validates the inserter header fields', function ( string $field, mixed $value, string $errorKey ): void {
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/block-patterns/patterns', [
+            'slug'  => 'invalid',
+            'title' => 'Invalid',
+            $field  => $value,
+        ] )->assertUnprocessable()->assertJsonValidationErrors( [$errorKey] );
+    } )->with( [
+        'keywords not a list'     => ['keywords', 'hero', 'keywords'],
+        'inserter not a boolean'  => ['inserter', 'sometimes', 'inserter'],
+        'inserter null'           => ['inserter', null, 'inserter'],
+        'post type with a space'  => ['post_types', ['my type'], 'post_types.0'],
+        'post type uppercase'     => ['post_types', ['Page'], 'post_types.0'],
+        'post type too long'      => ['post_types', [str_repeat( 'a', 21 )], 'post_types.0'],
+        'viewport too narrow'     => ['viewport_width', 100, 'viewport_width'],
+        'viewport too wide'       => ['viewport_width', 9000, 'viewport_width'],
+        'template types a string' => ['template_types', 'home', 'template_types'],
+    ] );
 } );
 
 describe( 'PUT /api/v1/block-patterns/patterns/{slug}', function (): void {

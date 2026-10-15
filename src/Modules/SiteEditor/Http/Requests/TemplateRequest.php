@@ -12,6 +12,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SiteEditorAbilities;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -21,11 +22,16 @@ use Illuminate\Foundation\Http\FormRequest;
 class TemplateRequest extends FormRequest
 {
     /**
+     * Require the Site Editor ability for this request's group. The
+     * route middleware checks it too; this keeps the request safe when
+     * a host reuses it on its own route.
+     *
      * @since 2.0.0
+     * @since 2.15.0 Requires the group ability {@see SiteEditorAbilities::allows()} checks instead of allowing every user.
      */
     public function authorize(): bool
     {
-        return true;
+        return SiteEditorAbilities::allows( $this->user(), SiteEditorAbilities::STRUCTURE );
     }
 
     /**

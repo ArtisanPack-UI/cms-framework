@@ -14,6 +14,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\BlockPatternRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\SyncedPatternResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
@@ -30,6 +31,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Blocks (synced patterns)', weight: 33 )]
 class BlocksController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -77,7 +80,7 @@ class BlocksController extends Controller
     public function store( BlockPatternRequest $request ): JsonResponse
     {
         try {
-            $pattern = BlockPattern::create( $this->createAttributes( $request->validated(), synced: true ) );
+            $pattern = BlockPattern::create( $this->filterBlockContentForCreate( $this->createAttributes( $request->validated(), synced: true ), 'block' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return $this->slugConflictResponse();
@@ -161,6 +164,7 @@ class BlocksController extends Controller
             // unsync-ing a pattern via this controller. Cross-state transitions
             // happen through the unsynced controller's POST/PUT instead.
             $validated['synced'] = true;
+            $validated           = $this->filterBlockContent( $validated, $existing, 'block' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -170,7 +174,7 @@ class BlocksController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return BlockPattern::create( $attributes );
+            return BlockPattern::create( $this->filterBlockContentForCreate( $attributes, 'block' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -183,6 +187,7 @@ class BlocksController extends Controller
 
             unset( $validated['slug'] );
             $validated['synced'] = true;
+            $validated           = $this->filterBlockContent( $validated, $existing, 'block' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -231,16 +236,29 @@ class BlocksController extends Controller
     }
 
     /**
+     * Whether the query failed on a unique constraint, by each driver's
+     * own unique-violation signal: PostgreSQL SQLSTATE `23505`, MySQL /
+     * MariaDB driver code 1062, SQL Server driver codes 2601 / 2627, or a
+     * SQLite message that starts with `UNIQUE constraint failed`.
+     *
+     * SQLSTATE `23000` alone covers every integrity violation (a NOT NULL
+     * or foreign-key failure too), and the exception message and some
+     * driver diagnostics (PostgreSQL's `Failing row contains (…)`) carry
+     * row values, so the word "unique" anywhere in them proves nothing.
+     *
      * @since 2.0.0
+     * @since 2.15.0 Matches only driver-specific unique-violation signals.
      */
     protected function isUniqueViolation( QueryException $e ): bool
     {
-        $sqlState = $e->getCode();
-
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ( '23505' === (string) $e->getCode() ) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique');
+        if ( in_array( $e->errorInfo[1] ?? null, [1062, 2601, 2627], true ) ) {
+            return true;
+        }
+
+        return str_starts_with( strtolower( (string) ( $e->errorInfo[2] ?? '' ) ), 'unique constraint failed' );
     }
 }

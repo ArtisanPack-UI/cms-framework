@@ -13,7 +13,7 @@ All routes are prefixed with `/api/cms` (configured in the consuming application
 ### Middleware
 
 - **Authentication**: Most routes require `auth:sanctum` middleware
-- **Authorization**: Enforced through Laravel policies in controllers, and — since *2.8.0* — through `can:` permission middleware on the extension-management and AI routes. The plugin mutating routes require `manage-plugins`, the theme mutating routes require `manage-themes`, and the AI endpoints require `cms.ai.use`. All three are deny-by-default and seeded to the `admin` role; a non-privileged authenticated user gets `403`.
+- **Authorization**: Enforced through Laravel policies in controllers, and — since *2.8.0* — through `can:` permission middleware on the extension-management and AI routes. The plugin mutating routes require `manage-plugins`, the theme mutating routes require `manage-themes`, and the AI endpoints require `cms.ai.use`. All three are deny-by-default and seeded to the `admin` role; a non-privileged authenticated user gets `403`. Since *2.15.0* the Site Editor routes also check abilities; see [Site Editor Module](#site-editor-module-200).
 
 ---
 
@@ -236,7 +236,9 @@ See [[settings/Site Settings]] for the envelope shape.
 ## Site Editor Module *(2.0.0)*
 
 **Base Path**: `/api/v1/`
-**Middleware**: `auth:sanctum`
+**Middleware**: `auth:sanctum`, plus `AuthorizeSiteEditorAccess` *(2.15.0)*
+
+Since *2.15.0* every Site Editor route needs the `read` ability (`manage-content`, or the structure ability), and every create, update and delete also needs its group's ability: `manage-themes` for templates, template parts, global styles, menus, menu items and menu locations, `manage-content` for patterns and synced blocks. Users without them get `403`. See [API Reference: Authorization](site-editor/API-Reference.md#authorization).
 
 The Site Editor module exposes WP-shape endpoints for templates, parts, patterns, global styles, and menus. See [[site-editor/API Reference]] for the full listing and response shapes.
 

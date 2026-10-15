@@ -71,6 +71,50 @@ Renders a `<style id="cms-global-styles">` block with the resolved global-styles
 
 The output is cached on a content-hash key; the cache busts on `GlobalStyles` model saves and deletes via a model observer wired in `SiteEditorServiceProvider`.
 
+## Framework filters
+
+| Filter | Arguments | Since | Purpose |
+|---|---|---|---|
+| `ap.cmsFramework.globalStyles.css` | `(string $css, ResolvedGlobalStyles $resolved)` | 2.15.0 | Filters the emitted global-styles CSS. Runs on every `GlobalStylesEmitter::emit()` call, after the cache, so whatever a callback adds is never frozen into the cached CSS. Feeds `@cmsGlobalStyles` and `GET /api/v1/global-styles/css`. Use it to append rules the emitter doesn't produce, such as block style variations on hosts without visual-editor. |
+| `ap.cmsFramework.siteEditor.blockContent` | `(array $blocks, ?array $storedBlocks, string $context)` | 2.15.0 | Filters the block tree a Site Editor API write is about to save. Runs on every create, update and upsert in `TemplatesController`, `TemplatePartsController`, `BlocksController` and `BlockPatternsController`, before the row is written. `$storedBlocks` is the record's current block content (decoded; `[]` when it has none). When the write creates the first DB override of a theme file (template, template part or theme pattern), it is that file's parsed blocks, the version the Site Editor showed; otherwise a create passes `null`. `$context` is `template`, `template-part`, `block` or `block-pattern`. visual-editor 1.15 uses it to enforce its `visual-editor.edit-block-css` ability on per-block Custom CSS. |
+| `ap.cmsFramework.abilities.siteEditor.read` | `(string $ability)` | 2.15.0 | Ability every Site Editor API route requires. Default `manage-content`. |
+| `ap.cmsFramework.abilities.siteEditor.structure` | `(string $ability)` | 2.15.0 | Ability for writes to templates, template parts, global styles and menus. Default `manage-themes`. |
+| `ap.cmsFramework.abilities.siteEditor.content` | `(string $ability)` | 2.15.0 | Ability for writes to patterns and synced blocks. Default `manage-content`. |
+
+See [API Reference: Authorization](API-Reference.md#authorization) for how the abilities combine.
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;
+
+addFilter( 'ap.cmsFramework.globalStyles.css', function ( string $css, ResolvedGlobalStyles $resolved ): string {
+    return $css . "\n\n:root :where(.wp-block-group.is-style-card) { padding: 2rem; }";
+} );
+```
+
+Every callback receives both arguments. A callback that returns something other than a string is ignored. The appended CSS is printed inside the directive's `<style>` element, so keep it to CSS you control: the filter output isn't validated the way theme.json values are.
+
+### Filtering block content before it is saved
+
+`ap.cmsFramework.siteEditor.blockContent` lets a host veto or rewrite parts of a block tree that comes in through the Site Editor API, the way visual-editor's `CustomCssGuard` keeps only the Custom CSS already stored on a record:
+
+```php
+addFilter( 'ap.cmsFramework.siteEditor.blockContent', function ( array $blocks, ?array $storedBlocks, string $context ): array {
+    if ( auth()->user()?->can( 'visual-editor.edit-block-css' ) ) {
+        return $blocks;
+    }
+
+    // Drop incoming Custom CSS on top-level blocks. A full guard would walk
+    // innerBlocks and restore each block's value from $storedBlocks instead.
+    return array_map( function ( array $block ): array {
+        unset( $block['attrs']['artisanpackEffects']['customCss'] );
+
+        return $block;
+    }, $blocks );
+}, 10, 3 );
+```
+
+Register the callback with an accepted-args count of `3` to receive all three arguments. The filter only runs when the request carries a `block_content` array; a write that leaves the blocks alone, or sets them to `null`, skips it. A callback that returns something other than an array is ignored and the incoming blocks are saved as sent. The first write that overrides a theme-file template, template part or pattern passes that file's parsed blocks (from the same resolver the index and show endpoints use) as `$storedBlocks`, so Custom CSS the theme ships survives the first save. Blade templates are read-only and never reach the filter.
+
 ## Model events
 
 The `GlobalStyles` model has a registered observer (in `SiteEditorServiceProvider::boot()`) that:

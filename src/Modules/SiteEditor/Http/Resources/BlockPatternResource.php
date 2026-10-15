@@ -53,6 +53,12 @@ final class BlockPatternResource
             // header; null means "use the client default" (WP's
             // `viewportWidth` pattern property).
             'viewport_width' => $pattern->viewportWidth,
+            // WordPress pattern-file headers (`Keywords:`, `Inserter:`,
+            // `Template Types:`, `Post Types:`), in WP's REST field names.
+            'keywords'       => $pattern->keywords,
+            'inserter'       => $pattern->inserter,
+            'template_types' => $pattern->templateTypes,
+            'post_types'     => $pattern->postTypes,
         ];
     }
 
