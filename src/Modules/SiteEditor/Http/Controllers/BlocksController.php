@@ -80,7 +80,7 @@ class BlocksController extends Controller
     public function store( BlockPatternRequest $request ): JsonResponse
     {
         try {
-            $pattern = BlockPattern::create( $this->filterBlockContent( $this->createAttributes( $request->validated(), synced: true ), null, 'block' ) );
+            $pattern = BlockPattern::create( $this->filterBlockContentForCreate( $this->createAttributes( $request->validated(), synced: true ), 'block' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return $this->slugConflictResponse();
@@ -174,7 +174,7 @@ class BlocksController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return BlockPattern::create( $this->filterBlockContent( $attributes, null, 'block' ) );
+            return BlockPattern::create( $this->filterBlockContentForCreate( $attributes, 'block' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;

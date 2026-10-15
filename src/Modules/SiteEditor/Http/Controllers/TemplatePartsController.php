@@ -87,7 +87,7 @@ class TemplatePartsController extends Controller
 
         try {
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplatePartRequest Form Request; Eloquent parameter-binds create().
-            $part = TemplatePart::create( $this->filterBlockContent( $this->normalizeAttributes( $theme, $request->validated() ), null, 'template-part' ) );
+            $part = TemplatePart::create( $this->filterBlockContentForCreate( $this->normalizeAttributes( $theme, $request->validated() ), 'template-part' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return response()->json( [
@@ -196,7 +196,7 @@ class TemplatePartsController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return TemplatePart::create( $this->filterBlockContent( $attributes, null, 'template-part' ) );
+            return TemplatePart::create( $this->filterBlockContentForCreate( $attributes, 'template-part' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;

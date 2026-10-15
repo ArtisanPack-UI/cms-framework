@@ -5,6 +5,9 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\TemplatePart;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\PatternResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Support\Facades\File;
@@ -66,6 +69,27 @@ dataset( 'block content endpoints', [
     'synced blocks'  => ['/api/v1/blocks', 'block', []],
     'block patterns' => ['/api/v1/block-patterns/patterns', 'block-pattern', []],
 ] );
+
+const THEME_FILE_MARKUP = '<!-- wp:paragraph {"artisanpackEffects":{"customCss":".theme { color: teal; }"}} --><p>Theme</p><!-- /wp:paragraph -->';
+
+/**
+ * Write a theme file for the slug and return the blocks the resolver shows for it.
+ *
+ * @return array<int, mixed>
+ */
+function writeThemeFileFor( string $context, string $themeRoot, string $slug ): array
+{
+    [$directory, $file, $contents, $resolver] = match ( $context ) {
+        'template'      => ['templates', $slug . '.html', THEME_FILE_MARKUP, TemplateResolver::class],
+        'template-part' => ['parts', $slug . '.html', THEME_FILE_MARKUP, TemplatePartResolver::class],
+        default         => ['patterns', $slug . '.php', "<?php\n/**\n * Title: Theme Hero\n */\n?>\n" . THEME_FILE_MARKUP, PatternResolver::class],
+    };
+
+    File::ensureDirectoryExists( $themeRoot . '/' . $directory );
+    File::put( $themeRoot . '/' . $directory . '/' . $file, $contents );
+
+    return app( $resolver )->resolve( $slug )->blocks;
+}
 
 beforeEach( function (): void {
     $this->user       = grantPermissions( TestUser::factory()->create(), 'manage-themes', 'manage-content' );
@@ -200,4 +224,53 @@ describe( 'ap.cmsFramework.siteEditor.blockContent filter', function (): void {
         expect( $calls->count() )->toBe( 0 )
             ->and( storedBlockContentRecord( $context, 'no-blocks' )->title )->toBe( 'Renamed' );
     } )->with( 'block content endpoints' );
+} );
+
+describe( 'ap.cmsFramework.siteEditor.blockContent filter on a theme file override', function (): void {
+    it( 'passes the theme file blocks as the stored blocks on the first save', function ( string $method, string $url, string $context, array $extra ): void {
+        $fileBlocks = writeThemeFileFor( $context, $this->themesPath . '/' . $this->themeSlug, 'hero' );
+
+        expect( json_encode( $fileBlocks ) )->toContain( '.theme { color: teal; }' );
+
+        $calls = new ArrayObject();
+        registerCustomCssStripper( $calls );
+
+        $payload = $extra + [
+            'title'         => 'Hero',
+            'block_content' => blockContentWithCustomCss( 'body { display: none; }', 'Mine' ),
+        ];
+
+        if ( 'post' === $method ) {
+            $payload['slug'] = 'hero';
+        }
+
+        $this->json( strtoupper( $method ), $url, $payload )->assertSuccessful();
+
+        expect( $calls->getArrayCopy() )->toBe( [['stored' => $fileBlocks, 'context' => $context]] )
+            ->and( storedBlockContentRecord( $context, 'hero' )->block_content[0]['attrs'] )->toBe( ['content' => 'Mine'] );
+    } )->with( [
+        'template PUT'        => ['put', '/api/v1/templates/hero', 'template', []],
+        'template POST'       => ['post', '/api/v1/templates', 'template', []],
+        'template part PUT'   => ['put', '/api/v1/template-parts/hero', 'template-part', ['area' => 'header']],
+        'synced block PUT'    => ['put', '/api/v1/blocks/hero', 'block', []],
+        'block pattern POST'  => ['post', '/api/v1/block-patterns/patterns', 'block-pattern', []],
+    ] );
+
+    it( 'passes the stored row, not the theme file, once an override exists', function (): void {
+        writeThemeFileFor( 'template', $this->themesPath . '/' . $this->themeSlug, 'hero' );
+
+        $stored = blockContentWithCustomCss( '.db { color: navy; }', 'Stored' );
+
+        $this->putJson( '/api/v1/templates/hero', ['title' => 'Hero', 'block_content' => $stored] )->assertOk();
+
+        $calls = new ArrayObject();
+        registerCustomCssStripper( $calls );
+
+        $this->putJson( '/api/v1/templates/hero', [
+            'title'         => 'Hero',
+            'block_content' => blockContentWithCustomCss( 'body { display: none; }', 'Mine' ),
+        ] )->assertOk();
+
+        expect( $calls->getArrayCopy() )->toBe( [['stored' => $stored, 'context' => 'template']] );
+    } );
 } );
