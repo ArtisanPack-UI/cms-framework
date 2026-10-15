@@ -81,8 +81,12 @@ class GlobalStylesEmitter
      * presets, `@font-face` rules, `.has-{slug}-font-family` bindings,
      * the `h1`–`h6` / `caption` / `cite` elements and element pseudo
      * states (#382).
+     *
+     * v7: drop `settings.custom` values and `styles.*` declaration values
+     * that could break out of the stylesheet, and skip `styles.blocks`
+     * keys outside WordPress's block-name charset (#385).
      */
-    private const SCHEMA_VERSION = 'v6';
+    private const SCHEMA_VERSION = 'v7';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -918,7 +922,10 @@ class GlobalStylesEmitter
     }
 
     /**
+     * Values that fail {@see self::isSafeCssValue()} are skipped (#385).
+     *
      * @since 2.0.0
+     * @since 2.15.0 Skips unsafe values.
      *
      * @param  array<string, mixed>  $node
      * @param  array<int, array{0: string, 1: string}>  $declarations
@@ -934,7 +941,7 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            if ( is_scalar( $value ) ) {
+            if ( is_scalar( $value ) && $this->isSafeCssValue( (string) $value ) ) {
                 $declarations[] = [$prefix . $segment, (string) $value];
             }
         }
@@ -943,9 +950,12 @@ class GlobalStylesEmitter
     /**
      * `styles.color.background`, `styles.color.text`, `styles.typography.fontSize`,
      * etc. — top-level styles get applied to `:root` so they cascade. Per-block /
-     * per-element styles get their own selectors below.
+     * per-element styles get their own selectors below. Every value goes
+     * through {@see self::declarationValue()}, so one that could break out
+     * of the rule is skipped (#385).
      *
      * @since 2.0.0
+     * @since 2.15.0 Skips unsafe values.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -956,13 +966,13 @@ class GlobalStylesEmitter
         $declarations = [];
 
         foreach ( self::SCALAR_DECLARATION_MAP as $path => $property ) {
-            $value = $this->pluck( $styles, $path );
+            $value = $this->declarationValue( $this->pluck( $styles, $path ) );
 
-            if ( ! is_scalar( $value ) ) {
+            if ( null === $value ) {
                 continue;
             }
 
-            $declarations[] = [$property, $this->translatePresetValue( (string) $value )];
+            $declarations[] = [$property, $value];
         }
 
         // border.radius.{corner} — WP theme.json v3 allows per-corner
@@ -971,13 +981,13 @@ class GlobalStylesEmitter
 
         if ( is_array( $radius ) ) {
             foreach ( self::BORDER_RADIUS_CORNERS as $corner => $property ) {
-                $value = $radius[ $corner ] ?? null;
+                $value = $this->declarationValue( $radius[ $corner ] ?? null );
 
-                if ( ! is_scalar( $value ) ) {
+                if ( null === $value ) {
                     continue;
                 }
 
-                $declarations[] = [$property, $this->translatePresetValue( (string) $value )];
+                $declarations[] = [$property, $value];
             }
         }
 
@@ -993,13 +1003,13 @@ class GlobalStylesEmitter
                 }
 
                 foreach ( ['color', 'style', 'width'] as $facet ) {
-                    $value = $sideDefinition[ $facet ] ?? null;
+                    $value = $this->declarationValue( $sideDefinition[ $facet ] ?? null );
 
-                    if ( ! is_scalar( $value ) ) {
+                    if ( null === $value ) {
                         continue;
                     }
 
-                    $declarations[] = [$prefix . '-' . $facet, $this->translatePresetValue( (string) $value )];
+                    $declarations[] = [$prefix . '-' . $facet, $value];
                 }
             }
         }
@@ -1015,17 +1025,37 @@ class GlobalStylesEmitter
             }
 
             foreach ( self::SPACING_SIDES as $side => $suffix ) {
-                $value = $definition[ $side ] ?? null;
+                $value = $this->declarationValue( $definition[ $side ] ?? null );
 
-                if ( ! is_scalar( $value ) ) {
+                if ( null === $value ) {
                     continue;
                 }
 
-                $declarations[] = [$spacingKey . '-' . $suffix, $this->translatePresetValue( (string) $value )];
+                $declarations[] = [$spacingKey . '-' . $suffix, $value];
             }
         }
 
         return $declarations;
+    }
+
+    /**
+     * The CSS value for one `styles.*` leaf: the
+     * {@see self::translatePresetValue()} form of a scalar, or null when
+     * the leaf isn't scalar or the translated value fails
+     * {@see self::isSafeCssValue()} (#385). Checking after translation
+     * means `var:preset|…` references pass as the `var(...)` they become.
+     *
+     * @since 2.15.0
+     */
+    protected function declarationValue( mixed $value ): ?string
+    {
+        if ( ! is_scalar( $value ) ) {
+            return null;
+        }
+
+        $value = $this->translatePresetValue( (string) $value );
+
+        return $this->isSafeCssValue( $value ) ? $value : null;
     }
 
     /**
@@ -1269,9 +1299,12 @@ class GlobalStylesEmitter
 
     /**
      * Map a `{namespace}/{name}` block identifier to its CSS selector.
-     * Returns `null` for malformed identifiers so the caller can skip.
+     * Returns `null` for malformed identifiers so the caller can skip:
+     * both parts must use WordPress's block-name charset (`[a-z0-9-]`),
+     * so a key can't inject its own selector or rule (#385).
      *
      * @since 2.5.0
+     * @since 2.15.0 Restricts both parts to `[a-z0-9-]`.
      */
     protected function blockSelector( string $blockName ): ?string
     {
@@ -1288,7 +1321,7 @@ class GlobalStylesEmitter
         $namespace = trim( $namespace );
         $name      = trim( $name );
 
-        if ( '' === $namespace || '' === $name ) {
+        if ( 1 !== preg_match( '/^[a-z0-9-]+$/', $namespace ) || 1 !== preg_match( '/^[a-z0-9-]+$/', $name ) ) {
             return null;
         }
 
