@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v7.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v8.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1466,5 +1466,131 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
         'uppercase'                   => ['Core/Quote'],
         'underscore'                  => ['my_plugin/card'],
         'dot'                         => ['core/quote.evil'],
+    ] );
+} );
+
+describe( 'GlobalStylesEmitter CSS string state (#387)', function (): void {
+    dataset( 'interleaved quotes', [
+        'double then single' => ['"a\' "b\''],
+        'single then double' => ['\'a" \'b"'],
+        'nested open string' => ['"a" \'b"c\' "d'],
+    ] );
+
+    it( 'drops interleaved-quote preset values and emits the next preset', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'bad', 'color' => $value],
+                        ['slug' => 'good', 'color' => '#123456'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '--wp--preset--color--bad' )
+            ->and( $css )->toContain( '--wp--preset--color--good: #123456;' );
+    } )->with( 'interleaved quotes' );
+
+    it( 'drops interleaved-quote settings.custom values and emits the next one', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['x' => $value, 'y' => '1rem']],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '--wp--custom--x' )
+            ->and( $css )->toContain( '--wp--custom--y: 1rem;' );
+    } )->with( 'interleaved quotes' );
+
+    it( 'drops interleaved-quote styles values and emits the next declaration', function ( string $value ): void {
+        $resolved = makeResolved(
+            styles: [
+                'typography' => ['fontFamily' => $value, 'fontSize' => '18px'],
+                'blocks'     => [
+                    'core/quote' => ['typography' => ['fontFamily' => $value, 'fontSize' => '20px']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( 'font-family:' )
+            ->and( $css )->toContain( 'font-size: 18px;' )
+            ->and( $css )->toContain( ".wp-block-quote {\n\tfont-size: 20px;\n}" );
+    } )->with( 'interleaved quotes' );
+
+    it( 'accepts parens and the other quote inside a string', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['label' => $value]],
+            styles: ['typography' => ['fontFamily' => $value]],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--custom--label: ' . $value . ';' )
+            ->and( $css )->toContain( 'font-family: ' . $value . ';' );
+    } )->with( [
+        'close paren in double quotes' => ['"Smile :)"'],
+        'open paren in single quotes'  => ['\'(\''],
+        'single quote in double'       => ['"Don\'t", serif'],
+        'double quote in single'       => ['\'Say "hi"\', serif'],
+        'paren string inside function' => ['attr(data-x, "(")'],
+        'quoted url with parens'       => ['url("a(1).png")'],
+        'spaced quoted url'            => ['url( \'a(1).png\' )'],
+        'unquoted url'                 => ['url(/img/a.png)'],
+        'uppercase unquoted url'       => ['URL(/img/a.png)'],
+        'url text inside a string'     => ['"url(a"'],
+        'ident ending in url'          => ['myurl(a, "b)", c)'],
+        'url inside a function'        => ['image-set(url(/a.png) 1x, url(/b.png) 2x)'],
+    ] );
+
+    it( 'drops unquoted url() values a tokenizer reads as a bad url', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['x' => $value, 'y' => '1rem']],
+            styles: ['typography' => ['fontFamily' => $value, 'fontSize' => '18px']],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '--wp--custom--x' )
+            ->and( $css )->not->toContain( 'font-family:' )
+            ->and( $css )->toContain( '--wp--custom--y: 1rem;' )
+            ->and( $css )->toContain( 'font-size: 18px;' );
+    } )->with( [
+        'quotes spanning the url close' => ['url(a"b)"c)'],
+        'single quote in url'           => ['url(a\'b)'],
+        'paren in url'                  => ['url(a(b))'],
+        'unclosed url'                  => ['url(a.png'],
+        'unclosed spaced url'           => ['url( '],
+    ] );
+
+    it( 'still rejects unbalanced parens outside strings', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['x' => $value, 'y' => '1rem']],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '--wp--custom--x' )
+            ->and( $css )->toContain( '--wp--custom--y: 1rem;' );
+    } )->with( [
+        'paren after closed string' => ['"a" ('],
+        'close before open'         => [')"("'],
+        'unclosed calc'             => ['calc(1rem + "x"'],
     ] );
 } );

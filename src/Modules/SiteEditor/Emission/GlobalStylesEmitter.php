@@ -85,8 +85,11 @@ class GlobalStylesEmitter
      * v7: drop `settings.custom` values and `styles.*` declaration values
      * that could break out of the stylesheet, and skip `styles.blocks`
      * keys outside WordPress's block-name charset (#385).
+     *
+     * v8: track CSS string state when validating values, so interleaved
+     * quotes are dropped and parens inside a string are allowed (#387).
      */
-    private const SCHEMA_VERSION = 'v7';
+    private const SCHEMA_VERSION = 'v8';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -867,7 +870,8 @@ class GlobalStylesEmitter
      * Whether a theme-supplied value can be written into the stylesheet
      * as-is: nothing that closes the declaration, rule or `<style>` tag
      * (`; { } < >`), opens or closes a comment, smuggles a CSS escape,
-     * breaks the line, or leaves a quote or parenthesis unbalanced.
+     * breaks the line, leaves a string open, or leaves a parenthesis
+     * outside a string unbalanced.
      * Mirrors visual-editor's `ThemeJsonTokensCompiler::isPrintablePresetValue()`.
      *
      * @since 2.15.0
@@ -878,21 +882,58 @@ class GlobalStylesEmitter
             return false;
         }
 
-        if ( 0 !== substr_count( $value, '"' ) % 2 || 0 !== substr_count( $value, "'" ) % 2 ) {
-            return false;
-        }
+        // Track string state the way a CSS tokenizer does: only the quote
+        // that opened a string closes it, and quotes or parens inside a
+        // string are literal (#387). Backslashes are rejected above, so
+        // escapes can't occur.
+        $quote  = null;
+        $depth  = 0;
+        $length = strlen( $value );
 
-        $depth = 0;
+        for ( $i = 0; $i < $length; $i++ ) {
+            $char = $value[ $i ];
 
-        foreach ( str_split( $value ) as $char ) {
-            if ( '(' === $char ) {
+            if ( null !== $quote ) {
+                if ( $quote === $char ) {
+                    $quote = null;
+                }
+            } elseif ( '"' === $char || "'" === $char ) {
+                $quote = $char;
+            } elseif ( '(' === $char && $this->opensUnquotedUrl( $value, $i ) ) {
+                // An unquoted `url(` is a single url token that ends at the
+                // first `)`. A quote or `(` inside it makes a bad-url token,
+                // which a tokenizer reads differently from this scan.
+                $end = strpos( $value, ')', $i );
+
+                if ( false === $end || false !== strpbrk( substr( $value, $i + 1, $end - $i - 1 ), "\"'(" ) ) {
+                    return false;
+                }
+
+                $i = $end;
+            } elseif ( '(' === $char ) {
                 $depth++;
             } elseif ( ')' === $char && --$depth < 0 ) {
                 return false;
             }
         }
 
-        return 0 === $depth;
+        return null === $quote && 0 === $depth;
+    }
+
+    /**
+     * Whether the `(` at `$offset` opens an unquoted url token: it follows
+     * the whole identifier `url` (any case), and its first non-whitespace
+     * character isn't a quote.
+     *
+     * @since 2.15.0
+     */
+    protected function opensUnquotedUrl( string $value, int $offset ): bool
+    {
+        if ( $offset < 3 ) {
+            return false;
+        }
+
+        return 1 === preg_match( '/(?<![\w\x80-\xFF-])url\(\s*+(?![\'"])/Ai', $value, $match, 0, $offset - 3 );
     }
 
     /**
