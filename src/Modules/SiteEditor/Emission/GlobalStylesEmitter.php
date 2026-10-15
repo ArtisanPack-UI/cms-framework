@@ -11,8 +11,14 @@
  * `settings.custom`, plus inline rules for
  * `styles.color`/`styles.typography`/`styles.spacing` and per-element styles
  * (`elements.link`, `elements.heading`, `elements.h1`–`h6`,
- * `elements.button`, `elements.caption`, `elements.cite`, and their
- * `:hover` / `:focus` / `:focus-visible` / `:active` states).
+ * `elements.button`, `elements.caption`, `elements.cite`, and the link
+ * and button `:link` / `:any-link` / `:visited` / `:hover` / `:focus` /
+ * `:focus-visible` / `:active` states).
+ *
+ * Block style variations (`styles.blocks.*.variations` and `styles/*.json`
+ * partials that declare `blockTypes`) are not emitted here; visual-editor
+ * appends them after this output. Hosts without it can append their own
+ * CSS through the `ap.cmsFramework.globalStyles.css` filter.
  *
  * Output is cached on a content-hash key derived from the resolved styles
  * tree (see {@see ResolvedGlobalStyles::contentHash()}). The cache busts on:
@@ -91,8 +97,13 @@ class GlobalStylesEmitter
      *
      * v9: wrap element, block and block-element rules in `:root :where(…)`
      * so they share WordPress's flat (0,1,0) specificity (#390).
+     *
+     * v10: reject values with unbalanced or crossed `( )` / `[ ]` outside
+     * strings; emit `outline.*`; scope `elements.link` to
+     * `a:where(:not(.wp-element-button))`; limit element pseudo states to
+     * WordPress's link and button lists.
      */
-    private const SCHEMA_VERSION = 'v9';
+    private const SCHEMA_VERSION = 'v10';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -140,6 +151,10 @@ class GlobalStylesEmitter
         'spacing.padding'           => 'padding',
         'spacing.margin'            => 'margin',
         'shadow'                    => 'box-shadow',
+        'outline.color'             => 'outline-color',
+        'outline.offset'            => 'outline-offset',
+        'outline.style'             => 'outline-style',
+        'outline.width'             => 'outline-width',
     ];
 
     /**
@@ -188,14 +203,19 @@ class GlobalStylesEmitter
      * — so the child selector doesn't leak out of block scope (#208).
      *
      * `heading` comes before `h1`–`h6` so a per-level rule overrides the
-     * shared heading rule by source order, as in WordPress. Mirrors
-     * visual-editor's `ElementsSupport::ELEMENT_SELECTORS` plus the
-     * `caption` / `cite` entries of `ThemeJsonTokensCompiler`.
+     * shared heading rule by source order, as in WordPress. `link` skips
+     * `.wp-element-button` links, as WordPress's `a:where(:not(…))`
+     * selector does, so link styles never restyle buttons. Mirrors
+     * `WP_Theme_JSON::ELEMENTS` and visual-editor's
+     * `ElementsSupport::ELEMENT_SELECTORS`.
+     *
+     * @since 2.0.0
+     * @since 2.15.0 `link` excludes `.wp-element-button`.
      *
      * @var array<string, string>
      */
     private const ELEMENT_SELECTORS = [
-        'link'    => 'a',
+        'link'    => 'a:where(:not(.wp-element-button))',
         'heading' => 'h1, h2, h3, h4, h5, h6',
         'h1'      => 'h1',
         'h2'      => 'h2',
@@ -209,16 +229,20 @@ class GlobalStylesEmitter
     ];
 
     /**
-     * Pseudo-state sub-nodes recognized under an element node, in the
+     * Pseudo-state sub-nodes recognized under each element node, in the
      * order WordPress emits them so `:focus` overrides `:hover` when an
-     * author sets both. Mirrors visual-editor's
-     * `ElementsSupport::PSEUDO_STATES`.
+     * author sets both. Only `link` and `button` take states, as in
+     * `WP_Theme_JSON::VALID_ELEMENT_PSEUDO_SELECTORS`. Mirrors
+     * visual-editor's `ElementsSupport::PSEUDO_STATES`.
      *
      * @since 2.15.0
      *
-     * @var array<int, string>
+     * @var array<string, array<int, string>>
      */
-    private const ELEMENT_PSEUDO_STATES = [':hover', ':focus', ':focus-visible', ':active'];
+    private const ELEMENT_PSEUDO_STATES = [
+        'link'   => [':link', ':any-link', ':visited', ':hover', ':focus', ':focus-visible', ':active'],
+        'button' => [':link', ':any-link', ':visited', ':hover', ':focus', ':focus-visible', ':active'],
+    ];
 
     /**
      * `fontFace[]` key → `@font-face` descriptor map. `fontFamily` and
@@ -283,7 +307,14 @@ class GlobalStylesEmitter
      * Return the emitted CSS for the active theme's resolved global styles.
      * Returns an empty string when there is no active theme.
      *
+     * The cached CSS passes through the `ap.cmsFramework.globalStyles.css`
+     * filter on every call, with the {@see ResolvedGlobalStyles} it was
+     * built from, so a host can append rules (block style variations,
+     * for one) without its output being frozen into the cache. A
+     * callback that returns a non-string is ignored.
+     *
      * @since 2.0.0
+     * @since 2.15.0 Applies the `ap.cmsFramework.globalStyles.css` filter.
      */
     public function emit(): string
     {
@@ -295,17 +326,17 @@ class GlobalStylesEmitter
 
         $cacheKey = $this->cacheKey( $resolved );
 
-        $cached = Cache::get( $cacheKey );
+        $css = Cache::get( $cacheKey );
 
-        if ( is_string( $cached ) ) {
-            return $cached;
+        if ( ! is_string( $css ) ) {
+            $css = $this->buildCss( $resolved );
+
+            Cache::put( $cacheKey, $css, self::CACHE_TTL );
         }
 
-        $css = $this->buildCss( $resolved );
+        $filtered = applyFilters( 'ap.cmsFramework.globalStyles.css', $css, $resolved );
 
-        Cache::put( $cacheKey, $css, self::CACHE_TTL );
-
-        return $css;
+        return is_string( $filtered ) ? $filtered : $css;
     }
 
     /**
@@ -823,7 +854,8 @@ class GlobalStylesEmitter
      *
      * `file:./assets/…` sources resolve through the `themes.assets`
      * route, which serves the theme's `assets/` directory; other
-     * `file:` paths, empty asset paths and `..` segments are skipped.
+     * `file:` paths, empty asset paths, `..` segments and `%` (so an
+     * encoded `%2e%2e` segment can't climb out either) are skipped.
      * Absolute `http(s)` URLs and root-relative paths pass through. The
      * theme-asset URL keeps only the path (including any subdirectory
      * base path) so the cached CSS doesn't pin the host it was first
@@ -840,7 +872,7 @@ class GlobalStylesEmitter
 
             $assetPath = ltrim( substr( $path, 7 ), '/' );
 
-            if ( ! str_starts_with( $path, 'assets/' ) || '' === $assetPath || in_array( '..', explode( '/', $path ), true ) || ! Route::has( 'themes.assets' ) ) {
+            if ( ! str_starts_with( $path, 'assets/' ) || '' === $assetPath || str_contains( $path, '%' ) || in_array( '..', explode( '/', $path ), true ) || ! Route::has( 'themes.assets' ) ) {
                 return null;
             }
 
@@ -873,8 +905,10 @@ class GlobalStylesEmitter
      * Whether a theme-supplied value can be written into the stylesheet
      * as-is: nothing that closes the declaration, rule or `<style>` tag
      * (`; { } < >`), opens or closes a comment, smuggles a CSS escape,
-     * breaks the line, leaves a string open, or leaves a parenthesis
-     * outside a string unbalanced.
+     * breaks the line, leaves a string open, or leaves a parenthesis or
+     * bracket outside a string unbalanced or crossed. An open `(` or `[`
+     * starts a CSS block that swallows every rule after it, so `x [`
+     * would wipe out the rest of the stylesheet.
      * Mirrors visual-editor's `ThemeJsonTokensCompiler::isPrintablePresetValue()`.
      *
      * @since 2.15.0
@@ -886,12 +920,13 @@ class GlobalStylesEmitter
         }
 
         // Track string state the way a CSS tokenizer does: only the quote
-        // that opened a string closes it, and quotes or parens inside a
-        // string are literal (#387). Backslashes are rejected above, so
-        // escapes can't occur.
-        $quote  = null;
-        $depth  = 0;
-        $length = strlen( $value );
+        // that opened a string closes it, and quotes, parens or brackets
+        // inside a string are literal (#387). Backslashes are rejected
+        // above, so escapes can't occur. Open blocks are a stack of the
+        // closers they expect, so `([)]` is rejected as crossed.
+        $quote   = null;
+        $closers = [];
+        $length  = strlen( $value );
 
         for ( $i = 0; $i < $length; $i++ ) {
             $char = $value[ $i ];
@@ -914,13 +949,15 @@ class GlobalStylesEmitter
 
                 $i = $end;
             } elseif ( '(' === $char ) {
-                $depth++;
-            } elseif ( ')' === $char && --$depth < 0 ) {
+                $closers[] = ')';
+            } elseif ( '[' === $char ) {
+                $closers[] = ']';
+            } elseif ( ( ')' === $char || ']' === $char ) && array_pop( $closers ) !== $char ) {
                 return false;
             }
         }
 
-        return null === $quote && 0 === $depth;
+        return null === $quote && [] === $closers;
     }
 
     /**
@@ -1178,7 +1215,7 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            array_push( $blocks, ...$this->elementNodeRules( $selector, $elements[ $element ] ) );
+            array_push( $blocks, ...$this->elementNodeRules( $element, $selector, $elements[ $element ] ) );
         }
 
         return $blocks;
@@ -1186,18 +1223,21 @@ class GlobalStylesEmitter
 
     /**
      * Rules for one element node: the base rule, then one rule per
-     * pseudo-state sub-node in {@see ELEMENT_PSEUDO_STATES} order. The
-     * pseudo is appended to every part of a comma-joined selector
+     * pseudo-state sub-node the element supports, in
+     * {@see ELEMENT_PSEUDO_STATES} order. Elements other than `link` and
+     * `button` take no states. The pseudo is appended to every part of a
+     * comma-joined selector
      * (`.wp-element-button:hover, .wp-block-button__link:hover`).
      * Nodes with no declarations emit nothing.
      *
      * @since 2.15.0
      *
+     * @param  string                $element   The `styles.elements` key.
      * @param  array<string, mixed>  $node
      *
      * @return array<int, string>
      */
-    protected function elementNodeRules( string $selector, array $node ): array
+    protected function elementNodeRules( string $element, string $selector, array $node ): array
     {
         $rules = [];
 
@@ -1207,7 +1247,7 @@ class GlobalStylesEmitter
             $rules[] = $this->flatSpecificitySelector( $selector ) . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
         }
 
-        foreach ( self::ELEMENT_PSEUDO_STATES as $pseudo ) {
+        foreach ( self::ELEMENT_PSEUDO_STATES[ $element ] ?? [] as $pseudo ) {
             if ( ! is_array( $node[ $pseudo ] ?? null ) ) {
                 continue;
             }
@@ -1233,11 +1273,12 @@ class GlobalStylesEmitter
      * Wrap a selector list in `:root :where(…)`, as WordPress's global
      * styles do for element, block and block-element rules: every one
      * lands at a flat (0,1,0) specificity, so source order decides
-     * between them (a block's `h1` rule overrides the root `h1:hover`
-     * one, and a block style variation's
-     * `:root :where(.wp-block-group.is-style-card h1)` overrides the
-     * block's own), while `.has-*`
-     * preset classes (`!important`) and inline styles still win (#390).
+     * between them (a block's link rule overrides the root `a:hover`
+     * one, and the block style variation rules visual-editor appends
+     * after this output, such as
+     * `:root :where(.wp-block-group.is-style-card h1)`, override the
+     * block's own), while `.has-*` preset classes (`!important`) and
+     * inline styles still win (#390).
      * Mirrors visual-editor's `ThemeJsonTokensCompiler::whereRule()`.
      *
      * @since 2.15.0
@@ -1335,7 +1376,7 @@ class GlobalStylesEmitter
 
             $composed = $this->composeBlockElementSelector( $blockSelector, $elementSelector );
 
-            array_push( $rules, ...$this->elementNodeRules( $composed, $elements[ $element ] ) );
+            array_push( $rules, ...$this->elementNodeRules( $element, $composed, $elements[ $element ] ) );
         }
 
         return $rules;
@@ -1465,6 +1506,6 @@ class GlobalStylesEmitter
             return false;
         }
 
-        return array_keys( $value ) !== range( 0, count( $value) - 1);
+        return array_keys( $value ) !== range( 0, count( $value ) - 1 );
     }
 }

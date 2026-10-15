@@ -256,17 +256,24 @@ class TemplatePartsController extends Controller
      * reports SQLSTATE 23505; SQLite (used in tests) raises 23000 with
      * 'UNIQUE constraint failed' in the message.
      *
+     * SQLSTATE 23000 alone covers every integrity violation (a NOT NULL
+     * or foreign-key failure too), so it only counts when the driver
+     * names a unique constraint (MySQL / MariaDB driver code 1062, or a
+     * SQLite / SQL Server message naming the UNIQUE constraint).
+     *
      * @since 2.0.0
+     * @since 2.15.0 No longer treats every `23000` integrity error as a unique violation.
      */
     protected function isUniqueViolation( QueryException $e ): bool
     {
-        $sqlState = $e->getCode();
-
-        if ( '23000' === $sqlState || '23505' === $sqlState ) {
+        if ( '23505' === (string) $e->getCode() || 1062 === ( $e->errorInfo[1] ?? null ) ) {
             return true;
         }
 
-        return str_contains( strtolower( $e->getMessage() ), 'unique' );
+        // The driver's own message, not the exception's, which also
+        // carries the SQL and its bindings (a title containing "unique"
+        // must not count).
+        return str_contains( strtolower( (string) ( $e->errorInfo[2] ?? '' ) ), 'unique' );
     }
 
     /**

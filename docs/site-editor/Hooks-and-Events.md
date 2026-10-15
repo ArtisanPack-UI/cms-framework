@@ -71,6 +71,27 @@ Renders a `<style id="cms-global-styles">` block with the resolved global-styles
 
 The output is cached on a content-hash key; the cache busts on `GlobalStyles` model saves and deletes via a model observer wired in `SiteEditorServiceProvider`.
 
+## Framework filters
+
+| Filter | Arguments | Since | Purpose |
+|---|---|---|---|
+| `ap.cmsFramework.globalStyles.css` | `(string $css, ResolvedGlobalStyles $resolved)` | 2.15.0 | Filters the emitted global-styles CSS. Runs on every `GlobalStylesEmitter::emit()` call, after the cache, so whatever a callback adds is never frozen into the cached CSS. Feeds `@cmsGlobalStyles` and `GET /api/v1/global-styles/css`. Use it to append rules the emitter doesn't produce, such as block style variations on hosts without visual-editor. |
+| `ap.cmsFramework.abilities.siteEditor.read` | `(string $ability)` | 2.15.0 | Ability every Site Editor API route requires. Default `manage-content`. |
+| `ap.cmsFramework.abilities.siteEditor.structure` | `(string $ability)` | 2.15.0 | Ability for writes to templates, template parts, global styles and menus. Default `manage-themes`. |
+| `ap.cmsFramework.abilities.siteEditor.content` | `(string $ability)` | 2.15.0 | Ability for writes to patterns and synced blocks. Default `manage-content`. |
+
+See [[site-editor/API Reference#authorization]] for how the abilities combine.
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;
+
+addFilter( 'ap.cmsFramework.globalStyles.css', function ( string $css, ResolvedGlobalStyles $resolved ): string {
+    return $css . "\n\n:root :where(.wp-block-group.is-style-card) { padding: 2rem; }";
+} );
+```
+
+Every callback receives both arguments. A callback that returns something other than a string is ignored. The appended CSS is printed inside the directive's `<style>` element, so keep it to CSS you control: the filter output isn't validated the way theme.json values are.
+
 ## Model events
 
 The `GlobalStyles` model has a registered observer (in `SiteEditorServiceProvider::boot()`) that:

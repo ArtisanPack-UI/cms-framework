@@ -193,20 +193,30 @@ describe( 'GlobalStylesResolver::variations()', function (): void {
         expect( array_column( $this->resolver->variations(), 'slug' ) )->toBe( ['dark'] );
     } );
 
-    it( 'keeps partials whose blockTypes is empty or not a list (#389)', function ( mixed $blockTypes ): void {
+    it( 'skips partials that declare blockTypes in any form, as WordPress does (#389)', function ( mixed $blockTypes ): void {
         File::ensureDirectoryExists( $this->stylesDir );
-        File::put( $this->stylesDir . '/dark.json', json_encode( [
-            'slug'       => 'dark',
+        File::put( $this->stylesDir . '/card.json', json_encode( [
+            'slug'       => 'card',
             'blockTypes' => $blockTypes,
             'styles'     => ['color' => ['background' => '#111111']],
         ] ) );
 
-        expect( array_column( $this->resolver->variations(), 'slug' ) )->toBe( ['dark'] );
+        expect( $this->resolver->variations() )->toBe( [] );
     } )->with( [
         'empty list' => [[]],
-        'null'       => [null],
         'string'     => ['core/group'],
     ] );
+
+    it( 'keeps partials whose blockTypes is null (#389)', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/dark.json', json_encode( [
+            'slug'       => 'dark',
+            'blockTypes' => null,
+            'styles'     => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        expect( array_column( $this->resolver->variations(), 'slug' ) )->toBe( ['dark'] );
+    } );
 } );
 
 describe( 'GlobalStylesResolver block style variation partials (#389)', function (): void {
@@ -228,7 +238,36 @@ describe( 'GlobalStylesResolver block style variation partials (#389)', function
         $resolved = $this->resolver->resolve();
 
         expect( $resolved->styles['color']['background'] )->toBe( '#ffffff' )
-            ->and( $resolved->styles['color']['text'] )->toBe( '#222222' );
+            ->and( $resolved->styles['color']['text'] )->toBe( '#222222' )
+            ->and( $resolved->variation )->toBeNull()
+            ->and( GlobalStyles::query()->first()->variation )->toBe( 'card' );
+    } );
+
+    it( 'reports no variation when the stored variation file is gone', function (): void {
+        GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'deleted',
+        ] );
+
+        expect( $this->resolver->resolve()->variation )->toBeNull();
+    } );
+
+    it( 'still reports a stored variation that loads', function (): void {
+        File::ensureDirectoryExists( $this->stylesDir );
+        File::put( $this->stylesDir . '/dark.json', json_encode( [
+            'slug'   => 'dark',
+            'styles' => ['color' => ['background' => '#111111']],
+        ] ) );
+
+        GlobalStyles::create( [
+            'theme'     => $this->themeSlug,
+            'variation' => 'dark',
+        ] );
+
+        $resolved = $this->resolver->resolve();
+
+        expect( $resolved->variation )->toBe( 'dark' )
+            ->and( $resolved->styles['color']['background'] )->toBe( '#111111' );
     } );
 } );
 

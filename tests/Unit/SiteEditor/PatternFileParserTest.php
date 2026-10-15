@@ -90,5 +90,23 @@ describe( 'PatternFileParser WordPress inserter headers (#383)', function (): vo
         'yes'      => ['yes', true],
         'true'     => ['TRUE', true],
         'empty'    => ['', true],
+        'zero'     => ['0', true],
     ] );
+
+    it( 'matches header names case-insensitively, as WordPress does', function (): void {
+        $parsed = PatternFileParser::parse( patternFileWithViewport(
+            " * inserter: no\n"
+            . " * post types: Page\n"
+            . " * KEYWORDS: hero\n"
+            . " * block types: core/post-content\n"
+            . " * viewport width: 1200\n",
+        ) );
+
+        expect( $parsed['inserter'] )->toBeFalse()
+            ->and( $parsed['post_types'] )->toBe( ['page'] )
+            ->and( $parsed['keywords'] )->toBe( ['hero'] )
+            ->and( $parsed['block_types'] )->toBe( ['core/post-content'] )
+            ->and( $parsed['viewport_width'] )->toBe( 1200 )
+            ->and( $parsed['title'] )->toBe( 'Hero' );
+    } );
 } );

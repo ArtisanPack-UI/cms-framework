@@ -75,7 +75,12 @@ final class PatternFileParser
      * Without anchoring, an earlier non-header `/* ... *\/` comment in the
      * file body would be parsed as the header and shadow the real one.
      *
+     * Header names match case-insensitively, as WordPress's
+     * `get_file_data()` does: each is stored in Title Case (`post types:`
+     * becomes `Post Types`).
+     *
      * @since 2.0.0
+     * @since 2.15.0 Matches header names case-insensitively.
      *
      * @return array<string, string>
      */
@@ -100,7 +105,7 @@ final class PatternFileParser
             }
 
             if ( preg_match( '/^([A-Za-z][A-Za-z0-9 \-]+):\s*(.*)$/', $stripped, $headerMatch ) ) {
-                $headers[ trim( $headerMatch[1] ) ] = trim( $headerMatch[2] );
+                $headers[ ucwords( strtolower( trim( $headerMatch[1] ) ) ) ] = trim( $headerMatch[2] );
             }
         }
 
@@ -192,9 +197,10 @@ final class PatternFileParser
     /**
      * Parse the `Inserter:` header into WordPress's `inserter` flag.
      *
-     * Mirrors `_register_theme_block_patterns()`: a missing or empty
-     * header leaves the pattern visible, `yes` / `true` keep it visible,
-     * and any other value (`no`, `false`, …) hides it from the inserter.
+     * Mirrors WordPress's theme pattern registration: a header PHP
+     * treats as empty (missing, blank or `0`) leaves the pattern
+     * visible, `yes` / `true` keep it visible, and any other value
+     * (`no`, `false`, …) hides it from the inserter.
      *
      * @since 2.15.0
      */
@@ -202,7 +208,7 @@ final class PatternFileParser
     {
         $value = strtolower( trim( (string) $value ) );
 
-        return '' === $value || in_array( $value, ['yes', 'true'], true );
+        return '' === $value || '0' === $value || in_array( $value, ['yes', 'true'], true );
     }
 
     /**
