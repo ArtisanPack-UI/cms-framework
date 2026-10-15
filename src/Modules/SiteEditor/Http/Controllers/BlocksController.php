@@ -14,6 +14,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\BlockPatternRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\SyncedPatternResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
@@ -30,6 +31,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Blocks (synced patterns)', weight: 33 )]
 class BlocksController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -77,7 +80,7 @@ class BlocksController extends Controller
     public function store( BlockPatternRequest $request ): JsonResponse
     {
         try {
-            $pattern = BlockPattern::create( $this->createAttributes( $request->validated(), synced: true ) );
+            $pattern = BlockPattern::create( $this->filterBlockContent( $this->createAttributes( $request->validated(), synced: true ), null, 'block' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return $this->slugConflictResponse();
@@ -161,6 +164,7 @@ class BlocksController extends Controller
             // unsync-ing a pattern via this controller. Cross-state transitions
             // happen through the unsynced controller's POST/PUT instead.
             $validated['synced'] = true;
+            $validated           = $this->filterBlockContent( $validated, $existing, 'block' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -170,7 +174,7 @@ class BlocksController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return BlockPattern::create( $attributes );
+            return BlockPattern::create( $this->filterBlockContent( $attributes, null, 'block' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -183,6 +187,7 @@ class BlocksController extends Controller
 
             unset( $validated['slug'] );
             $validated['synced'] = true;
+            $validated           = $this->filterBlockContent( $validated, $existing, 'block' );
             $existing->update( $validated );
 
             return $existing->refresh();

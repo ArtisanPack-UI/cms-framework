@@ -15,6 +15,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\BlockPatternRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\BlockPatternResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
@@ -32,6 +33,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Block Patterns (unsynced)', weight: 34 )]
 class BlockPatternsController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -79,7 +82,7 @@ class BlockPatternsController extends Controller
     public function store( BlockPatternRequest $request ): JsonResponse
     {
         try {
-            $pattern = BlockPattern::create( $this->createAttributes( $request->validated() ) );
+            $pattern = BlockPattern::create( $this->filterBlockContent( $this->createAttributes( $request->validated() ), null, 'block-pattern' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return $this->slugConflictResponse();
@@ -183,6 +186,7 @@ class BlockPatternsController extends Controller
 
         if ( null !== $existing ) {
             $validated['synced'] = false;
+            $validated           = $this->filterBlockContent( $validated, $existing, 'block-pattern' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -192,7 +196,7 @@ class BlockPatternsController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return BlockPattern::create( $attributes );
+            return BlockPattern::create( $this->filterBlockContent( $attributes, null, 'block-pattern' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -205,6 +209,7 @@ class BlockPatternsController extends Controller
 
             unset( $validated['slug'] );
             $validated['synced'] = false;
+            $validated           = $this->filterBlockContent( $validated, $existing, 'block-pattern' );
             $existing->update( $validated );
 
             return $existing->refresh();

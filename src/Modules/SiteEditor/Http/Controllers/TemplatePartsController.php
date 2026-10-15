@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\TemplatePartRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\TemplateResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\TemplatePart;
@@ -30,6 +31,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Template Parts', weight: 31 )]
 class TemplatePartsController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -84,7 +87,7 @@ class TemplatePartsController extends Controller
 
         try {
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplatePartRequest Form Request; Eloquent parameter-binds create().
-            $part = TemplatePart::create( $this->normalizeAttributes( $theme, $request->validated() ) );
+            $part = TemplatePart::create( $this->filterBlockContent( $this->normalizeAttributes( $theme, $request->validated() ), null, 'template-part' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return response()->json( [
@@ -183,6 +186,7 @@ class TemplatePartsController extends Controller
             ->first();
 
         if ( null !== $existing ) {
+            $validated = $this->filterBlockContent( $validated, $existing, 'template-part' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -192,7 +196,7 @@ class TemplatePartsController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return TemplatePart::create( $attributes );
+            return TemplatePart::create( $this->filterBlockContent( $attributes, null, 'template-part' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -205,6 +209,7 @@ class TemplatePartsController extends Controller
                 ->where( 'slug', $slug )
                 ->firstOrFail();
 
+            $validated = $this->filterBlockContent( $validated, $existing, 'template-part' );
             $existing->update( $validated );
 
             return $existing->refresh();
