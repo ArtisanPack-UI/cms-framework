@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.0] - 2026-10-15
+
+### Security
+
+- **The Site Editor API now checks abilities, not just authentication** — **Breaking** for hosts whose users relied on the old access. Before 2.15.0, any authenticated user could read and write global styles, templates, template parts, menus, menu items, menu locations, patterns and synced blocks: every Form Request's `authorize()` returned `true`, and the delete actions had no check at all. A low-privilege account could restyle the whole site, point fonts and backgrounds at an outside server, rewrite templates and menus, or wipe the admin's global styles. Every `/api/v1` Site Editor route now needs the `read` ability (`manage-content`; a user with the structure ability passes too), WordPress's `edit_posts` analogue. Writes also need their group's ability: global styles, templates, template parts, menus, menu items and menu locations need `manage-themes` (WordPress's `edit_theme_options`), and patterns and synced blocks need `manage-content`. Users without them get `403`. The abilities come from the new `SiteEditorAbilities` class and can be remapped with the `ap.cmsFramework.abilities.siteEditor.read`, `.structure` and `.content` filters. `PermissionsTableSeeder` already grants `admin` both abilities and `editor` `manage-content`. **Upgrade:** grant these abilities to any custom role that uses the Site Editor. visual-editor's own Site Editor routes are unaffected; they go through its `EnsureSiteEditorAccess` gate.
+- **Global-styles values that could break out of the stylesheet are dropped** ([#385](https://github.com/ArtisanPack-UI/cms-framework/issues/385), [#387](https://github.com/ArtisanPack-UI/cms-framework/issues/387)) — `GlobalStylesEmitter` validates every `settings.custom` value, every `styles.*` declaration value (after `var:preset|…` translation), every preset value and every `@font-face` descriptor before writing it. It drops anything containing `; { } < >`, a backslash, a comment marker or a control character, a string left open, or a parenthesis or bracket outside a string that is unbalanced or crossed. An unmatched `(` or `[` would otherwise swallow every rule after it. `styles.blocks` keys must be a single `namespace/name` in WordPress's block-name charset. Preset slugs and `var:preset|…` segments are normalized to `[a-z0-9-]` ([#380](https://github.com/ArtisanPack-UI/cms-framework/issues/380)).
+
+### Added
+
+- **`@font-face` rules from `theme.json`** ([#382](https://github.com/ArtisanPack-UI/cms-framework/issues/382)) — every `settings.typography.fontFamilies[].fontFace` entry becomes an `@font-face` rule, so fonts a theme bundles the WordPress way load without hand-written CSS. `file:./assets/…` sources resolve through the `themes.assets` route. The URL keeps only its path, so subdirectory installs work and the cached CSS doesn't pin a host. `https://` and root-relative sources pass through. Other `file:` paths, `..` segments, `%`-encoded paths and anything that could break out of `url("…")` are skipped. Missing `fontStyle` / `fontWeight` / `fontDisplay` default to `WP_Font_Face`'s `normal` / `400` / `fallback`.
+- **Shadow presets, font-family classes, more elements and element states** ([#382](https://github.com/ArtisanPack-UI/cms-framework/issues/382)):
+  - `settings.shadow.presets` emit `--wp--preset--shadow--{slug}`.
+  - Font families get `.has-{slug}-font-family` classes.
+  - `elements.h1`–`h6`, `elements.caption` and `elements.cite` emit at the root and per block.
+  - `link` and `button` elements emit WordPress's `:link`, `:any-link`, `:visited`, `:hover`, `:focus`, `:focus-visible` and `:active` states, in that order.
+- **`outline.*` styles** — `outline.color`, `outline.offset`, `outline.style` and `outline.width` emit as `outline-*` declarations at the root, on elements and their states, and on blocks. WordPress themes put their focus indicators here (for example `elements.button[":focus"].outline`).
+- **WordPress pattern headers** ([#383](https://github.com/ArtisanPack-UI/cms-framework/issues/383)) — theme pattern files' `Keywords:`, `Inserter:`, `Template Types:` and `Post Types:` headers are read and exposed as `keywords`, `inserter`, `template_types` and `post_types`. They appear on the `/block-patterns/patterns` responses, on `ResolvedPattern` and in `toFilterEntry()`.
+  - `Inserter:` hides a pattern unless it is `yes`, `true`, `0` or empty.
+  - `Post Types:` is lower-cased; empty means every post type.
+  - Keywords are comma-separated, so a phrase such as `call to action` stays one keyword.
+  - Header names now match case-insensitively, as in WordPress's `get_file_data()`.
+- **User patterns store the pattern headers** — a new migration adds `keywords`, `inserter`, `template_types`, `post_types` and `viewport_width` columns to `block_patterns`. The pattern endpoints accept and validate them: `post_types` entries must be lowercase post-type keys, and `viewport_width` must be 320–2560. `PatternResolver::cloneToUser()` copies them, along with the theme pattern's block content, which clones previously lost. **Run `php artisan migrate`.**
+- **`ap.cmsFramework.globalStyles.css` filter** — `GlobalStylesEmitter::emit()` passes its CSS and the `ResolvedGlobalStyles` through this filter on every call, after the cache. A host without visual-editor can append block style variation CSS, or anything else, without it being frozen into the cache. The `@cmsGlobalStyles` directive and `GET /api/v1/global-styles/css` both carry the filtered CSS.
+
+### Changed
+
+- **Element, block and block-element rules use WordPress's flat `:root :where(…)` specificity** ([#390](https://github.com/ArtisanPack-UI/cms-framework/issues/390)) — **behaviour change**. Every element, block and block-element rule is now (0,1,0), so source order decides between them, as in WordPress 6.6+. `.has-*` preset classes and inline styles still win.
+  - Root element rules (`a`, `h1`…) used to be (0,0,1). They now beat bare element selectors in a theme's `style.css` / `editor.css`, even though those files load after the emitter.
+  - Block-element rules (`.wp-block-quote a`) used to be (0,1,1). They now lose to a later (0,1,0) rule.
+  - **Upgrade:** move element colors and spacing into `theme.json`, or use class selectors in `style.css`.
+- **Link styles no longer restyle buttons** — `elements.link` now targets `a:where(:not(.wp-element-button))`, WordPress's link selector, instead of every `a`, so a link color can't override a button rendered as a link.
+- **Pseudo states only apply to links and buttons** — matching WordPress, `:hover`, `:focus` and the other states under `heading`, `h1`–`h6`, `caption` or `cite` are ignored.
+- **Block style variation partials are no longer theme style variations** ([#389](https://github.com/ArtisanPack-UI/cms-framework/issues/389)) — a `styles/*.json` file that declares `blockTypes` (theme.json v3 block style variations; any value, as in WordPress's `style_variation_has_scope()`) is no longer listed by `/global-styles/variations` or applied as a whole-theme variation. A stored pick of one, or of a variation whose file is gone, now resolves as `variation: null`. The stored slug stays in the DB row. Block style variations are emitted by visual-editor, not by `@cmsGlobalStyles`.
+- **`post_types` reaches visual-editor** — theme patterns with a `Post Types:` header are now only offered for those post types in the visual-editor inserter, as in WordPress.
+- The global-styles emitter cache schema moves to `v10`, so cached CSS regenerates on upgrade.
+
+### Fixed
+
+- **Theme-asset font URLs keep the app's base path** and skip empty asset paths.
+
 ## [2.14.1] - 2026-10-14
 
 ### Fixed

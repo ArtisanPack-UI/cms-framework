@@ -12,8 +12,8 @@ The patterns module surfaces both theme-shipped patterns (PHP files) and user-au
 
 Patterns occupy two disjoint sources rather than a file/DB merge:
 
-- **Theme patterns** — PHP files at `themes/{active}/patterns/{slug}.php` with a leading WP-style header doc-comment (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`, `Viewport Width:`). Read-only at runtime; the body after the doc-comment becomes the pattern content.
-- **User patterns** — DB rows in `block_patterns` with columns `id`, `slug`, `theme` (nullable), `title`, `description`, `source`, `synced` (bool), `categories` (JSON), `block_types` (JSON), `block_content` (JSON via `HasBlockContent`), `author_id`, timestamps.
+- **Theme patterns** — PHP files at `themes/{active}/patterns/{slug}.php` with a leading WP-style header doc-comment (`Title:`, `Slug:`, `Categories:`, `Description:`, `Block Types:`, `Viewport Width:`, `Keywords:`, `Inserter:`, `Template Types:`, `Post Types:`). Read-only at runtime; the body after the doc-comment becomes the pattern content.
+- **User patterns** — DB rows in `block_patterns` with columns `id`, `slug`, `theme` (nullable), `title`, `description`, `source`, `synced` (bool), `categories` (JSON), `block_types` (JSON), `keywords` (JSON), `inserter` (bool, default `true`), `template_types` (JSON), `post_types` (JSON), `viewport_width` (int, nullable), `block_content` (JSON via `HasBlockContent`), `author_id`, timestamps. The five pattern-header columns were added in 2.15.0; run `php artisan migrate` after upgrading.
 
 User-pattern slugs carry a `user/` prefix at storage time — this guarantees a theme pattern named `hero` and a user pattern named `hero` do not collide in the merged inserter map. The REST surface presents the unprefixed user-facing slug; the storage form is exposed as `name` on the unsynced response (mirroring WP's namespaced pattern names).
 
@@ -30,6 +30,10 @@ Theme patterns are parsed by `PatternFileParser` from PHP files of the form:
  * Description: A simple call-to-action block.
  * Block Types: core/group
  * Viewport Width: 1200
+ * Keywords: call to action, signup
+ * Inserter: yes
+ * Template Types: front-page, home
+ * Post Types: page
  */
 ?>
 <!-- wp:group {"layout":{"type":"constrained"}} -->
@@ -41,7 +45,20 @@ Theme patterns are parsed by `PatternFileParser` from PHP files of the form:
 <!-- /wp:group -->
 ```
 
-The parser regexes are anchored — the doc-comment must lead the file. Everything after the closing `?>` (or after the closing `*/` when there is no PHP tag) becomes the pattern content. Recognized header keys: `Title:`, `Slug:`, `Categories:` (comma-separated), `Description:`, `Block Types:` (comma-separated), `Viewport Width:`.
+The parser regexes are anchored — the doc-comment must lead the file. Everything after the closing `?>` (or after the closing `*/` when there is no PHP tag) becomes the pattern content. Recognized header keys: `Title:`, `Slug:`, `Categories:` (comma-separated), `Description:`, `Block Types:` (comma-separated), `Viewport Width:`, `Keywords:` (comma-separated), `Inserter:`, `Template Types:` (comma-separated), `Post Types:` (comma-separated). Since 2.15.0 header names match case-insensitively, as WordPress's `get_file_data()` does, so `post types:` works too.
+
+### Inserter headers
+
+> **Added in 2.15.0.**
+
+These headers mirror WordPress's theme pattern registration:
+
+- `Keywords:` — inserter search terms, exposed as `keywords`. Entries are split on commas only, so a phrase such as `call to action` stays one keyword (WordPress also splits on spaces).
+- `Inserter:` — exposed as `inserter`. `no`, `false` or any other value hides the pattern from the inserter; `yes`, `true`, `0` or an empty or missing header keeps it visible. Hidden patterns are still returned by the API and the filter map; the editor decides where to show them.
+- `Template Types:` — template types the pattern suits (`front-page`, `404`, …), exposed as `template_types`.
+- `Post Types:` — post types the pattern is offered for, lower-cased and de-duplicated, exposed as `post_types`. A missing or empty header gives `null`: the pattern is offered for every post type. visual-editor filters its inserter by this list.
+
+All four are exposed on the `/block-patterns/patterns` responses, on `ResolvedPattern` (`$keywords`, `$inserter`, `$templateTypes`, `$postTypes`) and in `toFilterMap()` entries.
 
 ### Viewport width
 
@@ -49,7 +66,11 @@ The parser regexes are anchored — the doc-comment must lead the file. Everythi
 
 `Viewport Width:` mirrors WordPress's `viewportWidth` pattern property: the width, in pixels, the pattern is laid out at before an inserter preview scales it down. The value must be a positive whole number with an optional `px` suffix (`1200` or `1200px`). Valid values are clamped to 320–2560 (`PatternFileParser::MIN_VIEWPORT_WIDTH` / `MAX_VIEWPORT_WIDTH`). A missing or invalid header yields `null`, meaning "use the client's default width".
 
-The parsed value is exposed as `viewport_width` on the `/block-patterns/patterns` responses, as `ResolvedPattern::$viewportWidth`, and in `toFilterMap()` entries. User patterns have no header, so their `viewport_width` is always `null`, including user patterns cloned from a theme pattern.
+The parsed value is exposed as `viewport_width` on the `/block-patterns/patterns` responses, as `ResolvedPattern::$viewportWidth`, and in `toFilterMap()` entries.
+
+### User pattern fields
+
+Since 2.15.0 user patterns store the same fields in `block_patterns` columns, and `POST` / `PUT` accept them: `keywords` and `template_types` (string lists), `inserter` (bool), `post_types` (lowercase post-type keys, `[a-z0-9_-]`, up to 20 characters) and `viewport_width` (320–2560). Rows written before 2.15.0 read as `keywords: []`, `inserter: true`, `template_types: []`, `post_types: null` and `viewport_width: null`. An empty stored `post_types` list also reads as `null`.
 
 ## Sync semantics
 
@@ -75,7 +96,9 @@ Theme patterns are always `synced = false`. Cross-state conversion happens throu
 | PUT    | `/block-patterns/patterns/{slug}` | Upsert an unsynced user pattern. **403** when targeting a theme slug. |
 | DELETE | `/block-patterns/patterns/{slug}` | Delete a user pattern. **403** when targeting a theme slug. |
 
-A theme pattern can be cloned to an editable user pattern via `PatternResolver::cloneToUser($slug)` — used by the admin "edit" affordance on theme patterns. The clone copies title, description, categories, and block types from the theme file into a new user-source DB row.
+A theme pattern can be cloned to an editable user pattern via `PatternResolver::cloneToUser($slug)` — used by the admin "edit" affordance on theme patterns. The clone copies the title, description, categories, block types, block content and, since 2.15.0, the inserter headers (`keywords`, `inserter`, `template_types`, `post_types`, `viewport_width`) from the theme file into a new user-source DB row. Before 2.15.0 the clone had no block content.
+
+Writes need the Site Editor `content` ability (`manage-content` by default) and reads the `read` ability; see [[site-editor/API Reference#authorization]].
 
 ## Resolver
 
