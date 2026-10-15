@@ -251,25 +251,29 @@ class BlockPatternsController extends Controller
     }
 
     /**
-     * Whether the query failed on a unique constraint. SQLSTATE `23000`
-     * covers every integrity violation (a NOT NULL or foreign-key failure
-     * too), so it only counts when the driver reports a unique
-     * constraint (MySQL / MariaDB driver code 1062, or a
-     * SQLite / SQL Server message naming the UNIQUE constraint); Postgres
-     * reports `23505` for unique violations alone.
+     * Whether the query failed on a unique constraint, by each driver's
+     * own unique-violation signal: PostgreSQL SQLSTATE `23505`, MySQL /
+     * MariaDB driver code 1062, SQL Server driver codes 2601 / 2627, or a
+     * SQLite message that starts with `UNIQUE constraint failed`.
+     *
+     * SQLSTATE `23000` alone covers every integrity violation (a NOT NULL
+     * or foreign-key failure too), and the exception message and some
+     * driver diagnostics (PostgreSQL's `Failing row contains (…)`) carry
+     * row values, so the word "unique" anywhere in them proves nothing.
      *
      * @since 2.0.0
-     * @since 2.15.0 No longer treats every `23000` integrity error as a unique violation.
+     * @since 2.15.0 Matches only driver-specific unique-violation signals.
      */
     protected function isUniqueViolation( QueryException $e ): bool
     {
-        if ( '23505' === (string) $e->getCode() || 1062 === ( $e->errorInfo[1] ?? null ) ) {
+        if ( '23505' === (string) $e->getCode() ) {
             return true;
         }
 
-        // The driver's own message, not the exception's, which also
-        // carries the SQL and its bindings (a title containing "unique"
-        // must not count).
-        return str_contains( strtolower( (string) ( $e->errorInfo[2] ?? '' ) ), 'unique' );
+        if ( in_array( $e->errorInfo[1] ?? null, [1062, 2601, 2627], true ) ) {
+            return true;
+        }
+
+        return str_starts_with( strtolower( (string) ( $e->errorInfo[2] ?? '' ) ), 'unique constraint failed' );
     }
 }

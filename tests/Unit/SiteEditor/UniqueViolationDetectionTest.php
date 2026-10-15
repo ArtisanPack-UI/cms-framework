@@ -43,10 +43,27 @@ dataset( 'site editor controllers', [
 it( 'recognizes unique violations from each driver', function ( string $controller ): void {
     expect( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23000', 19, 'UNIQUE constraint failed: block_patterns.slug'] ) ) )->toBeTrue()
         ->and( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23000', 1062, "Duplicate entry 'user/hero' for key 'block_patterns_slug_unique'"] ) ) )->toBeTrue()
-        ->and( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23505', 7, 'duplicate key value violates unique constraint'] ) ) )->toBeTrue();
+        ->and( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23505', 7, 'duplicate key value violates unique constraint'] ) ) )->toBeTrue()
+        ->and( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23000', 2627, "Violation of UNIQUE KEY constraint 'block_patterns_slug_unique'."] ) ) )->toBeTrue()
+        ->and( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23000', 2601, "Cannot insert duplicate key row in object 'dbo.block_patterns' with unique index 'block_patterns_slug_unique'."] ) ) )->toBeTrue();
 } )->with( 'site editor controllers' );
 
 it( 'does not treat other integrity errors as unique violations', function ( string $controller ): void {
     expect( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23000', 19, 'NOT NULL constraint failed: block_patterns.inserter'] ) ) )->toBeFalse()
         ->and( siteEditorIsUniqueViolation( $controller, siteEditorQueryException( ['23000', 1452, 'Cannot add or update a child row: a foreign key constraint fails'] ) ) )->toBeFalse();
+} )->with( 'site editor controllers' );
+
+it( 'ignores "unique" in a diagnostic that carries row values', function ( string $controller ): void {
+    // PostgreSQL's NOT NULL diagnostic echoes the failing row.
+    $postgresNotNull = siteEditorQueryException( [
+        '23502',
+        7,
+        "ERROR:  null value in column \"inserter\" of relation \"block_patterns\" violates not-null constraint\nDETAIL:  Failing row contains (1, user/unique-hero, null, unique hero, null, user, f).",
+    ] );
+
+    // A SQLite error that mentions "unique" without being a unique violation.
+    $sqliteCheck = siteEditorQueryException( ['23000', 19, 'CHECK constraint failed: title <> \'unique\''] );
+
+    expect( siteEditorIsUniqueViolation( $controller, $postgresNotNull ) )->toBeFalse()
+        ->and( siteEditorIsUniqueViolation( $controller, $sqliteCheck ) )->toBeFalse();
 } )->with( 'site editor controllers' );
