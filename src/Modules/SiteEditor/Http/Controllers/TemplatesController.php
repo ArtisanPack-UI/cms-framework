@@ -13,6 +13,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers;
 
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concerns\FiltersBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests\TemplateRequest;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\TemplateResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Template;
@@ -30,6 +31,8 @@ use Illuminate\Routing\Controller;
 #[Group( 'Site Editor / Templates', weight: 30 )]
 class TemplatesController extends Controller
 {
+    use FiltersBlockContent;
+
     /**
      * @since 2.0.0
      */
@@ -84,7 +87,7 @@ class TemplatesController extends Controller
 
         try {
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $theme is the internal active-theme slug and the attributes come from the TemplateRequest Form Request; Eloquent parameter-binds create().
-            $template = Template::create( $this->normalizeAttributes( $theme, $request->validated() ) );
+            $template = Template::create( $this->filterBlockContentForCreate( $this->normalizeAttributes( $theme, $request->validated() ), 'template' ) );
         } catch ( QueryException $e ) {
             if ( $this->isUniqueViolation( $e ) ) {
                 return response()->json( [
@@ -198,6 +201,7 @@ class TemplatesController extends Controller
             ->first();
 
         if ( null !== $existing ) {
+            $validated = $this->filterBlockContent( $validated, $existing, 'template' );
             $existing->update( $validated );
 
             return $existing->refresh();
@@ -207,7 +211,7 @@ class TemplatesController extends Controller
         $attributes['slug'] = $slug;
 
         try {
-            return Template::create( $attributes );
+            return Template::create( $this->filterBlockContentForCreate( $attributes, 'template' ) );
         } catch ( QueryException $e ) {
             if ( ! $this->isUniqueViolation( $e ) ) {
                 throw $e;
@@ -220,6 +224,7 @@ class TemplatesController extends Controller
                 ->where( 'slug', $slug )
                 ->firstOrFail();
 
+            $validated = $this->filterBlockContent( $validated, $existing, 'template' );
             $existing->update( $validated );
 
             return $existing->refresh();
