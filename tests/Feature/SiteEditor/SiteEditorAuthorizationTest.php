@@ -36,15 +36,16 @@ dataset( 'site structure writes', [
 ] );
 
 dataset( 'site editor reads', [
-    'templates'       => ['/api/v1/templates'],
-    'template parts'  => ['/api/v1/template-parts'],
-    'synced blocks'   => ['/api/v1/blocks'],
-    'patterns'        => ['/api/v1/block-patterns/patterns'],
-    'global styles'   => ['/api/v1/global-styles'],
-    'variations'      => ['/api/v1/global-styles/variations'],
-    'menus'           => ['/api/v1/menus'],
-    'menu items'      => ['/api/v1/menu-items'],
-    'menu locations'  => ['/api/v1/menu-locations'],
+    'templates'         => ['/api/v1/templates'],
+    'template parts'    => ['/api/v1/template-parts'],
+    'synced blocks'     => ['/api/v1/blocks'],
+    'patterns'          => ['/api/v1/block-patterns/patterns'],
+    'global styles'     => ['/api/v1/global-styles'],
+    'variations'        => ['/api/v1/global-styles/variations'],
+    'global styles css' => ['/api/v1/global-styles/css'],
+    'menus'             => ['/api/v1/menus'],
+    'menu items'        => ['/api/v1/menu-items'],
+    'menu locations'    => ['/api/v1/menu-locations'],
 ] );
 
 dataset( 'site content writes', [

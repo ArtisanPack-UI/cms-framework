@@ -1841,13 +1841,25 @@ describe( 'GlobalStylesEmitter CSS filter', function (): void {
             $received = $styles;
 
             return $css . "\n\n.is-style-card { padding: 1rem; }";
-        }, 10, 2 );
+        } );
 
         $css = $this->emitter->emit();
 
         expect( $css )->toContain( '--wp--preset--color--primary: #000000;' )
             ->and( $css )->toEndWith( '.is-style-card { padding: 1rem; }' )
             ->and( $received )->toBe( $resolved );
+    } );
+
+    it( 'ignores a filter callback that returns a non-string', function (): void {
+        $resolved = makeResolved(
+            settings: ['color' => ['palette' => [['slug' => 'primary', 'color' => '#000000']]]],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        addFilter( 'ap.cmsFramework.globalStyles.css', fn (): ?string => null );
+
+        expect( $this->emitter->emit() )->toContain( '--wp--preset--color--primary: #000000;' );
     } );
 
     it( 'applies the filter to cached CSS without caching the filtered result', function (): void {
@@ -1859,7 +1871,7 @@ describe( 'GlobalStylesEmitter CSS filter', function (): void {
 
         $unfiltered = $this->emitter->emit();
 
-        addFilter( 'ap.cmsFramework.globalStyles.css', fn ( string $css ): string => $css . "\n/* host */", 10, 1 );
+        addFilter( 'ap.cmsFramework.globalStyles.css', fn ( string $css ): string => $css . "\n/* host */" );
 
         expect( $this->emitter->emit() )->toBe( $unfiltered . "\n/* host */" )
             ->and( Cache::get( 'cms.global-styles.css.v10.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );

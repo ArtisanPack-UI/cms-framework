@@ -310,7 +310,8 @@ class GlobalStylesEmitter
      * The cached CSS passes through the `ap.cmsFramework.globalStyles.css`
      * filter on every call, with the {@see ResolvedGlobalStyles} it was
      * built from, so a host can append rules (block style variations,
-     * for one) without its output being frozen into the cache.
+     * for one) without its output being frozen into the cache. A
+     * callback that returns a non-string is ignored.
      *
      * @since 2.0.0
      * @since 2.15.0 Applies the `ap.cmsFramework.globalStyles.css` filter.
@@ -333,7 +334,9 @@ class GlobalStylesEmitter
             Cache::put( $cacheKey, $css, self::CACHE_TTL );
         }
 
-        return (string) applyFilters( 'ap.cmsFramework.globalStyles.css', $css, $resolved );
+        $filtered = applyFilters( 'ap.cmsFramework.globalStyles.css', $css, $resolved );
+
+        return is_string( $filtered ) ? $filtered : $css;
     }
 
     /**

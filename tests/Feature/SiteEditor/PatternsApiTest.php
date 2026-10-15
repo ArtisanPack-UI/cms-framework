@@ -255,6 +255,33 @@ describe( 'POST /api/v1/block-patterns/patterns', function (): void {
             ->assertJsonPath( 'viewport_width', 1200 );
     } );
 
+    it( 'returns the inserter header fields on synced blocks', function (): void {
+        $this->actingAs( $this->user );
+
+        $this->postJson( '/api/v1/blocks', [
+            'slug'           => 'cta',
+            'title'          => 'CTA',
+            'keywords'       => ['signup'],
+            'inserter'       => false,
+            'post_types'     => ['post'],
+            'viewport_width' => 800,
+        ] )->assertCreated()
+            ->assertJsonPath( 'keywords', ['signup'] )
+            ->assertJsonPath( 'inserter', false )
+            ->assertJsonPath( 'template_types', [] )
+            ->assertJsonPath( 'post_types', ['post'] )
+            ->assertJsonPath( 'viewport_width', 800 );
+    } );
+
+    it( 'still answers a duplicate slug with 409 when the title says unique', function (): void {
+        $this->actingAs( $this->user );
+
+        $payload = ['slug' => 'unique-hero', 'title' => 'A unique hero'];
+
+        $this->postJson( '/api/v1/block-patterns/patterns', $payload )->assertCreated();
+        $this->postJson( '/api/v1/block-patterns/patterns', $payload )->assertStatus( 409 );
+    } );
+
     it( 'validates the inserter header fields', function ( string $field, mixed $value, string $errorKey ): void {
         $this->actingAs( $this->user );
 
@@ -266,6 +293,7 @@ describe( 'POST /api/v1/block-patterns/patterns', function (): void {
     } )->with( [
         'keywords not a list'     => ['keywords', 'hero', 'keywords'],
         'inserter not a boolean'  => ['inserter', 'sometimes', 'inserter'],
+        'inserter null'           => ['inserter', null, 'inserter'],
         'post type with a space'  => ['post_types', ['my type'], 'post_types.0'],
         'post type uppercase'     => ['post_types', ['Page'], 'post_types.0'],
         'post type too long'      => ['post_types', [str_repeat( 'a', 21 )], 'post_types.0'],

@@ -63,7 +63,7 @@ class BlockPatternRequest extends FormRequest
 
             'keywords'         => ['nullable', 'array'],
             'keywords.*'       => ['string', 'max:255'],
-            'inserter'         => ['nullable', 'boolean'],
+            'inserter'         => ['sometimes', 'boolean'],
             'template_types'   => ['nullable', 'array'],
             'template_types.*' => ['string', 'max:255'],
             'post_types'       => ['nullable', 'array'],

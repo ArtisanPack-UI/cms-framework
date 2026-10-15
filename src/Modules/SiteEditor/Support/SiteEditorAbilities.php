@@ -101,12 +101,13 @@ final class SiteEditorAbilities
      *
      * @since 2.15.0
      *
-     * @param  Authorizable|null  $user   The user, or null for a guest.
-     * @param  string             $group  {@see self::READ}, {@see self::STRUCTURE} or {@see self::CONTENT}.
+     * @param  mixed   $user   The user, or null for a guest. A user model
+     *                         that isn't {@see Authorizable} is denied.
+     * @param  string  $group  {@see self::READ}, {@see self::STRUCTURE} or {@see self::CONTENT}.
      */
-    public static function allows( ?Authorizable $user, string $group ): bool
+    public static function allows( mixed $user, string $group ): bool
     {
-        if ( null === $user ) {
+        if ( ! $user instanceof Authorizable ) {
             return false;
         }
 
