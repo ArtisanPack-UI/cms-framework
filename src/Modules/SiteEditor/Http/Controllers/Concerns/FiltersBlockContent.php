@@ -18,6 +18,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Controllers\Concern
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedEntity;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedPattern;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\BlockContentFilter;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -63,10 +64,7 @@ trait FiltersBlockContent
             $storedBlocks = is_array( $stored ) ? $stored : [];
         }
 
-        $blocks   = $attributes['block_content'];
-        $filtered = applyFilters( 'ap.cmsFramework.siteEditor.blockContent', $blocks, $storedBlocks, $context );
-
-        $attributes['block_content'] = is_array( $filtered ) ? $filtered : $blocks;
+        $attributes['block_content'] = BlockContentFilter::apply( $attributes['block_content'], $storedBlocks, $context );
 
         return $attributes;
     }
