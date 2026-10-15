@@ -88,8 +88,11 @@ class GlobalStylesEmitter
      *
      * v8: track CSS string state when validating values, so interleaved
      * quotes are dropped and parens inside a string are allowed (#387).
+     *
+     * v9: wrap element, block and block-element rules in `:root :where(…)`
+     * so they share WordPress's flat (0,1,0) specificity (#390).
      */
-    private const SCHEMA_VERSION = 'v8';
+    private const SCHEMA_VERSION = 'v9';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -1149,10 +1152,12 @@ class GlobalStylesEmitter
 
     /**
      * Per-element rule blocks for every `styles.elements.{name}` in
-     * {@see ELEMENT_SELECTORS}. Each renders as its own selector.
+     * {@see ELEMENT_SELECTORS}. Each renders as its own selector, wrapped
+     * in `:root :where(…)` (#390).
      *
      * @since 2.0.0
-     * @since 2.15.0 Adds `h1`–`h6`, `caption`, `cite` and pseudo states.
+     * @since 2.15.0 Adds `h1`–`h6`, `caption`, `cite` and pseudo states;
+     *               wraps rules in `:root :where(…)`.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -1199,7 +1204,7 @@ class GlobalStylesEmitter
         $declarations = $this->stylesRootDeclarations( $node );
 
         if ( [] !== $declarations ) {
-            $rules[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+            $rules[] = $this->flatSpecificitySelector( $selector ) . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
         }
 
         foreach ( self::ELEMENT_PSEUDO_STATES as $pseudo ) {
@@ -1218,10 +1223,28 @@ class GlobalStylesEmitter
                 explode( ',', $selector ),
             ) );
 
-            $rules[] = $pseudoSelector . ' {' . "\n" . $this->formatDeclarations( $pseudoDeclarations ) . "\n" . '}';
+            $rules[] = $this->flatSpecificitySelector( $pseudoSelector ) . ' {' . "\n" . $this->formatDeclarations( $pseudoDeclarations ) . "\n" . '}';
         }
 
         return $rules;
+    }
+
+    /**
+     * Wrap a selector list in `:root :where(…)`, as WordPress's global
+     * styles do for element, block and block-element rules: every one
+     * lands at a flat (0,1,0) specificity, so source order decides
+     * between them (a block's `h1` rule overrides the root `h1:hover`
+     * one, and a block style variation's
+     * `:root :where(.wp-block-group.is-style-card h1)` overrides the
+     * block's own), while `.has-*`
+     * preset classes (`!important`) and inline styles still win (#390).
+     * Mirrors visual-editor's `ThemeJsonTokensCompiler::whereRule()`.
+     *
+     * @since 2.15.0
+     */
+    protected function flatSpecificitySelector( string $selector ): string
+    {
+        return ':root :where(' . $selector . ')';
     }
 
     /**
@@ -1229,9 +1252,11 @@ class GlobalStylesEmitter
      * entry renders into a `.wp-block-{namespace-}{name}` selector,
      * dropping `core/` to match Gutenberg's own class naming
      * (`core/quote` → `.wp-block-quote`, `artisanpack/card`
-     * → `.wp-block-artisanpack-card`) (#201).
+     * → `.wp-block-artisanpack-card`) (#201), wrapped in
+     * `:root :where(…)` (#390).
      *
      * @since 2.5.0
+     * @since 2.15.0 Wraps rules in `:root :where(…)`.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -1261,7 +1286,7 @@ class GlobalStylesEmitter
             $declarations = $this->stylesRootDeclarations( $blockStyles );
 
             if ( [] !== $declarations ) {
-                $rules[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+                $rules[] = $this->flatSpecificitySelector( $selector ) . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
             }
 
             foreach ( $this->blockElementStyleBlocks( $selector, $blockStyles ) as $rule ) {
@@ -1283,9 +1308,11 @@ class GlobalStylesEmitter
      *   `.wp-block-quote h1, .wp-block-quote h2, …`
      *
      * — not the naive concatenation `.wp-block-quote h1, h2, …`,
-     * which would let `h2` through `h6` apply globally (#208).
+     * which would let `h2` through `h6` apply globally (#208). Each
+     * rule is wrapped in `:root :where(…)` (#390).
      *
      * @since 2.5.0
+     * @since 2.15.0 Wraps rules in `:root :where(…)`.
      *
      * @param  array<string, mixed>  $blockStyles
      *

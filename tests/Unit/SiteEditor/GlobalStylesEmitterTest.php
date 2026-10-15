@@ -130,10 +130,10 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
 
         $css = $this->emitter->emit();
 
-        expect( $css )->toContain( 'a {' )
+        expect( $css )->toContain( ':root :where(a) {' )
             ->and( $css )->toContain( 'color: #0000ff;' )
-            ->and( $css )->toContain( 'h1, h2, h3, h4, h5, h6 {' )
-            ->and( $css )->toContain( '.wp-element-button, .wp-block-button__link {' )
+            ->and( $css )->toContain( ':root :where(h1, h2, h3, h4, h5, h6) {' )
+            ->and( $css )->toContain( ':root :where(.wp-element-button, .wp-block-button__link) {' )
             ->and( $css )->toContain( 'background-color: #ff0000;' );
     } );
 
@@ -488,7 +488,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-element-button, .wp-block-button__link {' )
+            ->toContain( ':root :where(.wp-element-button, .wp-block-button__link) {' )
             ->and( $css )->toContain( 'border-radius: 5px;' )
             ->and( $css )->toContain( 'border-color: #f00;' )
             ->and( $css )->toContain( 'border-style: solid;' )
@@ -533,14 +533,14 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-artisanpack-quote {' )
+            ->toContain( ':root :where(.wp-block-artisanpack-quote) {' )
             ->and( $css )->toContain( 'border-color: #accent;' )
             ->and( $css )->toContain( 'padding-left: 1.5rem;' )
             ->and( $css )->toContain( 'font-style: italic;' )
-            ->and( $css )->toContain( '.wp-block-artisanpack-card {' )
+            ->and( $css )->toContain( ':root :where(.wp-block-artisanpack-card) {' )
             ->and( $css )->toContain( 'border-radius: 12px;' )
             // core/* namespace drops to bare `.wp-block-{name}` selector.
-            ->and( $css )->toContain( '.wp-block-quote {' )
+            ->and( $css )->toContain( ':root :where(.wp-block-quote) {' )
             ->and( $css )->not->toContain( '.wp-block-core-quote' );
     } );
 
@@ -564,7 +564,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-artisanpack-legit {' )
+            ->toContain( ':root :where(.wp-block-artisanpack-legit) {' )
             ->and( $css )->not->toContain( '.wp-block-no-namespace' )
             ->and( $css )->not->toContain( '.wp-block-missing-name' )
             ->and( $css )->not->toContain( '.wp-block--missing-namespace' )
@@ -667,7 +667,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-quote a {' )
+            ->toContain( ':root :where(.wp-block-quote a) {' )
             ->and( $css )->toContain( 'color: #accent;' );
     } );
 
@@ -696,7 +696,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         // Each child selector must be prefixed by the block selector so
         // `h2` through `h6` don't leak out of block scope.
         expect( $css )
-            ->toContain( '.wp-block-artisanpack-card h1, .wp-block-artisanpack-card h2, .wp-block-artisanpack-card h3, .wp-block-artisanpack-card h4, .wp-block-artisanpack-card h5, .wp-block-artisanpack-card h6 {' )
+            ->toContain( ':root :where(.wp-block-artisanpack-card h1, .wp-block-artisanpack-card h2, .wp-block-artisanpack-card h3, .wp-block-artisanpack-card h4, .wp-block-artisanpack-card h5, .wp-block-artisanpack-card h6) {' )
             ->and( $css )->toContain( 'font-weight: 700;' )
             ->and( $css )->toContain( 'letter-spacing: -0.01em;' )
             // No naive concatenation that would leak `h2…h6` out of scope.
@@ -723,7 +723,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-artisanpack-card .wp-element-button, .wp-block-artisanpack-card .wp-block-button__link {' )
+            ->toContain( ':root :where(.wp-block-artisanpack-card .wp-element-button, .wp-block-artisanpack-card .wp-block-button__link) {' )
             ->and( $css )->toContain( 'background-color: #primary;' );
     } );
 
@@ -747,7 +747,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-quote a {' )
+            ->toContain( ':root :where(.wp-block-quote a) {' )
             ->and( $css )->toContain( 'color: var(--wp--preset--color--accent);' )
             ->and( $css )->not->toContain( 'var:preset|' );
     } );
@@ -782,7 +782,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
 
         expect( $css )
             // Base block rule still emits alongside the invalid elements map.
-            ->toContain( '.wp-block-artisanpack-a {' )
+            ->toContain( ':root :where(.wp-block-artisanpack-a) {' )
             // No block-element rule for the scalar `elements` map on block a.
             ->and( $css )->not->toContain( '.wp-block-artisanpack-a a' )
             ->and( $css )->not->toContain( '.wp-block-artisanpack-a h1' )
@@ -790,7 +790,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
             ->and( $css )->not->toContain( '.wp-block-artisanpack-b a' )
             ->and( $css )->not->toContain( '.wp-block-artisanpack-b h1' )
             // Legit entry on block c still emits.
-            ->and( $css )->toContain( '.wp-block-artisanpack-c a {' )
+            ->and( $css )->toContain( ':root :where(.wp-block-artisanpack-c a) {' )
             ->and( $css )->toContain( 'color: #legit;' );
     } );
 
@@ -819,11 +819,11 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-quote a {' )
+            ->toContain( ':root :where(.wp-block-quote a) {' )
             ->and( $css )->toContain( 'color: #accent;' )
             // No stray empty `.wp-block-quote { }` base rule when the
             // block has no base-level declarations.
-            ->and( $css )->not->toContain( ".wp-block-quote {\n}" );
+            ->and( $css )->not->toContain( ":root :where(.wp-block-quote) {\n}" );
     } );
 
     it( 'emits both the base block rule and its per-element overrides together (#208)', function (): void {
@@ -847,9 +847,9 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( '.wp-block-quote {' )
+            ->toContain( ':root :where(.wp-block-quote) {' )
             ->and( $css )->toContain( 'font-style: italic;' )
-            ->and( $css )->toContain( '.wp-block-quote a {' )
+            ->and( $css )->toContain( ':root :where(.wp-block-quote a) {' )
             ->and( $css )->toContain( 'color: #accent;' );
     } );
 } );
@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v8.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v9.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1213,11 +1213,11 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
 
         $css = $this->emitter->emit();
 
-        expect( $css )->toContain( "h1 {\n\tfont-size: 3rem;\n}" )
-            ->and( $css )->toContain( "h6 {\n\tfont-size: 1rem;\n}" )
-            ->and( $css )->toContain( "\n.wp-element-caption {\n\tfont-size: 0.75rem;\n}" )
-            ->and( $css )->toContain( "\ncite {\n\tfont-style: normal;\n}" )
-            ->and( strpos( $css, 'h1, h2, h3, h4, h5, h6 {' ) )->toBeLessThan( strpos( $css, "h1 {\n\tfont-size: 3rem;" ) );
+        expect( $css )->toContain( ":root :where(h1) {\n\tfont-size: 3rem;\n}" )
+            ->and( $css )->toContain( ":root :where(h6) {\n\tfont-size: 1rem;\n}" )
+            ->and( $css )->toContain( "\n:root :where(.wp-element-caption) {\n\tfont-size: 0.75rem;\n}" )
+            ->and( $css )->toContain( "\n:root :where(cite) {\n\tfont-style: normal;\n}" )
+            ->and( strpos( $css, ':root :where(h1, h2, h3, h4, h5, h6) {' ) )->toBeLessThan( strpos( $css, ":root :where(h1) {\n\tfont-size: 3rem;" ) );
     } );
 
     it( 'emits element pseudo states in WordPress order', function (): void {
@@ -1244,18 +1244,18 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
 
         $css = $this->emitter->emit();
 
-        $hover        = strpos( $css, "a:hover {\n\tcolor: #000001;\n}" );
-        $focus        = strpos( $css, "a:focus {\n\tcolor: #000002;\n}" );
-        $focusVisible = strpos( $css, "a:focus-visible {\n\tcolor: #000003;\n}" );
-        $active       = strpos( $css, "a:active {\n\tcolor: #000004;\n}" );
+        $hover        = strpos( $css, ":root :where(a:hover) {\n\tcolor: #000001;\n}" );
+        $focus        = strpos( $css, ":root :where(a:focus) {\n\tcolor: #000002;\n}" );
+        $focusVisible = strpos( $css, ":root :where(a:focus-visible) {\n\tcolor: #000003;\n}" );
+        $active       = strpos( $css, ":root :where(a:active) {\n\tcolor: #000004;\n}" );
 
         expect( $hover )->toBeInt()
             ->and( $focus )->toBeGreaterThan( $hover )
             ->and( $focusVisible )->toBeGreaterThan( $focus )
             ->and( $active )->toBeGreaterThan( $focusVisible )
-            ->and( strpos( $css, "a {\n\tcolor: #0000ff;\n}" ) )->toBeLessThan( $hover )
+            ->and( strpos( $css, ":root :where(a) {\n\tcolor: #0000ff;\n}" ) )->toBeLessThan( $hover )
             ->and( $css )->not->toContain( '#999999' )
-            ->and( $css )->toContain( ".wp-element-button:hover, .wp-block-button__link:hover {\n\tbackground-color: var(--wp--preset--color--accent);\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-element-button:hover, .wp-block-button__link:hover) {\n\tbackground-color: var(--wp--preset--color--accent);\n}" )
             ->and( $css )->not->toContain( '.wp-element-button:focus' );
     } );
 
@@ -1278,10 +1278,10 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
 
         $css = $this->emitter->emit();
 
-        expect( $css )->toContain( ".wp-block-quote a:hover {\n\tcolor: #ff0000;\n}" )
-            ->and( $css )->toContain( ".wp-block-quote h2 {\n\tcolor: #00ff00;\n}" )
-            ->and( $css )->toContain( '.wp-block-quote h1:focus, .wp-block-quote h2:focus, .wp-block-quote h3:focus, .wp-block-quote h4:focus, .wp-block-quote h5:focus, .wp-block-quote h6:focus {' )
-            ->and( $css )->not->toContain( ".wp-block-quote a {\n" );
+        expect( $css )->toContain( ":root :where(.wp-block-quote a:hover) {\n\tcolor: #ff0000;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-quote h2) {\n\tcolor: #00ff00;\n}" )
+            ->and( $css )->toContain( ':root :where(.wp-block-quote h1:focus, .wp-block-quote h2:focus, .wp-block-quote h3:focus, .wp-block-quote h4:focus, .wp-block-quote h5:focus, .wp-block-quote h6:focus) {' )
+            ->and( $css )->not->toContain( ":root :where(.wp-block-quote a) {\n" );
     } );
 } );
 
@@ -1368,10 +1368,10 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
         $css = $this->emitter->emit();
 
         expect( $css )->not->toContain( 'display:none' )
-            ->and( $css )->not->toContain( 'a {' )
-            ->and( $css )->not->toContain( 'a:hover {' )
-            ->and( $css )->toContain( ".wp-element-button, .wp-block-button__link {\n\tbackground-color: #111111;\n}" )
-            ->and( $css )->toContain( ".wp-element-button:focus, .wp-block-button__link:focus {\n\tbackground-color: #222222;\n}" );
+            ->and( $css )->not->toContain( ':root :where(a) {' )
+            ->and( $css )->not->toContain( ':root :where(a:hover) {' )
+            ->and( $css )->toContain( ":root :where(.wp-element-button, .wp-block-button__link) {\n\tbackground-color: #111111;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-element-button:focus, .wp-block-button__link:focus) {\n\tbackground-color: #222222;\n}" );
     } )->with( 'break-out values' );
 
     it( 'drops unsafe values under blocks and block elements', function ( string $value ): void {
@@ -1399,7 +1399,7 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
         $css = $this->emitter->emit();
 
         expect( $css )->not->toContain( 'display:none' )
-            ->and( $css )->toContain( ".wp-block-quote {\n\tbackground-color: #333333;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-quote) {\n\tbackground-color: #333333;\n}" )
             ->and( $css )->not->toContain( '.wp-block-quote a' )
             ->and( $css )->not->toContain( '.wp-block-pullquote' );
     } )->with( 'break-out values' );
@@ -1437,7 +1437,7 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
             ->and( $css )->toContain( 'font-family: "Source Serif 4", \'Times New Roman\', serif;' )
             ->and( $css )->toContain( 'padding-top: calc(var(--wp--custom--gutter) * 2);' )
             ->and( $css )->toContain( 'box-shadow: var(--wp--preset--shadow--natural);' )
-            ->and( $css )->toContain( ".wp-block-quote {\n\tborder-radius: min(4px, 1vw);\n}" );
+            ->and( $css )->toContain( ":root :where(.wp-block-quote) {\n\tborder-radius: min(4px, 1vw);\n}" );
     } );
 
     it( 'skips block keys outside the block-name charset', function ( string $blockName ): void {
@@ -1456,7 +1456,7 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
 
         expect( $css )->not->toContain( '#111111' )
             ->and( $css )->not->toContain( 'display:none' )
-            ->and( $css )->toContain( ".wp-block-artisanpack-card-2 {\n\tcolor: #222222;\n}" );
+            ->and( $css )->toContain( ":root :where(.wp-block-artisanpack-card-2) {\n\tcolor: #222222;\n}" );
     } )->with( [
         'rule injection in name'      => ['core/x{}body{display:none}'],
         'rule injection in namespace' => ['x{}body{display:none}/quote'],
@@ -1525,7 +1525,7 @@ describe( 'GlobalStylesEmitter CSS string state (#387)', function (): void {
 
         expect( $css )->not->toContain( 'font-family:' )
             ->and( $css )->toContain( 'font-size: 18px;' )
-            ->and( $css )->toContain( ".wp-block-quote {\n\tfont-size: 20px;\n}" );
+            ->and( $css )->toContain( ":root :where(.wp-block-quote) {\n\tfont-size: 20px;\n}" );
     } )->with( 'interleaved quotes' );
 
     it( 'accepts parens and the other quote inside a string', function ( string $value ): void {
@@ -1593,4 +1593,96 @@ describe( 'GlobalStylesEmitter CSS string state (#387)', function (): void {
         'close before open'         => [')"("'],
         'unclosed calc'             => ['calc(1rem + "x"'],
     ] );
+} );
+
+describe( 'GlobalStylesEmitter block rule specificity (#390)', function (): void {
+    it( 'wraps block, block-element and pseudo-state rules in :root :where()', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/group' => [
+                        'color'    => ['background' => '#ffffff'],
+                        'elements' => [
+                            'heading' => [
+                                'color'  => ['text' => '#111111'],
+                                ':hover' => ['color' => ['text' => '#222222']],
+                            ],
+                            'button'  => ['color' => ['background' => '#333333']],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-group) {\n\tbackground-color: #ffffff;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-group h1, .wp-block-group h2, .wp-block-group h3, .wp-block-group h4, .wp-block-group h5, .wp-block-group h6) {\n\tcolor: #111111;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-group h1:hover, .wp-block-group h2:hover, .wp-block-group h3:hover, .wp-block-group h4:hover, .wp-block-group h5:hover, .wp-block-group h6:hover) {\n\tcolor: #222222;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-group .wp-element-button, .wp-block-group .wp-block-button__link) {\n\tbackground-color: #333333;\n}" )
+            ->and( $css )->not->toMatch( '/^\.wp-block-group/m' );
+    } );
+
+    it( 'wraps root element rules and emits block rules after their pseudo states', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'link'   => ['color' => ['text' => '#0000ff'], ':hover' => ['color' => ['text' => '#ff0000']]],
+                    'button' => [':hover' => ['color' => ['background' => '#444444']]],
+                ],
+                'blocks' => [
+                    'core/group' => [
+                        'elements' => [
+                            'link'   => ['color' => ['text' => '#00ff00']],
+                            'button' => [':hover' => ['color' => ['background' => '#555555']]],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        $rootLinkHover   = strpos( $css, ":root :where(a:hover) {\n\tcolor: #ff0000;\n}" );
+        $rootButtonHover = strpos( $css, ":root :where(.wp-element-button:hover, .wp-block-button__link:hover) {\n\tbackground-color: #444444;\n}" );
+
+        expect( $css )->toContain( ":root :where(a) {\n\tcolor: #0000ff;\n}" )
+            ->and( $rootLinkHover )->toBeInt()
+            ->and( $rootButtonHover )->toBeInt()
+            ->and( strpos( $css, ":root :where(.wp-block-group a) {\n\tcolor: #00ff00;\n}" ) )->toBeGreaterThan( $rootLinkHover )
+            ->and( strpos( $css, ":root :where(.wp-block-group .wp-element-button:hover, .wp-block-group .wp-block-button__link:hover) {\n\tbackground-color: #555555;\n}" ) )->toBeGreaterThan( $rootButtonHover )
+            ->and( $css )->not->toMatch( '/^(a|h[1-6]|cite|\.wp-element-[a-z]+)[ ,:{]/m' );
+    } );
+
+    it( 'keeps preset class bindings after block rules and !important', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color'      => ['palette' => [['slug' => 'primary', 'color' => '#000000']]],
+                'typography' => ['fontSizes' => [['slug' => 'large', 'size' => '2rem']]],
+            ],
+            styles: [
+                'blocks' => [
+                    'core/group' => [
+                        'color'      => ['text' => '#111111', 'background' => '#ffffff'],
+                        'typography' => ['fontSize' => '1rem'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        $blockRule = strpos( $css, ':root :where(.wp-block-group) {' );
+
+        expect( $blockRule )->not->toBeFalse()
+            ->and( strpos( $css, '.has-primary-color { color: var(--wp--preset--color--primary) !important; }' ) )->toBeGreaterThan( $blockRule )
+            ->and( strpos( $css, '.has-primary-background-color { background-color: var(--wp--preset--color--primary) !important; }' ) )->toBeGreaterThan( $blockRule )
+            ->and( strpos( $css, '.has-large-font-size { font-size: var(--wp--preset--font-size--large) !important; }' ) )->toBeGreaterThan( $blockRule );
+    } );
 } );

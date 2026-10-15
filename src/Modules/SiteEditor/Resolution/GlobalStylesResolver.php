@@ -88,10 +88,13 @@ class GlobalStylesResolver
      * List declared variations from the active theme's `styles/` directory.
      *
      * Each entry is the parsed variation JSON (typically containing `title`,
-     * `slug`, `description`, `settings`, `styles`). Returns an empty array
-     * when there is no active theme or no `styles/` directory.
+     * `slug`, `description`, `settings`, `styles`). Block style variation
+     * partials ({@see self::isBlockStyleVariation()}) are skipped. Returns
+     * an empty array when there is no active theme or no `styles/`
+     * directory.
      *
      * @since 2.0.0
+     * @since 2.15.0 Skips block style variation partials.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -119,7 +122,7 @@ class GlobalStylesResolver
             $contents = File::get( $file->getRealPath() );
             $decoded  = json_decode( $contents, true );
 
-            if ( ! is_array( $decoded ) ) {
+            if ( ! is_array( $decoded ) || $this->isBlockStyleVariation( $decoded ) ) {
                 continue;
             }
 
@@ -212,9 +215,11 @@ class GlobalStylesResolver
 
     /**
      * Load the variation JSON file for the given theme + slug. Returns null
-     * when the file does not exist or fails to decode.
+     * when the file does not exist, fails to decode, or is a block style
+     * variation partial, so a stored pick of one applies nothing.
      *
      * @since 2.0.0
+     * @since 2.15.0 Ignores block style variation partials.
      *
      * @return array<string, mixed>|null
      */
@@ -232,7 +237,24 @@ class GlobalStylesResolver
 
         $decoded = json_decode( File::get( $path ), true );
 
-        return is_array( $decoded ) ? $decoded : null;
+        return is_array( $decoded ) && ! $this->isBlockStyleVariation( $decoded ) ? $decoded : null;
+    }
+
+    /**
+     * Whether a decoded `styles/*.json` partial is a block style variation
+     * (theme.json v3): it declares a non-empty `blockTypes` list. Those
+     * share the `styles/` directory with theme style variations but style
+     * only the listed blocks, so they're never listed or applied as a
+     * whole-theme variation (#389). Mirrors visual-editor's
+     * `BlockStyleVariationParser`.
+     *
+     * @since 2.15.0
+     *
+     * @param  array<string, mixed>  $partial
+     */
+    protected function isBlockStyleVariation( array $partial ): bool
+    {
+        return is_array( $partial['blockTypes'] ?? null ) && [] !== $partial['blockTypes'];
     }
 
     /**
