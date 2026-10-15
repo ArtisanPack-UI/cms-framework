@@ -6,6 +6,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission\GlobalStylesEmitter;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\GlobalStylesResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\URL;
 
 beforeEach( function (): void {
     Cache::flush();
@@ -878,11 +879,408 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v5.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v6.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
 
         expect( Cache::has( $cacheKey ) )->toBeFalse();
+    } );
+} );
+
+describe( 'GlobalStylesEmitter preset slug hardening (#380)', function (): void {
+    it( 'neutralizes CSS metacharacters in preset slugs', function ( string $slug, string $expected ): void {
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette'   => [['slug' => $slug, 'color' => '#000000']],
+                    'gradients' => [['slug' => $slug, 'gradient' => 'linear-gradient(#000, #fff)']],
+                ],
+                'typography' => [
+                    'fontSizes'    => [['slug' => $slug, 'size' => '12px']],
+                    'fontFamilies' => [['slug' => $slug, 'fontFamily' => 'Inter']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--preset--color--' . $expected . ': #000000;' )
+            ->and( $css )->toContain( '.has-' . $expected . '-color {' )
+            ->and( $css )->toContain( '.has-' . $expected . '-background-color {' )
+            ->and( $css )->toContain( '.has-' . $expected . '-font-size {' )
+            ->and( $css )->toContain( '.has-' . $expected . '-font-family {' )
+            ->and( $css )->toContain( '.has-' . $expected . '-gradient-background {' )
+            ->and( $css )->not->toContain( '</style>' )
+            ->and( $css )->not->toContain( 'display:none' )
+            ->and( $css )->not->toContain( '"' );
+    } )->with( [
+        'braces and semicolon' => ['x{}body{display:none}', 'x--body-display-none-'],
+        'style tag'            => ['a</style><script>', 'a--style--script-'],
+        'quotes'               => ['a"b\'c', 'a-b-c'],
+        'whitespace'           => ['big gap', 'big-gap'],
+        'surrounding space'    => ['  primary ', 'primary'],
+    ] );
+
+    it( 'keeps camelCase and snake_case slugs normalizing as before', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => 'brandPrimary', 'color' => '#111111'],
+                        ['slug' => 'big_gap', 'color' => '#222222'],
+                        ['slug' => 'h2Large', 'color' => '#333333'],
+                        ['slug' => 'accent-2', 'color' => '#444444'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--preset--color--brand-primary: #111111;' )
+            ->and( $css )->toContain( '--wp--preset--color--big-gap: #222222;' )
+            ->and( $css )->toContain( '--wp--preset--color--h2-large: #333333;' )
+            ->and( $css )->toContain( '--wp--preset--color--accent-2: #444444;' );
+    } );
+
+    it( 'skips preset entries whose slug has no letters or digits', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color' => [
+                    'palette' => [
+                        ['slug' => '{}', 'color' => '#111111'],
+                        ['slug' => '   ', 'color' => '#222222'],
+                        ['slug' => '', 'color' => '#333333'],
+                        ['slug' => 'ok', 'color' => '#444444'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '#111111' )
+            ->and( $css )->not->toContain( '#222222' )
+            ->and( $css )->not->toContain( '#333333' )
+            ->and( $css )->not->toContain( '.has--' )
+            ->and( $css )->toContain( '--wp--preset--color--ok: #444444;' );
+    } );
+
+    it( 'skips preset entries whose value could break out of the rule', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: [
+                'color'  => ['palette' => [['slug' => 'bad', 'color' => $value], ['slug' => 'ok', 'color' => '#444444']]],
+                'shadow' => ['presets' => [['slug' => 'bad', 'shadow' => $value]]],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->not->toContain( '--wp--preset--color--bad' )
+            ->and( $css )->not->toContain( '.has-bad-' )
+            ->and( $css )->not->toContain( '--wp--preset--shadow--bad' )
+            ->and( $css )->not->toContain( 'display:none' )
+            ->and( $css )->toContain( '--wp--preset--color--ok: #444444;' );
+    } )->with( [
+        'rule break'     => ['red;}body{display:none'],
+        'style tag'      => ['red</style><script>'],
+        'comment'        => ['red /* display:none'],
+        'open paren'     => ['rgb(0, 0, 0 display:none'],
+        'unclosed quote' => ['"red display:none'],
+    ] );
+
+    it( 'keeps quoted font-family stacks and gradients', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color'      => ['gradients' => [['slug' => 'sunset', 'gradient' => 'linear-gradient(135deg, rgb(255, 0, 0) 0%, #fff 100%)']]],
+                'typography' => ['fontFamilies' => [['slug' => 'serif', 'fontFamily' => '"Source Serif 4", \'Times New Roman\', serif']]],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--preset--gradient--sunset: linear-gradient(135deg, rgb(255, 0, 0) 0%, #fff 100%);' )
+            ->and( $css )->toContain( '--wp--preset--font-family--serif: "Source Serif 4", \'Times New Roman\', serif;' );
+    } );
+
+    it( 'normalizes settings.custom keys', function (): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['line{Height}' => ['body;x' => '1.5']]],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->toContain( '--wp--custom--line-height---body-x: 1.5;' );
+    } );
+
+    it( 'normalizes var:preset references to match the declared property', function (): void {
+        $resolved = makeResolved(
+            settings: ['color' => ['palette' => [['slug' => 'brandPrimary', 'color' => '#111111']]]],
+            styles: ['color' => ['text' => 'var:preset|color|brandPrimary']],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->toContain( 'color: var(--wp--preset--color--brand-primary);' );
+    } );
+} );
+
+describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
+    it( 'emits shadow presets as custom properties', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'shadow' => [
+                    'presets' => [
+                        ['slug' => 'natural', 'shadow' => '6px 6px 9px rgba(0, 0, 0, 0.2)'],
+                        ['slug' => 'broken'],
+                    ],
+                ],
+            ],
+            styles: ['shadow' => 'var:preset|shadow|natural'],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--preset--shadow--natural: 6px 6px 9px rgba(0, 0, 0, 0.2);' )
+            ->and( $css )->toContain( 'box-shadow: var(--wp--preset--shadow--natural);' )
+            ->and( $css )->not->toContain( '--wp--preset--shadow--broken' );
+    } );
+
+    it( 'emits .has-{slug}-font-family bindings', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        ['slug' => 'body', 'fontFamily' => 'Inter, sans-serif'],
+                        ['slug' => 'monoFace', 'fontFamily' => 'monospace'],
+                        ['slug' => 'missing-value'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '.has-body-font-family { font-family: var(--wp--preset--font-family--body) !important; }' )
+            ->and( $css )->toContain( '.has-mono-face-font-family { font-family: var(--wp--preset--font-family--mono-face) !important; }' )
+            ->and( $css )->not->toContain( '.has-missing-value-font-family' );
+    } );
+
+    it( 'emits @font-face rules from fontFamilies[].fontFace', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        [
+                            'slug'       => 'inter',
+                            'fontFamily' => 'Inter, sans-serif',
+                            'fontFace'   => [
+                                [
+                                    'fontFamily'   => 'Inter',
+                                    'fontWeight'   => '300 900',
+                                    'fontStyle'    => 'normal',
+                                    'fontStretch'  => 'normal',
+                                    'unicodeRange' => 'U+0000-00FF',
+                                    'src'          => ['file:./assets/fonts/inter/Inter.woff2'],
+                                ],
+                                [
+                                    'fontFamily' => '"Inter"',
+                                    'fontStyle'  => 'italic',
+                                    'src'        => 'https://cdn.example.com/fonts/Inter-Italic.ttf',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toStartWith( '@font-face {' )
+            ->and( $css )->toContain( "@font-face {\n\tfont-family: \"Inter\";\n\tfont-style: normal;\n\tfont-weight: 300 900;\n\tfont-display: fallback;\n\tfont-stretch: normal;\n\tunicode-range: U+0000-00FF;\n\tsrc: url(\"/themes/test-theme/assets/fonts/inter/Inter.woff2\") format(\"woff2\");\n}" )
+            ->and( $css )->toContain( "@font-face {\n\tfont-family: \"Inter\";\n\tfont-style: italic;\n\tfont-weight: 400;\n\tfont-display: fallback;\n\tsrc: url(\"https://cdn.example.com/fonts/Inter-Italic.ttf\") format(\"truetype\");\n}" );
+    } );
+
+    it( 'skips @font-face sources and faces that cannot be served safely', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        [
+                            'slug'       => 'body',
+                            'fontFamily' => 'Body',
+                            'fontFace'   => [
+                                ['fontFamily' => 'Outside', 'src' => ['file:./fonts/outside.woff2']],
+                                ['fontFamily' => 'Traversal', 'src' => ['file:./assets/../theme.json']],
+                                ['fontFamily' => 'Protocol', 'src' => ['//evil.example.com/x.woff2', 'javascript:alert(1)']],
+                                ['fontFamily' => 'Injected', 'src' => ['https://example.com/x.woff2");}body{x:y']],
+                                ['fontFamily' => 'Bad;Name', 'src' => ['https://example.com/ok.woff2']],
+                                ['fontFamily' => 'NoSource'],
+                                [
+                                    'fontFamily' => 'Mixed',
+                                    'fontWeight' => '400;}body{color:red',
+                                    'src'        => ['file:./fonts/outside.woff2', 'file:./assets/fonts/mixed.woff'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( substr_count( $css, '@font-face' ) )->toBe( 1 )
+            ->and( $css )->toContain( "font-family: \"Mixed\";\n\tfont-style: normal;\n\tfont-display: fallback;\n\tsrc: url(\"/themes/test-theme/assets/fonts/mixed.woff\") format(\"woff\");" )
+            ->and( $css )->not->toContain( 'color:red' )
+            ->and( $css )->not->toContain( 'evil.example.com' )
+            ->and( $css )->not->toContain( 'Bad;Name' );
+    } );
+
+    it( 'skips file: sources with an empty asset path instead of failing the build', function ( string $src ): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        ['slug' => 'body', 'fontFamily' => 'Body', 'fontFace' => [['fontFamily' => 'Body', 'src' => [$src]]]],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->not->toContain( '@font-face' );
+    } )->with( [
+        'bare prefix'   => ['file:./assets/'],
+        'only slashes'  => ['file:./assets///'],
+    ] );
+
+    it( 'keeps the app base path on theme-asset font URLs', function (): void {
+        URL::forceRootUrl( 'https://example.com/cms' );
+
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        ['slug' => 'body', 'fontFamily' => 'Body', 'fontFace' => [['fontFamily' => 'Body', 'src' => ['file:./assets/fonts/body.woff2']]]],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->toContain( 'src: url("/cms/themes/test-theme/assets/fonts/body.woff2") format("woff2");' );
+
+        URL::forceRootUrl( null );
+    } );
+
+    it( 'emits h1–h6, caption and cite element rules after the shared heading rule', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'h1'      => ['typography' => ['fontSize' => '3rem']],
+                    'heading' => ['color' => ['text' => '#111111']],
+                    'h6'      => ['typography' => ['fontSize' => '1rem']],
+                    'caption' => ['typography' => ['fontSize' => '0.75rem']],
+                    'cite'    => ['typography' => ['fontStyle' => 'normal']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( "h1 {\n\tfont-size: 3rem;\n}" )
+            ->and( $css )->toContain( "h6 {\n\tfont-size: 1rem;\n}" )
+            ->and( $css )->toContain( "\n.wp-element-caption {\n\tfont-size: 0.75rem;\n}" )
+            ->and( $css )->toContain( "\ncite {\n\tfont-style: normal;\n}" )
+            ->and( strpos( $css, 'h1, h2, h3, h4, h5, h6 {' ) )->toBeLessThan( strpos( $css, "h1 {\n\tfont-size: 3rem;" ) );
+    } );
+
+    it( 'emits element pseudo states in WordPress order', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'link' => [
+                        'color'          => ['text' => '#0000ff'],
+                        ':active'        => ['color' => ['text' => '#000004']],
+                        ':focus'         => ['color' => ['text' => '#000002']],
+                        ':hover'         => ['color' => ['text' => '#000001']],
+                        ':focus-visible' => ['color' => ['text' => '#000003']],
+                        ':visited'       => ['color' => ['text' => '#999999']],
+                    ],
+                    'button' => [
+                        ':hover' => ['color' => ['background' => 'var:preset|color|accent']],
+                        ':focus' => [],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        $hover        = strpos( $css, "a:hover {\n\tcolor: #000001;\n}" );
+        $focus        = strpos( $css, "a:focus {\n\tcolor: #000002;\n}" );
+        $focusVisible = strpos( $css, "a:focus-visible {\n\tcolor: #000003;\n}" );
+        $active       = strpos( $css, "a:active {\n\tcolor: #000004;\n}" );
+
+        expect( $hover )->toBeInt()
+            ->and( $focus )->toBeGreaterThan( $hover )
+            ->and( $focusVisible )->toBeGreaterThan( $focus )
+            ->and( $active )->toBeGreaterThan( $focusVisible )
+            ->and( strpos( $css, "a {\n\tcolor: #0000ff;\n}" ) )->toBeLessThan( $hover )
+            ->and( $css )->not->toContain( '#999999' )
+            ->and( $css )->toContain( ".wp-element-button:hover, .wp-block-button__link:hover {\n\tbackground-color: var(--wp--preset--color--accent);\n}" )
+            ->and( $css )->not->toContain( '.wp-element-button:focus' );
+    } );
+
+    it( 'emits pseudo states for per-block elements scoped to the block', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/quote' => [
+                        'elements' => [
+                            'link'    => [':hover' => ['color' => ['text' => '#ff0000']]],
+                            'h2'      => ['color' => ['text' => '#00ff00']],
+                            'heading' => [':focus' => ['color' => ['text' => '#0000ff']]],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ".wp-block-quote a:hover {\n\tcolor: #ff0000;\n}" )
+            ->and( $css )->toContain( ".wp-block-quote h2 {\n\tcolor: #00ff00;\n}" )
+            ->and( $css )->toContain( '.wp-block-quote h1:focus, .wp-block-quote h2:focus, .wp-block-quote h3:focus, .wp-block-quote h4:focus, .wp-block-quote h5:focus, .wp-block-quote h6:focus {' )
+            ->and( $css )->not->toContain( ".wp-block-quote a {\n" );
     } );
 } );

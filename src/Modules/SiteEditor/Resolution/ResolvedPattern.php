@@ -49,6 +49,16 @@ final class ResolvedPattern
      *                                   `Viewport Width:` header. Null means
      *                                   "use the consumer's default" and is
      *                                   always null for user patterns.
+     * @param  array<int, string>  $keywords  Inserter search terms, from a theme
+     *                                       file's `Keywords:` header.
+     * @param  bool  $inserter  False when a theme file's `Inserter:` header
+     *                          hides the pattern from the inserter.
+     * @param  array<int, string>  $templateTypes  Template types the pattern
+     *                                            suits, from `Template Types:`.
+     * @param  array<int, string>|null  $postTypes  Lower-cased post types the
+     *                                              pattern is offered for, from
+     *                                              `Post Types:`. Null means
+     *                                              unscoped (every post type).
      */
     public function __construct(
         public readonly string $slug,
@@ -64,6 +74,10 @@ final class ResolvedPattern
         public readonly array $blockTypes,
         public readonly ?BlockPattern $model,
         public readonly ?int $viewportWidth = null,
+        public readonly array $keywords = [],
+        public readonly bool $inserter = true,
+        public readonly array $templateTypes = [],
+        public readonly ?array $postTypes = null,
     ) {
     }
 
@@ -84,6 +98,7 @@ final class ResolvedPattern
      * {@see \ArtisanPackUI\VisualEditor\SiteEditor\Resolution\ResolvedPattern::fromArray()}.
      *
      * @since 2.0.0
+     * @since 2.15.0 Adds `keywords`, `inserter`, `template_types` and `post_types`.
      *
      * @return array<string, mixed>
      */
@@ -100,6 +115,10 @@ final class ResolvedPattern
             'block_types'    => $this->blockTypes,
             'wp_id'          => $this->wpId(),
             'viewport_width' => $this->viewportWidth,
+            'keywords'       => $this->keywords,
+            'inserter'       => $this->inserter,
+            'template_types' => $this->templateTypes,
+            'post_types'     => $this->postTypes,
         ];
     }
 }

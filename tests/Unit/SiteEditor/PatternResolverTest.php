@@ -117,6 +117,52 @@ PHP );
             ->and( $this->resolver->resolve( 'plain' )->viewportWidth )->toBeNull();
     } );
 
+    it( 'carries the Keywords, Inserter, Template Types and Post Types headers on theme patterns (#383)', function (): void {
+        File::put( $this->themeFiles . '/scoped.php', <<<'PHP'
+<?php
+/**
+ * Title: Scoped
+ * Keywords: hero, banner
+ * Inserter: no
+ * Template Types: front-page
+ * Post Types: Page, post
+ */
+?>
+<!-- wp:paragraph --><p>Scoped</p><!-- /wp:paragraph -->
+PHP );
+
+        File::put( $this->themeFiles . '/plain.php', "<?php\n/**\n * Title: Plain\n */\n" );
+
+        $scoped = $this->resolver->resolve( 'scoped' );
+        $plain  = $this->resolver->resolve( 'plain' );
+
+        expect( $scoped->keywords )->toBe( ['hero', 'banner'] )
+            ->and( $scoped->inserter )->toBeFalse()
+            ->and( $scoped->templateTypes )->toBe( ['front-page'] )
+            ->and( $scoped->postTypes )->toBe( ['page', 'post'] )
+            ->and( $scoped->toFilterEntry() )->toMatchArray( [
+                'keywords'       => ['hero', 'banner'],
+                'inserter'       => false,
+                'template_types' => ['front-page'],
+                'post_types'     => ['page', 'post'],
+            ] )
+            ->and( $plain->keywords )->toBe( [] )
+            ->and( $plain->inserter )->toBeTrue()
+            ->and( $plain->templateTypes )->toBe( [] )
+            ->and( $plain->postTypes )->toBeNull();
+    } );
+
+    it( 'leaves the WordPress header fields at their defaults on user patterns (#383)', function (): void {
+        BlockPattern::create( ['slug' => 'callout', 'title' => 'Callout', 'source' => BlockPattern::SOURCE_USER] );
+
+        $pattern = $this->resolver->resolve( 'callout' );
+
+        expect( $pattern->keywords )->toBe( [] )
+            ->and( $pattern->inserter )->toBeTrue()
+            ->and( $pattern->templateTypes )->toBe( [] )
+            ->and( $pattern->postTypes )->toBeNull();
+    } );
+
     it( 'leaves the viewport width null on user patterns', function (): void {
         BlockPattern::create( ['slug' => 'callout', 'title' => 'Callout', 'source' => BlockPattern::SOURCE_USER] );
 
@@ -298,6 +344,10 @@ PHP );
                 'block_types',
                 'wp_id',
                 'viewport_width',
+                'keywords',
+                'inserter',
+                'template_types',
+                'post_types',
             ] )
             ->and( $map['hero']['slug'] )->toBe( 'hero' )
             ->and( $map['hero']['source'] )->toBe( BlockPattern::SOURCE_THEME )

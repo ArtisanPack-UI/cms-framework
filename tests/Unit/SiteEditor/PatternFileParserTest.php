@@ -49,3 +49,46 @@ describe( 'PatternFileParser viewport width', function (): void {
         'too wide'   => ['9000', PatternFileParser::MAX_VIEWPORT_WIDTH],
     ] );
 } );
+
+describe( 'PatternFileParser WordPress inserter headers (#383)', function (): void {
+    it( 'parses Keywords, Template Types and Post Types as lists', function (): void {
+        $parsed = PatternFileParser::parse( patternFileWithViewport(
+            " * Keywords: hero, banner , call to action\n"
+            . " * Template Types: front-page, home\n"
+            . " * Post Types: Page, wp_template, page\n",
+        ) );
+
+        expect( $parsed['keywords'] )->toBe( ['hero', 'banner', 'call to action'] )
+            ->and( $parsed['template_types'] )->toBe( ['front-page', 'home'] )
+            ->and( $parsed['post_types'] )->toBe( ['page', 'wp_template'] );
+    } );
+
+    it( 'defaults the new headers when they are missing', function (): void {
+        $parsed = PatternFileParser::parse( patternFileWithViewport( '' ) );
+
+        expect( $parsed['keywords'] )->toBe( [] )
+            ->and( $parsed['inserter'] )->toBeTrue()
+            ->and( $parsed['template_types'] )->toBe( [] )
+            ->and( $parsed['post_types'] )->toBeNull();
+    } );
+
+    it( 'leaves the pattern unscoped when Post Types is empty', function (): void {
+        $parsed = PatternFileParser::parse( patternFileWithViewport( " * Post Types:\n" ) );
+
+        expect( $parsed['post_types'] )->toBeNull();
+    } );
+
+    it( 'reads the Inserter header the way WordPress does', function ( string $value, bool $expected ): void {
+        $parsed = PatternFileParser::parse( patternFileWithViewport( " * Inserter: {$value}\n" ) );
+
+        expect( $parsed['inserter'] )->toBe( $expected );
+    } )->with( [
+        'no'       => ['no', false],
+        'false'    => ['false', false],
+        'upper NO' => ['NO', false],
+        'other'    => ['hidden', false],
+        'yes'      => ['yes', true],
+        'true'     => ['TRUE', true],
+        'empty'    => ['', true],
+    ] );
+} );

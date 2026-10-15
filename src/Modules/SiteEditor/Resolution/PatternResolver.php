@@ -260,6 +260,10 @@ class PatternResolver
             blockTypes     : $parsed['block_types'],
             model          : null,
             viewportWidth  : $parsed['viewport_width'],
+            keywords       : $parsed['keywords'],
+            inserter       : $parsed['inserter'],
+            templateTypes  : $parsed['template_types'],
+            postTypes      : $parsed['post_types'],
         );
     }
 

@@ -3,12 +3,16 @@
 /**
  * Global Styles CSS Emitter
  *
- * Translates the resolved global-styles tree into CSS — custom properties
+ * Translates the resolved global-styles tree into CSS — `@font-face` rules
+ * for `settings.typography.fontFamilies[].fontFace`, custom properties
  * for `settings.color.palette`, `settings.typography.fontSizes`,
  * `settings.typography.fontFamilies`, `settings.spacing.spacingSizes`,
- * `settings.color.gradients`, and `settings.custom`, plus inline rules for
+ * `settings.color.gradients`, `settings.shadow.presets`, and
+ * `settings.custom`, plus inline rules for
  * `styles.color`/`styles.typography`/`styles.spacing` and per-element styles
- * (`elements.link`, `elements.heading`, `elements.button`).
+ * (`elements.link`, `elements.heading`, `elements.h1`–`h6`,
+ * `elements.button`, `elements.caption`, `elements.cite`, and their
+ * `:hover` / `:focus` / `:focus-visible` / `:active` states).
  *
  * Output is cached on a content-hash key derived from the resolved styles
  * tree (see {@see ResolvedGlobalStyles::contentHash()}). The cache busts on:
@@ -28,6 +32,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\GlobalStylesResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Route;
 
 /**
  * @since 2.0.0
@@ -71,8 +76,13 @@ class GlobalStylesEmitter
      * v5: scope the `.has-{slug}-color` rule for the `text`, `link` and
      * `border` slugs to real picks of that slug so it no longer overrides
      * a block's own color through the matching block-support marker.
+     *
+     * v6: restrict preset slugs to `[a-z0-9-]` (#380); emit shadow
+     * presets, `@font-face` rules, `.has-{slug}-font-family` bindings,
+     * the `h1`–`h6` / `caption` / `cite` elements and element pseudo
+     * states (#382).
      */
-    private const SCHEMA_VERSION = 'v5';
+    private const SCHEMA_VERSION = 'v6';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -167,12 +177,88 @@ class GlobalStylesEmitter
      * block selector at the block-element call site — never concatenated
      * — so the child selector doesn't leak out of block scope (#208).
      *
+     * `heading` comes before `h1`–`h6` so a per-level rule overrides the
+     * shared heading rule by source order, as in WordPress. Mirrors
+     * visual-editor's `ElementsSupport::ELEMENT_SELECTORS` plus the
+     * `caption` / `cite` entries of `ThemeJsonTokensCompiler`.
+     *
      * @var array<string, string>
      */
     private const ELEMENT_SELECTORS = [
         'link'    => 'a',
         'heading' => 'h1, h2, h3, h4, h5, h6',
+        'h1'      => 'h1',
+        'h2'      => 'h2',
+        'h3'      => 'h3',
+        'h4'      => 'h4',
+        'h5'      => 'h5',
+        'h6'      => 'h6',
         'button'  => '.wp-element-button, .wp-block-button__link',
+        'caption' => '.wp-element-caption',
+        'cite'    => 'cite',
+    ];
+
+    /**
+     * Pseudo-state sub-nodes recognized under an element node, in the
+     * order WordPress emits them so `:focus` overrides `:hover` when an
+     * author sets both. Mirrors visual-editor's
+     * `ElementsSupport::PSEUDO_STATES`.
+     *
+     * @since 2.15.0
+     *
+     * @var array<int, string>
+     */
+    private const ELEMENT_PSEUDO_STATES = [':hover', ':focus', ':focus-visible', ':active'];
+
+    /**
+     * `fontFace[]` key → `@font-face` descriptor map. `fontFamily` and
+     * `src` are handled separately by {@see self::fontFaceRule()}.
+     *
+     * @since 2.15.0
+     *
+     * @var array<string, string>
+     */
+    private const FONT_FACE_DESCRIPTORS = [
+        'fontStyle'             => 'font-style',
+        'fontWeight'            => 'font-weight',
+        'fontDisplay'           => 'font-display',
+        'fontStretch'           => 'font-stretch',
+        'unicodeRange'          => 'unicode-range',
+        'fontFeatureSettings'   => 'font-feature-settings',
+        'fontVariationSettings' => 'font-variation-settings',
+        'ascentOverride'        => 'ascent-override',
+        'descentOverride'       => 'descent-override',
+        'lineGapOverride'       => 'line-gap-override',
+        'sizeAdjust'            => 'size-adjust',
+    ];
+
+    /**
+     * Descriptor defaults WordPress's `WP_Font_Face` applies when a
+     * `fontFace` entry leaves them out.
+     *
+     * @since 2.15.0
+     *
+     * @var array<string, string>
+     */
+    private const FONT_FACE_DEFAULTS = [
+        'fontStyle'   => 'normal',
+        'fontWeight'  => '400',
+        'fontDisplay' => 'fallback',
+    ];
+
+    /**
+     * Font file extension → `format()` hint for `@font-face` sources.
+     *
+     * @since 2.15.0
+     *
+     * @var array<string, string>
+     */
+    private const FONT_FORMATS = [
+        'woff2' => 'woff2',
+        'woff'  => 'woff',
+        'ttf'   => 'truetype',
+        'otf'   => 'opentype',
+        'eot'   => 'embedded-opentype',
     ];
 
     /**
@@ -256,11 +342,12 @@ class GlobalStylesEmitter
             $this->fontFamilyCustomProperties( $resolved->settings ),
             $this->spacingCustomProperties( $resolved->settings ),
             $this->gradientCustomProperties( $resolved->settings ),
+            $this->shadowCustomProperties( $resolved->settings ),
             $this->settingsCustomProperties( $resolved->settings ),
             $this->stylesRootDeclarations( $resolved->styles ),
         );
 
-        $blocks = [];
+        $blocks = $this->fontFaceRules( $resolved->settings, $resolved->theme );
 
         if ( [] !== $rootDeclarations ) {
             $blocks[] = ':root {' . "\n" . $this->formatDeclarations( $rootDeclarations ) . "\n" . '}';
@@ -373,8 +460,9 @@ class GlobalStylesEmitter
 
     /**
      * Emit `.has-{slug}-color`, `-background-color`, `-border-color`,
-     * `-font-size`, and `-gradient-background` rules that bind each
-     * preset slug to its matching `--wp--preset--*` custom property.
+     * `-font-size`, `-font-family`, and `-gradient-background` rules that
+     * bind each preset slug to its matching `--wp--preset--*` custom
+     * property.
      *
      * `!important` mirrors WordPress core's emission so a preset
      * selection always overrides cascading default styles, the way
@@ -413,6 +501,14 @@ class GlobalStylesEmitter
             $rules[] = '.has-' . $slug . '-font-size { font-size: var(--wp--preset--font-size--' . $slug . ') !important; }';
         }
 
+        $fontFamilies = is_array( $settings['typography']['fontFamilies'] ?? null )
+            ? $settings['typography']['fontFamilies']
+            : [];
+
+        foreach ( $this->presetSlugs( $fontFamilies, 'fontFamily' ) as $slug ) {
+            $rules[] = '.has-' . $slug . '-font-family { font-family: var(--wp--preset--font-family--' . $slug . ') !important; }';
+        }
+
         $gradients = is_array( $settings['color']['gradients'] ?? null )
             ? $settings['color']['gradients']
             : [];
@@ -444,21 +540,58 @@ class GlobalStylesEmitter
         $slugs = [];
 
         foreach ( $items as $item ) {
-            if ( ! is_array( $item ) ) {
-                continue;
+            $slug = $this->presetEntrySlug( $item, $valueKey );
+
+            if ( null !== $slug ) {
+                $slugs[] = $slug;
             }
-
-            $slug  = $item['slug'] ?? null;
-            $value = $item[ $valueKey ] ?? null;
-
-            if ( ! is_string( $slug ) || '' === $slug || ! is_scalar( $value ) ) {
-                continue;
-            }
-
-            $slugs[] = $this->kebab( $slug );
         }
 
         return $slugs;
+    }
+
+    /**
+     * The normalized slug of one preset entry, or null when the entry is
+     * malformed: not an array, no string slug, a `$valueKey` value that
+     * isn't scalar or fails {@see self::isSafeCssValue()}, or a slug with
+     * no letters or digits left after {@see self::presetSlug()}. The
+     * declaration and the `.has-*` binding both go through here, so a
+     * skipped entry never leaves a class pointing at an undeclared var.
+     *
+     * @since 2.15.0
+     */
+    protected function presetEntrySlug( mixed $item, string $valueKey ): ?string
+    {
+        if ( ! is_array( $item ) ) {
+            return null;
+        }
+
+        $slug  = $item['slug'] ?? null;
+        $value = $item[ $valueKey ] ?? null;
+
+        if ( ! is_string( $slug ) || ! is_scalar( $value ) || ! $this->isSafeCssValue( (string) $value ) ) {
+            return null;
+        }
+
+        $slug = $this->presetSlug( $slug );
+
+        return '' === trim( $slug, '-' ) ? null : $slug;
+    }
+
+    /**
+     * Normalize a preset slug (or `var:preset|…` segment) for use in a
+     * class name or custom-property name: the {@see self::kebab()}
+     * camelCase split and lowercase, then every character outside
+     * `[a-z0-9-]` becomes `-`, so a theme.json or saved global-styles
+     * slug can't close the selector or rule it's written into (#380).
+     * Slugs already in `[a-zA-Z0-9_-]` normalize exactly as before.
+     * Mirrors visual-editor's `PresetRegistry::presetSlug()`.
+     *
+     * @since 2.15.0
+     */
+    protected function presetSlug( string $value ): string
+    {
+        return (string) preg_replace( '/[^a-z0-9\-]/', '-', $this->kebab( trim( $value ) ) );
     }
 
     /**
@@ -555,6 +688,210 @@ class GlobalStylesEmitter
     }
 
     /**
+     * Translate `settings.shadow.presets[].(slug, shadow)` into
+     * `--wp--preset--shadow--{slug}: {shadow};` declarations so a picked
+     * shadow preset (`var:preset|shadow|{slug}`) resolves (#382).
+     *
+     * @since 2.15.0
+     *
+     * @param  array<string, mixed>  $settings
+     *
+     * @return array<int, array{0: string, 1: string}>
+     */
+    protected function shadowCustomProperties( array $settings ): array
+    {
+        $presets = $settings['shadow']['presets'] ?? [];
+
+        if ( ! is_array( $presets ) ) {
+            return [];
+        }
+
+        return $this->presetCustomProperties( $presets, 'shadow', 'shadow' );
+    }
+
+    /**
+     * Emit an `@font-face` rule for every entry of
+     * `settings.typography.fontFamilies[].fontFace`, so fonts a theme
+     * bundles the WordPress way load without hand-written CSS (#382).
+     *
+     * @since 2.15.0
+     *
+     * @param  array<string, mixed>  $settings
+     * @param  string                $theme     Active theme slug, for `file:./` sources.
+     *
+     * @return array<int, string>
+     */
+    protected function fontFaceRules( array $settings, string $theme ): array
+    {
+        $families = $settings['typography']['fontFamilies'] ?? null;
+
+        if ( ! is_array( $families ) ) {
+            return [];
+        }
+
+        $rules = [];
+
+        foreach ( $families as $family ) {
+            if ( ! is_array( $family ) || ! is_array( $family['fontFace'] ?? null ) ) {
+                continue;
+            }
+
+            foreach ( $family['fontFace'] as $face ) {
+                $rule = is_array( $face ) ? $this->fontFaceRule( $face, $theme ) : null;
+
+                if ( null !== $rule ) {
+                    $rules[] = $rule;
+                }
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Build one `@font-face` rule, or null when the face has no usable
+     * family name or source. Missing `fontStyle` / `fontWeight` /
+     * `fontDisplay` fall back to `WP_Font_Face`'s defaults, and any
+     * descriptor whose value could break out of the rule is dropped.
+     *
+     * @since 2.15.0
+     *
+     * @param  array<string, mixed>  $face
+     */
+    protected function fontFaceRule( array $face, string $theme ): ?string
+    {
+        $family = is_string( $face['fontFamily'] ?? null )
+            ? trim( trim( $face['fontFamily'] ), '"\'' )
+            : '';
+
+        if ( '' === $family || ! $this->isSafeCssValue( $family ) || str_contains( $family, '"' ) ) {
+            return null;
+        }
+
+        $sources = [];
+
+        foreach ( (array) ( $face['src'] ?? [] ) as $src ) {
+            $source = is_string( $src ) ? $this->fontFaceSource( $src, $theme ) : null;
+
+            if ( null !== $source ) {
+                $sources[] = $source;
+            }
+        }
+
+        if ( [] === $sources ) {
+            return null;
+        }
+
+        $declarations = [
+            ['font-family', '"' . $family . '"'],
+        ];
+
+        foreach ( self::FONT_FACE_DESCRIPTORS as $key => $descriptor ) {
+            $value = $face[ $key ] ?? self::FONT_FACE_DEFAULTS[ $key ] ?? null;
+
+            if ( ! is_scalar( $value ) || is_bool( $value ) ) {
+                continue;
+            }
+
+            $value = trim( (string) $value );
+
+            if ( '' === $value || ! $this->isSafeCssValue( $value ) ) {
+                continue;
+            }
+
+            $declarations[] = [$descriptor, $value];
+        }
+
+        $declarations[] = ['src', implode( ', ', $sources )];
+
+        return '@font-face {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+    }
+
+    /**
+     * Turn one `fontFace[].src` entry into a `url("…") format("…")`
+     * source, or null when it can't be served safely.
+     *
+     * `file:./assets/…` sources resolve through the `themes.assets`
+     * route, which serves the theme's `assets/` directory; other
+     * `file:` paths, empty asset paths and `..` segments are skipped.
+     * Absolute `http(s)` URLs and root-relative paths pass through. The
+     * theme-asset URL keeps only the path (including any subdirectory
+     * base path) so the cached CSS doesn't pin the host it was first
+     * built on.
+     *
+     * @since 2.15.0
+     */
+    protected function fontFaceSource( string $src, string $theme ): ?string
+    {
+        $src = trim( $src );
+
+        if ( str_starts_with( $src, 'file:' ) ) {
+            $path = (string) preg_replace( '#^(?:\./)+#', '', ltrim( substr( $src, 5 ) ) );
+
+            $assetPath = ltrim( substr( $path, 7 ), '/' );
+
+            if ( ! str_starts_with( $path, 'assets/' ) || '' === $assetPath || in_array( '..', explode( '/', $path ), true ) || ! Route::has( 'themes.assets' ) ) {
+                return null;
+            }
+
+            // Keep only the path of the absolute URL: a relative `route()`
+            // strips the app's root URL, which drops the base path of an
+            // app served from a subdirectory.
+            $url = (string) parse_url( route( 'themes.assets', ['slug' => $theme, 'path' => $assetPath] ), PHP_URL_PATH );
+        } elseif ( 1 === preg_match( '#^(?:https?://|/(?!/))#i', $src ) ) {
+            $url = $src;
+        } else {
+            return null;
+        }
+
+        if ( 1 === preg_match( '/["\'\\\\\s<>(){};]/', $url ) ) {
+            return null;
+        }
+
+        $source = 'url("' . $url . '")';
+
+        $extension = strtolower( pathinfo( (string) parse_url( $url, PHP_URL_PATH ), PATHINFO_EXTENSION ) );
+
+        if ( isset( self::FONT_FORMATS[ $extension ] ) ) {
+            $source .= ' format("' . self::FONT_FORMATS[ $extension ] . '")';
+        }
+
+        return $source;
+    }
+
+    /**
+     * Whether a theme-supplied value can be written into the stylesheet
+     * as-is: nothing that closes the declaration, rule or `<style>` tag
+     * (`; { } < >`), opens or closes a comment, smuggles a CSS escape,
+     * breaks the line, or leaves a quote or parenthesis unbalanced.
+     * Mirrors visual-editor's `ThemeJsonTokensCompiler::isPrintablePresetValue()`.
+     *
+     * @since 2.15.0
+     */
+    protected function isSafeCssValue( string $value ): bool
+    {
+        if ( 1 === preg_match( '#[;{}<>\\\\\x00-\x1F\x7F]|/\*|\*/#', $value ) ) {
+            return false;
+        }
+
+        if ( 0 !== substr_count( $value, '"' ) % 2 || 0 !== substr_count( $value, "'" ) % 2 ) {
+            return false;
+        }
+
+        $depth = 0;
+
+        foreach ( str_split( $value ) as $char ) {
+            if ( '(' === $char ) {
+                $depth++;
+            } elseif ( ')' === $char && --$depth < 0 ) {
+                return false;
+            }
+        }
+
+        return 0 === $depth;
+    }
+
+    /**
      * `settings.custom` flattens into kebab-cased custom properties prefixed
      * with `--wp--custom--`. Nested objects deepen the prefix, matching WP's
      * `wp_get_global_settings()` translation.
@@ -589,7 +926,7 @@ class GlobalStylesEmitter
     protected function flattenCustom( array $node, string $prefix, array &$declarations ): void
     {
         foreach ( $node as $key => $value ) {
-            $segment = '--' . $this->kebab( (string) $key );
+            $segment = '--' . $this->presetSlug( (string) $key );
 
             if ( is_array( $value ) && $this->isAssoc( $value ) ) {
                 $this->flattenCustom( $value, $prefix . $segment, $declarations );
@@ -719,9 +1056,12 @@ class GlobalStylesEmitter
      * into a real CSS `var(--wp--preset--{category}--{slug})` reference
      * (#202). Values that don't match the pattern pass through unchanged,
      * so themes that write either the shorthand or the raw `var(...)`
-     * form both work.
+     * form both work. Both segments go through {@see self::presetSlug()}
+     * so `var:preset|color|brandPrimary` references the
+     * `--wp--preset--color--brand-primary` property the palette declares.
      *
      * @since 2.5.0
+     * @since 2.15.0 Normalizes the category and slug segments.
      */
     protected function translatePresetValue( string $value ): string
     {
@@ -731,16 +1071,17 @@ class GlobalStylesEmitter
         // subtly-broken value.
         return (string) preg_replace_callback(
             '/var:preset\|([A-Za-z0-9_-]+)\|([A-Za-z0-9_-]+)(?![A-Za-z0-9_|-])/',
-            fn ( array $matches ): string => 'var(--wp--preset--' . $matches[1] . '--' . $matches[2] . ')',
+            fn ( array $matches ): string => 'var(--wp--preset--' . $this->presetSlug( $matches[1] ) . '--' . $this->presetSlug( $matches[2] ) . ')',
             $value,
         );
     }
 
     /**
-     * Per-element rule blocks: `styles.elements.link`, `styles.elements.heading`,
-     * `styles.elements.button`. Each renders as its own selector.
+     * Per-element rule blocks for every `styles.elements.{name}` in
+     * {@see ELEMENT_SELECTORS}. Each renders as its own selector.
      *
      * @since 2.0.0
+     * @since 2.15.0 Adds `h1`–`h6`, `caption`, `cite` and pseudo states.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -761,16 +1102,55 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            $declarations = $this->stylesRootDeclarations( $elements[ $element ] );
-
-            if ( [] === $declarations ) {
-                continue;
-            }
-
-            $blocks[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+            array_push( $blocks, ...$this->elementNodeRules( $selector, $elements[ $element ] ) );
         }
 
         return $blocks;
+    }
+
+    /**
+     * Rules for one element node: the base rule, then one rule per
+     * pseudo-state sub-node in {@see ELEMENT_PSEUDO_STATES} order. The
+     * pseudo is appended to every part of a comma-joined selector
+     * (`.wp-element-button:hover, .wp-block-button__link:hover`).
+     * Nodes with no declarations emit nothing.
+     *
+     * @since 2.15.0
+     *
+     * @param  array<string, mixed>  $node
+     *
+     * @return array<int, string>
+     */
+    protected function elementNodeRules( string $selector, array $node ): array
+    {
+        $rules = [];
+
+        $declarations = $this->stylesRootDeclarations( $node );
+
+        if ( [] !== $declarations ) {
+            $rules[] = $selector . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+        }
+
+        foreach ( self::ELEMENT_PSEUDO_STATES as $pseudo ) {
+            if ( ! is_array( $node[ $pseudo ] ?? null ) ) {
+                continue;
+            }
+
+            $pseudoDeclarations = $this->stylesRootDeclarations( $node[ $pseudo ] );
+
+            if ( [] === $pseudoDeclarations ) {
+                continue;
+            }
+
+            $pseudoSelector = implode( ', ', array_map(
+                static fn ( string $part ): string => trim( $part ) . $pseudo,
+                explode( ',', $selector ),
+            ) );
+
+            $rules[] = $pseudoSelector . ' {' . "\n" . $this->formatDeclarations( $pseudoDeclarations ) . "\n" . '}';
+        }
+
+        return $rules;
     }
 
     /**
@@ -855,15 +1235,9 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            $declarations = $this->stylesRootDeclarations( $elements[ $element ] );
-
-            if ( [] === $declarations ) {
-                continue;
-            }
-
             $composed = $this->composeBlockElementSelector( $blockSelector, $elementSelector );
 
-            $rules[] = $composed . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+            array_push( $rules, ...$this->elementNodeRules( $composed, $elements[ $element ] ) );
         }
 
         return $rules;
@@ -940,18 +1314,13 @@ class GlobalStylesEmitter
         $declarations = [];
 
         foreach ( $items as $item ) {
-            if ( ! is_array( $item ) ) {
+            $slug = $this->presetEntrySlug( $item, $valueKey );
+
+            if ( null === $slug ) {
                 continue;
             }
 
-            $slug  = $item['slug'] ?? null;
-            $value = $item[ $valueKey ] ?? null;
-
-            if ( ! is_string( $slug ) || '' === $slug || ! is_scalar( $value ) ) {
-                continue;
-            }
-
-            $declarations[] = ['--wp--preset--' . $prefix . '--' . $this->kebab( $slug ), (string) $value];
+            $declarations[] = ['--wp--preset--' . $prefix . '--' . $slug, (string) $item[ $valueKey ]];
         }
 
         return $declarations;

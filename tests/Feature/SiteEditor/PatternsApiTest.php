@@ -191,6 +191,31 @@ describe( 'GET /api/v1/block-patterns/patterns', function (): void {
         $response->assertOk();
         expect( $response->json( 'viewport_width' ) )->toBe( 1400 );
     } );
+
+    it( 'exposes the Keywords, Inserter, Template Types and Post Types headers (#383)', function (): void {
+        File::put(
+            $this->themePatterns . '/scoped.php',
+            "<?php\n/**\n * Title: Scoped\n * Keywords: hero, banner\n * Inserter: no\n * Template Types: front-page\n * Post Types: page\n */\n",
+        );
+        File::put( $this->themePatterns . '/plain.php', "<?php\n/**\n * Title: Plain\n */\n" );
+
+        $this->actingAs( $this->user );
+
+        $scoped = $this->getJson( '/api/v1/block-patterns/patterns/scoped' );
+        $plain  = $this->getJson( '/api/v1/block-patterns/patterns/plain' );
+
+        $scoped->assertOk();
+        expect( $scoped->json( 'keywords' ) )->toBe( ['hero', 'banner'] );
+        expect( $scoped->json( 'inserter' ) )->toBeFalse();
+        expect( $scoped->json( 'template_types' ) )->toBe( ['front-page'] );
+        expect( $scoped->json( 'post_types' ) )->toBe( ['page'] );
+
+        $plain->assertOk();
+        expect( $plain->json( 'keywords' ) )->toBe( [] );
+        expect( $plain->json( 'inserter' ) )->toBeTrue();
+        expect( $plain->json( 'template_types' ) )->toBe( [] );
+        expect( $plain->json( 'post_types' ) )->toBeNull();
+    } );
 } );
 
 describe( 'POST /api/v1/block-patterns/patterns', function (): void {
