@@ -6,6 +6,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Emission\GlobalStylesEmitter;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\GlobalStylesResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyles;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\URL;
 
 beforeEach( function (): void {
     Cache::flush();
@@ -1154,6 +1155,45 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
             ->and( $css )->not->toContain( 'color:red' )
             ->and( $css )->not->toContain( 'evil.example.com' )
             ->and( $css )->not->toContain( 'Bad;Name' );
+    } );
+
+    it( 'skips file: sources with an empty asset path instead of failing the build', function ( string $src ): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        ['slug' => 'body', 'fontFamily' => 'Body', 'fontFace' => [['fontFamily' => 'Body', 'src' => [$src]]]],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->not->toContain( '@font-face' );
+    } )->with( [
+        'bare prefix'   => ['file:./assets/'],
+        'only slashes'  => ['file:./assets///'],
+    ] );
+
+    it( 'keeps the app base path on theme-asset font URLs', function (): void {
+        URL::forceRootUrl( 'https://example.com/cms' );
+
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        ['slug' => 'body', 'fontFamily' => 'Body', 'fontFace' => [['fontFamily' => 'Body', 'src' => ['file:./assets/fonts/body.woff2']]]],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->toContain( 'src: url("/cms/themes/test-theme/assets/fonts/body.woff2") format("woff2");' );
+
+        URL::forceRootUrl( null );
     } );
 
     it( 'emits h1–h6, caption and cite element rules after the shared heading rule', function (): void {

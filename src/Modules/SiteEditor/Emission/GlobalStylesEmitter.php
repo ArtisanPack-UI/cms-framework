@@ -813,9 +813,10 @@ class GlobalStylesEmitter
      *
      * `file:./assets/…` sources resolve through the `themes.assets`
      * route, which serves the theme's `assets/` directory; other
-     * `file:` paths and `..` segments are skipped. Absolute `http(s)`
-     * URLs and root-relative paths pass through. The theme-asset URL is
-     * root-relative so the cached CSS doesn't pin the host it was first
+     * `file:` paths, empty asset paths and `..` segments are skipped.
+     * Absolute `http(s)` URLs and root-relative paths pass through. The
+     * theme-asset URL keeps only the path (including any subdirectory
+     * base path) so the cached CSS doesn't pin the host it was first
      * built on.
      *
      * @since 2.15.0
@@ -827,11 +828,16 @@ class GlobalStylesEmitter
         if ( str_starts_with( $src, 'file:' ) ) {
             $path = (string) preg_replace( '#^(?:\./)+#', '', ltrim( substr( $src, 5 ) ) );
 
-            if ( ! str_starts_with( $path, 'assets/' ) || in_array( '..', explode( '/', $path ), true ) || ! Route::has( 'themes.assets' ) ) {
+            $assetPath = ltrim( substr( $path, 7 ), '/' );
+
+            if ( ! str_starts_with( $path, 'assets/' ) || '' === $assetPath || in_array( '..', explode( '/', $path ), true ) || ! Route::has( 'themes.assets' ) ) {
                 return null;
             }
 
-            $url = route( 'themes.assets', ['slug' => $theme, 'path' => substr( $path, 7 )], false );
+            // Keep only the path of the absolute URL: a relative `route()`
+            // strips the app's root URL, which drops the base path of an
+            // app served from a subdirectory.
+            $url = (string) parse_url( route( 'themes.assets', ['slug' => $theme, 'path' => $assetPath] ), PHP_URL_PATH );
         } elseif ( 1 === preg_match( '#^(?:https?://|/(?!/))#i', $src ) ) {
             $url = $src;
         } else {
