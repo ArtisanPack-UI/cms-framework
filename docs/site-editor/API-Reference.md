@@ -94,7 +94,7 @@ Singleton-per-theme — no `{slug}` segment.
 
 ## Pattern fields
 
-Since 2.15.0 every unsynced pattern response (`/block-patterns/patterns`, theme and user) carries the WordPress pattern-header fields alongside `viewport_width`:
+Since 2.15.0 every pattern response (`/block-patterns/patterns`, theme and user, and `/blocks`) carries the WordPress pattern-header fields:
 
 | Field | Type | Meaning |
 |---|---|---|
@@ -104,7 +104,7 @@ Since 2.15.0 every unsynced pattern response (`/block-patterns/patterns`, theme 
 | `post_types` | `string[] \| null` | Post types the pattern is offered for (`Post Types:` header); `null` means every post type. |
 | `viewport_width` | `int \| null` | Preview layout width (`Viewport Width:` header); `null` means the client default. |
 
-`POST` / `PUT` on `/block-patterns/patterns` and `/blocks` accept the same fields for user patterns. `post_types` entries must be lowercase post-type keys (`[a-z0-9_-]`, up to 20 characters) and `viewport_width` must be 320–2560; anything else is a `422`. See [[site-editor/Patterns]].
+`POST` / `PUT` on `/block-patterns/patterns` and `/blocks` accept the same fields for user patterns. `post_types` entries must be lowercase post-type keys (`[a-z0-9_-]`, up to 20 characters), `viewport_width` must be 320–2560 and `inserter` must be a boolean when sent (omit it to keep the current value); anything else is a `422`. See [[site-editor/Patterns]].
 
 ## Authentication
 

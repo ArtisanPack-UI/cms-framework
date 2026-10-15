@@ -87,10 +87,10 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\ResolvedGlobalStyle
 
 addFilter( 'ap.cmsFramework.globalStyles.css', function ( string $css, ResolvedGlobalStyles $resolved ): string {
     return $css . "\n\n:root :where(.wp-block-group.is-style-card) { padding: 2rem; }";
-}, 10, 2 );
+} );
 ```
 
-The appended CSS is printed inside the directive's `<style>` element; keep it to CSS you control, since the filter output isn't validated the way theme.json values are.
+Every callback receives both arguments. A callback that returns something other than a string is ignored. The appended CSS is printed inside the directive's `<style>` element, so keep it to CSS you control: the filter output isn't validated the way theme.json values are.
 
 ## Model events
 

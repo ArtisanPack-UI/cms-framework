@@ -44,6 +44,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Theme-asset font URLs keep the app's base path** and skip empty asset paths.
+- **A failed pattern, template or menu write is no longer reported as a slug conflict** — the pattern, synced-block, template, template-part and menu controllers treated every SQLSTATE `23000` error (a `NOT NULL` or foreign-key failure too) as a duplicate slug and answered `409`. They also searched the exception message, which includes the query's bound values, so a title containing "unique" could match. Only real unique violations count now.
+- **`/blocks` responses include the pattern-header fields** the endpoint accepts (`keywords`, `inserter`, `template_types`, `post_types`, `viewport_width`).
 
 ## [2.14.1] - 2026-10-14
 

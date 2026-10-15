@@ -74,7 +74,7 @@ Every `settings.typography.fontFamilies[].fontFace` entry becomes an `@font-face
 
 - `file:./assets/…` resolves through the `themes.assets` route, which serves the theme's `assets/` directory. The URL keeps only its path, so an app in a subdirectory keeps its base path and the cached CSS doesn't pin a host.
 - Absolute `http(s)://` URLs and root-relative `/…` paths pass through.
-- Other `file:` paths, `..` segments, `%`-encoded paths, protocol-relative `//…` URLs and anything with quotes, whitespace, parentheses or `<>{};` are skipped. A face with no usable source is skipped.
+- Other `file:` paths, `..` segments, paths containing `%` (so encoded segments such as `%2e%2e` can't climb out; name font files without percent-encoding — a literal space is fine), protocol-relative `//…` URLs and anything with quotes, whitespace, parentheses or `<>{};` are skipped. A face with no usable source is skipped.
 
 `format()` comes from the file extension (`woff2`, `woff`, `ttf` → `truetype`, `otf` → `opentype`, `eot`). Missing `fontStyle`, `fontWeight` and `fontDisplay` default to `WP_Font_Face`'s `normal`, `400` and `fallback`. The other descriptors (`fontStretch`, `unicodeRange`, `fontFeatureSettings`, `fontVariationSettings`, `ascentOverride`, `descentOverride`, `lineGapOverride`, `sizeAdjust`) pass through when set.
 
