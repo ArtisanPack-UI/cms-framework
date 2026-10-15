@@ -8,7 +8,7 @@ use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 
 beforeEach( function (): void {
-    $this->user      = TestUser::factory()->create();
+    $this->user      = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
     $this->themeSlug = 'test-theme';
 
     $this->mock( ThemeManager::class, function ( $mock ): void {

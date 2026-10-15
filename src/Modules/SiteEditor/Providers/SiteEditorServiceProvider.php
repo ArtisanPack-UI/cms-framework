@@ -215,6 +215,6 @@ class SiteEditorServiceProvider extends ServiceProvider
         };
 
         GlobalStyles::saved( $invalidate );
-        GlobalStyles::deleted( $invalidate);
+        GlobalStyles::deleted( $invalidate );
     }
 }

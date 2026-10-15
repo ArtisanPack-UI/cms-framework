@@ -130,7 +130,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
 
         $css = $this->emitter->emit();
 
-        expect( $css )->toContain( ':root :where(a) {' )
+        expect( $css )->toContain( ':root :where(a:where(:not(.wp-element-button))) {' )
             ->and( $css )->toContain( 'color: #0000ff;' )
             ->and( $css )->toContain( ':root :where(h1, h2, h3, h4, h5, h6) {' )
             ->and( $css )->toContain( ':root :where(.wp-element-button, .wp-block-button__link) {' )
@@ -667,7 +667,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( ':root :where(.wp-block-quote a) {' )
+            ->toContain( ':root :where(.wp-block-quote a:where(:not(.wp-element-button))) {' )
             ->and( $css )->toContain( 'color: #accent;' );
     } );
 
@@ -747,7 +747,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( ':root :where(.wp-block-quote a) {' )
+            ->toContain( ':root :where(.wp-block-quote a:where(:not(.wp-element-button))) {' )
             ->and( $css )->toContain( 'color: var(--wp--preset--color--accent);' )
             ->and( $css )->not->toContain( 'var:preset|' );
     } );
@@ -790,7 +790,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
             ->and( $css )->not->toContain( '.wp-block-artisanpack-b a' )
             ->and( $css )->not->toContain( '.wp-block-artisanpack-b h1' )
             // Legit entry on block c still emits.
-            ->and( $css )->toContain( ':root :where(.wp-block-artisanpack-c a) {' )
+            ->and( $css )->toContain( ':root :where(.wp-block-artisanpack-c a:where(:not(.wp-element-button))) {' )
             ->and( $css )->toContain( 'color: #legit;' );
     } );
 
@@ -819,7 +819,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         $css = $this->emitter->emit();
 
         expect( $css )
-            ->toContain( ':root :where(.wp-block-quote a) {' )
+            ->toContain( ':root :where(.wp-block-quote a:where(:not(.wp-element-button))) {' )
             ->and( $css )->toContain( 'color: #accent;' )
             // No stray empty `.wp-block-quote { }` base rule when the
             // block has no base-level declarations.
@@ -849,7 +849,7 @@ describe( 'GlobalStylesEmitter::emit()', function (): void {
         expect( $css )
             ->toContain( ':root :where(.wp-block-quote) {' )
             ->and( $css )->toContain( 'font-style: italic;' )
-            ->and( $css )->toContain( ':root :where(.wp-block-quote a) {' )
+            ->and( $css )->toContain( ':root :where(.wp-block-quote a:where(:not(.wp-element-button))) {' )
             ->and( $css )->toContain( 'color: #accent;' );
     } );
 } );
@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v9.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v10.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1157,6 +1157,25 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
             ->and( $css )->not->toContain( 'Bad;Name' );
     } );
 
+    it( 'skips file: sources with percent-encoded segments', function ( string $src ): void {
+        $resolved = makeResolved(
+            settings: [
+                'typography' => [
+                    'fontFamilies' => [
+                        ['slug' => 'body', 'fontFamily' => 'Body', 'fontFace' => [['fontFamily' => 'Body', 'src' => [$src]]]],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->not->toContain( '@font-face' );
+    } )->with( [
+        'encoded dot segments' => ['file:./assets/%2e%2e/%2e%2e/logout?a.woff2'],
+        'encoded slash'        => ['file:./assets/fonts%2F..%2Fx.woff2'],
+    ] );
+
     it( 'skips file: sources with an empty asset path instead of failing the build', function ( string $src ): void {
         $resolved = makeResolved(
             settings: [
@@ -1231,6 +1250,9 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
                         ':hover'         => ['color' => ['text' => '#000001']],
                         ':focus-visible' => ['color' => ['text' => '#000003']],
                         ':visited'       => ['color' => ['text' => '#999999']],
+                        ':any-link'      => ['color' => ['text' => '#888888']],
+                        ':link'          => ['color' => ['text' => '#777777']],
+                        ':focus-within'  => ['color' => ['text' => '#666666']],
                     ],
                     'button' => [
                         ':hover' => ['color' => ['background' => 'var:preset|color|accent']],
@@ -1244,17 +1266,23 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
 
         $css = $this->emitter->emit();
 
-        $hover        = strpos( $css, ":root :where(a:hover) {\n\tcolor: #000001;\n}" );
-        $focus        = strpos( $css, ":root :where(a:focus) {\n\tcolor: #000002;\n}" );
-        $focusVisible = strpos( $css, ":root :where(a:focus-visible) {\n\tcolor: #000003;\n}" );
-        $active       = strpos( $css, ":root :where(a:active) {\n\tcolor: #000004;\n}" );
+        $link         = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):link) {\n\tcolor: #777777;\n}" );
+        $anyLink      = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):any-link) {\n\tcolor: #888888;\n}" );
+        $visited      = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):visited) {\n\tcolor: #999999;\n}" );
+        $hover        = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):hover) {\n\tcolor: #000001;\n}" );
+        $focus        = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):focus) {\n\tcolor: #000002;\n}" );
+        $focusVisible = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):focus-visible) {\n\tcolor: #000003;\n}" );
+        $active       = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):active) {\n\tcolor: #000004;\n}" );
 
-        expect( $hover )->toBeInt()
+        expect( $link )->toBeInt()
+            ->and( $anyLink )->toBeGreaterThan( $link )
+            ->and( $visited )->toBeGreaterThan( $anyLink )
+            ->and( $hover )->toBeGreaterThan( $visited )
             ->and( $focus )->toBeGreaterThan( $hover )
             ->and( $focusVisible )->toBeGreaterThan( $focus )
             ->and( $active )->toBeGreaterThan( $focusVisible )
-            ->and( strpos( $css, ":root :where(a) {\n\tcolor: #0000ff;\n}" ) )->toBeLessThan( $hover )
-            ->and( $css )->not->toContain( '#999999' )
+            ->and( strpos( $css, ":root :where(a:where(:not(.wp-element-button))) {\n\tcolor: #0000ff;\n}" ) )->toBeLessThan( $link )
+            ->and( $css )->not->toContain( '#666666' )
             ->and( $css )->toContain( ":root :where(.wp-element-button:hover, .wp-block-button__link:hover) {\n\tbackground-color: var(--wp--preset--color--accent);\n}" )
             ->and( $css )->not->toContain( '.wp-element-button:focus' );
     } );
@@ -1278,10 +1306,11 @@ describe( 'GlobalStylesEmitter theme.json parity (#382)', function (): void {
 
         $css = $this->emitter->emit();
 
-        expect( $css )->toContain( ":root :where(.wp-block-quote a:hover) {\n\tcolor: #ff0000;\n}" )
+        expect( $css )->toContain( ":root :where(.wp-block-quote a:where(:not(.wp-element-button)):hover) {\n\tcolor: #ff0000;\n}" )
             ->and( $css )->toContain( ":root :where(.wp-block-quote h2) {\n\tcolor: #00ff00;\n}" )
-            ->and( $css )->toContain( ':root :where(.wp-block-quote h1:focus, .wp-block-quote h2:focus, .wp-block-quote h3:focus, .wp-block-quote h4:focus, .wp-block-quote h5:focus, .wp-block-quote h6:focus) {' )
-            ->and( $css )->not->toContain( ":root :where(.wp-block-quote a) {\n" );
+            ->and( $css )->not->toContain( ':focus' )
+            ->and( $css )->not->toContain( '#0000ff' )
+            ->and( $css )->not->toContain( ":root :where(.wp-block-quote a:where(:not(.wp-element-button))) {\n" );
     } );
 } );
 
@@ -1298,6 +1327,9 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
         'open paren'      => ['rgb(0, 0, 0 display:none'],
         'close paren'     => ['red) display:none'],
         'newline'         => ["red\ndisplay:none"],
+        'open bracket'    => ['red [ display:none'],
+        'close bracket'   => ['red ] display:none'],
+        'crossed blocks'  => ['([)] display:none'],
     ] );
 
     it( 'drops unsafe settings.custom values and keeps safe siblings', function ( string $value ): void {
@@ -1368,8 +1400,8 @@ describe( 'GlobalStylesEmitter value and block key hardening (#385)', function (
         $css = $this->emitter->emit();
 
         expect( $css )->not->toContain( 'display:none' )
-            ->and( $css )->not->toContain( ':root :where(a) {' )
-            ->and( $css )->not->toContain( ':root :where(a:hover) {' )
+            ->and( $css )->not->toContain( ':root :where(a:where(:not(.wp-element-button))) {' )
+            ->and( $css )->not->toContain( ':root :where(a:where(:not(.wp-element-button)):hover) {' )
             ->and( $css )->toContain( ":root :where(.wp-element-button, .wp-block-button__link) {\n\tbackground-color: #111111;\n}" )
             ->and( $css )->toContain( ":root :where(.wp-element-button:focus, .wp-block-button__link:focus) {\n\tbackground-color: #222222;\n}" );
     } )->with( 'break-out values' );
@@ -1592,6 +1624,25 @@ describe( 'GlobalStylesEmitter CSS string state (#387)', function (): void {
         'paren after closed string' => ['"a" ('],
         'close before open'         => [')"("'],
         'unclosed calc'             => ['calc(1rem + "x"'],
+        'crossed paren and bracket' => ['([)]'],
+        'bracket closing a paren'   => ['var(--x]'],
+        'unclosed bracket'          => ['[full-start 1fr'],
+        'bracket after string'      => ['"[" ]'],
+    ] );
+
+    it( 'keeps balanced brackets and brackets inside strings', function ( string $value ): void {
+        $resolved = makeResolved(
+            settings: ['custom' => ['x' => $value]],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->toContain( '--wp--custom--x: ' . $value . ';' );
+    } )->with( [
+        'grid line names'     => ['[full-start] minmax(0, 1fr) [full-end]'],
+        'bracket in a string' => ['"a[b"'],
+        'nested functions'    => ['var(--x, rgb(0 0 0))'],
+        'parens in brackets'  => ['[a(b)]'],
     ] );
 } );
 
@@ -1603,11 +1654,11 @@ describe( 'GlobalStylesEmitter block rule specificity (#390)', function (): void
                     'core/group' => [
                         'color'    => ['background' => '#ffffff'],
                         'elements' => [
-                            'heading' => [
-                                'color'  => ['text' => '#111111'],
-                                ':hover' => ['color' => ['text' => '#222222']],
+                            'heading' => ['color' => ['text' => '#111111']],
+                            'button'  => [
+                                'color'  => ['background' => '#333333'],
+                                ':hover' => ['color' => ['background' => '#222222']],
                             ],
-                            'button'  => ['color' => ['background' => '#333333']],
                         ],
                     ],
                 ],
@@ -1620,7 +1671,7 @@ describe( 'GlobalStylesEmitter block rule specificity (#390)', function (): void
 
         expect( $css )->toContain( ":root :where(.wp-block-group) {\n\tbackground-color: #ffffff;\n}" )
             ->and( $css )->toContain( ":root :where(.wp-block-group h1, .wp-block-group h2, .wp-block-group h3, .wp-block-group h4, .wp-block-group h5, .wp-block-group h6) {\n\tcolor: #111111;\n}" )
-            ->and( $css )->toContain( ":root :where(.wp-block-group h1:hover, .wp-block-group h2:hover, .wp-block-group h3:hover, .wp-block-group h4:hover, .wp-block-group h5:hover, .wp-block-group h6:hover) {\n\tcolor: #222222;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-group .wp-element-button:hover, .wp-block-group .wp-block-button__link:hover) {\n\tbackground-color: #222222;\n}" )
             ->and( $css )->toContain( ":root :where(.wp-block-group .wp-element-button, .wp-block-group .wp-block-button__link) {\n\tbackground-color: #333333;\n}" )
             ->and( $css )->not->toMatch( '/^\.wp-block-group/m' );
     } );
@@ -1647,13 +1698,13 @@ describe( 'GlobalStylesEmitter block rule specificity (#390)', function (): void
 
         $css = $this->emitter->emit();
 
-        $rootLinkHover   = strpos( $css, ":root :where(a:hover) {\n\tcolor: #ff0000;\n}" );
+        $rootLinkHover   = strpos( $css, ":root :where(a:where(:not(.wp-element-button)):hover) {\n\tcolor: #ff0000;\n}" );
         $rootButtonHover = strpos( $css, ":root :where(.wp-element-button:hover, .wp-block-button__link:hover) {\n\tbackground-color: #444444;\n}" );
 
-        expect( $css )->toContain( ":root :where(a) {\n\tcolor: #0000ff;\n}" )
+        expect( $css )->toContain( ":root :where(a:where(:not(.wp-element-button))) {\n\tcolor: #0000ff;\n}" )
             ->and( $rootLinkHover )->toBeInt()
             ->and( $rootButtonHover )->toBeInt()
-            ->and( strpos( $css, ":root :where(.wp-block-group a) {\n\tcolor: #00ff00;\n}" ) )->toBeGreaterThan( $rootLinkHover )
+            ->and( strpos( $css, ":root :where(.wp-block-group a:where(:not(.wp-element-button))) {\n\tcolor: #00ff00;\n}" ) )->toBeGreaterThan( $rootLinkHover )
             ->and( strpos( $css, ":root :where(.wp-block-group .wp-element-button:hover, .wp-block-group .wp-block-button__link:hover) {\n\tbackground-color: #555555;\n}" ) )->toBeGreaterThan( $rootButtonHover )
             ->and( $css )->not->toMatch( '/^(a|h[1-6]|cite|\.wp-element-[a-z]+)[ ,:{]/m' );
     } );
@@ -1684,5 +1735,133 @@ describe( 'GlobalStylesEmitter block rule specificity (#390)', function (): void
             ->and( strpos( $css, '.has-primary-color { color: var(--wp--preset--color--primary) !important; }' ) )->toBeGreaterThan( $blockRule )
             ->and( strpos( $css, '.has-primary-background-color { background-color: var(--wp--preset--color--primary) !important; }' ) )->toBeGreaterThan( $blockRule )
             ->and( strpos( $css, '.has-large-font-size { font-size: var(--wp--preset--font-size--large) !important; }' ) )->toBeGreaterThan( $blockRule );
+    } );
+} );
+
+describe( 'GlobalStylesEmitter WordPress element parity', function (): void {
+    it( 'emits outline declarations, including on focus states', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'outline'  => ['style' => 'solid'],
+                'elements' => [
+                    'button' => [
+                        ':focus' => [
+                            'outline' => [
+                                'color'  => 'var:preset|color|accent',
+                                'offset' => '2px',
+                                'style'  => 'dotted',
+                                'width'  => '3px',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( "\toutline-style: solid;" )
+            ->and( $css )->toContain( ":root :where(.wp-element-button:focus, .wp-block-button__link:focus) {\n\toutline-color: var(--wp--preset--color--accent);\n\toutline-offset: 2px;\n\toutline-style: dotted;\n\toutline-width: 3px;\n}" );
+    } );
+
+    it( 'drops unsafe outline values', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'link' => [':focus-visible' => ['outline' => ['color' => 'red;}body{display:none', 'width' => '2px']]],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(a:where(:not(.wp-element-button)):focus-visible) {\n\toutline-width: 2px;\n}" )
+            ->and( $css )->not->toContain( 'display:none' );
+    } );
+
+    it( 'scopes link styles away from button links', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'link'   => ['color' => ['text' => '#0000ff']],
+                    'button' => ['color' => ['text' => '#ffffff']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(a:where(:not(.wp-element-button))) {\n\tcolor: #0000ff;\n}" )
+            ->and( $css )->not->toContain( ':root :where(a) {' );
+    } );
+
+    it( 'ignores pseudo states on elements other than link and button', function ( string $element ): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    $element => [
+                        'color'  => ['text' => '#111111'],
+                        ':hover' => ['color' => ['text' => '#222222']],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '#111111' )
+            ->and( $css )->not->toContain( '#222222' )
+            ->and( $css )->not->toContain( ':hover' );
+    } )->with( ['heading', 'h1', 'caption', 'cite'] );
+} );
+
+describe( 'GlobalStylesEmitter CSS filter', function (): void {
+    afterEach( function (): void {
+        removeAllFilters( 'ap.cmsFramework.globalStyles.css' );
+    } );
+
+    it( 'passes the emitted CSS and resolved styles through ap.cmsFramework.globalStyles.css', function (): void {
+        $resolved = makeResolved(
+            settings: ['color' => ['palette' => [['slug' => 'primary', 'color' => '#000000']]]],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $received = null;
+
+        addFilter( 'ap.cmsFramework.globalStyles.css', function ( string $css, ResolvedGlobalStyles $styles ) use ( &$received ): string {
+            $received = $styles;
+
+            return $css . "\n\n.is-style-card { padding: 1rem; }";
+        }, 10, 2 );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '--wp--preset--color--primary: #000000;' )
+            ->and( $css )->toEndWith( '.is-style-card { padding: 1rem; }' )
+            ->and( $received )->toBe( $resolved );
+    } );
+
+    it( 'applies the filter to cached CSS without caching the filtered result', function (): void {
+        $resolved = makeResolved(
+            settings: ['color' => ['palette' => [['slug' => 'primary', 'color' => '#000000']]]],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $unfiltered = $this->emitter->emit();
+
+        addFilter( 'ap.cmsFramework.globalStyles.css', fn ( string $css ): string => $css . "\n/* host */", 10, 1 );
+
+        expect( $this->emitter->emit() )->toBe( $unfiltered . "\n/* host */" )
+            ->and( Cache::get( 'cms.global-styles.css.v10.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
     } );
 } );

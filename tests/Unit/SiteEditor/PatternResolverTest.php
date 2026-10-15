@@ -383,6 +383,63 @@ PHP );
             ->and( $row->categories )->toEqual( ['featured'] );
     } );
 
+    it( 'copies the block content and inserter headers to the clone', function (): void {
+        File::put( $this->themeFiles . '/hero.php', <<<'PHP'
+<?php
+/**
+ * Title: Hero
+ * Keywords: hero, banner
+ * Inserter: no
+ * Template Types: front-page
+ * Post Types: page
+ * Viewport Width: 1200
+ */
+?>
+<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->
+PHP );
+
+        $row = $this->resolver->cloneToUser( 'hero' );
+
+        expect( $row->keywords )->toBe( ['hero', 'banner'] )
+            ->and( $row->inserter )->toBeFalse()
+            ->and( $row->template_types )->toBe( ['front-page'] )
+            ->and( $row->post_types )->toBe( ['page'] )
+            ->and( $row->viewport_width )->toBe( 1200 )
+            ->and( $row->block_content )->toHaveCount( 1 )
+            ->and( $row->block_content[0]['blockName'] )->toBe( 'core/paragraph' );
+
+        $resolved = $this->resolver->resolve( 'hero' );
+
+        expect( $resolved->source )->toBe( BlockPattern::SOURCE_USER )
+            ->and( $resolved->keywords )->toBe( ['hero', 'banner'] )
+            ->and( $resolved->inserter )->toBeFalse()
+            ->and( $resolved->templateTypes )->toBe( ['front-page'] )
+            ->and( $resolved->postTypes )->toBe( ['page'] )
+            ->and( $resolved->viewportWidth )->toBe( 1200 )
+            ->and( $resolved->blocks )->toHaveCount( 1 );
+    } );
+
+    it( 'defaults the inserter headers on user rows that predate them', function (): void {
+        BlockPattern::create( ['slug' => 'plain', 'title' => 'Plain', 'source' => BlockPattern::SOURCE_USER, 'synced' => false] );
+
+        $resolved = $this->resolver->resolve( 'plain' );
+
+        expect( $resolved->keywords )->toBe( [] )
+            ->and( $resolved->inserter )->toBeTrue()
+            ->and( $resolved->templateTypes )->toBe( [] )
+            ->and( $resolved->postTypes )->toBeNull()
+            ->and( $resolved->viewportWidth )->toBeNull();
+    } );
+
+    it( 'normalizes stored post types and treats an empty list as unscoped', function ( array $stored, ?array $expected ): void {
+        BlockPattern::create( ['slug' => 'scoped', 'title' => 'Scoped', 'source' => BlockPattern::SOURCE_USER, 'synced' => false, 'post_types' => $stored] );
+
+        expect( $this->resolver->resolve( 'scoped' )->postTypes )->toBe( $expected );
+    } )->with( [
+        'mixed case and duplicates' => [['Page', 'page', 'post'], ['page', 'post']],
+        'empty list'                => [[], null],
+    ] );
+
     it( 'throws when the theme pattern does not exist', function (): void {
         $this->resolver->cloneToUser( 'missing' );
     } )->throws( RuntimeException::class );

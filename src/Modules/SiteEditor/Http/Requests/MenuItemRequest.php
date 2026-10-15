@@ -24,6 +24,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Requests;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Http\Resources\MenuItemResource;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\Menu;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\MenuItem;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SiteEditorAbilities;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Closure;
 use Illuminate\Foundation\Http\FormRequest;
@@ -35,11 +36,16 @@ use Illuminate\Validation\Rule;
 class MenuItemRequest extends FormRequest
 {
     /**
+     * Require the Site Editor ability for this request's group. The
+     * route middleware checks it too; this keeps the request safe when
+     * a host reuses it on its own route.
+     *
      * @since 2.0.0
+     * @since 2.15.0 Requires the group ability {@see SiteEditorAbilities::allows()} checks instead of allowing every user.
      */
     public function authorize(): bool
     {
-        return true;
+        return SiteEditorAbilities::allows( $this->user(), SiteEditorAbilities::STRUCTURE );
     }
 
     /**

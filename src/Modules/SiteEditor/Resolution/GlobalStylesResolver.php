@@ -45,7 +45,13 @@ class GlobalStylesResolver
      * active theme but no DB row, returns a resolved object backed by
      * `theme.json` defaults plus any default variation declared by the theme.
      *
+     * A stored variation slug that no longer loads (its file is gone, or
+     * it's a block style variation partial) resolves as no variation, so
+     * the reported `variation` always matches what was applied. The DB
+     * row keeps the stored slug.
+     *
      * @since 2.0.0
+     * @since 2.15.0 Reports `variation: null` when the stored variation doesn't load.
      */
     public function resolve(): ?ResolvedGlobalStyles
     {
@@ -61,6 +67,7 @@ class GlobalStylesResolver
             ? $row->variation
             : null;
         $variationData   = null !== $variationSlug ? $this->loadVariation( $theme['slug'], $variationSlug ) : null;
+        $variationSlug   = null !== $variationData ? $variationSlug : null;
 
         $defaultSettings = is_array( $theme['settings'] ?? null ) ? $theme['settings'] : [];
         $defaultStyles   = is_array( $theme['styles'] ?? null ) ? $theme['styles'] : [];
@@ -242,11 +249,12 @@ class GlobalStylesResolver
 
     /**
      * Whether a decoded `styles/*.json` partial is a block style variation
-     * (theme.json v3): it declares a non-empty `blockTypes` list. Those
+     * (theme.json v3): it declares `blockTypes`, whatever its value. Those
      * share the `styles/` directory with theme style variations but style
      * only the listed blocks, so they're never listed or applied as a
-     * whole-theme variation (#389). Mirrors visual-editor's
-     * `BlockStyleVariationParser`.
+     * whole-theme variation (#389). Matches WordPress's
+     * `WP_Theme_JSON_Resolver::style_variation_has_scope()` and
+     * visual-editor's `BlockStyleVariationParser`.
      *
      * @since 2.15.0
      *
@@ -254,7 +262,7 @@ class GlobalStylesResolver
      */
     protected function isBlockStyleVariation( array $partial ): bool
     {
-        return is_array( $partial['blockTypes'] ?? null ) && [] !== $partial['blockTypes'];
+        return isset( $partial['blockTypes'] );
     }
 
     /**

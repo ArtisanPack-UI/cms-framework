@@ -46,13 +46,15 @@ final class ResolvedPattern
      * @param  BlockPattern|null  $model  The DB row when `source === 'user'`; null otherwise.
      * @param  int|null  $viewportWidth  Width in pixels the pattern is laid out at
      *                                   for previews, from a theme file's
-     *                                   `Viewport Width:` header. Null means
-     *                                   "use the consumer's default" and is
-     *                                   always null for user patterns.
+     *                                   `Viewport Width:` header or a user
+     *                                   row's `viewport_width` column. Null
+     *                                   means "use the consumer's default".
      * @param  array<int, string>  $keywords  Inserter search terms, from a theme
-     *                                       file's `Keywords:` header.
-     * @param  bool  $inserter  False when a theme file's `Inserter:` header
-     *                          hides the pattern from the inserter.
+     *                                       file's `Keywords:` header or a
+     *                                       user row's `keywords` column.
+     * @param  bool  $inserter  False when the `Inserter:` header (or a user
+     *                          row's `inserter` column) hides the pattern
+     *                          from the inserter.
      * @param  array<int, string>  $templateTypes  Template types the pattern
      *                                            suits, from `Template Types:`.
      * @param  array<int, string>|null  $postTypes  Lower-cased post types the
