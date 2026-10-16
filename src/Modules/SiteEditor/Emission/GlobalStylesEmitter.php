@@ -9,7 +9,7 @@
  * `settings.typography.fontFamilies`, `settings.spacing.spacingSizes`,
  * `settings.color.gradients`, `settings.shadow.presets`, and
  * `settings.custom`, plus inline rules for
- * `styles.color`/`styles.typography`/`styles.spacing` and per-element styles
+ * `styles.color` (including `color.gradient`)/`styles.typography`/`styles.spacing` and per-element styles
  * (`elements.link`, `elements.heading`, `elements.h1`–`h6`,
  * `elements.button`, `elements.caption`, `elements.cite`, and the link
  * and button `:link` / `:any-link` / `:visited` / `:hover` / `:focus` /
@@ -102,8 +102,11 @@ class GlobalStylesEmitter
      * strings; emit `outline.*`; scope `elements.link` to
      * `a:where(:not(.wp-element-button))`; limit element pseudo states to
      * WordPress's link and button lists.
+     *
+     * v11: emit `color.gradient` as `background`, before `background-color`
+     * (#398).
      */
-    private const SCHEMA_VERSION = 'v10';
+    private const SCHEMA_VERSION = 'v11';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -131,9 +134,14 @@ class GlobalStylesEmitter
      * array of sides, border.top.width, border.radius.topLeft, …) are
      * handled by dedicated walkers in {@see stylesRootDeclarations()}.
      *
+     * `color.gradient` comes before `color.background`, in WordPress's
+     * `PROPERTIES_METADATA` order: the `background` shorthand resets
+     * `background-color`, so a node with both keeps its color (#398).
+     *
      * @var array<string, string>
      */
     private const SCALAR_DECLARATION_MAP = [
+        'color.gradient'            => 'background',
         'color.background'          => 'background-color',
         'color.text'                => 'color',
         'typography.fontSize'       => 'font-size',
