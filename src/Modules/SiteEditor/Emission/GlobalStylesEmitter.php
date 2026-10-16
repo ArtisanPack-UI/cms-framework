@@ -105,8 +105,11 @@ class GlobalStylesEmitter
      *
      * v11: emit `color.gradient` as `background`, before `background-color`
      * (#398).
+     *
+     * v12: alias preset classes with WordPress's kebab case when it differs
+     * (`.has-h2-font-size, .has-h-2-font-size`) (#401).
      */
-    private const SCHEMA_VERSION = 'v11';
+    private const SCHEMA_VERSION = 'v12';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -460,7 +463,7 @@ class GlobalStylesEmitter
 
         foreach ( array_unique( $slugs ) as $slug ) {
             if ( ! in_array( $slug, self::MARKER_COLOR_SLUGS, true ) ) {
-                $rules[] = '.has-' . $slug . '-color { color: var(--wp--preset--color--' . $slug . ') !important; }';
+                $rules[] = $this->presetClassSelector( $slug, 'color' ) . ' { color: var(--wp--preset--color--' . $slug . ') !important; }';
             }
         }
 
@@ -536,8 +539,8 @@ class GlobalStylesEmitter
         foreach ( $colorSlugs as $slug ) {
             $var = '--wp--preset--color--' . $slug;
 
-            $rules[] = '.has-' . $slug . '-background-color { background-color: var(' . $var . ') !important; }';
-            $rules[] = '.has-' . $slug . '-border-color { border-color: var(' . $var . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'background-color' ) . ' { background-color: var(' . $var . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'border-color' ) . ' { border-color: var(' . $var . ') !important; }';
         }
 
         array_push( $rules, ...$this->colorUtilityRules( $colorSlugs ) );
@@ -547,7 +550,7 @@ class GlobalStylesEmitter
             : [];
 
         foreach ( $this->presetSlugs( $fontSizes, 'size' ) as $slug ) {
-            $rules[] = '.has-' . $slug . '-font-size { font-size: var(--wp--preset--font-size--' . $slug . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'font-size' ) . ' { font-size: var(--wp--preset--font-size--' . $slug . ') !important; }';
         }
 
         $fontFamilies = is_array( $settings['typography']['fontFamilies'] ?? null )
@@ -555,7 +558,7 @@ class GlobalStylesEmitter
             : [];
 
         foreach ( $this->presetSlugs( $fontFamilies, 'fontFamily' ) as $slug ) {
-            $rules[] = '.has-' . $slug . '-font-family { font-family: var(--wp--preset--font-family--' . $slug . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'font-family' ) . ' { font-family: var(--wp--preset--font-family--' . $slug . ') !important; }';
         }
 
         $gradients = is_array( $settings['color']['gradients'] ?? null )
@@ -563,10 +566,47 @@ class GlobalStylesEmitter
             : [];
 
         foreach ( $this->presetSlugs( $gradients, 'gradient' ) as $slug ) {
-            $rules[] = '.has-' . $slug . '-gradient-background { background: var(--wp--preset--gradient--' . $slug . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'gradient-background' ) . ' { background: var(--wp--preset--gradient--' . $slug . ') !important; }';
         }
 
         return $rules;
+    }
+
+    /**
+     * The `.has-{slug}-{suffix}` preset class selector, plus the WordPress
+     * kebab-case form when it differs (#401).
+     *
+     * The editor builds preset class names with WordPress's `kebabCase`,
+     * which splits letters from digits (`h2` → `has-h-2-font-size`), as
+     * `_wp_to_kebab_case()` does for WordPress's own global styles. The
+     * renderers print the slug as-is (`has-h2-font-size`). Emitting both
+     * keeps editor-saved and renderer-built markup resolving to the preset.
+     * Custom property names keep the slug as-is.
+     *
+     * @since 2.15.3
+     *
+     * @param  string  $slug    A normalized `[a-z0-9-]` preset slug.
+     * @param  string  $suffix  The class suffix, e.g. `font-size`.
+     */
+    protected function presetClassSelector( string $slug, string $suffix ): string
+    {
+        $selector = '.has-' . $slug . '-' . $suffix;
+        $kebab    = $this->wordpressKebabSlug( $slug );
+
+        return $kebab === $slug ? $selector : $selector . ', .has-' . $kebab . '-' . $suffix;
+    }
+
+    /**
+     * A normalized preset slug in WordPress's kebab case: hyphens between
+     * letters and digits (`h2` → `h-2`, `gray900` → `gray-900`). Slugs are
+     * already lowercase `[a-z0-9-]`, so letter–digit boundaries are the only
+     * splits left to make.
+     *
+     * @since 2.15.3
+     */
+    protected function wordpressKebabSlug( string $slug ): string
+    {
+        return (string) preg_replace( ['/([a-z])(?=[0-9])/', '/([0-9])(?=[a-z])/'], '$1-', $slug );
     }
 
     /**
