@@ -466,7 +466,7 @@ PHP );
 
                 return $block;
             }, $blocks );
-        }, 10, 3 );
+        } );
 
         try {
             $row = $this->resolver->cloneToUser( 'hero' );
@@ -486,7 +486,7 @@ PHP );
         $themeBlocks = $this->resolver->resolve( 'hero' )->blocks;
 
         removeAllFilters( 'ap.cmsFramework.siteEditor.blockContent' );
-        addFilter( 'ap.cmsFramework.siteEditor.blockContent', fn (): string => 'not blocks', 10, 3 );
+        addFilter( 'ap.cmsFramework.siteEditor.blockContent', fn (): string => 'not blocks' );
 
         try {
             $row = $this->resolver->cloneToUser( 'hero' );

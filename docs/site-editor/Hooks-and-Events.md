@@ -110,10 +110,15 @@ addFilter( 'ap.cmsFramework.siteEditor.blockContent', function ( array $blocks, 
 
         return $block;
     }, $blocks );
-}, 10, 3 );
+} );
 ```
 
-Register the callback with an accepted-args count of `3` to receive all three arguments. The filter only runs when the request carries a `block_content` array; a write that leaves the blocks alone, or sets them to `null`, skips it. A callback that returns something other than an array is ignored and the incoming blocks are saved as sent. The first write that overrides a theme-file template, template part or pattern passes that file's parsed blocks (from the same resolver the index and show endpoints use) as `$storedBlocks`, so Custom CSS the theme ships survives the first save. Blade templates are read-only and never reach the filter. Since 2.15.1, `PatternResolver::cloneToUser()` runs the theme pattern's blocks through the filter the same way, so a model-level guard such as visual-editor's doesn't strip the theme's Custom CSS from the clone.
+Every callback receives all three arguments. A callback that returns something other than an array is ignored and the incoming blocks are saved as sent.
+
+The filter runs in two places:
+
+- **API writes.** A Site Editor API write runs the filter only when the request carries a `block_content` array; a write that leaves the blocks alone, or sets them to `null`, skips it. The first write that overrides a theme-file template, template part or pattern passes that file's parsed blocks (from the same resolver the index and show endpoints use) as `$storedBlocks`, so Custom CSS the theme ships survives the first save. Blade templates are read-only and never reach the filter.
+- **Theme pattern clones.** Since 2.15.1, `PatternResolver::cloneToUser()` always runs the theme pattern's blocks through the filter, with the same blocks as `$storedBlocks` and `block-pattern` as `$context`. No request is involved, so a model-level guard such as visual-editor's doesn't strip the theme's Custom CSS from the clone.
 
 ## Model events
 
