@@ -46,7 +46,7 @@ function registerCustomCssStripper( ArrayObject $calls ): void
 
             return $block;
         }, $blocks );
-    }, 10, 3 );
+    } );
 }
 
 /**
@@ -197,7 +197,7 @@ describe( 'ap.cmsFramework.siteEditor.blockContent filter', function (): void {
     } )->with( 'block content endpoints' );
 
     it( 'keeps the incoming blocks when a callback returns a non-array', function ( string $url, string $context, array $extra ): void {
-        addFilter( BLOCK_CONTENT_FILTER, fn (): string => 'not blocks', 10, 3 );
+        addFilter( BLOCK_CONTENT_FILTER, fn (): string => 'not blocks' );
 
         $blocks = blockContentWithCustomCss( '.a { color: blue; }' );
 

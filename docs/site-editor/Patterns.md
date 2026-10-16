@@ -96,7 +96,7 @@ Theme patterns are always `synced = false`. Cross-state conversion happens throu
 | PUT    | `/block-patterns/patterns/{slug}` | Upsert an unsynced user pattern. **403** when targeting a theme slug. |
 | DELETE | `/block-patterns/patterns/{slug}` | Delete a user pattern. **403** when targeting a theme slug. |
 
-A theme pattern can be cloned to an editable user pattern via `PatternResolver::cloneToUser($slug)` — used by the admin "edit" affordance on theme patterns. The clone copies the title, description, categories, block types, block content and, since 2.15.0, the inserter headers (`keywords`, `inserter`, `template_types`, `post_types`, `viewport_width`) from the theme file into a new user-source DB row. Before 2.15.0 the clone had no block content.
+A theme pattern can be cloned to an editable user pattern via `PatternResolver::cloneToUser($slug)` — used by the admin "edit" affordance on theme patterns. The clone copies the title, description, categories, block types, block content and, since 2.15.0, the inserter headers (`keywords`, `inserter`, `template_types`, `post_types`, `viewport_width`) from the theme file into a new user-source DB row. Before 2.15.0 the clone had no block content. Since 2.15.1 the copied blocks go through the `ap.cmsFramework.siteEditor.blockContent` filter (context `block-pattern`, with the theme file's blocks as `$storedBlocks`) before the row is written, so a Custom CSS guard such as visual-editor's keeps the theme's Custom CSS; see [Hooks and Events](Hooks-and-Events.md#filtering-block-content-before-it-is-saved).
 
 Writes need the Site Editor `content` ability (`manage-content` by default) and reads the `read` ability; see [API Reference: Authorization](API-Reference.md#authorization).
 

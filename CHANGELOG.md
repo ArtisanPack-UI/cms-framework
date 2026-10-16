@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.1] - 2026-10-15
+
+### Security
+
+- **Cloned theme patterns run through the Site Editor block content filter** — `PatternResolver::cloneToUser()` now passes the theme pattern's blocks through `ap.cmsFramework.siteEditor.blockContent` (context `block-pattern`), with those blocks as `$storedBlocks`, before it saves the user pattern. Cloning a theme pattern therefore keeps the pattern's Custom CSS under visual-editor 1.15's model-level guard, instead of losing it when the acting user can't edit block Custom CSS. A callback that returns something other than an array is ignored. With no callback registered, nothing changes.
+
 ## [2.15.0] - 2026-10-15
 
 ### Security
