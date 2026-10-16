@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v11.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v12.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1880,6 +1880,52 @@ describe( 'GlobalStylesEmitter WordPress element parity', function (): void {
     } )->with( ['heading', 'h1', 'caption', 'cite'] );
 } );
 
+describe( 'GlobalStylesEmitter WordPress kebab-case preset classes (#401)', function (): void {
+    it( 'aliases preset classes whose slug has a letter-digit boundary', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color'      => [
+                    'palette'   => [['slug' => 'gray900', 'color' => '#111827']],
+                    'gradients' => [['slug' => 'neon2', 'gradient' => 'linear-gradient(red, blue)']],
+                ],
+                'typography' => [
+                    'fontSizes'    => [['slug' => 'h2', 'size' => '44px']],
+                    'fontFamilies' => [['slug' => 'mono2', 'fontFamily' => 'monospace']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '.has-h2-font-size, .has-h-2-font-size { font-size: var(--wp--preset--font-size--h2) !important; }' )
+            ->and( $css )->toContain( '.has-gray900-color, .has-gray-900-color { color: var(--wp--preset--color--gray900) !important; }' )
+            ->and( $css )->toContain( '.has-gray900-background-color, .has-gray-900-background-color { background-color: var(--wp--preset--color--gray900) !important; }' )
+            ->and( $css )->toContain( '.has-gray900-border-color, .has-gray-900-border-color { border-color: var(--wp--preset--color--gray900) !important; }' )
+            ->and( $css )->toContain( '.has-mono2-font-family, .has-mono-2-font-family { font-family: var(--wp--preset--font-family--mono2) !important; }' )
+            ->and( $css )->toContain( '.has-neon2-gradient-background, .has-neon-2-gradient-background { background: var(--wp--preset--gradient--neon2) !important; }' )
+            ->and( $css )->toContain( '--wp--preset--font-size--h2: 44px;' )
+            ->and( $css )->not->toContain( '--wp--preset--font-size--h-2' );
+    } );
+
+    it( 'emits a single selector when the slug is already WordPress kebab case', function (): void {
+        $resolved = makeResolved(
+            settings: [
+                'color'      => ['palette' => [['slug' => 'neutral-0', 'color' => '#ffffff']]],
+                'typography' => ['fontSizes' => [['slug' => 'button-lg', 'size' => '17px']]],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( '.has-button-lg-font-size { font-size: var(--wp--preset--font-size--button-lg) !important; }' )
+            ->and( $css )->toContain( '.has-neutral-0-background-color { background-color: var(--wp--preset--color--neutral-0) !important; }' );
+    } );
+} );
+
 describe( 'GlobalStylesEmitter CSS filter', function (): void {
     afterEach( function (): void {
         removeAllFilters( 'ap.cmsFramework.globalStyles.css' );
@@ -1931,6 +1977,6 @@ describe( 'GlobalStylesEmitter CSS filter', function (): void {
         addFilter( 'ap.cmsFramework.globalStyles.css', fn ( string $css ): string => $css . "\n/* host */" );
 
         expect( $this->emitter->emit() )->toBe( $unfiltered . "\n/* host */" )
-            ->and( Cache::get( 'cms.global-styles.css.v11.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
+            ->and( Cache::get( 'cms.global-styles.css.v12.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
     } );
 } );

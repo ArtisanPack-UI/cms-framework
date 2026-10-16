@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.3] - Unreleased
+
+### Fixed
+
+- **Preset classes match the editor's class names for letter–digit slugs** ([#401](https://github.com/ArtisanPack-UI/cms-framework/issues/401)). The editor names preset classes with WordPress's kebab case, which splits letters from digits: a `fontSize: "h2"` block carries `has-h-2-font-size`. `GlobalStylesEmitter` emitted only `.has-h2-font-size`, so `h1`–`h6` style size presets (and any color, gradient or font family slug like `gray900`) didn't apply in the Site Editor canvas. Each preset class now also lists the WordPress kebab-case form when it differs (`.has-h2-font-size, .has-h-2-font-size`); custom property names are unchanged. The emitter cache key moves to `v12`.
+
 ## [2.15.2] - 2026-10-16
 
 ### Fixed
