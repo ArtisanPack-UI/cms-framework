@@ -128,8 +128,8 @@ class PatternResolver
      * Custom CSS is being carried over rather than authored.
      *
      * @since 2.0.0
-     * @since 2.15.0 Copies the block content and the inserter headers, and
-     *               runs the block content through the block content filter.
+     * @since 2.15.0 Copies the block content and the inserter headers.
+     * @since 2.15.1 Runs the block content through the block content filter.
      *
      * @throws RuntimeException When no theme pattern exists for the slug.
      */

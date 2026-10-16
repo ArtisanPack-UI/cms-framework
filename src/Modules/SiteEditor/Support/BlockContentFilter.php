@@ -8,7 +8,7 @@
  * the row is written: the API controllers and theme-file copies such as
  * {@see \ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\PatternResolver::cloneToUser()}.
  *
- * @since      2.15.0
+ * @since      2.15.1
  */
 
 declare( strict_types=1 );
@@ -16,14 +16,14 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 
 /**
- * @since 2.15.0
+ * @since 2.15.1
  */
 final class BlockContentFilter
 {
     /**
      * The filter hook name.
      *
-     * @since 2.15.0
+     * @since 2.15.1
      */
     public const HOOK = 'ap.cmsFramework.siteEditor.blockContent';
 
@@ -33,7 +33,7 @@ final class BlockContentFilter
      * A callback that returns something other than an array is ignored and
      * the incoming blocks are returned unchanged.
      *
-     * @since 2.15.0
+     * @since 2.15.1
      *
      * @param  array<int, mixed>  $blocks  The block tree about to be saved.
      * @param  array<int, mixed>|null  $storedBlocks  The record's stored blocks, the theme file's blocks when the save copies or first overrides a theme file, or null.
