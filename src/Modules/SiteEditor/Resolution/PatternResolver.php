@@ -20,6 +20,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\BlockContentFilter;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\BlockMarkupParser;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\PatternFileParser;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
@@ -121,8 +122,14 @@ class PatternResolver
      * (keywords, inserter, template types, post types, viewport width)
      * from the theme file.
      *
+     * The copied blocks go through the `ap.cmsFramework.siteEditor.blockContent`
+     * filter (context `block-pattern`) with the theme file's blocks as the
+     * stored blocks, so a model-level Custom CSS guard knows the theme's own
+     * Custom CSS is being carried over rather than authored.
+     *
      * @since 2.0.0
      * @since 2.15.0 Copies the block content and the inserter headers.
+     * @since 2.15.1 Runs the block content through the block content filter.
      *
      * @throws RuntimeException When no theme pattern exists for the slug.
      */
@@ -133,6 +140,8 @@ class PatternResolver
         if ( null === $themePattern ) {
             throw new RuntimeException( "No theme pattern found for slug '{$themeSlug}'." );
         }
+
+        $blocks = BlockContentFilter::apply( $themePattern->blocks, $themePattern->blocks, 'block-pattern' );
 
         return BlockPattern::create( [
             'slug'           => $themePattern->userFacingSlug,
@@ -148,7 +157,7 @@ class PatternResolver
             'template_types' => $themePattern->templateTypes,
             'post_types'     => $themePattern->postTypes,
             'viewport_width' => $themePattern->viewportWidth,
-            'block_content'  => $themePattern->blocks,
+            'block_content'  => $blocks,
         ] );
     }
 

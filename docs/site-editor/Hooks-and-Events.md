@@ -76,7 +76,7 @@ The output is cached on a content-hash key; the cache busts on `GlobalStyles` mo
 | Filter | Arguments | Since | Purpose |
 |---|---|---|---|
 | `ap.cmsFramework.globalStyles.css` | `(string $css, ResolvedGlobalStyles $resolved)` | 2.15.0 | Filters the emitted global-styles CSS. Runs on every `GlobalStylesEmitter::emit()` call, after the cache, so whatever a callback adds is never frozen into the cached CSS. Feeds `@cmsGlobalStyles` and `GET /api/v1/global-styles/css`. Use it to append rules the emitter doesn't produce, such as block style variations on hosts without visual-editor. |
-| `ap.cmsFramework.siteEditor.blockContent` | `(array $blocks, ?array $storedBlocks, string $context)` | 2.15.0 | Filters the block tree a Site Editor API write is about to save. Runs on every create, update and upsert in `TemplatesController`, `TemplatePartsController`, `BlocksController` and `BlockPatternsController`, before the row is written. `$storedBlocks` is the record's current block content (decoded; `[]` when it has none). When the write creates the first DB override of a theme file (template, template part or theme pattern), it is that file's parsed blocks, the version the Site Editor showed; otherwise a create passes `null`. `$context` is `template`, `template-part`, `block` or `block-pattern`. visual-editor 1.15 uses it to enforce its `visual-editor.edit-block-css` ability on per-block Custom CSS. |
+| `ap.cmsFramework.siteEditor.blockContent` | `(array $blocks, ?array $storedBlocks, string $context)` | 2.15.0 | Filters the block tree a Site Editor API write is about to save. Runs on every create, update and upsert in `TemplatesController`, `TemplatePartsController`, `BlocksController` and `BlockPatternsController`, and (since 2.15.1) when `PatternResolver::cloneToUser()` copies a theme pattern into a user pattern (context `block-pattern`, with the theme file's blocks as both `$blocks` and `$storedBlocks`), before the row is written. `$storedBlocks` is the record's current block content (decoded; `[]` when it has none). When the write creates the first DB override of a theme file (template, template part or theme pattern), it is that file's parsed blocks, the version the Site Editor showed; otherwise a create passes `null`. `$context` is `template`, `template-part`, `block` or `block-pattern`. visual-editor 1.15 uses it to enforce its `visual-editor.edit-block-css` ability on per-block Custom CSS. |
 | `ap.cmsFramework.abilities.siteEditor.read` | `(string $ability)` | 2.15.0 | Ability every Site Editor API route requires. Default `manage-content`. |
 | `ap.cmsFramework.abilities.siteEditor.structure` | `(string $ability)` | 2.15.0 | Ability for writes to templates, template parts, global styles and menus. Default `manage-themes`. |
 | `ap.cmsFramework.abilities.siteEditor.content` | `(string $ability)` | 2.15.0 | Ability for writes to patterns and synced blocks. Default `manage-content`. |
@@ -110,10 +110,15 @@ addFilter( 'ap.cmsFramework.siteEditor.blockContent', function ( array $blocks, 
 
         return $block;
     }, $blocks );
-}, 10, 3 );
+} );
 ```
 
-Register the callback with an accepted-args count of `3` to receive all three arguments. The filter only runs when the request carries a `block_content` array; a write that leaves the blocks alone, or sets them to `null`, skips it. A callback that returns something other than an array is ignored and the incoming blocks are saved as sent. The first write that overrides a theme-file template, template part or pattern passes that file's parsed blocks (from the same resolver the index and show endpoints use) as `$storedBlocks`, so Custom CSS the theme ships survives the first save. Blade templates are read-only and never reach the filter.
+Every callback receives all three arguments. A callback that returns something other than an array is ignored and the incoming blocks are saved as sent.
+
+The filter runs in two places:
+
+- **API writes.** A Site Editor API write runs the filter only when the request carries a `block_content` array; a write that leaves the blocks alone, or sets them to `null`, skips it. The first write that overrides a theme-file template, template part or pattern passes that file's parsed blocks (from the same resolver the index and show endpoints use) as `$storedBlocks`, so Custom CSS the theme ships survives the first save. Blade templates are read-only and never reach the filter.
+- **Theme pattern clones.** Since 2.15.1, `PatternResolver::cloneToUser()` always runs the theme pattern's blocks through the filter, with the same blocks as `$storedBlocks` and `block-pattern` as `$context`. No request is involved, so a model-level guard such as visual-editor's doesn't strip the theme's Custom CSS from the clone.
 
 ## Model events
 

@@ -443,6 +443,59 @@ PHP );
     it( 'throws when the theme pattern does not exist', function (): void {
         $this->resolver->cloneToUser( 'missing' );
     } )->throws( RuntimeException::class );
+
+    it( 'runs the cloned blocks through the block content filter with the theme blocks as stored', function (): void {
+        File::put( $this->themeFiles . '/hero.php', <<<'PHP'
+<?php
+/**
+ * Title: Hero
+ */
+?>
+<!-- wp:paragraph {"artisanpackEffects":{"customCss":".theme { color: teal; }"}} --><p>Hero</p><!-- /wp:paragraph -->
+PHP );
+
+        $themeBlocks = $this->resolver->resolve( 'hero' )->blocks;
+        $calls       = [];
+
+        removeAllFilters( 'ap.cmsFramework.siteEditor.blockContent' );
+        addFilter( 'ap.cmsFramework.siteEditor.blockContent', function ( array $blocks, ?array $storedBlocks, string $context ) use ( &$calls ): array {
+            $calls[] = ['blocks' => $blocks, 'stored' => $storedBlocks, 'context' => $context];
+
+            return array_map( static function ( array $block ): array {
+                $block['attrs']['vouched'] = true;
+
+                return $block;
+            }, $blocks );
+        } );
+
+        try {
+            $row = $this->resolver->cloneToUser( 'hero' );
+        } finally {
+            removeAllFilters( 'ap.cmsFramework.siteEditor.blockContent' );
+        }
+
+        expect( json_encode( $themeBlocks ) )->toContain( '.theme { color: teal; }' )
+            ->and( $calls )->toBe( [['blocks' => $themeBlocks, 'stored' => $themeBlocks, 'context' => 'block-pattern']] )
+            ->and( $row->fresh()->block_content[0]['attrs']['vouched'] )->toBeTrue()
+            ->and( $row->fresh()->block_content[0]['attrs']['artisanpackEffects'] )->toBe( ['customCss' => '.theme { color: teal; }'] );
+    } );
+
+    it( 'clones the theme blocks unchanged when the filter callback returns a non-array', function (): void {
+        File::put( $this->themeFiles . '/hero.php', "<?php\n/**\n * Title: Hero\n */\n?>\n<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->" );
+
+        $themeBlocks = $this->resolver->resolve( 'hero' )->blocks;
+
+        removeAllFilters( 'ap.cmsFramework.siteEditor.blockContent' );
+        addFilter( 'ap.cmsFramework.siteEditor.blockContent', fn (): string => 'not blocks' );
+
+        try {
+            $row = $this->resolver->cloneToUser( 'hero' );
+        } finally {
+            removeAllFilters( 'ap.cmsFramework.siteEditor.blockContent' );
+        }
+
+        expect( $row->fresh()->block_content )->toBe( $themeBlocks );
+    } );
 } );
 
 describe( 'BlockPattern slug prefix', function (): void {
