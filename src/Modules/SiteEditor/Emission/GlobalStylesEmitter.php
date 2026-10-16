@@ -1045,6 +1045,7 @@ class GlobalStylesEmitter
      *
      * @since 2.0.0
      * @since 2.15.0 Skips unsafe values.
+     * @since 2.15.2 Emits `color.gradient` as `background` (#398).
      *
      * @param  array<string, mixed>  $styles
      *
