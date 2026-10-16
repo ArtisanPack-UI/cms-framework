@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.15.2] - Unreleased
+
+### Fixed
+
+- **`color.gradient` is emitted** ([#398](https://github.com/ArtisanPack-UI/cms-framework/issues/398)). `GlobalStylesEmitter` now writes `color.gradient` as `background` at the root, on elements and their states, and on blocks. It comes before `background-color`, so a node with both keeps its color, as WordPress does. Before, the value was dropped. visual-editor's canvas stylesheet uses only this emitter, so a theme's gradient buttons and sections rendered without their gradient in the Site Editor while the front end showed it. The emitter cache key moves to `v11`, so cached CSS is rebuilt on deploy.
+
 ## [2.15.1] - 2026-10-15
 
 ### Security

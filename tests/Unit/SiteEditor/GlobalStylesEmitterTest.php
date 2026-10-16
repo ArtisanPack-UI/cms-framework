@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v10.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v11.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1783,6 +1783,63 @@ describe( 'GlobalStylesEmitter WordPress element parity', function (): void {
             ->and( $css )->not->toContain( 'display:none' );
     } );
 
+    it( 'emits color.gradient as background on elements, their states and blocks (#398)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'button' => [
+                        'color'  => ['gradient' => 'var:preset|gradient|brand', 'text' => '#ffffff'],
+                        ':hover' => ['color' => ['gradient' => 'linear-gradient(115deg, #2962ff 0%, #e040fb 100%)']],
+                    ],
+                ],
+                'blocks'   => [
+                    'core/group' => ['color' => ['gradient' => 'var:preset|gradient|neon']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-element-button, .wp-block-button__link) {\n\tbackground: var(--wp--preset--gradient--brand);\n\tcolor: #ffffff;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-element-button:hover, .wp-block-button__link:hover) {\n\tbackground: linear-gradient(115deg, #2962ff 0%, #e040fb 100%);\n}" )
+            ->and( $css )->toContain( 'background: var(--wp--preset--gradient--neon);' );
+    } );
+
+    it( 'emits a gradient before background-color so a node with both keeps its color (#398)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'button' => ['color' => ['background' => '#111827', 'gradient' => 'var:preset|gradient|brand']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-element-button, .wp-block-button__link) {\n\tbackground: var(--wp--preset--gradient--brand);\n\tbackground-color: #111827;\n}" );
+    } );
+
+    it( 'drops unsafe gradient values (#398)', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'elements' => [
+                    'button' => ['color' => ['gradient' => 'red;}body{display:none', 'text' => '#ffffff']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-element-button, .wp-block-button__link) {\n\tcolor: #ffffff;\n}" )
+            ->and( $css )->not->toContain( 'display:none' );
+    } );
+
     it( 'scopes link styles away from button links', function (): void {
         $resolved = makeResolved(
             styles: [
@@ -1874,6 +1931,6 @@ describe( 'GlobalStylesEmitter CSS filter', function (): void {
         addFilter( 'ap.cmsFramework.globalStyles.css', fn ( string $css ): string => $css . "\n/* host */" );
 
         expect( $this->emitter->emit() )->toBe( $unfiltered . "\n/* host */" )
-            ->and( Cache::get( 'cms.global-styles.css.v10.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
+            ->and( Cache::get( 'cms.global-styles.css.v11.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
     } );
 } );
