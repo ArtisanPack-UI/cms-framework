@@ -88,7 +88,7 @@ A palette slug named `text`, `link` or `border` produces a `.has-{slug}-color` c
 
 The `styles` walker is registry-based against WP `theme.json` v3. The same registry feeds root, element, and block rules — so per-element and per-block styles get the same coverage the root does. Covered keys:
 
-- `color` — `background`, `text`, `gradient`.
+- `color` — `background`, `text`, `gradient`. `gradient` → `background`, written before `background-color` so a node with both keeps its color, as WordPress does. Before 2.15.2 `gradient` was listed here but dropped, so gradient backgrounds were missing from the Site Editor canvas ([#398](https://github.com/ArtisanPack-UI/cms-framework/issues/398)).
 - `typography` — `fontSize`, `fontFamily`, `lineHeight`, `fontWeight`, `fontStyle`, `letterSpacing`, `textTransform`, `textDecoration`.
 - `spacing.padding` / `spacing.margin` — scalar shorthand and per-side objects (`{top,right,bottom,left}`).
 - `border` — `radius`, `color`, `style`, `width`, including per-corner (`topLeft`, `topRight`, `bottomLeft`, `bottomRight`) and per-side (`top`, `right`, `bottom`, `left`) shapes.
