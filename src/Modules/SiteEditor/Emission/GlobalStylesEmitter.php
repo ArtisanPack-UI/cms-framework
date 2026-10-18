@@ -108,8 +108,11 @@ class GlobalStylesEmitter
      *
      * v12: alias preset classes with WordPress's kebab case when it differs
      * (`.has-h2-font-size, .has-h-2-font-size`) (#401).
+     *
+     * v13: target both `.wp-block-{name}` and `.wp-block-artisanpack-{name}`
+     * for `artisanpack/*` blocks, so forks of core blocks match (#405).
      */
-    private const SCHEMA_VERSION = 'v12';
+    private const SCHEMA_VERSION = 'v13';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -1339,14 +1342,14 @@ class GlobalStylesEmitter
 
     /**
      * Per-block rule blocks: `styles.blocks.{namespace/name}`. Each
-     * entry renders into a `.wp-block-{namespace-}{name}` selector,
-     * dropping `core/` to match Gutenberg's own class naming
+     * entry renders into the selector list from {@see blockSelector()}
      * (`core/quote` → `.wp-block-quote`, `artisanpack/card`
-     * → `.wp-block-artisanpack-card`) (#201), wrapped in
-     * `:root :where(…)` (#390).
+     * → `.wp-block-card, .wp-block-artisanpack-card`) (#201, #405),
+     * wrapped in `:root :where(…)` (#390).
      *
      * @since 2.5.0
      * @since 2.15.0 Wraps rules in `:root :where(…)`.
+     * @since 2.15.3 `artisanpack/*` blocks target both class forms.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -1435,12 +1438,20 @@ class GlobalStylesEmitter
      * Distribute the parent block selector across each comma-separated
      * child selector token so the emitted rule stays scoped to the block
      * even when the element selector is a group (`h1, h2, …`) (#208).
+     * A block selector list (`.wp-block-x, .wp-block-artisanpack-x`) is
+     * distributed too, so every element token is scoped to every block
+     * class (`.wp-block-x h2, .wp-block-artisanpack-x h2`) (#405).
      *
      * @since 2.5.0
+     * @since 2.15.3 Distributes a comma-separated block selector list.
      */
     protected function composeBlockElementSelector( string $blockSelector, string $elementSelector ): string
     {
-        $parts = array_map( 'trim', explode( ',', $elementSelector ) );
+        $parts          = array_map( 'trim', explode( ',', $elementSelector ) );
+        $blockSelectors = array_filter(
+            array_map( 'trim', explode( ',', $blockSelector ) ),
+            static fn ( string $selector ): bool => '' !== $selector,
+        );
 
         $composed = [];
 
@@ -1449,20 +1460,30 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            $composed[] = $blockSelector . ' ' . $part;
+            foreach ( $blockSelectors as $selector ) {
+                $composed[] = $selector . ' ' . $part;
+            }
         }
 
         return implode( ', ', $composed );
     }
 
     /**
-     * Map a `{namespace}/{name}` block identifier to its CSS selector.
+     * Map a `{namespace}/{name}` block identifier to the CSS selector
+     * list for the classes it renders on the front end. `core/x` renders
+     * `.wp-block-x`. A first-party `artisanpack/x` block can be a fork of
+     * `core/x` (rendering `.wp-block-x`) or its own block (rendering
+     * `.wp-block-artisanpack-x`), so both are targeted (#405). Any other
+     * namespace renders `.wp-block-{namespace}-{name}`. Mirrors
+     * visual-editor's `BlockStyleCssCompiler::blockSelectors()`.
+     *
      * Returns `null` for malformed identifiers so the caller can skip:
      * both parts must use WordPress's block-name charset (`[a-z0-9-]`),
      * so a key can't inject its own selector or rule (#385).
      *
      * @since 2.5.0
      * @since 2.15.0 Restricts both parts to `[a-z0-9-]`.
+     * @since 2.15.3 `artisanpack/x` returns `.wp-block-x, .wp-block-artisanpack-x`.
      */
     protected function blockSelector( string $blockName ): ?string
     {
@@ -1485,6 +1506,10 @@ class GlobalStylesEmitter
 
         if ( 'core' === $namespace ) {
             return '.wp-block-' . $name;
+        }
+
+        if ( 'artisanpack' === $namespace ) {
+            return '.wp-block-' . $name . ', .wp-block-artisanpack-' . $name;
         }
 
         return '.wp-block-' . $namespace . '-' . $name;
