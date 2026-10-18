@@ -220,7 +220,12 @@ class QueryRuntime
      */
     protected function applyIdFilters( Builder $query, array $attributes ): void
     {
-        $postIn = $this->normalizeIdList( $attributes['postIn'] ?? null );
+        // `include` is the name visual-editor's single-content and
+        // host-post lookups send; treat it as an alias of `postIn` (#403).
+        $postIn = array_values( array_unique( array_merge(
+            $this->normalizeIdList( $attributes['postIn'] ?? null ),
+            $this->normalizeIdList( $attributes['include'] ?? null ),
+        ) ) );
         if ( [] !== $postIn ) {
             $query->whereIn( 'id', $postIn );
         }
@@ -335,6 +340,11 @@ class QueryRuntime
             ? 'asc'
             : 'desc';
 
+        // WordPress spells random order `rand` (#403).
+        if ( 'rand' === $orderBy ) {
+            $orderBy = 'random';
+        }
+
         if ( ! in_array( $orderBy, self::SUPPORTED_ORDER_BY, true ) ) {
             $orderBy = 'date';
         }
@@ -409,11 +419,12 @@ class QueryRuntime
         $perPage = isset( $attributes['perPage'] ) ? (int) $attributes['perPage'] : self::DEFAULT_PER_PAGE;
         $perPage = max( 1, min( self::MAX_PER_PAGE, $perPage ) );
 
-        $offset = isset( $attributes['offset'] ) ? max( 0, (int) $attributes['offset'] ) : 0;
-        $cap    = isset( $attributes['pages'] ) ? max( 0, (int) $attributes['pages'] ) : 0;
+        $offset   = isset( $attributes['offset'] ) ? max( 0, (int) $attributes['offset'] ) : 0;
+        $cap      = isset( $attributes['pages'] ) ? max( 0, (int) $attributes['pages'] ) : 0;
+        $pageName = $this->pageName( $attributes );
 
         if ( 0 === $offset && 0 === $cap ) {
-            return $query->paginate( $perPage );
+            return $query->paginate( $perPage, ['*'], $pageName );
         }
 
         if ( $cap > 0 ) {
@@ -429,7 +440,7 @@ class QueryRuntime
             $effectiveTotal = min( $effectiveTotal, $cap );
         }
 
-        $page = max( 1, Paginator::resolveCurrentPage() );
+        $page = max( 1, Paginator::resolveCurrentPage( $pageName ) );
         $skip = $offset + ( $page - 1 ) * $perPage;
         $take = $perPage;
 
@@ -449,9 +460,33 @@ class QueryRuntime
             $page,
             [
                 'path'     => Paginator::resolveCurrentPath(),
-                'pageName' => 'page',
+                'pageName' => $pageName,
             ],
         );
+    }
+
+    /**
+     * The query-string variable a loop pages on.
+     *
+     * A loop that names itself with a `queryId` pages on
+     * `query-{queryId}-page`, so two paginated loops on one page move
+     * independently (#403); one without a `queryId` keeps the plain `page`.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    protected function pageName( array $attributes ): string
+    {
+        $queryId = $attributes['queryId'] ?? null;
+
+        if ( ! is_string( $queryId ) && ! is_int( $queryId ) ) {
+            return 'page';
+        }
+
+        $queryId = preg_replace( '/[^A-Za-z0-9_-]/', '', (string) $queryId ) ?? '';
+
+        return '' === $queryId ? 'page' : 'query-' . $queryId . '-page';
     }
 
     /**
