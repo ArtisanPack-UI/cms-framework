@@ -44,11 +44,13 @@ class TemplatePartResolver implements EntityResolver
             return null;
         }
 
-        $theme = $this->activeThemeSlug();
+        $manifest = $this->activeThemeManifest();
 
-        if ( null === $theme ) {
+        if ( null === $manifest ) {
             return null;
         }
+
+        $theme = (string) $manifest['slug'];
 
         // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config); $slug is guarded by SlugValidator at the top of this method. Both are bound as Eloquent query parameters.
         $row          = TemplatePart::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
@@ -94,7 +96,7 @@ class TemplatePartResolver implements EntityResolver
                 hasThemeFile : true,
                 isCustom     : false,
                 isBlade      : true,
-                area         : $this->guessAreaFromSlug( $slug ),
+                area         : $this->themeFileArea( $manifest, $slug ),
                 model        : null,
             );
         }
@@ -113,7 +115,7 @@ class TemplatePartResolver implements EntityResolver
             hasThemeFile : true,
             isCustom     : false,
             isBlade      : false,
-            area         : $this->guessAreaFromSlug( $slug ),
+            area         : $this->themeFileArea( $manifest, $slug ),
             model        : null,
         );
     }
@@ -185,9 +187,58 @@ class TemplatePartResolver implements EntityResolver
      */
     protected function activeThemeSlug(): ?string
     {
+        $theme = $this->activeThemeManifest();
+
+        return null !== $theme ? (string) $theme['slug'] : null;
+    }
+
+    /**
+     * Active-theme manifest accessor. Returns null when no theme is active or
+     * the active theme has no `slug` key in its manifest.
+     *
+     * @since 2.15.3
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function activeThemeManifest(): ?array
+    {
         $theme = $this->themeManager->getActiveTheme();
 
-        return null !== $theme && ! empty( $theme['slug'] ) ? (string) $theme['slug'] : null;
+        return null !== $theme && ! empty( $theme['slug'] ) ? $theme : null;
+    }
+
+    /**
+     * Area for a theme-file part: the `area` declared for the slug in the
+     * active theme's `theme.json` `templateParts` (matched on `name`), so a
+     * theme can ship e.g. a `navigation-overlay` part without a DB row.
+     * Falls back to {@see guessAreaFromSlug()} when the theme declares no
+     * entry, or an entry with no usable `area`.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<string, mixed>  $manifest  Active theme's parsed `theme.json`.
+     */
+    protected function themeFileArea( array $manifest, string $slug ): string
+    {
+        $templateParts = $manifest['templateParts'] ?? null;
+
+        if ( is_array( $templateParts ) ) {
+            foreach ( $templateParts as $templatePart ) {
+                if ( ! is_array( $templatePart ) || ( $templatePart['name'] ?? null ) !== $slug ) {
+                    continue;
+                }
+
+                $area = $templatePart['area'] ?? null;
+
+                if ( is_string( $area ) && '' !== trim( $area ) ) {
+                    return trim( $area );
+                }
+
+                break;
+            }
+        }
+
+        return $this->guessAreaFromSlug( $slug );
     }
 
     /**
@@ -256,8 +307,8 @@ class TemplatePartResolver implements EntityResolver
     }
 
     /**
-     * Guess a template-part area from the slug for theme-file parts that
-     * carry no metadata: e.g. `header`, `header-large` → `'header'`,
+     * Guess a template-part area from the slug for theme-file parts whose
+     * theme declares no `templateParts` area: e.g. `header`, `header-large` → `'header'`,
      * `footer` → `'footer'`, anything else → `'uncategorized'`
      * (WP core's catch-all label, used for the Create-overlay action
      * on `core/navigation` — Keystone #55).

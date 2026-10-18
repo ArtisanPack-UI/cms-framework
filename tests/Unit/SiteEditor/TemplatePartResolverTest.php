@@ -26,11 +26,13 @@ beforeEach( function (): void {
 
     config()->set( 'cms.themes.cacheEnabled', false );
 
+    $this->activeManifest = [
+        'name' => 'Test',
+        'slug' => $this->themeSlug,
+    ];
+
     $themeManager = $this->mock( ThemeManager::class, function ( $mock ): void {
-        $mock->shouldReceive( 'getActiveTheme' )->andReturn( [
-            'name' => 'Test',
-            'slug' => $this->themeSlug,
-        ] );
+        $mock->shouldReceive( 'getActiveTheme' )->andReturnUsing( fn (): array => $this->activeManifest );
     } );
 
     $this->resolver = new TemplatePartResolver( $themeManager );
@@ -135,6 +137,55 @@ describe( 'TemplatePartResolver::resolve()', function (): void {
 
         expect( $result->isBlade )->toBeFalse()
             ->and( $result->blocks )->toHaveCount( 1 );
+    } );
+
+    it( 'takes a theme-file part\'s area from the theme.json templateParts entry (#409)', function (): void {
+        File::put( $this->themeFiles . '/mobile-menu.html', '<!-- wp:paragraph --><p>Menu</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/drawer.blade.php', '<nav>drawer</nav>' );
+
+        $this->activeManifest['templateParts'] = [
+            ['name' => 'header', 'area' => 'header'],
+            ['name' => 'mobile-menu', 'title' => 'Mobile Menu', 'area' => 'navigation-overlay'],
+            ['name' => 'drawer', 'area' => 'navigation-overlay'],
+        ];
+
+        expect( $this->resolver->resolve( 'mobile-menu' )->area )->toBe( 'navigation-overlay' )
+            ->and( $this->resolver->resolve( 'drawer' )->area )->toBe( 'navigation-overlay' );
+    } );
+
+    it( 'falls back to the slug guess when theme.json declares no usable area (#409)', function (): void {
+        File::put( $this->themeFiles . '/header-large.html', '<!-- wp:paragraph --><p>H</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/mobile-menu.html', '<!-- wp:paragraph --><p>M</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/promo.html', '<!-- wp:paragraph --><p>P</p><!-- /wp:paragraph -->' );
+
+        $this->activeManifest['templateParts'] = [
+            ['name' => 'mobile-menu'],
+            ['name' => 'promo', 'area' => ''],
+            'not-an-entry',
+        ];
+
+        expect( $this->resolver->resolve( 'header-large' )->area )->toBe( 'header' )
+            ->and( $this->resolver->resolve( 'mobile-menu' )->area )->toBe( 'uncategorized' )
+            ->and( $this->resolver->resolve( 'promo' )->area )->toBe( 'uncategorized' );
+    } );
+
+    it( 'keeps the DB row\'s area over the theme.json templateParts area (#409)', function (): void {
+        File::put( $this->themeFiles . '/mobile-menu.html', '<!-- wp:paragraph --><p>Menu</p><!-- /wp:paragraph -->' );
+
+        $this->activeManifest['templateParts'] = [
+            ['name' => 'mobile-menu', 'area' => 'navigation-overlay'],
+        ];
+
+        TemplatePart::create( [
+            'theme'         => $this->themeSlug,
+            'slug'          => 'mobile-menu',
+            'title'         => 'Mobile Menu',
+            'area'          => 'uncategorized',
+            'is_custom'     => false,
+            'block_content' => [],
+        ] );
+
+        expect( $this->resolver->resolve( 'mobile-menu' )->area )->toBe( 'uncategorized' );
     } );
 } );
 
