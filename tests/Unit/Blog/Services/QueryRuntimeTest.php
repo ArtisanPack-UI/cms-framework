@@ -2,12 +2,16 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Services\QueryRuntime;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
+use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Str;
 
 beforeEach( function (): void {
@@ -119,6 +123,30 @@ it( 'restricts results with postIn', function (): void {
         ->and( $result->items()[0]->id )->toBe( $keep->id );
 } );
 
+it( 'treats include as an alias of postIn (#403)', function (): void {
+    publishedPost( $this->user->id, 'Newest', null, 1 );
+    $wanted = publishedPost( $this->user->id, 'Wanted', null, 60 );
+
+    $result = $this->runtime->resolve( ['postType' => 'post', 'include' => [$wanted->id]] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $wanted->id );
+} );
+
+it( 'returns include rows in the requested order (#403)', function (): void {
+    $newest = publishedPost( $this->user->id, 'Bravo', null, 1 );
+    $oldest = publishedPost( $this->user->id, 'Alpha', null, 60 );
+    $middle = publishedPost( $this->user->id, 'Charlie', null, 30 );
+
+    $requested  = $this->runtime->resolve( ['postType' => 'post', 'include' => [$oldest->id, $newest->id, $middle->id]] );
+    $byTitle    = $this->runtime->resolve( ['postType' => 'post', 'include' => [$middle->id, $newest->id], 'orderBy' => 'title', 'order' => 'asc'] );
+    $postInOnly = $this->runtime->resolve( ['postType' => 'post', 'postIn' => [$oldest->id, $newest->id]] );
+
+    expect( array_map( fn ( $post ) => $post->id, $requested->items() ) )->toBe( [$oldest->id, $newest->id, $middle->id] )
+        ->and( array_map( fn ( $post ) => $post->id, $byTitle->items() ) )->toBe( [$newest->id, $middle->id] )
+        ->and( array_map( fn ( $post ) => $post->id, $postInOnly->items() ) )->toBe( [$newest->id, $oldest->id] );
+} );
+
 it( 'excludes results with postNotIn', function (): void {
     $keep = publishedPost( $this->user->id, 'Keep' );
     $skip = publishedPost( $this->user->id, 'Skip' );
@@ -197,6 +225,42 @@ it( 'falls back to date when posts are ordered by menu_order', function (): void
 
     expect( $result->items()[0]->id )->toBe( $newer->id )
         ->and( $result->items()[1]->id )->toBe( $older->id );
+} );
+
+it( 'accepts rand as random order (#403)', function (): void {
+    publishedPost( $this->user->id, 'One' );
+
+    $runtime = new class( app( BlogManager::class ), app( PageManager::class ), app( ContentTypeManager::class ) ) extends QueryRuntime {
+        public function sql( array $attributes ): string
+        {
+            $query = $this->baseQuery( 'post', $attributes );
+            $this->applyOrdering( $query, 'post', $attributes );
+
+            return strtolower( $query->toSql() );
+        }
+    };
+
+    expect( $runtime->sql( ['orderBy' => 'rand'] ) )->toContain( 'random()' );
+} );
+
+it( 'pages on query-{queryId}-page when the loop has a queryId (#403)', function (): void {
+    foreach ( range( 1, 3 ) as $minutes ) {
+        publishedPost( $this->user->id, "Post {$minutes}", null, $minutes );
+    }
+
+    Paginator::currentPageResolver( fn ( string $pageName ): int => 'query-blog-page' === $pageName ? 2 : 1 );
+
+    $named   = $this->runtime->resolve( ['postType' => 'post', 'perPage' => 2, 'queryId' => 'blog'] );
+    $plain   = $this->runtime->resolve( ['postType' => 'post', 'perPage' => 2] );
+    $offset  = $this->runtime->resolve( ['postType' => 'post', 'perPage' => 1, 'offset' => 1, 'queryId' => 'blog'] );
+
+    expect( $named->currentPage() )->toBe( 2 )
+        ->and( $named->getPageName() )->toBe( 'query-blog-page' )
+        ->and( count( $named->items() ) )->toBe( 1 )
+        ->and( $plain->currentPage() )->toBe( 1 )
+        ->and( $plain->getPageName() )->toBe( 'page' )
+        ->and( $offset->currentPage() )->toBe( 2 )
+        ->and( $offset->getPageName() )->toBe( 'query-blog-page' );
 } );
 
 it( 'filters by author', function (): void {
