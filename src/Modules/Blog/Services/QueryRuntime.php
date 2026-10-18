@@ -326,12 +326,41 @@ class QueryRuntime
      *  - `relevance` → preserves the manager's default ordering when
      *    `search` is set; otherwise falls back to `date`.
      *
+     * An `include` list with no `orderBy` (or `orderBy` `include` /
+     * `post__in`) returns its rows in the requested order, `postIn`-only
+     * ids after them (#403). An explicit other `orderBy` wins.
+     *
      * @since 2.0.0
+     * @since 2.15.3 Orders an `include` lookup by the requested ids.
      *
      * @param  array<string, mixed>  $attributes
      */
     protected function applyOrdering( Builder $query, string $postType, array $attributes ): void
     {
+        $include          = $this->normalizeIdList( $attributes['include'] ?? null );
+        $requestedOrderBy = isset( $attributes['orderBy'] ) && is_string( $attributes['orderBy'] )
+            ? strtolower( $attributes['orderBy'] )
+            : null;
+
+        if ( [] !== $include && in_array( $requestedOrderBy, [null, 'include', 'post__in'], true ) ) {
+            $include  = array_values( array_unique( $include ) );
+            $branches = implode( ' ', array_fill( 0, count( $include ), 'WHEN ? THEN ?' ) );
+            $bindings = [];
+
+            foreach ( $include as $position => $id ) {
+                $bindings[] = $id;
+                $bindings[] = $position;
+            }
+
+            $bindings[] = count( $include );
+
+            $query->reorder()
+                ->orderByRaw( "CASE id {$branches} ELSE ? END", $bindings )
+                ->orderBy( 'id' );
+
+            return;
+        }
+
         $orderBy = isset( $attributes['orderBy'] ) && is_string( $attributes['orderBy'] )
             ? strtolower( $attributes['orderBy'] )
             : 'date';

@@ -133,6 +133,20 @@ it( 'treats include as an alias of postIn (#403)', function (): void {
         ->and( $result->items()[0]->id )->toBe( $wanted->id );
 } );
 
+it( 'returns include rows in the requested order (#403)', function (): void {
+    $newest = publishedPost( $this->user->id, 'Bravo', null, 1 );
+    $oldest = publishedPost( $this->user->id, 'Alpha', null, 60 );
+    $middle = publishedPost( $this->user->id, 'Charlie', null, 30 );
+
+    $requested  = $this->runtime->resolve( ['postType' => 'post', 'include' => [$oldest->id, $newest->id, $middle->id]] );
+    $byTitle    = $this->runtime->resolve( ['postType' => 'post', 'include' => [$middle->id, $newest->id], 'orderBy' => 'title', 'order' => 'asc'] );
+    $postInOnly = $this->runtime->resolve( ['postType' => 'post', 'postIn' => [$oldest->id, $newest->id]] );
+
+    expect( array_map( fn ( $post ) => $post->id, $requested->items() ) )->toBe( [$oldest->id, $newest->id, $middle->id] )
+        ->and( array_map( fn ( $post ) => $post->id, $byTitle->items() ) )->toBe( [$newest->id, $middle->id] )
+        ->and( array_map( fn ( $post ) => $post->id, $postInOnly->items() ) )->toBe( [$newest->id, $oldest->id] );
+} );
+
 it( 'excludes results with postNotIn', function (): void {
     $keep = publishedPost( $this->user->id, 'Keep' );
     $skip = publishedPost( $this->user->id, 'Skip' );
