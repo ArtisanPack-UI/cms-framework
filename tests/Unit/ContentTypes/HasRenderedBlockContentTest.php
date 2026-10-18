@@ -66,6 +66,107 @@ namespace ArtisanPackUI\VisualEditor\Services\Bindings {
     }
 }
 
+namespace ArtisanPackUI\VisualEditor\Resources {
+
+    if ( ! class_exists( PostResolver::class, false ) ) {
+        /**
+         * Test-only stand-in for visual-editor's PostResolver.
+         *
+         * Stamps a few `post-*` blocks the way the real resolver does,
+         * including reading `rendered_content` for `post-content`, so
+         * the recursion guard is exercised.
+         */
+        class PostResolver
+        {
+            public static mixed $lastPost = null;
+
+            /**
+             * @param  array<int, array<string, mixed>>  $tree
+             *
+             * @return array<int, array<string, mixed>>
+             */
+            public function stampTree( array $tree, object $post ): array
+            {
+                self::$lastPost = $post;
+
+                $out = [];
+
+                foreach ( $tree as $block ) {
+                    $name       = $block['name'] ?? '';
+                    $attributes = $block['attributes'] ?? [];
+
+                    $resolved = match ( $name ) {
+                        'artisanpack/post-title'   => ['_resolvedTitle' => (string) $post->title],
+                        'artisanpack/post-excerpt' => ['_resolvedExcerpt' => (string) $post->excerpt],
+                        'artisanpack/post-terms'   => ['_resolvedTermsByTaxonomy' => ['stub' => $post->getKey()]],
+                        'artisanpack/post-content' => ['_resolvedContent' => (string) ( $post->rendered_content ?? '' )],
+                        default                    => [],
+                    };
+
+                    if ( [] !== $resolved ) {
+                        $block['attributes'] = array_merge( $resolved, $attributes );
+                    }
+
+                    if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+                        $block['innerBlocks'] = $this->stampTree( $block['innerBlocks'], $post );
+                    }
+
+                    $out[] = $block;
+                }
+
+                return $out;
+            }
+        }
+    }
+
+    if ( ! class_exists( QueryInliner::class, false ) ) {
+        /**
+         * Test-only stand-in for visual-editor's QueryInliner. Records the
+         * host post; `$expand` lets a test splice in loop results.
+         */
+        class QueryInliner
+        {
+            public static mixed $lastHostPost = null;
+
+            public static ?\Closure $expand = null;
+
+            /**
+             * @param  array<int, array<string, mixed>>  $tree
+             *
+             * @return array<int, array<string, mixed>>
+             */
+            public function inline( array $tree, ?object $hostPost = null ): array
+            {
+                self::$lastHostPost = $hostPost;
+
+                return null !== self::$expand ? ( self::$expand )( $tree, $hostPost ) : $tree;
+            }
+        }
+    }
+
+    if ( ! class_exists( PatternInliner::class, false ) ) {
+        /**
+         * Test-only stand-in for visual-editor's PatternInliner.
+         */
+        class PatternInliner
+        {
+            public static bool $called = false;
+
+            /**
+             * @param  array<int, array<string, mixed>>  $tree
+             *
+             * @return array<int, array<string, mixed>>
+             */
+            public function inline( array $tree ): array
+            {
+                self::$called = true;
+
+                return $tree;
+            }
+        }
+    }
+}
+
 namespace {
 
     use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
@@ -73,6 +174,9 @@ namespace {
     use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
     use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
     use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
+    use ArtisanPackUI\VisualEditor\Resources\PatternInliner;
+    use ArtisanPackUI\VisualEditor\Resources\PostResolver;
+    use ArtisanPackUI\VisualEditor\Resources\QueryInliner;
     use ArtisanPackUI\VisualEditor\Services\Bindings\BindingContext;
     use ArtisanPackUI\VisualEditorRendererBlade\BlockRenderer;
     use Illuminate\Database\Eloquent\Model;
@@ -85,6 +189,129 @@ namespace {
         BlockRenderer::$throwOnRender = false;
 
         BlockRenderer::$lastBindingContext = null;
+
+        PostResolver::$lastPost       = null;
+        QueryInliner::$lastHostPost   = null;
+        QueryInliner::$expand         = null;
+        PatternInliner::$called       = false;
+    } );
+
+    /**
+     * Create a saved post whose content is the given block tree.
+     *
+     * @param  array<int, array<string, mixed>>  $blocks
+     */
+    function postWithContent( array $blocks ): Post
+    {
+        $user = TestUser::create( [
+            'name'     => 'Author',
+            'email'    => 'author@example.com',
+            'password' => 'password',
+        ] );
+
+        $post = Post::create( [
+            'title'     => 'Core',
+            'slug'      => 'core',
+            'excerpt'   => 'The core package.',
+            'author_id' => $user->id,
+            'status'    => 'draft',
+        ] );
+
+        $post->setBlockContent( $blocks );
+        $post->save();
+
+        return $post->fresh();
+    }
+
+    test( 'post blocks in a record\'s own content are stamped with that record', function ( string $blockName, string $key, Closure $expected ): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/group', 'attributes' => [], 'innerBlocks' => [
+                ['name' => $blockName, 'attributes' => [], 'innerBlocks' => []],
+            ]],
+        ] );
+
+        $post->rendered_content;
+
+        expect( PostResolver::$lastPost )->toBe( $post );
+        expect( BlockRenderer::$lastTree[0]['innerBlocks'][0]['attributes'][ $key ] )->toBe( $expected( $post ) );
+    } )->with( [
+        'post-title'   => ['artisanpack/post-title', '_resolvedTitle', fn ( Post $post ): string => 'Core'],
+        'post-excerpt' => ['artisanpack/post-excerpt', '_resolvedExcerpt', fn ( Post $post ): string => 'The core package.'],
+        'post-terms'   => ['artisanpack/post-terms', '_resolvedTermsByTaxonomy', fn ( Post $post ): array => ['stub' => $post->id]],
+    ] );
+
+    test( 'synced patterns and query loops in a record\'s content are inlined with the record as host', function (): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/related-posts', 'attributes' => [], 'innerBlocks' => []],
+        ] );
+
+        $post->rendered_content;
+
+        expect( PatternInliner::$called )->toBeTrue();
+        expect( QueryInliner::$lastHostPost )->toBe( $post );
+    } );
+
+    test( 'a post-content block inside a record\'s own content renders empty instead of recursing', function (): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/post-title', 'attributes' => [], 'innerBlocks' => []],
+            ['name' => 'artisanpack/post-content', 'attributes' => [], 'innerBlocks' => []],
+        ] );
+
+        expect( $post->rendered_content )->toBe( '<p>stubbed render</p>' );
+        expect( BlockRenderer::$lastTree[1]['attributes']['_resolvedContent'] )->toBe( '' );
+    } );
+
+    test( 'a loop that lists the record itself does not render its content again', function (): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/query', 'attributes' => [], 'innerBlocks' => []],
+        ] );
+
+        // Mimic QueryInliner stamping each result: the loop's result is a
+        // fresh instance of the same record with a post-content block.
+        QueryInliner::$expand = function ( array $tree ) use ( $post ): array {
+            $tree[0]['innerBlocks'] = app( PostResolver::class )->stampTree(
+                [['name' => 'artisanpack/post-content', 'attributes' => [], 'innerBlocks' => []]],
+                Post::find( $post->id ),
+            );
+
+            return $tree;
+        };
+
+        expect( $post->rendered_content )->toBe( '<p>stubbed render</p>' );
+        expect( BlockRenderer::$lastTree[0]['innerBlocks'][0]['attributes']['_resolvedContent'] )->toBe( '' );
+    } );
+
+    test( 'a failing content pass leaves the tree for the renderer', function (): void {
+        $blocks = [
+            ['name' => 'artisanpack/paragraph', 'attributes' => ['content' => 'Hi'], 'innerBlocks' => []],
+        ];
+
+        $post = postWithContent( $blocks );
+
+        QueryInliner::$expand = fn (): array => throw new RuntimeException( 'query failure' );
+
+        expect( $post->rendered_content )->toBe( '<p>stubbed render</p>' );
+        expect( BlockRenderer::$lastTree )->toBe( $blocks );
+    } );
+
+    test( 'the tree renders unchanged when visual-editor\'s content passes are not installed', function (): void {
+        $post = new class extends Post {
+            protected function contentPipelineService( string $class ): ?object
+            {
+                return null;
+            }
+        };
+
+        $blocks = [
+            ['name' => 'artisanpack/post-title', 'attributes' => [], 'innerBlocks' => []],
+        ];
+
+        $post->title = 'Unstamped';
+        $post->setBlockContent( $blocks );
+
+        expect( $post->renderContent() )->toBe( '<p>stubbed render</p>' );
+        expect( BlockRenderer::$lastTree )->toBe( $blocks );
+        expect( PostResolver::$lastPost )->toBeNull();
     } );
 
     test( 'rendered_content accessor walks block tree through the renderer', function (): void {
