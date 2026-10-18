@@ -60,6 +60,51 @@ trait HasRenderedBlockContent
     protected const BINDING_CONTEXT_CLASS = 'ArtisanPackUI\\VisualEditor\\Services\\Bindings\\BindingContext';
 
     /**
+     * Fully-qualified class name of visual-editor's block-shape normalizer.
+     *
+     * Kept as a string for the same soft-integration reason as
+     * {@see self::BLOCK_RENDERER_CLASS}.
+     *
+     * @since 2.15.3
+     */
+    protected const BLOCK_SHAPE_CLASS = 'ArtisanPackUI\\VisualEditor\\Support\\BlockShape';
+
+    /**
+     * Fully-qualified class name of visual-editor's synced-pattern inliner.
+     *
+     * @since 2.15.3
+     */
+    protected const PATTERN_INLINER_CLASS = 'ArtisanPackUI\\VisualEditor\\Resources\\PatternInliner';
+
+    /**
+     * Fully-qualified class name of visual-editor's query-loop inliner.
+     *
+     * @since 2.15.3
+     */
+    protected const QUERY_INLINER_CLASS = 'ArtisanPackUI\\VisualEditor\\Resources\\QueryInliner';
+
+    /**
+     * Fully-qualified class name of visual-editor's `post-*` block resolver.
+     *
+     * @since 2.15.3
+     */
+    protected const POST_RESOLVER_CLASS = 'ArtisanPackUI\\VisualEditor\\Resources\\PostResolver';
+
+    /**
+     * Records whose content is being rendered right now, keyed by
+     * {@see self::renderingContentKey()}.
+     *
+     * A `post-content` block (or a loop that lists the record itself)
+     * inside a record's own content would otherwise read
+     * `rendered_content` again and recurse without end.
+     *
+     * @since 2.15.3
+     *
+     * @var array<string, true>
+     */
+    protected static array $renderingContentKeys = [];
+
+    /**
      * Eloquent accessor for `$model->rendered_content`.
      *
      * Visual-editor's `PostResolver::resolveContent()` prefers this attribute
@@ -85,6 +130,7 @@ trait HasRenderedBlockContent
      *
      * @since 2.2.0
      * @since 2.14.1 Renders with a binding context for the model, so block bindings resolve.
+     * @since 2.15.3 Inlines synced patterns and query loops, and stamps `post-*` blocks against the model first.
      */
     public function renderContent(): string
     {
@@ -92,13 +138,26 @@ trait HasRenderedBlockContent
             $blocks = $this->getBlockContent();
 
             if ( [] !== $blocks ) {
+                $guardKey = $this->renderingContentKey();
+
+                // Already rendering this record further up the stack: a
+                // `post-content` block inside its own content renders
+                // nothing, as in WordPress.
+                if ( isset( self::$renderingContentKeys[ $guardKey ] ) ) {
+                    return '';
+                }
+
+                self::$renderingContentKeys[ $guardKey ] = true;
+
                 try {
                     $renderer = app( self::BLOCK_RENDERER_CLASS );
 
-                    return $renderer->render( $blocks, $this->blockBindingContext() );
+                    return $renderer->render( $this->prepareBlocksForRender( $blocks ), $this->blockBindingContext() );
                 } catch ( Throwable ) {
                     // Renderer installed but failed to resolve or render —
                     // fall through to the pre-rendered string fallback below.
+                } finally {
+                    unset( self::$renderingContentKeys[ $guardKey ] );
                 }
             }
         }
@@ -131,6 +190,157 @@ trait HasRenderedBlockContent
         $rendered = is_string( $content ) ? $content : '';
 
         return $this->resolveDynamicContentTokens( $rendered );
+    }
+
+    /**
+     * Run the model's block tree through visual-editor's entity passes
+     * before it is rendered.
+     *
+     * `<x-ve-blocks :post="$post">` runs these for a template, but this
+     * accessor renders the content on its own, so without them every
+     * `post-title`, `post-excerpt` or `post-terms` block in a record's
+     * content renders an empty wrapper. The order mirrors visual-editor's
+     * `BlocksComponent`: synced patterns, then query loops (with the
+     * model as host, so a related-posts loop finds its neighbours), then
+     * `post-*` stamping. Template parts belong to templates and are not
+     * inlined here. Each pass is skipped when its class is not installed,
+     * and a pass that throws leaves the tree as it was.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<int, array<string, mixed>>  $blocks
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function prepareBlocksForRender( array $blocks ): array
+    {
+        $blockShape = class_exists( self::BLOCK_SHAPE_CLASS ) ? self::BLOCK_SHAPE_CLASS : null;
+
+        // The passes read `name` / `attributes`; canonicalize legacy
+        // `attrs` blocks first, as `BlocksComponent` does.
+        if ( null !== $blockShape ) {
+            $blocks = $blockShape::normalizeTree( $blocks );
+        }
+
+        $patternInliner = $this->contentPipelineService( self::PATTERN_INLINER_CLASS );
+
+        if ( null !== $patternInliner ) {
+            $blocks = $this->applyContentPass( $blocks, static function ( array $tree ) use ( $patternInliner, $blockShape ): array {
+                $inlined = $patternInliner->inline( $tree );
+
+                return null !== $blockShape ? $blockShape::normalizeTree( $inlined ) : $inlined;
+            } );
+        }
+
+        $queryInliner = $this->contentPipelineService( self::QUERY_INLINER_CLASS );
+
+        if ( null !== $queryInliner ) {
+            $blocks = $this->applyContentPass( $blocks, fn ( array $tree ): array => $queryInliner->inline( $tree, $this ) );
+        }
+
+        $postResolver = $this->contentPipelineService( self::POST_RESOLVER_CLASS );
+
+        if ( null !== $postResolver ) {
+            $blocks = $this->applyContentPass(
+                $blocks,
+                fn ( array $tree ): array => $postResolver->stampTree( $this->blankNestedPostContent( $tree ), $this ),
+            );
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * Resolve one of visual-editor's content passes from the container.
+     *
+     * Null when the class is not installed, so the pass is skipped.
+     *
+     * @since 2.15.3
+     */
+    protected function contentPipelineService( string $class ): ?object
+    {
+        return class_exists( $class ) ? app( $class ) : null;
+    }
+
+    /**
+     * Apply one content pass, keeping the tree as it was if the pass throws.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<int, array<string, mixed>>  $blocks
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function applyContentPass( array $blocks, callable $pass ): array
+    {
+        try {
+            $result = $pass( $blocks );
+        } catch ( Throwable ) {
+            return $blocks;
+        }
+
+        return is_array( $result ) ? $result : $blocks;
+    }
+
+    /**
+     * Stamp an empty `_resolvedContent` on every `post-content` block in
+     * the model's own content that has not been resolved yet.
+     *
+     * The model's content can't contain itself. Pre-stamping keeps
+     * `PostResolver` from printing the raw `content` column there, since
+     * its own value wins on merge. Blocks a query loop already stamped
+     * against another record keep their value.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<int, array<string, mixed>>  $blocks
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function blankNestedPostContent( array $blocks ): array
+    {
+        foreach ( $blocks as $index => $block ) {
+            if ( ! is_array( $block ) ) {
+                continue;
+            }
+
+            $name = isset( $block['name'] ) && is_string( $block['name'] ) ? $block['name'] : '';
+
+            if ( in_array( $name, ['core/post-content', 'artisanpack/post-content'], true ) ) {
+                $attributes = isset( $block['attributes'] ) && is_array( $block['attributes'] ) ? $block['attributes'] : [];
+
+                if ( ! array_key_exists( '_resolvedContent', $attributes ) ) {
+                    $attributes['_resolvedContent'] = '';
+                    $block['attributes']            = $attributes;
+                }
+            }
+
+            if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+                $block['innerBlocks'] = $this->blankNestedPostContent( $block['innerBlocks'] );
+            }
+
+            $blocks[ $index ] = $block;
+        }
+
+        return $blocks;
+    }
+
+    /**
+     * Key identifying this record in {@see self::$renderingContentKeys}.
+     *
+     * Uses the table and primary key so a fresh instance of the same
+     * record (a loop result, say) is caught too; unsaved models fall back
+     * to the object id.
+     *
+     * @since 2.15.3
+     */
+    protected function renderingContentKey(): string
+    {
+        $key = $this->getKey();
+
+        return null !== $key && '' !== $key
+            ? $this->getTable() . ':' . $key
+            : 'object:' . spl_object_id( $this );
     }
 
     /**
