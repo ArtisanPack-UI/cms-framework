@@ -105,8 +105,14 @@ class GlobalStylesEmitter
      *
      * v11: emit `color.gradient` as `background`, before `background-color`
      * (#398).
+     *
+     * v12: alias preset classes with WordPress's kebab case when it differs
+     * (`.has-h2-font-size, .has-h-2-font-size`) (#401).
+     *
+     * v13: target both `.wp-block-{name}` and `.wp-block-artisanpack-{name}`
+     * for `artisanpack/*` blocks, so forks of core blocks match (#405).
      */
-    private const SCHEMA_VERSION = 'v11';
+    private const SCHEMA_VERSION = 'v13';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -460,7 +466,7 @@ class GlobalStylesEmitter
 
         foreach ( array_unique( $slugs ) as $slug ) {
             if ( ! in_array( $slug, self::MARKER_COLOR_SLUGS, true ) ) {
-                $rules[] = '.has-' . $slug . '-color { color: var(--wp--preset--color--' . $slug . ') !important; }';
+                $rules[] = $this->presetClassSelector( $slug, 'color' ) . ' { color: var(--wp--preset--color--' . $slug . ') !important; }';
             }
         }
 
@@ -536,8 +542,8 @@ class GlobalStylesEmitter
         foreach ( $colorSlugs as $slug ) {
             $var = '--wp--preset--color--' . $slug;
 
-            $rules[] = '.has-' . $slug . '-background-color { background-color: var(' . $var . ') !important; }';
-            $rules[] = '.has-' . $slug . '-border-color { border-color: var(' . $var . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'background-color' ) . ' { background-color: var(' . $var . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'border-color' ) . ' { border-color: var(' . $var . ') !important; }';
         }
 
         array_push( $rules, ...$this->colorUtilityRules( $colorSlugs ) );
@@ -547,7 +553,7 @@ class GlobalStylesEmitter
             : [];
 
         foreach ( $this->presetSlugs( $fontSizes, 'size' ) as $slug ) {
-            $rules[] = '.has-' . $slug . '-font-size { font-size: var(--wp--preset--font-size--' . $slug . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'font-size' ) . ' { font-size: var(--wp--preset--font-size--' . $slug . ') !important; }';
         }
 
         $fontFamilies = is_array( $settings['typography']['fontFamilies'] ?? null )
@@ -555,7 +561,7 @@ class GlobalStylesEmitter
             : [];
 
         foreach ( $this->presetSlugs( $fontFamilies, 'fontFamily' ) as $slug ) {
-            $rules[] = '.has-' . $slug . '-font-family { font-family: var(--wp--preset--font-family--' . $slug . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'font-family' ) . ' { font-family: var(--wp--preset--font-family--' . $slug . ') !important; }';
         }
 
         $gradients = is_array( $settings['color']['gradients'] ?? null )
@@ -563,10 +569,47 @@ class GlobalStylesEmitter
             : [];
 
         foreach ( $this->presetSlugs( $gradients, 'gradient' ) as $slug ) {
-            $rules[] = '.has-' . $slug . '-gradient-background { background: var(--wp--preset--gradient--' . $slug . ') !important; }';
+            $rules[] = $this->presetClassSelector( $slug, 'gradient-background' ) . ' { background: var(--wp--preset--gradient--' . $slug . ') !important; }';
         }
 
         return $rules;
+    }
+
+    /**
+     * The `.has-{slug}-{suffix}` preset class selector, plus the WordPress
+     * kebab-case form when it differs (#401).
+     *
+     * The editor builds preset class names with WordPress's `kebabCase`,
+     * which splits letters from digits (`h2` → `has-h-2-font-size`), as
+     * `_wp_to_kebab_case()` does for WordPress's own global styles. The
+     * renderers print the slug as-is (`has-h2-font-size`). Emitting both
+     * keeps editor-saved and renderer-built markup resolving to the preset.
+     * Custom property names keep the slug as-is.
+     *
+     * @since 2.15.3
+     *
+     * @param  string  $slug    A normalized `[a-z0-9-]` preset slug.
+     * @param  string  $suffix  The class suffix, e.g. `font-size`.
+     */
+    protected function presetClassSelector( string $slug, string $suffix ): string
+    {
+        $selector = '.has-' . $slug . '-' . $suffix;
+        $kebab    = $this->wordpressKebabSlug( $slug );
+
+        return $kebab === $slug ? $selector : $selector . ', .has-' . $kebab . '-' . $suffix;
+    }
+
+    /**
+     * A normalized preset slug in WordPress's kebab case: hyphens between
+     * letters and digits (`h2` → `h-2`, `gray900` → `gray-900`). Slugs are
+     * already lowercase `[a-z0-9-]`, so letter–digit boundaries are the only
+     * splits left to make.
+     *
+     * @since 2.15.3
+     */
+    protected function wordpressKebabSlug( string $slug ): string
+    {
+        return (string) preg_replace( ['/([a-z])(?=[0-9])/', '/([0-9])(?=[a-z])/'], '$1-', $slug );
     }
 
     /**
@@ -1299,14 +1342,14 @@ class GlobalStylesEmitter
 
     /**
      * Per-block rule blocks: `styles.blocks.{namespace/name}`. Each
-     * entry renders into a `.wp-block-{namespace-}{name}` selector,
-     * dropping `core/` to match Gutenberg's own class naming
+     * entry renders into the selector list from {@see blockSelector()}
      * (`core/quote` → `.wp-block-quote`, `artisanpack/card`
-     * → `.wp-block-artisanpack-card`) (#201), wrapped in
-     * `:root :where(…)` (#390).
+     * → `.wp-block-card, .wp-block-artisanpack-card`) (#201, #405),
+     * wrapped in `:root :where(…)` (#390).
      *
      * @since 2.5.0
      * @since 2.15.0 Wraps rules in `:root :where(…)`.
+     * @since 2.15.3 `artisanpack/*` blocks target both class forms.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -1395,12 +1438,20 @@ class GlobalStylesEmitter
      * Distribute the parent block selector across each comma-separated
      * child selector token so the emitted rule stays scoped to the block
      * even when the element selector is a group (`h1, h2, …`) (#208).
+     * A block selector list (`.wp-block-x, .wp-block-artisanpack-x`) is
+     * distributed too, so every element token is scoped to every block
+     * class (`.wp-block-x h2, .wp-block-artisanpack-x h2`) (#405).
      *
      * @since 2.5.0
+     * @since 2.15.3 Distributes a comma-separated block selector list.
      */
     protected function composeBlockElementSelector( string $blockSelector, string $elementSelector ): string
     {
-        $parts = array_map( 'trim', explode( ',', $elementSelector ) );
+        $parts          = array_map( 'trim', explode( ',', $elementSelector ) );
+        $blockSelectors = array_filter(
+            array_map( 'trim', explode( ',', $blockSelector ) ),
+            static fn ( string $selector ): bool => '' !== $selector,
+        );
 
         $composed = [];
 
@@ -1409,20 +1460,30 @@ class GlobalStylesEmitter
                 continue;
             }
 
-            $composed[] = $blockSelector . ' ' . $part;
+            foreach ( $blockSelectors as $selector ) {
+                $composed[] = $selector . ' ' . $part;
+            }
         }
 
         return implode( ', ', $composed );
     }
 
     /**
-     * Map a `{namespace}/{name}` block identifier to its CSS selector.
+     * Map a `{namespace}/{name}` block identifier to the CSS selector
+     * list for the classes it renders on the front end. `core/x` renders
+     * `.wp-block-x`. A first-party `artisanpack/x` block can be a fork of
+     * `core/x` (rendering `.wp-block-x`) or its own block (rendering
+     * `.wp-block-artisanpack-x`), so both are targeted (#405). Any other
+     * namespace renders `.wp-block-{namespace}-{name}`. Mirrors
+     * visual-editor's `BlockStyleCssCompiler::blockSelectors()`.
+     *
      * Returns `null` for malformed identifiers so the caller can skip:
      * both parts must use WordPress's block-name charset (`[a-z0-9-]`),
      * so a key can't inject its own selector or rule (#385).
      *
      * @since 2.5.0
      * @since 2.15.0 Restricts both parts to `[a-z0-9-]`.
+     * @since 2.15.3 `artisanpack/x` returns `.wp-block-x, .wp-block-artisanpack-x`.
      */
     protected function blockSelector( string $blockName ): ?string
     {
@@ -1445,6 +1506,10 @@ class GlobalStylesEmitter
 
         if ( 'core' === $namespace ) {
             return '.wp-block-' . $name;
+        }
+
+        if ( 'artisanpack' === $namespace ) {
+            return '.wp-block-' . $name . ', .wp-block-artisanpack-' . $name;
         }
 
         return '.wp-block-' . $namespace . '-' . $name;
