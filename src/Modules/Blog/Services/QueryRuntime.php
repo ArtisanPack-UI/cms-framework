@@ -71,6 +71,16 @@ class QueryRuntime
         'relevance',
     ];
 
+    /**
+     * Whether each model table has a `status` column, keyed by
+     * `connection|table`.
+     *
+     * @since 2.15.3
+     *
+     * @var array<string, bool>
+     */
+    protected array $statusColumnCache = [];
+
     public function __construct(
         protected BlogManager $blogManager,
         protected PageManager $pageManager,
@@ -254,7 +264,9 @@ class QueryRuntime
      * Restrict a custom-type query to the given status.
      *
      * Published (the default) uses the model's `published()` scope when
-     * it has one, so scheduled rows stay hidden until `published_at`.
+     * it has one (a `scopePublished()` method or a `#[Scope]`-attributed
+     * `published()` method, both found by `hasNamedScope()`), so scheduled
+     * rows stay hidden until `published_at`.
      * Otherwise it falls back to `status = published` when the model's
      * table has a `status` column. A model with neither has no notion of
      * publication and is left unfiltered. Any other status only arrives
@@ -277,7 +289,7 @@ class QueryRuntime
             || '' === $status
             || ( ! is_string( $status ) && ! $status instanceof ContentStatus );
 
-        if ( $wantsPublished && method_exists( $instance, 'scopePublished' ) ) {
+        if ( $wantsPublished && $instance->hasNamedScope( 'published' ) ) {
             $query->published();
 
             return;
@@ -300,18 +312,20 @@ class QueryRuntime
     /**
      * Whether the model's table has a `status` column.
      *
-     * Checks the schema rather than `$fillable`, so a model that guards
-     * nothing (an empty `$fillable`) is still filtered.
+     * Checks the schema, not `$fillable`: a model that guards nothing (an
+     * empty `$fillable`) is still filtered, and a model that lists `status`
+     * as fillable without the column doesn't get a `where` on a column that
+     * isn't there. The answer is remembered per connection and table for
+     * the request, so a page with several loops asks the schema once.
      *
      * @since 2.15.3
      */
     protected function modelHasStatusColumn( Model $instance ): bool
     {
-        if ( in_array( 'status', $instance->getFillable(), true ) ) {
-            return true;
-        }
+        $connection = $instance->getConnection();
+        $key        = $connection->getName() . '|' . $instance->getTable();
 
-        return $instance->getConnection()->getSchemaBuilder()->hasColumn( $instance->getTable(), 'status' );
+        return $this->statusColumnCache[ $key ] ??= $connection->getSchemaBuilder()->hasColumn( $instance->getTable(), 'status' );
     }
 
     /**

@@ -12,6 +12,8 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Str;
@@ -69,6 +71,34 @@ class QueryRuntimeStatusColumnModel extends Model
     protected $table = 'pages';
 
     protected $guarded = [];
+}
+
+/**
+ * A custom-type model whose `published()` scope is a `#[Scope]`-attributed
+ * method (no `scope` prefix) that also hides scheduled rows.
+ */
+class QueryRuntimeAttributeScopeModel extends Model
+{
+    protected $table = 'pages';
+
+    protected $guarded = [];
+
+    #[Scope]
+    protected function published( Builder $query ): void
+    {
+        $query->where( 'status', 'published' )->where( 'published_at', '<=', now() );
+    }
+}
+
+/**
+ * A custom-type model that lists `status` as fillable although its table
+ * has no `status` column.
+ */
+class QueryRuntimeFillableStatusWithoutColumnModel extends Model
+{
+    protected $table = 'users';
+
+    protected $fillable = ['name', 'status'];
 }
 
 function draftPage( int $userId, string $title ): Page
@@ -409,6 +439,25 @@ it( 'excludes draft records of a custom type with only a status column', functio
     $result = $this->runtime->resolve( ['postType' => 'notes'] );
 
     expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'uses a #[Scope] published scope on a custom type, so scheduled records stay hidden', function (): void {
+    registerQueryRuntimeType( 'events', QueryRuntimeAttributeScopeModel::class );
+    $published = publishedPage( $this->user->id, 'Live' );
+    $scheduled = publishedPage( $this->user->id, 'Tomorrow' );
+    $scheduled->forceFill( ['published_at' => now()->addDay()] )->save();
+
+    $result = $this->runtime->resolve( ['postType' => 'events'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'does not filter on status when the column is only fillable, not in the table', function (): void {
+    registerQueryRuntimeType( 'people', QueryRuntimeFillableStatusWithoutColumnModel::class );
+
+    $result = $this->runtime->resolve( ['postType' => 'people'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$this->user->id] );
 } );
 
 it( 'ignores a status attribute passed to resolve', function ( string $postType ): void {
