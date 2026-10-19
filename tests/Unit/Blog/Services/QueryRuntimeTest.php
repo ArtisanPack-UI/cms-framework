@@ -8,9 +8,13 @@ use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostCategory;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Models\PostTag;
 use ArtisanPackUI\CMSFramework\Modules\Blog\Services\QueryRuntime;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Str;
 
@@ -55,6 +59,70 @@ function publishedPage( int $userId, string $title, ?int $parent = null, int $or
         'published_at' => now()->subDay()->toDateTimeString(),
         'parent_id'    => $parent,
         'order'        => $order,
+    ] );
+}
+
+/**
+ * A custom-type model with a `status` column but no `published()` scope
+ * and nothing in `$fillable`.
+ */
+class QueryRuntimeStatusColumnModel extends Model
+{
+    protected $table = 'pages';
+
+    protected $guarded = [];
+}
+
+/**
+ * A custom-type model whose `published()` scope is a `#[Scope]`-attributed
+ * method (no `scope` prefix) that also hides scheduled rows.
+ */
+class QueryRuntimeAttributeScopeModel extends Model
+{
+    protected $table = 'pages';
+
+    protected $guarded = [];
+
+    #[Scope]
+    protected function published( Builder $query ): void
+    {
+        $query->where( 'status', 'published' )->where( 'published_at', '<=', now() );
+    }
+}
+
+/**
+ * A custom-type model that lists `status` as fillable although its table
+ * has no `status` column.
+ */
+class QueryRuntimeFillableStatusWithoutColumnModel extends Model
+{
+    protected $table = 'users';
+
+    protected $fillable = ['name', 'status'];
+}
+
+function draftPage( int $userId, string $title ): Page
+{
+    return Page::create( [
+        'title'     => $title,
+        'slug'      => Str::slug( $title ) . '-' . uniqid(),
+        'content'   => 'Body for ' . $title,
+        'author_id' => $userId,
+        'status'    => 'draft',
+    ] );
+}
+
+function registerQueryRuntimeType( string $slug, string $modelClass ): void
+{
+    ContentType::create( [
+        'name'          => ucfirst( $slug ),
+        'slug'          => $slug,
+        'table_name'    => 'pages',
+        'model_class'   => $modelClass,
+        'hierarchical'  => false,
+        'has_archive'   => true,
+        'public'        => true,
+        'show_in_admin' => true,
     ] );
 }
 
@@ -343,3 +411,116 @@ it( 'ignores taxQuery operators outside the V1 IN subset', function (): void {
 it( 'throws when an unknown postType is requested', function (): void {
     $this->runtime->resolve( ['postType' => 'something-unregistered'] );
 } )->throws( InvalidArgumentException::class, 'unknown post type' );
+
+it( 'excludes draft pages by default', function (): void {
+    $published = publishedPage( $this->user->id, 'Live' );
+    draftPage( $this->user->id, 'Hidden' );
+
+    $result = $this->runtime->resolve( ['postType' => 'page'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'excludes draft records of a custom type with a published scope', function (): void {
+    registerQueryRuntimeType( 'docs', Page::class );
+    $published = publishedPage( $this->user->id, 'Live' );
+    draftPage( $this->user->id, 'Hidden' );
+
+    $result = $this->runtime->resolve( ['postType' => 'docs'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'excludes draft records of a custom type with only a status column', function (): void {
+    registerQueryRuntimeType( 'notes', QueryRuntimeStatusColumnModel::class );
+    $published = publishedPage( $this->user->id, 'Live' );
+    draftPage( $this->user->id, 'Hidden' );
+
+    $result = $this->runtime->resolve( ['postType' => 'notes'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'uses a #[Scope] published scope on a custom type, so scheduled records stay hidden', function (): void {
+    registerQueryRuntimeType( 'events', QueryRuntimeAttributeScopeModel::class );
+    $published = publishedPage( $this->user->id, 'Live' );
+    $scheduled = publishedPage( $this->user->id, 'Tomorrow' );
+    $scheduled->forceFill( ['published_at' => now()->addDay()] )->save();
+
+    $result = $this->runtime->resolve( ['postType' => 'events'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'does not filter on status when the column is only fillable, not in the table', function (): void {
+    registerQueryRuntimeType( 'people', QueryRuntimeFillableStatusWithoutColumnModel::class );
+
+    $result = $this->runtime->resolve( ['postType' => 'people'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$this->user->id] );
+} );
+
+it( 'ignores a status attribute passed to resolve', function ( string $postType ): void {
+    registerQueryRuntimeType( 'docs', Page::class );
+    publishedPost( $this->user->id, 'Live post' );
+    publishedPage( $this->user->id, 'Live page' );
+    $draftPost = Post::create( [
+        'title'     => 'Draft post',
+        'slug'      => 'draft-post',
+        'author_id' => $this->user->id,
+        'status'    => 'draft',
+    ] );
+    $draftPage = draftPage( $this->user->id, 'Draft page' );
+
+    $ids = collect( $this->runtime->resolve( ['postType' => $postType, 'status' => 'draft'] )->items() )->pluck( 'id' );
+
+    expect( $ids )->toHaveCount( 1 )
+        ->and( $ids->all() )->not->toContain( 'post' === $postType ? $draftPost->id : $draftPage->id );
+} )->with( ['post', 'page', 'docs'] );
+
+it( 'honours a status attribute passed to resolveTrusted', function (): void {
+    registerQueryRuntimeType( 'docs', Page::class );
+    registerQueryRuntimeType( 'notes', QueryRuntimeStatusColumnModel::class );
+    publishedPost( $this->user->id, 'Live post' );
+    publishedPage( $this->user->id, 'Live page' );
+    $draftPost = Post::create( [
+        'title'     => 'Draft post',
+        'slug'      => 'draft-post',
+        'author_id' => $this->user->id,
+        'status'    => 'draft',
+    ] );
+    $draftPage = draftPage( $this->user->id, 'Draft page' );
+
+    $ids = fn ( string $postType ): array => collect(
+        $this->runtime->resolveTrusted( ['postType' => $postType, 'status' => 'draft'] )->items(),
+    )->pluck( 'id' )->all();
+
+    expect( $ids( 'post' ) )->toBe( [$draftPost->id] )
+        ->and( $ids( 'page' ) )->toBe( [$draftPage->id] )
+        ->and( $ids( 'docs' ) )->toBe( [$draftPage->id] )
+        ->and( $ids( 'notes' ) )->toBe( [$draftPage->id] );
+} );
+
+it( 'lists published content from resolveTrusted when no status is given', function (): void {
+    $published = publishedPage( $this->user->id, 'Live' );
+    draftPage( $this->user->id, 'Hidden' );
+
+    $result = $this->runtime->resolveTrusted( ['postType' => 'page'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );
+
+it( 'keeps excluding draft and scheduled posts', function (): void {
+    $published = publishedPost( $this->user->id, 'Live' );
+    Post::create( [
+        'title'     => 'Draft',
+        'slug'      => 'draft',
+        'author_id' => $this->user->id,
+        'status'    => 'draft',
+    ] );
+    publishedPost( $this->user->id, 'Scheduled', now()->addDay()->toDateTimeString() );
+
+    $result = $this->runtime->resolve( ['postType' => 'post'] );
+
+    expect( collect( $result->items() )->pluck( 'id' )->all() )->toBe( [$published->id] );
+} );

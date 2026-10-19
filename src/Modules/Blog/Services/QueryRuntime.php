@@ -17,12 +17,19 @@ declare( strict_types=1 );
  * thin REST endpoint (see G4c-2 in the visual-editor repo); a host that
  * runs the editor in-process can also call `resolve()` directly.
  *
+ * Every loop lists published content only. `resolve()` takes block
+ * attributes, which are author- or visitor-controlled, so it ignores a
+ * `status` attribute. A host that has already authorized the request
+ * (e.g. an admin listing) can call `resolveTrusted()` to honour it.
+ *
  * @since 2.0.0
+ * @since 2.15.3 Loops default to published content for every post type.
  */
 
 namespace ArtisanPackUI\CMSFramework\Modules\Blog\Services;
 
 use ArtisanPackUI\CMSFramework\Modules\Blog\Managers\BlogManager;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Enums\ContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\Pages\Managers\PageManager;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -64,6 +71,16 @@ class QueryRuntime
         'relevance',
     ];
 
+    /**
+     * Whether each model table has a `status` column, keyed by
+     * `connection|table`.
+     *
+     * @since 2.15.3
+     *
+     * @var array<string, bool>
+     */
+    protected array $statusColumnCache = [];
+
     public function __construct(
         protected BlogManager $blogManager,
         protected PageManager $pageManager,
@@ -74,11 +91,47 @@ class QueryRuntime
     /**
      * Resolve the given query attributes to a paginated result set.
      *
+     * Lists published content only: a `status` attribute is ignored,
+     * because block attributes are not a trusted source. Use
+     * {@see self::resolveTrusted()} to query another status.
+     *
      * @since 2.0.0
+     * @since 2.15.3 Ignores `status` and lists published content only.
      *
      * @param  array<string, mixed>  $attributes  Normalized `core/query` attributes.
      */
     public function resolve( array $attributes ): LengthAwarePaginator
+    {
+        unset( $attributes['status'] );
+
+        return $this->resolveAttributes( $attributes );
+    }
+
+    /**
+     * Resolve the given query attributes, honouring a `status` attribute.
+     *
+     * For callers that have already authorized the request to see
+     * unpublished content. Never pass block attributes or request input
+     * here without that check. Without a `status`, the result is the
+     * same as {@see self::resolve()}: published content only.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<string, mixed>  $attributes  Normalized `core/query` attributes.
+     */
+    public function resolveTrusted( array $attributes ): LengthAwarePaginator
+    {
+        return $this->resolveAttributes( $attributes );
+    }
+
+    /**
+     * Run the query pipeline for the given attributes.
+     *
+     * @since 2.15.3
+     *
+     * @param  array<string, mixed>  $attributes  Normalized `core/query` attributes.
+     */
+    protected function resolveAttributes( array $attributes ): LengthAwarePaginator
     {
         $postType = isset( $attributes['postType'] ) && is_string( $attributes['postType'] )
             ? sanitizeText( $attributes['postType'] )
@@ -138,11 +191,14 @@ class QueryRuntime
             $filters['search'] = $attributes['search'];
         }
 
-        // Default the manager filter status pass-through to a forward
-        // filter; the QueryRuntime caller can override per-payload.
-        if ( isset( $attributes['status'] ) ) {
-            $filters['status'] = $attributes['status'];
-        }
+        // Always hand the managers an explicit status. `PageManager`
+        // lists every status when none is given (its admin default), so
+        // leaving it unset would expose drafts. `resolve()` strips any
+        // caller-supplied status before this point; only
+        // `resolveTrusted()` lets one through.
+        $filters['status'] = isset( $attributes['status'] ) && ( is_string( $attributes['status'] ) || $attributes['status'] instanceof ContentStatus )
+            ? $attributes['status']
+            : ContentStatus::Published;
 
         return $filters;
     }
@@ -188,10 +244,7 @@ class QueryRuntime
             $query->byAuthor( (int) $managerFilters['author'] );
         }
 
-        if ( isset( $managerFilters['status'] ) && in_array( 'status', $instance->getFillable(), true ) ) {
-            // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $managerFilters['status'] is applied as an Eloquent parameter-bound where(), gated on the column being fillable.
-            $query->where( 'status', $managerFilters['status'] );
-        }
+        $this->applyCustomTypeStatus( $query, $instance, $managerFilters['status'] ?? ContentStatus::Published );
 
         if ( isset( $managerFilters['search'] ) && is_string( $managerFilters['search'] ) ) {
             $escaped = str_replace( ['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $managerFilters['search'] );
@@ -205,6 +258,74 @@ class QueryRuntime
         }
 
         return $query;
+    }
+
+    /**
+     * Restrict a custom-type query to the given status.
+     *
+     * Published (the default) uses the model's `published()` scope when
+     * it has one (a `scopePublished()` method or a `#[Scope]`-attributed
+     * `published()` method, both found by `hasNamedScope()`), so scheduled
+     * rows stay hidden until `published_at`.
+     * Otherwise it falls back to `status = published` when the model's
+     * table has a `status` column. A model with neither has no notion of
+     * publication and is left unfiltered. Any other status only arrives
+     * through {@see self::resolveTrusted()} and is matched literally.
+     *
+     * @since 2.15.3
+     *
+     * @param  Builder  $query     The custom-type query.
+     * @param  Model    $instance  An instance of the type's model.
+     * @param  mixed    $status    A ContentStatus, a status string, or null.
+     */
+    protected function applyCustomTypeStatus( Builder $query, Model $instance, mixed $status ): void
+    {
+        if ( is_string( $status ) ) {
+            $status = sanitizeText( $status );
+            $status = ContentStatus::tryFrom( $status ) ?? $status;
+        }
+
+        $wantsPublished = ContentStatus::Published === $status
+            || '' === $status
+            || ( ! is_string( $status ) && ! $status instanceof ContentStatus );
+
+        if ( $wantsPublished && $instance->hasNamedScope( 'published' ) ) {
+            $query->published();
+
+            return;
+        }
+
+        if ( ! $this->modelHasStatusColumn( $instance ) ) {
+            return;
+        }
+
+        $value = match ( true ) {
+            $wantsPublished                  => ContentStatus::Published->value,
+            $status instanceof ContentStatus => $status->value,
+            default                          => $status,
+        };
+
+        // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput -- $value is a ContentStatus value or a sanitizeText()-normalized string from a trusted caller, applied as an Eloquent parameter-bound where().
+        $query->where( 'status', $value );
+    }
+
+    /**
+     * Whether the model's table has a `status` column.
+     *
+     * Checks the schema, not `$fillable`: a model that guards nothing (an
+     * empty `$fillable`) is still filtered, and a model that lists `status`
+     * as fillable without the column doesn't get a `where` on a column that
+     * isn't there. The answer is remembered per connection and table for
+     * the request, so a page with several loops asks the schema once.
+     *
+     * @since 2.15.3
+     */
+    protected function modelHasStatusColumn( Model $instance ): bool
+    {
+        $connection = $instance->getConnection();
+        $key        = $connection->getName() . '|' . $instance->getTable();
+
+        return $this->statusColumnCache[ $key ] ??= $connection->getSchemaBuilder()->hasColumn( $instance->getTable(), 'status' );
     }
 
     /**
