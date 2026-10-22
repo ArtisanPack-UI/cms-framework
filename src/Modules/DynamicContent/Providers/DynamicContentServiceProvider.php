@@ -20,12 +20,13 @@ use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Policies\DynamicContentRec
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Policies\DynamicContentTypePolicy;
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Services\DynamicContentAccessor;
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Services\DynamicContentResolver;
-use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
+use ArtisanPackUI\CMSFramework\Support\SeedsPermissionsOnce;
+use Illuminate\Database\Events\MigrationsEnded;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Livewire\Livewire;
 
@@ -36,7 +37,18 @@ use Livewire\Livewire;
  */
 class DynamicContentServiceProvider extends ServiceProvider
 {
+    use SeedsPermissionsOnce;
+
     public const CAPABILITY = 'manage_dynamic_content';
+
+    /**
+     * Cache key prefix for the "capability is seeded" flag.
+     *
+     * @since 2.15.4
+     *
+     * @var string
+     */
+    public const CAPABILITY_CACHE_KEY = 'cms-framework.dynamic-content.capability-registered';
 
     public function register(): void
     {
@@ -116,26 +128,41 @@ class DynamicContentServiceProvider extends ServiceProvider
 
     /**
      * Defer the `manage_dynamic_content` capability registration until the
-     * app has fully booted. Running `Schema::hasTable('permissions')` inside
-     * a synchronous `boot()` costs one DB round-trip on every request; the
-     * capability only needs to exist once, at real bootstrap time (console
-     * migrations, one-shot bootstrap seeders), so we lift the probe into
-     * `booted()` where it runs once per process.
+     * app has fully booted, so `PermissionManager` is bound.
+     *
+     * The capability is seeded once and then remembered with a cache flag,
+     * so a normal request costs a single cache read instead of a
+     * `Schema::hasTable` probe plus a `firstOrCreate`. Under php-fpm every
+     * request boots the app afresh, so the flag is what keeps this off the
+     * request path; `booted()` alone only helps long-lived workers. The
+     * flag is cleared and the capability re-seeded after every migration
+     * run, so `migrate:fresh` / `migrate:reset` can't leave it stale.
+     *
+     * @since 2.4.0
+     * @since 2.15.4 Skipped once seeded, via a cache flag.
      */
     protected function deferCapabilityRegistration(): void
     {
         $this->app->booted( function (): void {
-            if ( ! class_exists( PermissionManager::class ) ) {
-                return;
-            }
-
-            if ( ! Schema::hasTable( 'permissions' ) ) {
-                return;
-            }
-
-            $this->app->make( PermissionManager::class )
-                ->register( self::CAPABILITY, __( 'Manage Dynamic Content' ) );
+            $this->seedPermissionsOnce( self::CAPABILITY_CACHE_KEY, $this->capabilityPermissions() );
         } );
+
+        Event::listen( MigrationsEnded::class, function (): void {
+            $this->forgetSeededPermissionsFlag( self::CAPABILITY_CACHE_KEY, $this->capabilityPermissions() );
+            $this->seedPermissionsOnce( self::CAPABILITY_CACHE_KEY, $this->capabilityPermissions() );
+        } );
+    }
+
+    /**
+     * The module's capabilities, keyed by slug.
+     *
+     * @since 2.15.4
+     *
+     * @return array<string, string> Capability names keyed by slug.
+     */
+    protected function capabilityPermissions(): array
+    {
+        return [ self::CAPABILITY => __( 'Manage Dynamic Content' ) ];
     }
 
     /**
