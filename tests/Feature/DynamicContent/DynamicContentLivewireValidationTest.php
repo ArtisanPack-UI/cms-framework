@@ -7,6 +7,8 @@ use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Livewire\FieldBuilder;
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Managers\DynamicContentRecordManager;
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Managers\DynamicContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Models\DynamicContentType;
+use ArtisanPackUI\CMSFramework\Modules\DynamicContent\Providers\DynamicContentServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
@@ -21,6 +23,12 @@ beforeEach( function (): void {
         'email'    => 'a@example.com',
         'password' => bcrypt( 'x' ),
     ] );
+
+    // The migration run seeds the capability, and rbac's `Gate::before`
+    // lets a seeded permission decide on its own. Drop it so these
+    // tests' `Gate::define` stays in control. Delete through the model so
+    // rbac's permission-name cache is flushed too.
+    Permission::where( 'slug', DynamicContentServiceProvider::CAPABILITY )->get()->each->delete();
 
     Gate::define( 'manage_dynamic_content', fn () => true );
 

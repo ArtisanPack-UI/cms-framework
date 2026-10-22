@@ -202,8 +202,7 @@ test( 'permissions: the flag is scoped to the database so a shared cache store d
     Permission::where( 'slug', 'like', 'visual_editor.%' )->delete();
 
     // Another site sharing this cache store, pointed at its own database.
-    $connection = config( 'database.default' );
-    config( ['database.connections.' . $connection . '.database' => 'other-site'] );
+    DB::connection()->setDatabaseName( 'other-site' );
 
     $provider->registerVisualEditorBridge();
 
