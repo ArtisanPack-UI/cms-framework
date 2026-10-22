@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reading settings no longer queries the database on every call** ([#413](https://github.com/ArtisanPack-UI/cms-framework/issues/413)). `SettingsManager::getSetting()` (and `apGetSetting()`) ran `Schema::hasTable('settings')` and a `SELECT` on every call, so a page that reads settings in loops issued hundreds of queries. All stored settings are now loaded at most once per request, by one query, and kept in the `cms.settings.all` cache entry, so a warm request runs no settings queries. A positive table check is remembered for the process. Any Eloquent save or delete on a `Setting` clears the cache, both immediately and after the surrounding transaction commits, and reads inside a transaction go straight to the database, so an uncommitted value is never cached or kept after a rollback. Queue jobs and Octane requests reset the in-memory copy, so they see writes made by other processes. Writes that skip Eloquent events (raw `DB::table('settings')` updates) must call the new `SettingsManager::flushCache()`.
+
 ## [2.15.3] - 2026-10-18
 
 ### Fixed
