@@ -90,6 +90,28 @@ When you request a setting value using `getSetting($key, $default)` or `apGetSet
 
 If none are available, `null` (or an empty string for string type) may be returned depending on the model cast behavior.
 
+## Caching
+
+Since 2.15.4, reads don't query the database on every call. The first `getSetting()`/`apGetSetting()` in a request loads every stored setting with one query and keeps them in memory for the rest of the request. The rows are also stored in the `cms.settings.all` cache entry (`SettingsManager::CACHE_KEY`) for up to an hour (`SettingsManager::CACHE_TTL`), so a warm request runs no settings queries at all.
+
+The cache is cleared automatically:
+
+- Any Eloquent save or delete on a `Setting` (including `apUpdateSetting()` and the REST endpoints) flushes it immediately, and again after the surrounding transaction commits.
+- Reads inside a database transaction skip the cache and go to the database, so an uncommitted value is never cached or kept after a rollback.
+- Queue jobs and Octane requests reset the in-memory copy at each job/request boundary, so they see writes made by other processes.
+
+Writes that skip Eloquent events, such as a raw `DB::table('settings')->update(...)`, must clear the cache themselves:
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
+
+DB::table('settings')->where('key', 'site.title')->update(['value' => 'New Title']);
+
+app(SettingsManager::class)->flushCache();
+```
+
+`forgetLoadedSettings()` clears only the in-memory copy and leaves the shared cache entry in place.
+
 ## Sanitization on Update
 
 All updates go through the registered sanitization callback for the setting key. The callback should:

@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Settings\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -25,6 +26,51 @@ use Illuminate\Support\Facades\Schema;
  */
 class SettingsManager
 {
+    /**
+     * Cache key holding the raw attributes of every stored setting.
+     *
+     * @since 2.15.4
+     *
+     * @var string
+     */
+    public const CACHE_KEY = 'cms.settings.all';
+
+    /**
+     * Lifetime of the shared cache entry, in seconds.
+     *
+     * Invalidation is event-driven; the TTL only bounds how long stale rows
+     * can survive when a flush is lost, e.g. another process caching rows it
+     * read just before a write flushed the entry.
+     *
+     * @since 2.15.4
+     *
+     * @var int
+     */
+    public const CACHE_TTL = 3600;
+
+    /**
+     * Stored settings loaded for the current request, keyed by setting key.
+     *
+     * Null until the first read; reset by `flushCache()` and `forgetLoadedSettings()`.
+     *
+     * @since 2.15.4
+     *
+     * @var array<string, Setting>|null
+     */
+    protected ?array $loadedSettings = null;
+
+    /**
+     * Whether the settings table has been confirmed to exist.
+     *
+     * Only a positive result is remembered so a table created later in the
+     * same process (e.g. during installation) is still picked up.
+     *
+     * @since 2.15.4
+     *
+     * @var bool
+     */
+    protected bool $settingsTableExists = false;
+
     /**
      * Registers a setting definition via a filter so it can be discovered globally.
      *
@@ -69,9 +115,10 @@ class SettingsManager
     /**
      * Retrieves a setting value, falling back to a default when not stored.
      *
-     * Checks the database first and if no record exists, falls back to the
+     * Checks the stored settings first and if no record exists, falls back to the
      * registered default value from the `ap.settings.registeredSettings` filter
-     * or the provided `$default` parameter.
+     * or the provided `$default` parameter. Stored settings are loaded once per
+     * request (see `loadSettings()`), so repeated calls do not query the database.
      *
      * @since 1.0.0
      *
@@ -82,12 +129,10 @@ class SettingsManager
      */
     public function getSetting( string $key, mixed $default = null ): mixed
     {
-        if ( Schema::hasTable( 'settings' ) ) {
-            $setting = Setting::where( 'key', sanitizeText( $key ) )->first();
+        $setting = $this->loadSettings()[ sanitizeText( $key ) ] ?? null;
 
-            if ( $setting ) {
-                return $setting->value;
-            }
+        if ( $setting ) {
+            return $setting->value;
         }
 
         /**
@@ -119,7 +164,7 @@ class SettingsManager
      */
     public function updateSetting( string $key, mixed $value ): void
     {
-        if ( ! Schema::hasTable( 'settings' ) ) {
+        if ( ! $this->settingsTableExists() ) {
             return;
         }
 
@@ -161,5 +206,94 @@ class SettingsManager
 
             Setting::create( $attributes );
         }
+    }
+
+    /**
+     * Clears the request memo and the shared cache of stored settings.
+     *
+     * Called automatically whenever a `Setting` model is saved or deleted.
+     * Writes that bypass Eloquent events (raw query builder updates) must
+     * call this manually.
+     *
+     * @since 2.15.4
+     */
+    public function flushCache(): void
+    {
+        $this->forgetLoadedSettings();
+
+        Cache::forget( self::CACHE_KEY );
+    }
+
+    /**
+     * Clears the request memo only, leaving the shared cache intact.
+     *
+     * The manager is a singleton, so long-lived processes (queue workers,
+     * Octane) call this at each job/request boundary to pick up writes made
+     * by other processes.
+     *
+     * @since 2.15.4
+     */
+    public function forgetLoadedSettings(): void
+    {
+        $this->loadedSettings = null;
+    }
+
+    /**
+     * Loads every stored setting, memoized for the lifetime of this instance.
+     *
+     * Reads from the shared cache when possible and falls back to a single
+     * query. Inside a database transaction both the memo and the shared cache
+     * are bypassed, so uncommitted values never outlive a rollback or leak to
+     * other requests.
+     *
+     * @since 2.15.4
+     *
+     * @return array<string, Setting> Stored settings keyed by setting key.
+     */
+    protected function loadSettings(): array
+    {
+        $inTransaction = ( new Setting )->getConnection()->transactionLevel() > 0;
+
+        if ( ! $inTransaction && null !== $this->loadedSettings ) {
+            return $this->loadedSettings;
+        }
+
+        $rows = $inTransaction ? null : Cache::get( self::CACHE_KEY );
+
+        if ( ! is_array( $rows ) ) {
+            if ( ! $this->settingsTableExists() ) {
+                return [];
+            }
+
+            $rows = Setting::query()
+                ->toBase()
+                ->get( [ 'key', 'value', 'type' ] )
+                ->map( fn ( $row ): array => (array) $row )
+                ->all();
+
+            if ( $inTransaction ) {
+                return Setting::hydrate( $rows )->keyBy( 'key' )->all();
+            }
+
+            Cache::put( self::CACHE_KEY, $rows, self::CACHE_TTL );
+        }
+
+        return $this->loadedSettings = Setting::hydrate( $rows )->keyBy( 'key' )->all();
+    }
+
+    /**
+     * Determines whether the settings table exists, remembering a positive result.
+     *
+     * @since 2.15.4
+     *
+     * @return bool True when the settings table exists.
+     */
+    protected function settingsTableExists(): bool
+    {
+        if ( ! $this->settingsTableExists ) {
+            $this->settingsTableExists = Schema::hasTable( 'settings' );
+        }
+
+        return $this->settingsTableExists;
     }
 }

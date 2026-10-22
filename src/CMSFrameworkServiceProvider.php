@@ -41,8 +41,11 @@ use ArtisanPackUI\CMSFramework\Modules\Themes\Providers\ThemesServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use ArtisanPackUI\CMSFramework\Support\HookAliases;
+use ArtisanPackUI\CMSFramework\Support\SeedsPermissionsOnce;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
+use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -62,6 +65,7 @@ use Livewire\Livewire;
  */
 class CMSFrameworkServiceProvider extends ServiceProvider
 {
+    use SeedsPermissionsOnce;
 
     /**
      * The full set of AI feature keys the cms-framework exposes.
@@ -117,6 +121,19 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         CategorySuggestionAgent::class,
         SlugSuggestionAgent::class,
     ];
+
+    /**
+     * Cache key prefix for the "visual-editor permissions are seeded" flag.
+     *
+     * The full key appends a hash of the {@see self::VISUAL_EDITOR_PERMISSIONS}
+     * slugs so adding or renaming a slug in a later release invalidates the flag
+     * and the new rows get seeded on the next boot.
+     *
+     * @since 2.15.4
+     *
+     * @var string
+     */
+    public const VISUAL_EDITOR_PERMISSIONS_CACHE_KEY = 'cms-framework.visual-editor.permissions-registered';
 
     /**
      * Permission slugs and human-readable names registered into
@@ -277,6 +294,14 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         } );
 
         $this->registerVisualEditorPermissions();
+
+        // `migrate:fresh` / `migrate:reset` wipe the permissions table but
+        // not the cache, so re-seed after every migration run rather than
+        // trusting a flag that may now point at an empty table.
+        Event::listen( MigrationsEnded::class, function (): void {
+            $this->forgetSeededPermissionsFlag( self::VISUAL_EDITOR_PERMISSIONS_CACHE_KEY, self::VISUAL_EDITOR_PERMISSIONS );
+            $this->registerVisualEditorPermissions();
+        } );
     }
 
     /**
@@ -361,27 +386,27 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      * the slugs early lets apps build admin UI against stable names
      * without waiting for V1.1's policy delegation. Idempotent via
      * {@see PermissionManager::register()} (`firstOrCreate`), so a
-     * second boot doesn't double-insert.
+     * second run doesn't double-insert.
      *
-     * The `Schema::hasTable( 'permissions' )` guard mirrors the one on
-     * {@see self::autoRegisterCustomContentTypes()}: it lets a fresh
+     * The seed runs once and is then remembered with a cache flag, so a
+     * normal request costs a single cache read instead of a
+     * `Schema::hasTable` probe plus eight `firstOrCreate` queries. The flag
+     * is cleared after every migration run (see
+     * {@see self::registerVisualEditorBridge()}) and keyed to the slug list,
+     * so a reset database or a new slug is re-seeded automatically.
+     *
+     * The `Schema::hasTable( 'permissions' )` guard in
+     * {@see SeedsPermissionsOnce::seedPermissionsOnce()} lets a fresh
      * `php artisan migrate` run before the permissions table exists
-     * without tripping the bridge.
+     * without tripping the bridge. The flag is only written once the rows
+     * exist, so that early boot doesn't suppress the later seed.
      *
      * @since 2.0.0
+     * @since 2.15.4 Skipped once seeded, via a cache flag.
      */
     protected function registerVisualEditorPermissions(): void
     {
-        if ( ! Schema::hasTable( 'permissions' ) ) {
-            return;
-        }
-
-        /** @var PermissionManager $manager */
-        $manager = $this->app->make( PermissionManager::class );
-
-        foreach ( self::VISUAL_EDITOR_PERMISSIONS as $slug => $name ) {
-            $manager->register( $slug, $name );
-        }
+        $this->seedPermissionsOnce( self::VISUAL_EDITOR_PERMISSIONS_CACHE_KEY, self::VISUAL_EDITOR_PERMISSIONS );
     }
 
     /**

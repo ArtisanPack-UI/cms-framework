@@ -59,13 +59,18 @@ All registrations are gated behind `class_exists(VisualEditor::class)` so cms-fr
 
 When visual-editor is installed, cms-framework seeds the following permission slugs via the parent `CMSFrameworkServiceProvider`:
 
+- `visual_editor.access`
+- `visual_editor.posts.edit`
+- `visual_editor.pages.edit`
 - `visual_editor.templates.edit`
 - `visual_editor.template-parts.edit`
 - `visual_editor.patterns.edit`
 - `visual_editor.global-styles.edit`
 - `visual_editor.navigation.edit`
 
-Routes themselves use `auth:sanctum` for the 2.0.0 baseline; future releases will introduce policy-based gating on these slugs.
+Since 2.15.4 the slugs are seeded once rather than on every request. A cache flag records that the rows exist; it is keyed to the slug list and the default database, so a new slug in a later release is seeded automatically and sites sharing a cache store don't skip each other's seed. The flag is cleared and the slugs re-seeded after every migration run, so `migrate:fresh` can't leave it stale. Rows deleted by hand outside a migration come back after a cache clear or the next `migrate`. The DynamicContent module seeds its `manage_dynamic_content` capability the same way, through the shared `SeedsPermissionsOnce` trait.
+
+cms-framework's Site Editor routes don't check these slugs. Since 2.15.0 they check the Site Editor abilities instead; see [Authorization](API-Reference.md#authorization).
 
 ## Content type auto-registration
 

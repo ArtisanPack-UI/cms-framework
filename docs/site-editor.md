@@ -56,6 +56,6 @@ Migrations live at the package level (`database/migrations/`) and are loaded by 
 
 ## Permissions
 
-The slugs `visual_editor.templates.edit`, `visual_editor.template-parts.edit`, `visual_editor.patterns.edit`, `visual_editor.global-styles.edit`, and `visual_editor.navigation.edit` are seeded by the parent `CMSFrameworkServiceProvider` when the `artisanpack-ui/visual-editor` package is installed. The SiteEditor module itself does not register additional permissions; routes use `auth:sanctum` so any authenticated user with a valid Sanctum token can read and write.
+The `visual_editor.*` slugs (`access`, `posts.edit`, `pages.edit`, `templates.edit`, `template-parts.edit`, `patterns.edit`, `global-styles.edit` and `navigation.edit`) are seeded once by the parent `CMSFrameworkServiceProvider` when the `artisanpack-ui/visual-editor` package is installed; see [Visual Editor Integration](site-editor/Visual-Editor-Integration.md#permissions). The SiteEditor module itself does not register additional permissions. Its routes use `auth:sanctum` and, since 2.15.0, check the Site Editor abilities; see [Authorization](site-editor/API-Reference.md#authorization).
 
 See the guides above for detailed module documentation.

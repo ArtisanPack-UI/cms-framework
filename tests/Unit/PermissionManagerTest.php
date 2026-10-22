@@ -53,7 +53,7 @@ test( 'permission manager can register multiple permissions', function (): void 
         expect( $permission->exists )->toBeTrue();
     }
 
-    expect( Permission::count() )->toBe( 4 );
+    expect( Permission::whereIn( 'slug', [ 'create-posts', 'edit-posts', 'delete-posts', 'publish-posts' ] )->count() )->toBe( 4 );
 } );
 
 test( 'permission manager register method works with app container', function (): void {
