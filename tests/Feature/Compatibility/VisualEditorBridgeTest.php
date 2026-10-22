@@ -9,6 +9,9 @@ use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
 use ArtisanPackUI\CMSFramework\Modules\Users\Models\Permission;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestBlockContentTypeModel;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestPlainContentTypeModel;
+use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 // Standalone gate behavior — that registerVisualEditorBridge() does NOT
@@ -148,6 +151,74 @@ test( 'permissions: rerunning the bridge does not double-insert', function (): v
 
     expect( $firstCount )->toBe( 8 );
     expect( $secondCount )->toBe( 8 );
+} );
+
+test( 'permissions: once seeded, later boots skip the permission queries', function (): void {
+    require_once __DIR__ . '/../../Support/VisualEditorClassStub.php';
+
+    Cache::flush();
+
+    $provider = new CMSFrameworkServiceProvider( app() );
+    $provider->registerVisualEditorBridge();
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+
+    $provider->registerVisualEditorBridge();
+
+    $permissionQueries = collect( DB::getQueryLog() )
+        ->filter( fn ( array $query ): bool => str_contains( $query['query'], 'permissions' ) );
+
+    expect( $permissionQueries )->toBeEmpty();
+} );
+
+test( 'permissions: a stale flag after a migration run is cleared and the slugs re-seeded', function (): void {
+    require_once __DIR__ . '/../../Support/VisualEditorClassStub.php';
+
+    Cache::flush();
+
+    $provider = new CMSFrameworkServiceProvider( app() );
+    $provider->registerVisualEditorBridge();
+
+    // Simulate `migrate:fresh` wiping the rows while the cache flag survives.
+    Permission::where( 'slug', 'like', 'visual_editor.%' )->delete();
+
+    $provider->registerVisualEditorBridge();
+    expect( Permission::where( 'slug', 'like', 'visual_editor.%' )->count() )->toBe( 0 );
+
+    event( new MigrationsEnded( 'up' ) );
+
+    expect( Permission::where( 'slug', 'like', 'visual_editor.%' )->count() )->toBe( 8 );
+} );
+
+test( 'permissions: the flag is scoped to the database so a shared cache store does not skip the seed', function (): void {
+    require_once __DIR__ . '/../../Support/VisualEditorClassStub.php';
+
+    Cache::flush();
+
+    $provider = new CMSFrameworkServiceProvider( app() );
+    $provider->registerVisualEditorBridge();
+
+    Permission::where( 'slug', 'like', 'visual_editor.%' )->delete();
+
+    // Another site sharing this cache store, pointed at its own database.
+    $connection = config( 'database.default' );
+    config( ['database.connections.' . $connection . '.database' => 'other-site'] );
+
+    $provider->registerVisualEditorBridge();
+
+    expect( Permission::where( 'slug', 'like', 'visual_editor.%' )->count() )->toBe( 8 );
+} );
+
+test( 'permissions: the seed still runs when the cache store is unavailable', function (): void {
+    require_once __DIR__ . '/../../Support/VisualEditorClassStub.php';
+
+    Cache::shouldReceive( 'has' )->andThrow( new RuntimeException( 'cache table missing' ) );
+    Cache::shouldReceive( 'forever' )->andThrow( new RuntimeException( 'cache table missing' ) );
+
+    (new CMSFrameworkServiceProvider( app() ))->registerVisualEditorBridge();
+
+    expect( Permission::where( 'slug', 'like', 'visual_editor.%' )->count() )->toBe( 8 );
 } );
 
 test( 'auto-register: a content type that declares editor support but lacks the trait surfaces a warning', function (): void {

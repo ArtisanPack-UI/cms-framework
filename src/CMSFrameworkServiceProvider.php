@@ -43,6 +43,9 @@ use ArtisanPackUI\CMSFramework\Modules\Users\Providers\UserServiceProvider;
 use ArtisanPackUI\CMSFramework\Support\HookAliases;
 use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
 use ArtisanPackUI\VisualEditor\VisualEditor;
+use Illuminate\Database\Events\MigrationsEnded;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
@@ -50,6 +53,7 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use InvalidArgumentException;
 use Livewire\Livewire;
+use Throwable;
 
 /**
  * Registers and bootstraps the CMS Framework within the application.
@@ -117,6 +121,19 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         CategorySuggestionAgent::class,
         SlugSuggestionAgent::class,
     ];
+
+    /**
+     * Cache key prefix for the "visual-editor permissions are seeded" flag.
+     *
+     * The full key appends a hash of {@see self::VISUAL_EDITOR_PERMISSIONS}
+     * so adding or renaming a slug in a later release invalidates the flag
+     * and the new rows get seeded on the next boot.
+     *
+     * @since 2.15.4
+     *
+     * @var string
+     */
+    public const VISUAL_EDITOR_PERMISSIONS_CACHE_KEY = 'cms-framework.visual-editor.permissions-registered';
 
     /**
      * Permission slugs and human-readable names registered into
@@ -277,6 +294,14 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         } );
 
         $this->registerVisualEditorPermissions();
+
+        // `migrate:fresh` / `migrate:reset` wipe the permissions table but
+        // not the cache, so re-seed after every migration run rather than
+        // trusting a flag that may now point at an empty table.
+        Event::listen( MigrationsEnded::class, function (): void {
+            $this->forgetVisualEditorPermissionsFlag();
+            $this->registerVisualEditorPermissions();
+        } );
     }
 
     /**
@@ -361,17 +386,37 @@ class CMSFrameworkServiceProvider extends ServiceProvider
      * the slugs early lets apps build admin UI against stable names
      * without waiting for V1.1's policy delegation. Idempotent via
      * {@see PermissionManager::register()} (`firstOrCreate`), so a
-     * second boot doesn't double-insert.
+     * second run doesn't double-insert.
+     *
+     * The seed runs once and is then remembered with a cache flag, so a
+     * normal request costs a single cache read instead of a
+     * `Schema::hasTable` probe plus eight `firstOrCreate` queries. The flag
+     * is cleared after every migration run (see
+     * {@see self::registerVisualEditorBridge()}) and keyed to the slug list,
+     * so a reset database or a new slug is re-seeded automatically.
      *
      * The `Schema::hasTable( 'permissions' )` guard mirrors the one on
      * {@see self::autoRegisterCustomContentTypes()}: it lets a fresh
      * `php artisan migrate` run before the permissions table exists
-     * without tripping the bridge.
+     * without tripping the bridge. The flag is only written once the rows
+     * exist, so that early boot doesn't suppress the later seed.
      *
      * @since 2.0.0
+     * @since 2.15.4 Skipped once seeded, via a cache flag.
      */
     protected function registerVisualEditorPermissions(): void
     {
+        $flagKey = $this->visualEditorPermissionsFlagKey();
+
+        try {
+            if ( Cache::has( $flagKey ) ) {
+                return;
+            }
+        } catch ( Throwable ) {
+            // A database cache store has no table yet during a fresh
+            // install; fall through to the uncached seed.
+        }
+
         if ( ! Schema::hasTable( 'permissions' ) ) {
             return;
         }
@@ -382,6 +427,49 @@ class CMSFrameworkServiceProvider extends ServiceProvider
         foreach ( self::VISUAL_EDITOR_PERMISSIONS as $slug => $name ) {
             $manager->register( $slug, $name );
         }
+
+        try {
+            Cache::forever( $flagKey, true );
+        } catch ( Throwable ) {
+            // Unwritable cache: the seed simply runs again next boot.
+        }
+    }
+
+    /**
+     * Clears the "visual-editor permissions are seeded" cache flag.
+     *
+     * @since 2.15.4
+     */
+    protected function forgetVisualEditorPermissionsFlag(): void
+    {
+        try {
+            Cache::forget( $this->visualEditorPermissionsFlagKey() );
+        } catch ( Throwable ) {
+            // `migrate:reset` can drop a database cache store's table.
+        }
+    }
+
+    /**
+     * Builds the cache key for the "visual-editor permissions are seeded"
+     * flag, versioned by the current permission list.
+     *
+     * The default connection's database is part of the hash, so sites that
+     * share one cache store (and prefix) don't read each other's flag and
+     * skip their own seed.
+     *
+     * @since 2.15.4
+     *
+     * @return string The cache key.
+     */
+    protected function visualEditorPermissionsFlagKey(): string
+    {
+        $connection = config( 'database.default' );
+
+        return self::VISUAL_EDITOR_PERMISSIONS_CACHE_KEY . '.' . md5( (string) json_encode( [
+            $connection,
+            config( 'database.connections.' . $connection . '.database' ),
+            self::VISUAL_EDITOR_PERMISSIONS,
+        ] ) );
     }
 
     /**
