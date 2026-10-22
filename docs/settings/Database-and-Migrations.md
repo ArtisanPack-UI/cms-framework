@@ -46,7 +46,7 @@ The SettingsManager checks `Schema::hasTable('settings')` before querying. If th
 1) The explicit default you pass to `getSetting($key, $default)`
 2) Otherwise the registered default for the key
 
-This allows you to safely call `apGetSetting()` during early boot even before migrations run.
+This allows you to safely call `apGetSetting()` during early boot even before migrations run. A positive table check is remembered for the rest of the process, so the check runs once rather than on every read. See [Caching](Retrieving-and-Updating.md#caching) for how stored values are cached.
 
 ## Backing Up and Seeding
 
