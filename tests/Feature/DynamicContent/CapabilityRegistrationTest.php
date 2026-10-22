@@ -69,8 +69,7 @@ test( 'the flag is scoped to the database so a shared cache store does not skip 
     Permission::where( 'slug', DynamicContentServiceProvider::CAPABILITY )->delete();
 
     // Another site sharing this cache store, pointed at its own database.
-    $connection = config( 'database.default' );
-    config( ['database.connections.' . $connection . '.database' => 'other-site'] );
+    DB::connection()->setDatabaseName( 'other-site' );
 
     registerDynamicContentCapability();
 
@@ -84,4 +83,31 @@ test( 'the seed still runs when the cache store is unavailable', function (): vo
     registerDynamicContentCapability();
 
     expect( dynamicContentCapabilityCount() )->toBe( 1 );
+} );
+
+test( 'the flag key follows a database set through the connection url', function (): void {
+    $provider = new DynamicContentServiceProvider( app() );
+    $original = config( 'database.default' );
+    $keyFor   = function ( string $url ) use ( $provider ): string {
+        // Same connection name and `database` value on both sites; only
+        // `DB_URL` differs.
+        config( [
+            'database.default'          => 'site',
+            'database.connections.site' => [ 'driver' => 'sqlite', 'url' => $url, 'database' => 'shared' ],
+        ] );
+        DB::purge( 'site' );
+
+        return ( fn () => $this->seededPermissionsFlagKey(
+            DynamicContentServiceProvider::CAPABILITY_CACHE_KEY,
+            $this->capabilityPermissions(),
+        ) )->call( $provider );
+    };
+
+    $siteAKey = $keyFor( 'sqlite:///site-a.sqlite' );
+    $siteBKey = $keyFor( 'sqlite:///site-b.sqlite' );
+
+    // Teardown rolls migrations back on the default connection.
+    config( ['database.default' => $original] );
+
+    expect( $siteAKey )->not->toBe( $siteBKey );
 } );

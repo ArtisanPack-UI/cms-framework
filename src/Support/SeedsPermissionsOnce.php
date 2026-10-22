@@ -19,6 +19,7 @@ namespace ArtisanPackUI\CMSFramework\Support;
 
 use ArtisanPackUI\CMSFramework\Modules\Users\Managers\PermissionManager;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -104,6 +105,10 @@ trait SeedsPermissionsOnce
      * Builds the cache flag key, versioned by the slug list and the default
      * connection's database.
      *
+     * The database name comes from the resolved connection rather than the
+     * raw config, so a database set through `DB_URL` is honoured. Resolving
+     * the connection doesn't open it, so this costs no query.
+     *
      * Only the slugs are hashed, so a translated permission name doesn't
      * change the key from one locale to the next.
      *
@@ -120,7 +125,7 @@ trait SeedsPermissionsOnce
 
         return $cacheKeyPrefix . '.' . md5( (string) json_encode( [
             $connection,
-            config( 'database.connections.' . $connection . '.database' ),
+            DB::connection( $connection )->getDatabaseName(),
             array_keys( $permissions ),
         ] ) );
     }
