@@ -158,6 +158,18 @@ test( 'it serves settings from the shared cache without querying', function (): 
     expect( $queries )->toBe( 0 );
 } );
 
+test( 'it expires stale cached rows after the cache TTL', function (): void {
+    Setting::create( ['key' => 'ttl-key', 'value' => 'fresh'] );
+    Cache::put( SettingsManager::CACHE_KEY, [['key' => 'ttl-key', 'value' => 'stale', 'type' => 'string']], SettingsManager::CACHE_TTL );
+
+    expect( $this->manager->getSetting( 'ttl-key' ) )->toBe( 'stale' );
+
+    $this->travel( SettingsManager::CACHE_TTL + 1 )->seconds();
+    $this->manager->forgetLoadedSettings();
+
+    expect( $this->manager->getSetting( 'ttl-key' ) )->toBe( 'fresh' );
+} );
+
 test( 'it preserves value casting for cached settings', function (): void {
     Setting::create( ['key' => 'int-key', 'value' => 42] );
     Setting::create( ['key' => 'bool-key', 'value' => true] );
@@ -222,7 +234,7 @@ test( 'it clears the shared cache again once the transaction commits', function 
 
         // Simulate another process re-caching the committed (old) rows
         // between the write and the commit.
-        Cache::forever( SettingsManager::CACHE_KEY, [['key' => 'commit-key', 'value' => 'old', 'type' => 'string']] );
+        Cache::put( SettingsManager::CACHE_KEY, [['key' => 'commit-key', 'value' => 'old', 'type' => 'string']], SettingsManager::CACHE_TTL );
     } );
 
     expect( Cache::has( SettingsManager::CACHE_KEY ) )->toBeFalse();

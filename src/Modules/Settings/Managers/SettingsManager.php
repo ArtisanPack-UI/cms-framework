@@ -36,6 +36,19 @@ class SettingsManager
     public const CACHE_KEY = 'cms.settings.all';
 
     /**
+     * Lifetime of the shared cache entry, in seconds.
+     *
+     * Invalidation is event-driven; the TTL only bounds how long stale rows
+     * can survive when a flush is lost, e.g. another process caching rows it
+     * read just before a write flushed the entry.
+     *
+     * @since 2.15.4
+     *
+     * @var int
+     */
+    public const CACHE_TTL = 3600;
+
+    /**
      * Stored settings loaded for the current request, keyed by setting key.
      *
      * Null until the first read; reset by `flushCache()` and `forgetLoadedSettings()`.
@@ -262,7 +275,7 @@ class SettingsManager
                 return Setting::hydrate( $rows )->keyBy( 'key' )->all();
             }
 
-            Cache::forever( self::CACHE_KEY, $rows );
+            Cache::put( self::CACHE_KEY, $rows, self::CACHE_TTL );
         }
 
         return $this->loadedSettings = Setting::hydrate( $rows )->keyBy( 'key' )->all();
