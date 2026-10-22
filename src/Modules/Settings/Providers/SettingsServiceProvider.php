@@ -12,7 +12,10 @@ namespace ArtisanPackUI\CMSFramework\Modules\Settings\Providers;
 
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Routing\Router;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -45,6 +48,38 @@ class SettingsServiceProvider extends ServiceProvider
             ->group( __DIR__ . '/../routes/api.php' );
 
         $this->registerSiteSettings();
+        $this->registerCacheInvalidation();
+    }
+
+    /**
+     * Keeps the SettingsManager's memoized/cached settings in sync with writes.
+     *
+     * Any Eloquent save or delete on a `Setting` flushes immediately (so the
+     * current request sees its own write) and again after the surrounding
+     * transaction commits (so another process that re-cached the old values
+     * before the commit cannot leave them behind). Queue jobs and Octane
+     * requests drop the in-memory memo so they pick up writes made by other
+     * processes.
+     *
+     * @since 2.15.4
+     */
+    protected function registerCacheInvalidation(): void
+    {
+        $flush = function ( Setting $setting ): void {
+            $settings = $this->app->make( SettingsManager::class );
+
+            $settings->flushCache();
+
+            $setting->getConnection()->afterCommit( fn () => $settings->flushCache() );
+        };
+
+        Setting::saved( $flush );
+        Setting::deleted( $flush );
+
+        $forget = fn () => $this->app->make( SettingsManager::class )->forgetLoadedSettings();
+
+        Event::listen( JobProcessing::class, $forget );
+        Event::listen( 'Laravel\\Octane\\Events\\RequestReceived', $forget );
     }
 
     /**
