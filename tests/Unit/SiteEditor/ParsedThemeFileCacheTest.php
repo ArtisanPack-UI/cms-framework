@@ -107,6 +107,31 @@ describe( 'ParsedThemeFileCache::remember()', function (): void {
         'zero'       => [0, ParsedThemeFileCache::DEFAULT_TTL],
         'negative'   => [-5, ParsedThemeFileCache::DEFAULT_TTL],
     ] );
+    it( 'stops calling an unavailable cache store for the rest of the request', function (): void {
+        Cache::shouldReceive( 'get' )->once()->andThrow( new RuntimeException( 'Connection refused' ) );
+        Cache::shouldReceive( 'put' )->never();
+
+        $cache = app( ParsedThemeFileCache::class );
+
+        foreach ( ['a', 'b', 'c'] as $contents ) {
+            $cache->remember( 'blocks', $contents, '', $this->parser );
+        }
+
+        expect( $this->calls )->toBe( 3 )
+            ->and( $cache->remember( 'blocks', 'a', '', $this->parser ) )->toBe( ['parsed' => 1] );
+    } );
+
+    it( 'stops writing to a cache store whose first write fails', function (): void {
+        Cache::shouldReceive( 'get' )->once()->andReturnNull();
+        Cache::shouldReceive( 'put' )->once()->andThrow( new RuntimeException( 'no such table: cache' ) );
+
+        $cache = app( ParsedThemeFileCache::class );
+        $cache->remember( 'blocks', 'a', '', $this->parser );
+        $cache->remember( 'blocks', 'b', '', $this->parser );
+
+        expect( $this->calls )->toBe( 2 );
+    } );
+
     it( 'parses without caching when the cache store is unavailable', function (): void {
         Cache::shouldReceive( 'get' )->andThrow( new RuntimeException( 'no such table: cache' ) );
         Cache::shouldReceive( 'put' )->andThrow( new RuntimeException( 'no such table: cache' ) );

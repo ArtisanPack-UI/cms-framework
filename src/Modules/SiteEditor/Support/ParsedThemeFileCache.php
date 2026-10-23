@@ -60,6 +60,15 @@ final class ParsedThemeFileCache
     private array $memo = [];
 
     /**
+     * Set once the cache store has failed during this request, so later
+     * lookups skip it instead of failing (or waiting out a connection
+     * timeout) once per file.
+     *
+     * @since 2.15.6
+     */
+    private bool $storeUnavailable = false;
+
+    /**
      * Return the cached parse for a theme file's contents, running the parser
      * and storing its result on a miss.
      *
@@ -105,8 +114,9 @@ final class ParsedThemeFileCache
 
     /**
      * Read an entry from the cache store. An unavailable store (a database
-     * store before its table exists, an unreachable Redis) is a miss: the
-     * parse can always be redone, so it must never take the site editor down.
+     * store before its table exists, an unreachable Redis) is a miss, and is
+     * skipped for the rest of the request: the parse can always be redone,
+     * so it must never take the site editor down.
      *
      * @since 2.15.6
      */
@@ -115,13 +125,15 @@ final class ParsedThemeFileCache
         try {
             return Cache::get( $key );
         } catch ( Throwable ) {
+            $this->storeUnavailable = true;
+
             return null;
         }
     }
 
     /**
-     * Write an entry to the cache store, skipping it when the store is
-     * unavailable.
+     * Write an entry to the cache store. A failure marks the store
+     * unavailable for the rest of the request.
      *
      * @since 2.15.6
      *
@@ -132,7 +144,7 @@ final class ParsedThemeFileCache
         try {
             Cache::put( $key, $parsed, $this->ttl() );
         } catch ( Throwable ) {
-            // Nothing to do: the next request parses again.
+            $this->storeUnavailable = true;
         }
     }
 
@@ -153,7 +165,7 @@ final class ParsedThemeFileCache
      */
     private function storeEnabled(): bool
     {
-        return (bool) config( 'cms.themes.parsedFileCacheEnabled', true );
+        return ! $this->storeUnavailable && (bool) config( 'cms.themes.parsedFileCacheEnabled', true );
     }
 
     /**
