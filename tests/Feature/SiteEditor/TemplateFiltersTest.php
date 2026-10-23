@@ -7,7 +7,9 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\TemplatePart;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Providers\SiteEditorServiceProvider;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 
 uses( RefreshDatabase::class );
 
@@ -135,5 +137,37 @@ describe( 'ap.visual-editor.template-parts filter wiring', function (): void {
             ->and( $templates )->not->toHaveKey( 'header' )
             ->and( $parts )->toHaveKey( 'header' )
             ->and( $parts )->not->toHaveKey( 'page' );
+    } );
+} );
+
+describe( 'site-editor filter table checks (#424)', function (): void {
+    beforeEach( function (): void {
+        $this->schemaQueries = function (): int {
+            return collect( DB::getQueryLog() )
+                ->filter( fn ( array $query ): bool => str_contains( $query['query'], 'sqlite_master' ) || str_contains( $query['query'], 'pragma' ) )
+                ->count();
+        };
+    } );
+
+    it( 'checks a table that exists only once across repeated filter calls', function (): void {
+        File::put( $this->templates . '/single.html', '<!-- file -->' );
+
+        DB::enableQueryLog();
+
+        foreach ( range( 1, 3 ) as $call ) {
+            expect( applyFilters( 'ap.visual-editor.templates', [] ) )->toHaveKey( 'single' );
+        }
+
+        expect( ( $this->schemaQueries )() )->toBe( 1 );
+    } );
+
+    it( 'keeps checking a table that is missing', function (): void {
+        Schema::drop( 'templates' );
+
+        DB::enableQueryLog();
+
+        expect( applyFilters( 'ap.visual-editor.templates', [] ) )->toBe( [] )
+            ->and( applyFilters( 'ap.visual-editor.templates', [] ) )->toBe( [] )
+            ->and( ( $this->schemaQueries )() )->toBe( 2 );
     } );
 } );
