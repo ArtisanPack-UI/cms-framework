@@ -89,6 +89,10 @@ return [
     'cacheKey'     => 'cms.themes.discovered',
     'cacheTtl'     => 3600, // 1 hour
 
+    // Parsed theme file cache (since 2.15.6)
+    'parsedFileCacheEnabled' => env( 'THEMES_PARSED_FILE_CACHE_ENABLED', true ),
+    'parsedFileCacheTtl'     => 3600, // 1 hour
+
     // WordPress theme.json schema version used to validate the WP-shape
     // subset of theme.json. Pinned to match the @wordpress/* package
     // versions in artisanpack-ui/visual-editor.
@@ -99,6 +103,17 @@ return [
 The published file carries more keys than are shown here — upload limits,
 update settings and asset caching among them. See the shipped
 `src/Modules/Themes/config/themes.php` for the annotated full list.
+
+Since *2.15.6*, the site editor keeps parsed theme templates, parts and
+patterns in the cache store between requests, as well as for the rest of the
+request. Entries are keyed on a hash of the file's contents (plus the block
+hydrator and visual-editor version for templates and parts), so editing a
+theme file takes effect immediately. Set `THEMES_PARSED_FILE_CACHE_ENABLED=false`
+while developing blocks: a block type's attribute sources shape the parsed tree
+without changing the theme file, so a cached parse would hide the change.
+`cms.themes.parsedFileCacheTtl` sets the entries' lifetime in seconds. An
+unavailable cache store falls back to parsing, and a parse whose hydration
+failed is never stored.
 
 Since *2.8.0*, `cms.themes.maxUncompressedSize` (100MB default) is an
 uncompressed-size ceiling enforced *before* a theme archive is extracted — a

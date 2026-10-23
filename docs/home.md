@@ -297,4 +297,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers CMS Framework v2.15.5*
+*This documentation covers CMS Framework v2.15.6*

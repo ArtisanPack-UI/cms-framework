@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.15.6] - 2026-10-23
+
 ### Fixed
 
 - **The self-updater now resets OPcache, so PHP-FPM stops running pre-update code** ([#425](https://github.com/ArtisanPack-UI/cms-framework/issues/425)). `ApplicationUpdateManager` cleared Laravel's caches but never OPcache. With `opcache.validate_timestamps=0` (Laravel Forge's OPcache optimisation), PHP-FPM kept the old bytecode for every file it had already compiled, so the site ran a mix of old and new code until PHP-FPM was reloaded. A route cache built afterwards could then name middleware the stale provider never registered, and every page returned 500. `opcache_reset()` now runs once the files on disk are final: after a successful update, after a rollback, and after a failure that leaves new or half-applied code in place. Inside a PHP-FPM request this clears the pool's cache. From the CLI or a queue worker it can only clear that process's cache, so the updater logs a warning, records `php_reload_required` in the update state, and `update:perform`, `update:rollback` and `update:status` tell the operator to reload PHP-FPM. The same happens when `opcache.restrict_api` blocks the reset. The config, route and event caches that were in place before an update are also rebuilt afterwards, each in a fresh PHP process so it is compiled from the new code, instead of leaving a production site uncached. A failed rebuild is logged and does not fail the update.

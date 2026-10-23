@@ -52,6 +52,8 @@ This mirrors WordPress's site-editor authority chain. Visual-editor consumes the
 - Registers the `@cmsGlobalStyles` Blade directive.
 - Wires a `GlobalStyles` model observer that invalidates the emitter cache on save and delete.
 
+Since 2.15.6, `TemplateResolver::all()` and `TemplatePartResolver::all()` build every entity from one query and one theme-directory scan instead of resolving each slug again, and parsed theme files are memoised by `ParsedThemeFileCache` for the request and in the cache store. See [Themes configuration](themes.md#configuration) for `cms.themes.parsedFileCacheEnabled` and `cms.themes.parsedFileCacheTtl`. The `ap.visual-editor.*` filters also stop running `Schema::hasTable()` once their table has been found.
+
 Migrations live at the package level (`database/migrations/`) and are loaded by the parent `CMSFrameworkServiceProvider`.
 
 ## Permissions
