@@ -26,6 +26,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\MenuResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\PatternResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplatePartResolver;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution\TemplateResolver;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ParsedThemeFileCache;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeStylesheetReader;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\VisualEditor\VisualEditor;
@@ -39,10 +40,25 @@ use Illuminate\Support\ServiceProvider;
 class SiteEditorServiceProvider extends ServiceProvider
 {
     /**
+     * Tables already confirmed to exist, so the site-editor filter callbacks
+     * run `Schema::hasTable()` at most once per table (#424). Only positive
+     * results are kept: a missing table may appear once migrations run.
+     *
+     * @since 2.15.6
+     *
+     * @var array<string, true>
+     */
+    private array $existingTables = [];
+
+    /**
      * @since 2.0.0
      */
     public function register(): void
     {
+        // Scoped rather than singleton so its per-request memo is dropped
+        // between requests on long-lived workers (Octane, queue).
+        $this->app->scoped( ParsedThemeFileCache::class );
+
         $this->app->singleton( TemplateResolver::class, function ( $app ) {
             return new TemplateResolver( $app->make( ThemeManager::class ) );
         } );
@@ -111,7 +127,7 @@ class SiteEditorServiceProvider extends ServiceProvider
         }
 
         addFilter( 'ap.visual-editor.templates', function ( array $templates ): array {
-            if ( ! Schema::hasTable( 'templates' ) ) {
+            if ( ! $this->tableExists( 'templates' ) ) {
                 return $templates;
             }
 
@@ -119,7 +135,7 @@ class SiteEditorServiceProvider extends ServiceProvider
         } );
 
         addFilter( 'ap.visual-editor.template-parts', function ( array $parts ): array {
-            if ( ! Schema::hasTable( 'template_parts' ) ) {
+            if ( ! $this->tableExists( 'template_parts' ) ) {
                 return $parts;
             }
 
@@ -127,7 +143,7 @@ class SiteEditorServiceProvider extends ServiceProvider
         } );
 
         addFilter( 'ap.visual-editor.patterns', function ( array $patterns ): array {
-            if ( ! Schema::hasTable( 'block_patterns' ) ) {
+            if ( ! $this->tableExists( 'block_patterns' ) ) {
                 return $patterns;
             }
 
@@ -139,7 +155,7 @@ class SiteEditorServiceProvider extends ServiceProvider
         // the prior value (typically null from the default callback) only
         // surfaces when there is no active theme.
         addFilter( 'ap.visual-editor.global-styles', function ( $existing ) {
-            if ( ! Schema::hasTable( 'global_styles' ) ) {
+            if ( ! $this->tableExists( 'global_styles' ) ) {
                 return $existing;
             }
 
@@ -153,12 +169,33 @@ class SiteEditorServiceProvider extends ServiceProvider
         // resolved map goes *under* the existing map so app-level config
         // (or earlier filter contributors) wins on key collision.
         addFilter( 'ap.visual-editor.navigation', function ( array $existing ): array {
-            if ( ! Schema::hasTable( 'menus' ) ) {
+            if ( ! $this->tableExists( 'menus' ) ) {
                 return $existing;
             }
 
             return array_merge( $this->app->make( MenuResolver::class )->all(), $existing );
         } );
+    }
+
+    /**
+     * Whether a site-editor table exists, checking the schema only until the
+     * table has been seen once.
+     *
+     * @since 2.15.6
+     */
+    protected function tableExists( string $table ): bool
+    {
+        if ( isset( $this->existingTables[ $table ] ) ) {
+            return true;
+        }
+
+        if ( ! Schema::hasTable( $table ) ) {
+            return false;
+        }
+
+        $this->existingTables[ $table ] = true;
+
+        return true;
     }
 
     /**

@@ -63,6 +63,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Parsed Theme File Cache
+    |--------------------------------------------------------------------------
+    |
+    | Whether to keep parsed theme templates, parts and patterns in the cache
+    | store between requests, and for how long (in seconds). Entries are keyed
+    | on file contents, so editing a theme file takes effect immediately.
+    | Turn this off while developing blocks: a block type's attribute sources
+    | shape the parsed tree without changing the theme file.
+    |
+    */
+    'parsedFileCacheEnabled' => env( 'THEMES_PARSED_FILE_CACHE_ENABLED', true ),
+    'parsedFileCacheTtl'     => 3600, // 1 hour
+
+    /*
+    |--------------------------------------------------------------------------
     | WordPress theme.json Schema Version
     |--------------------------------------------------------------------------
     |

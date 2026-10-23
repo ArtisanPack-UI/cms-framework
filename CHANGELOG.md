@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Performance
+
+- **Listing templates, parts and patterns no longer re-queries and re-parses every entity** ([#424](https://github.com/ArtisanPack-UI/cms-framework/issues/424)). `TemplateResolver::all()` and `TemplatePartResolver::all()` loaded every row for the active theme and then called `resolve()` per slug, which queried the row again, looked up the theme file and re-parsed it: about 35ms per template on a real site. Both now build each entity from the row and theme file already in hand, through a builder shared with `resolve()`, with one query and one directory scan per call. Parsed theme templates, parts and patterns are memoised by the new `ParsedThemeFileCache` for the request and in the cache store, keyed on a hash of the file contents (plus the block hydrator and visual-editor version for templates and parts), so editing a theme file takes effect immediately. The store layer is on by default and can be turned off with `cms.themes.parsedFileCacheEnabled` (`THEMES_PARSED_FILE_CACHE_ENABLED`), which is useful while developing blocks; `cms.themes.parsedFileCacheTtl` sets its lifetime (default one hour). An unavailable cache store falls back to parsing, and a parse whose hydration failed is not stored. The site-editor `ap.visual-editor.*` filters also stop running `Schema::hasTable()` once their table has been found.
+
 ## [2.15.5] - 2026-10-22
 
 ### Fixed

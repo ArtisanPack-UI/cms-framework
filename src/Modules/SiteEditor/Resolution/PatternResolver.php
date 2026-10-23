@@ -22,6 +22,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Resolution;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Models\BlockPattern;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\BlockContentFilter;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\BlockMarkupParser;
+use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ParsedThemeFileCache;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\PatternFileParser;
 use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\SlugValidator;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
@@ -286,11 +287,32 @@ class PatternResolver
     /**
      * Build a theme {@see ResolvedPattern} from a parsed file's contents.
      *
+     * The header parse and block tree are memoised through
+     * {@see ParsedThemeFileCache}, so listing patterns does not re-parse
+     * every theme pattern file on every request (#424).
+     *
      * @since 2.0.0
+     * @since 2.15.6 Reuses cached parses of unchanged pattern files.
      */
     protected function buildThemePattern( string $theme, string $slug, string $contents ): ResolvedPattern
     {
-        $parsed = PatternFileParser::parse( $contents );
+        $parsed = app( ParsedThemeFileCache::class )->remember(
+            'pattern',
+            $contents,
+            '',
+            function () use ( $contents ): array {
+                $parsed = PatternFileParser::parse( $contents );
+
+                // Parse the raw markup into WP-shape blocks up-front so pattern
+                // consumers (visual-editor's `PatternThumbnail`, Edit view) get
+                // the block tree in the initial payload rather than having to
+                // re-parse `rawContent` on the client. Previously hardcoded to
+                // `[]`, which forced the empty-state placeholder path (#204).
+                $parsed['blocks'] = BlockMarkupParser::parse( $parsed['content'] );
+
+                return $parsed;
+            },
+        );
 
         return new ResolvedPattern(
             slug           : $slug,
@@ -301,12 +323,7 @@ class PatternResolver
             source         : BlockPattern::SOURCE_THEME,
             synced         : false,
             rawContent     : $parsed['content'],
-            // Parse the raw markup into WP-shape blocks up-front so pattern
-            // consumers (visual-editor's `PatternThumbnail`, Edit view) get
-            // the block tree in the initial payload rather than having to
-            // re-parse `rawContent` on the client. Previously hardcoded to
-            // `[]`, which forced the empty-state placeholder path (#204).
-            blocks         : BlockMarkupParser::parse( $parsed['content'] ),
+            blocks         : $parsed['blocks'],
             categories     : $parsed['categories'],
             blockTypes     : $parsed['block_types'],
             model          : null,
