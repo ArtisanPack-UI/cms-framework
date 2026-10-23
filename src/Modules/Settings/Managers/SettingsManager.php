@@ -16,6 +16,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Settings\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
@@ -215,13 +216,21 @@ class SettingsManager
      * Writes that bypass Eloquent events (raw query builder updates) must
      * call this manually.
      *
+     * An unavailable cache store (e.g. a missing `database` cache table) is
+     * ignored, since nothing can have been cached in it.
+     *
      * @since 2.15.4
+     * @since 2.15.5 Ignores an unavailable cache store.
      */
     public function flushCache(): void
     {
         $this->forgetLoadedSettings();
 
-        Cache::forget( self::CACHE_KEY );
+        try {
+            Cache::forget( self::CACHE_KEY );
+        } catch ( QueryException ) {
+            // The store is unavailable, so there is no cached entry to clear.
+        }
     }
 
     /**
@@ -258,13 +267,13 @@ class SettingsManager
             return $this->loadedSettings;
         }
 
-        $rows = $inTransaction ? null : Cache::get( self::CACHE_KEY );
+        if ( ! $this->settingsTableExists() ) {
+            return [];
+        }
+
+        $rows = $inTransaction ? null : $this->readCachedRows();
 
         if ( ! is_array( $rows ) ) {
-            if ( ! $this->settingsTableExists() ) {
-                return [];
-            }
-
             $rows = Setting::query()
                 ->toBase()
                 ->get( [ 'key', 'value', 'type' ] )
@@ -275,10 +284,46 @@ class SettingsManager
                 return Setting::hydrate( $rows )->keyBy( 'key' )->all();
             }
 
-            Cache::put( self::CACHE_KEY, $rows, self::CACHE_TTL );
+            $this->writeCachedRows( $rows );
         }
 
         return $this->loadedSettings = Setting::hydrate( $rows )->keyBy( 'key' )->all();
+    }
+
+    /**
+     * Reads the shared cache entry, treating an unavailable cache store as a miss.
+     *
+     * The `database` cache store throws when its table hasn't been migrated
+     * yet, which would otherwise break app boot (e.g. `package:discover`)
+     * before `migrate` has run.
+     *
+     * @since 2.15.5
+     *
+     * @return mixed The cached rows, or null on a miss or an unavailable store.
+     */
+    protected function readCachedRows(): mixed
+    {
+        try {
+            return Cache::get( self::CACHE_KEY );
+        } catch ( QueryException ) {
+            return null;
+        }
+    }
+
+    /**
+     * Writes the shared cache entry, skipping it when the cache store is unavailable.
+     *
+     * @since 2.15.5
+     *
+     * @param  array<int, array<string, mixed>>  $rows  Raw setting rows to cache.
+     */
+    protected function writeCachedRows( array $rows ): void
+    {
+        try {
+            Cache::put( self::CACHE_KEY, $rows, self::CACHE_TTL );
+        } catch ( QueryException ) {
+            // The store is unavailable; the rows are still memoized for this request.
+        }
     }
 
     /**
