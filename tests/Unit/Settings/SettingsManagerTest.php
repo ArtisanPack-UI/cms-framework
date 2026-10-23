@@ -13,6 +13,7 @@ declare( strict_types=1 );
 use ArtisanPackUI\CMSFramework\Modules\Settings\Enums\SettingType;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Contracts\Queue\Job;
 use Illuminate\Queue\Events\JobProcessing;
 use Illuminate\Support\Facades\Cache;
@@ -269,4 +270,34 @@ test( 'it does not remember a missing settings table', function (): void {
     $manager->forgetLoadedSettings();
 
     expect( $manager->getSetting( 'late-key' ) )->toBe( 'stored' );
+} );
+
+test( 'it returns defaults on an unmigrated database with the database cache store', function (): void {
+    config( ['cache.default' => 'database'] );
+    Schema::drop( 'settings' );
+    expect( Schema::hasTable( 'cache' ) )->toBeFalse();
+
+    $manager = new SettingsManager;
+    $manager->registerSetting( 'boot-key', 'boot-default', 'trim', SettingType::String );
+
+    expect( $manager->getSetting( 'boot-key' ) )->toBe( 'boot-default' );
+} );
+
+test( 'it boots the theme view path on an unmigrated database with the database cache store', function (): void {
+    config( ['cache.default' => 'database'] );
+    Schema::drop( 'settings' );
+    app()->forgetInstance( SettingsManager::class );
+    app()->forgetInstance( ThemeManager::class );
+
+    app( ThemeManager::class )->registerThemeViewPath();
+} )->throwsNoExceptions();
+
+test( 'it falls back to the database when the cache table is missing', function (): void {
+    config( ['cache.default' => 'database'] );
+    expect( Schema::hasTable( 'cache' ) )->toBeFalse();
+
+    Setting::withoutEvents( fn () => Setting::create( ['key' => 'cacheless-key', 'value' => 'stored'] ) );
+    $manager = new SettingsManager;
+
+    expect( $manager->getSetting( 'cacheless-key' ) )->toBe( 'stored' );
 } );
