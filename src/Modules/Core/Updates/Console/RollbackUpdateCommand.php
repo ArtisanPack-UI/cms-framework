@@ -123,6 +123,13 @@ class RollbackUpdateCommand extends Command
             $this->info( '✓ Rollback completed successfully!' );
             $this->line( 'Application restored from backup.' );
 
+            // This command runs outside PHP-FPM, so it cannot reset the web
+            // server's OPcache (#425).
+            if ( $manager->phpReloadRequired() ) {
+                $this->newLine();
+                $this->warn( 'Reload PHP-FPM if OPcache runs with opcache.validate_timestamps=0, or it keeps serving the code that was rolled back.' );
+            }
+
             return self::SUCCESS;
         } catch ( Exception $e ) {
             $this->newLine();

@@ -209,6 +209,26 @@ class UpdateStateStore
     }
 
     /**
+     * Record whether PHP-FPM must be reloaded before it serves the code the
+     * last update or rollback wrote (#425).
+     *
+     * Only merged into an existing record, so a manual `update:rollback` with
+     * no update on record does not leave a state file holding only this flag.
+     *
+     * @since 2.15.6
+     *
+     * @param  bool  $required  True when OPcache could not be reset for the web server.
+     */
+    public function recordPhpReloadRequired( bool $required ): void
+    {
+        if ( null === $this->read() ) {
+            return;
+        }
+
+        $this->merge( ['php_reload_required' => $required] );
+    }
+
+    /**
      * Persist the ledger of files the current extraction added.
      *
      * The in-memory ledger dies with the process, so an update killed during
