@@ -216,13 +216,21 @@ class SettingsManager
      * Writes that bypass Eloquent events (raw query builder updates) must
      * call this manually.
      *
+     * An unavailable cache store (e.g. a missing `database` cache table) is
+     * ignored, since nothing can have been cached in it.
+     *
      * @since 2.15.4
+     * @since 2.15.5 Ignores an unavailable cache store.
      */
     public function flushCache(): void
     {
         $this->forgetLoadedSettings();
 
-        Cache::forget( self::CACHE_KEY );
+        try {
+            Cache::forget( self::CACHE_KEY );
+        } catch ( QueryException ) {
+            // The store is unavailable, so there is no cached entry to clear.
+        }
     }
 
     /**

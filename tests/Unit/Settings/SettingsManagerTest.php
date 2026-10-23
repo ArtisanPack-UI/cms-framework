@@ -296,8 +296,22 @@ test( 'it falls back to the database when the cache table is missing', function 
     config( ['cache.default' => 'database'] );
     expect( Schema::hasTable( 'cache' ) )->toBeFalse();
 
-    Setting::withoutEvents( fn () => Setting::create( ['key' => 'cacheless-key', 'value' => 'stored'] ) );
+    Setting::create( ['key' => 'cacheless-key', 'value' => 'stored'] );
     $manager = new SettingsManager;
 
     expect( $manager->getSetting( 'cacheless-key' ) )->toBe( 'stored' );
+} );
+
+test( 'it saves and deletes settings when the cache table is missing', function (): void {
+    config( ['cache.default' => 'database'] );
+    expect( Schema::hasTable( 'cache' ) )->toBeFalse();
+
+    $this->manager->updateSetting( 'cacheless-save', 'first' );
+    expect( $this->manager->getSetting( 'cacheless-save' ) )->toBe( 'first' );
+
+    $this->manager->updateSetting( 'cacheless-save', 'second' );
+    expect( $this->manager->getSetting( 'cacheless-save' ) )->toBe( 'second' );
+
+    Setting::where( 'key', 'cacheless-save' )->first()->delete();
+    expect( $this->manager->getSetting( 'cacheless-save', 'gone' ) )->toBe( 'gone' );
 } );
