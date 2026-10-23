@@ -53,97 +53,47 @@ class TemplatePartResolver implements EntityResolver
         $theme = (string) $manifest['slug'];
 
         // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config); $slug is guarded by SlugValidator at the top of this method. Both are bound as Eloquent query parameters.
-        $row          = TemplatePart::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
-        $themeFile    = $this->resolveThemeFile( $theme, $slug );
-        $hasThemeFile = null !== $themeFile;
+        $row = TemplatePart::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
 
-        if ( null !== $row ) {
-            return new ResolvedEntity(
-                slug         : $row->slug,
-                theme        : $row->theme,
-                source       : 'db',
-                raw          : '',
-                blocks       : is_array( $row->block_content ) ? $row->block_content : [],
-                title        : $row->title,
-                description  : $row->description,
-                status       : $row->status,
-                hasThemeFile : $hasThemeFile,
-                isCustom     : (bool) $row->is_custom && ! $hasThemeFile,
-                isBlade      : false,
-                area         : $row->area,
-                model        : $row,
-            );
-        }
-
-        if ( null === $themeFile ) {
-            return null;
-        }
-
-        // Blade theme files render at request time and are read-only in the
-        // site editor. They carry no block tree, so `raw` and `blocks` stay
-        // empty and the `isBlade` flag drives the editor's read-only affordance
-        // and the save-rejection guard in TemplatePartsController.
-        if ( $themeFile['isBlade'] ) {
-            return new ResolvedEntity(
-                slug         : $slug,
-                theme        : $theme,
-                source       : 'theme',
-                raw          : '',
-                blocks       : [],
-                title        : $this->humanizeSlug( $slug ),
-                description  : null,
-                status       : 'publish',
-                hasThemeFile : true,
-                isCustom     : false,
-                isBlade      : true,
-                area         : $this->themeFileArea( $manifest, $slug ),
-                model        : null,
-            );
-        }
-
-        $markup = File::get( $themeFile['path'] );
-
-        return new ResolvedEntity(
-            slug         : $slug,
-            theme        : $theme,
-            source       : 'theme',
-            raw          : $markup,
-            blocks       : ThemeFileBlockParser::parse( $markup ),
-            title        : $this->humanizeSlug( $slug ),
-            description  : null,
-            status       : 'publish',
-            hasThemeFile : true,
-            isCustom     : false,
-            isBlade      : false,
-            area         : $this->themeFileArea( $manifest, $slug ),
-            model        : null,
-        );
+        return $this->buildEntity( $manifest, $slug, $row, $this->resolveThemeFile( $theme, $slug ) );
     }
 
     /**
+     * Lists every template part for the active theme with one query and one
+     * scan of the theme's `parts/` directory, building each entity from the
+     * row and file already in hand rather than re-resolving per slug (#424).
+     *
      * @since 2.0.0
+     * @since 2.15.6 Builds entities from the fetched rows and file index instead of calling resolve() per slug.
      *
      * @return array<int, ResolvedEntity>
      */
     public function all(): array
     {
-        $theme = $this->activeThemeSlug();
+        $manifest = $this->activeThemeManifest();
 
-        if ( null === $theme ) {
+        if ( null === $manifest ) {
             return [];
         }
 
-        $themeFileSlugs = $this->themeFileSlugs( $theme );
+        $theme      = (string) $manifest['slug'];
+        $themeFiles = $this->themeFileIndex( $theme );
         // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug from ThemeManager (internal config, not request input) and is bound as an Eloquent query parameter.
-        $rows           = TemplatePart::query()->where( 'theme', $theme )->get()->keyBy( 'slug' );
+        $rows       = TemplatePart::query()->where( 'theme', $theme )->get()->keyBy( 'slug' );
 
-        $allSlugs = array_unique( array_merge( $themeFileSlugs, $rows->keys()->all() ) );
+        // Numeric slugs become integer array keys; cast back so the
+        // string-typed slug guard and builder accept them.
+        $allSlugs = array_map( 'strval', array_unique( array_merge( array_keys( $themeFiles ), $rows->keys()->all() ) ) );
         sort( $allSlugs );
 
         $resolved = [];
 
         foreach ( $allSlugs as $slug ) {
-            $entity = $this->resolve( $slug );
+            if ( ! $this->isValidSlug( $slug ) ) {
+                continue;
+            }
+
+            $entity = $this->buildEntity( $manifest, $slug, $rows->get( $slug ), $themeFiles[ $slug ] ?? null );
 
             if ( null !== $entity ) {
                 $resolved[] = $entity;
@@ -205,6 +155,91 @@ class TemplatePartResolver implements EntityResolver
         $theme = $this->themeManager->getActiveTheme();
 
         return null !== $theme && ! empty( $theme['slug'] ) ? $theme : null;
+    }
+
+    /**
+     * Build the entity for a part slug from its DB row (if any) and theme
+     * file (if any). The DB row wins; otherwise the theme file supplies the
+     * entity, with its area taken from the theme manifest. Returns null when
+     * neither exists.
+     *
+     * Shared by {@see resolve()} and {@see all()} so the listing path can
+     * reuse the rows and file index it already fetched.
+     *
+     * @since 2.15.6
+     *
+     * @param  array<string, mixed>                    $manifest   Active theme's parsed `theme.json`.
+     * @param  string                                  $slug       Validated part slug.
+     * @param  TemplatePart|null                       $row        The DB override for the slug, if any.
+     * @param  array{path: string, isBlade: bool}|null  $themeFile  The theme file backing the slug, if any.
+     */
+    protected function buildEntity( array $manifest, string $slug, ?TemplatePart $row, ?array $themeFile ): ?ResolvedEntity
+    {
+        $hasThemeFile = null !== $themeFile;
+
+        if ( null !== $row ) {
+            return new ResolvedEntity(
+                slug         : $row->slug,
+                theme        : $row->theme,
+                source       : 'db',
+                raw          : '',
+                blocks       : is_array( $row->block_content ) ? $row->block_content : [],
+                title        : $row->title,
+                description  : $row->description,
+                status       : $row->status,
+                hasThemeFile : $hasThemeFile,
+                isCustom     : (bool) $row->is_custom && ! $hasThemeFile,
+                isBlade      : false,
+                area         : $row->area,
+                model        : $row,
+            );
+        }
+
+        if ( null === $themeFile ) {
+            return null;
+        }
+
+        $theme = (string) $manifest['slug'];
+
+        // Blade theme files render at request time and are read-only in the
+        // site editor. They carry no block tree, so `raw` and `blocks` stay
+        // empty and the `isBlade` flag drives the editor's read-only affordance
+        // and the save-rejection guard in TemplatePartsController.
+        if ( $themeFile['isBlade'] ) {
+            return new ResolvedEntity(
+                slug         : $slug,
+                theme        : $theme,
+                source       : 'theme',
+                raw          : '',
+                blocks       : [],
+                title        : $this->humanizeSlug( $slug ),
+                description  : null,
+                status       : 'publish',
+                hasThemeFile : true,
+                isCustom     : false,
+                isBlade      : true,
+                area         : $this->themeFileArea( $manifest, $slug ),
+                model        : null,
+            );
+        }
+
+        $markup = File::get( $themeFile['path'] );
+
+        return new ResolvedEntity(
+            slug         : $slug,
+            theme        : $theme,
+            source       : 'theme',
+            raw          : $markup,
+            blocks       : ThemeFileBlockParser::parseCached( $markup ),
+            title        : $this->humanizeSlug( $slug ),
+            description  : null,
+            status       : 'publish',
+            hasThemeFile : true,
+            isCustom     : false,
+            isBlade      : false,
+            area         : $this->themeFileArea( $manifest, $slug ),
+            model        : null,
+        );
     }
 
     /**
@@ -273,6 +308,20 @@ class TemplatePartResolver implements EntityResolver
      */
     protected function themeFileSlugs( string $theme ): array
     {
+        return array_map( 'strval', array_keys( $this->themeFileIndex( $theme ) ) );
+    }
+
+    /**
+     * Map each part slug the active theme provides on disk to its backing
+     * file, from a single directory scan. Applies the same precedence as
+     * {@see resolveThemeFile()}: HTML wins over Blade for the same slug.
+     *
+     * @since 2.15.6
+     *
+     * @return array<string, array{path: string, isBlade: bool}>
+     */
+    protected function themeFileIndex( string $theme ): array
+    {
         $directory = config( 'cms.themes.directory', 'themes' );
         $dir       = base_path( $directory ) . '/' . $theme . '/parts';
 
@@ -280,22 +329,24 @@ class TemplatePartResolver implements EntityResolver
             return [];
         }
 
-        $slugs = [];
+        $index = [];
 
         foreach ( File::files( $dir ) as $file ) {
             $name = $file->getFilename();
+            $path = $dir . '/' . $name;
 
             // `getFilenameWithoutExtension()` strips only the final extension,
             // so `header.blade.php` would yield `header.blade`; match the
             // compound `.blade.php` suffix explicitly before `.html`.
             if ( str_ends_with( $name, '.blade.php' ) ) {
-                $slugs[] = substr( $name, 0, -strlen( '.blade.php' ) );
+                $slug           = substr( $name, 0, -strlen( '.blade.php' ) );
+                $index[ $slug ] ??= ['path' => $path, 'isBlade' => true];
             } elseif ( 'html' === $file->getExtension() ) {
-                $slugs[] = $file->getFilenameWithoutExtension();
+                $index[ $file->getFilenameWithoutExtension() ] = ['path' => $path, 'isBlade' => false];
             }
         }
 
-        return array_values( array_unique( $slugs ) );
+        return $index;
     }
 
     /**

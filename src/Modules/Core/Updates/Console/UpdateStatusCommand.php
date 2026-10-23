@@ -166,6 +166,13 @@ class UpdateStatusCommand extends Command
             $this->renderRollbackOutcome( $state );
         }
 
+        // The run happened outside PHP-FPM or could not reset OPcache, so the
+        // web server may still be running the pre-update bytecode (#425).
+        if ( true === ( $state['php_reload_required'] ?? false ) ) {
+            $this->newLine();
+            $this->warn( __( 'OPcache was not reset for the web server. If it runs with opcache.validate_timestamps=0, reload PHP-FPM so it serves the code now on disk.' ) );
+        }
+
         if ( UpdateRunStatus::InProgress === $status ) {
             $this->newLine();
             $this->comment( __( 'An update is either still running or died without triggering its shutdown handler (e.g. `kill -9`). Check whether the recorded PID is still alive before intervening.' ) );

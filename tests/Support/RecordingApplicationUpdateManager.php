@@ -72,6 +72,30 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     public bool $shutdownGuardWasArmed = false;
 
     /**
+     * SAPI the double reports, or null to report the real one.
+     *
+     * @since 2.15.6
+     */
+    public ?string $sapi = null;
+
+    /**
+     * What the stubbed `opcache_reset()` returns: true when reset, false when
+     * it failed, null when OPcache is not enabled.
+     *
+     * @since 2.15.6
+     */
+    public ?bool $opcacheResetResult = null;
+
+    /**
+     * Cache commands `cachedArtifacts()` reports as in place before the update.
+     *
+     * @since 2.15.6
+     *
+     * @var array<int, string>
+     */
+    public array $cachedArtifactCommands = [];
+
+    /**
      * Put the double into the state a live update would be in when the process
      * dies mid-flight.
      *
@@ -272,6 +296,38 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     protected function cleanup( string $zipPath ): void
     {
         $this->calls[] = 'cleanup';
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @since 2.15.6
+     */
+    protected function cachedArtifacts(): array
+    {
+        return $this->cachedArtifactCommands;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @since 2.15.6
+     */
+    protected function attemptOpcacheReset(): ?bool
+    {
+        $this->calls[] = 'opcache-reset';
+
+        return $this->opcacheResetResult;
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @since 2.15.6
+     */
+    protected function phpSapi(): string
+    {
+        return $this->sapi ?? parent::phpSapi();
     }
 
     /**

@@ -317,6 +317,37 @@ PHP );
     } );
 } );
 
+describe( 'PatternResolver theme-file parse cache (#424)', function (): void {
+    it( 'returns the same theme patterns from a cached parse on later requests', function (): void {
+        File::put( $this->themeFiles . '/hero.php', <<<'PHP'
+<?php
+/**
+ * Title: Hero
+ * Categories: featured
+ */
+?>
+<!-- wp:paragraph --><p>Hero</p><!-- /wp:paragraph -->
+PHP );
+
+        $first = $this->resolver->toFilterMap();
+
+        app()->forgetScopedInstances();
+
+        expect( $this->resolver->toFilterMap() )->toEqual( $first )
+            ->and( $first['hero']['blocks'][0]['blockName'] )->toBe( 'core/paragraph' );
+    } );
+
+    it( 'picks up edits to a theme pattern file', function (): void {
+        File::put( $this->themeFiles . '/hero.php', "<?php\n/**\n * Title: Before\n */\n?>\n<!-- before -->" );
+
+        $this->resolver->all();
+
+        File::put( $this->themeFiles . '/hero.php', "<?php\n/**\n * Title: After\n */\n?>\n<!-- after -->" );
+
+        expect( $this->resolver->all()['hero']->title )->toBe( 'After' );
+    } );
+} );
+
 describe( 'PatternResolver::toFilterMap()', function (): void {
     it( 'returns an array shape consumable by visual-editor ResolvedPattern::fromArray', function (): void {
         File::put( $this->themeFiles . '/hero.php', <<<'PHP'

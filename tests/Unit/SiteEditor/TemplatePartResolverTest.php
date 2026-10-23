@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeFileBlockParser;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Tests\Support\BlockMarkupHydratorStub;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 uses( RefreshDatabase::class );
@@ -198,5 +199,43 @@ describe( 'TemplatePartResolver::all()', function (): void {
 
         expect( $bySlug->get( 'header' )->blocks[0]['blockName'] )->toBe( 'core/paragraph' )
             ->and( $bySlug->get( 'footer' )->blocks[0]['blockName'] )->toBe( 'core/heading' );
+    } );
+
+    it( 'lists every part with a single template_parts query (#424)', function (): void {
+        File::put( $this->themeFiles . '/header.html', '<!-- header -->' );
+        File::put( $this->themeFiles . '/footer.html', '<!-- footer -->' );
+
+        foreach ( ['header', 'sidebar'] as $slug ) {
+            TemplatePart::create( ['theme' => $this->themeSlug, 'slug' => $slug, 'title' => ucfirst( $slug ), 'area' => $slug] );
+        }
+
+        DB::enableQueryLog();
+
+        $all = $this->resolver->all();
+
+        $queries = collect( DB::getQueryLog() )->filter( fn ( array $query ): bool => str_contains( $query['query'], 'template_parts' ) );
+
+        expect( $all )->toHaveCount( 3 )
+            ->and( $queries )->toHaveCount( 1 );
+    } );
+
+    it( 'builds the same entities resolve() returns, including theme.json areas (#424)', function (): void {
+        $this->activeManifest['templateParts'] = [
+            ['name' => 'navigation-overlay', 'area' => 'navigation-overlay'],
+        ];
+
+        File::put( $this->themeFiles . '/navigation-overlay.html', '<!-- wp:paragraph --><p>Nav</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/footer.blade.php', '<p>Foot</p>' );
+        File::put( $this->themeFiles . '/header.html', '<!-- header -->' );
+
+        TemplatePart::create( ['theme' => $this->themeSlug, 'slug' => 'header', 'title' => 'DB Header', 'area' => 'header'] );
+
+        $all = $this->resolver->all();
+
+        expect( collect( $all )->firstWhere( 'slug', 'navigation-overlay' )->area )->toBe( 'navigation-overlay' );
+
+        foreach ( $all as $entity ) {
+            expect( $entity->toFilterEntry() )->toEqual( $this->resolver->resolve( $entity->slug )->toFilterEntry() );
+        }
     } );
 } );

@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support\ThemeFileBlockParser;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Tests\Support\BlockMarkupHydratorStub;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
 uses( RefreshDatabase::class );
@@ -222,6 +223,77 @@ describe( 'TemplateResolver::all()', function (): void {
             ->and( $bySlug->get( 'page' )->source )->toBe( 'db' )
             ->and( $bySlug->get( 'single' )->source )->toBe( 'theme' )
             ->and( $bySlug->get( 'archive' )->source )->toBe( 'db' );
+    } );
+} );
+
+describe( 'TemplateResolver::all() without per-slug lookups (#424)', function (): void {
+    it( 'lists every template with a single templates query', function (): void {
+        File::put( $this->themeFiles . '/single.html', '<!-- wp:paragraph --><p>Single</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/page.html', '<!-- page -->' );
+
+        foreach ( ['page', 'archive', 'search'] as $slug ) {
+            Template::create( ['theme' => $this->themeSlug, 'slug' => $slug, 'title' => ucfirst( $slug )] );
+        }
+
+        DB::enableQueryLog();
+
+        $all = $this->resolver->all();
+
+        $queries = collect( DB::getQueryLog() )->filter( fn ( array $query ): bool => str_contains( $query['query'], 'templates' ) );
+
+        expect( $all )->toHaveCount( 4 )
+            ->and( $queries )->toHaveCount( 1 );
+    } );
+
+    it( 'builds the same entities resolve() returns for each slug', function (): void {
+        File::put( $this->themeFiles . '/single.html', '<!-- wp:paragraph --><p>Single</p><!-- /wp:paragraph -->' );
+        File::put( $this->themeFiles . '/page.html', '<!-- page -->' );
+        File::put( $this->themeFiles . '/legacy.blade.php', '<p>Legacy</p>' );
+
+        Template::create( [
+            'theme'         => $this->themeSlug,
+            'slug'          => 'page',
+            'title'         => 'DB Page',
+            'block_content' => [['blockName' => 'core/heading']],
+        ] );
+        Template::create( ['theme' => $this->themeSlug, 'slug' => 'custom', 'title' => 'Custom', 'is_custom' => true] );
+
+        foreach ( $this->resolver->all() as $entity ) {
+            $expected = $this->resolver->resolve( $entity->slug );
+
+            expect( $entity->toFilterEntry() )->toEqual( $expected->toFilterEntry() )
+                ->and( $entity->isCustom )->toBe( $expected->isCustom );
+        }
+    } );
+
+    it( 'includes numeric slugs such as 404 from both the DB and theme files', function (): void {
+        File::put( $this->themeFiles . '/404.html', '<!-- wp:paragraph --><p>Missing</p><!-- /wp:paragraph -->' );
+        Template::create( ['theme' => $this->themeSlug, 'slug' => '500', 'title' => 'Error'] );
+
+        $bySlug = collect( $this->resolver->all() )->keyBy( 'slug' );
+
+        expect( $bySlug->get( '404' )->source )->toBe( 'theme' )
+            ->and( $bySlug->get( '404' )->blocks[0]['blockName'] )->toBe( 'core/paragraph' )
+            ->and( $bySlug->get( '500' )->source )->toBe( 'db' );
+    } );
+
+    it( 'skips theme files whose names are not valid slugs', function (): void {
+        File::put( $this->themeFiles . '/Upper.html', '<!-- upper -->' );
+        File::put( $this->themeFiles . '/fine.html', '<!-- fine -->' );
+
+        expect( collect( $this->resolver->all() )->pluck( 'slug' )->all() )->toBe( ['fine'] );
+    } );
+
+    it( 'reflects edits to a theme file on the next listing', function (): void {
+        File::put( $this->themeFiles . '/page.html', '<!-- wp:paragraph --><p>Before</p><!-- /wp:paragraph -->' );
+
+        $this->resolver->all();
+
+        File::put( $this->themeFiles . '/page.html', '<!-- wp:heading --><h2>After</h2><!-- /wp:heading -->' );
+
+        $page = collect( $this->resolver->all() )->firstWhere( 'slug', 'page' );
+
+        expect( $page->blocks[0]['blockName'] )->toBe( 'core/heading' );
     } );
 } );
 

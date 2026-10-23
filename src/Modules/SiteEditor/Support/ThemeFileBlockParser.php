@@ -41,6 +41,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\SiteEditor\Support;
 
+use Composer\InstalledVersions;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -79,11 +80,64 @@ final class ThemeFileBlockParser
             return [];
         }
 
+        return self::parseWith( self::hydrator(), $markup )['blocks'];
+    }
+
+    /**
+     * Parse raw theme-file block markup, reusing an earlier parse of the
+     * same markup when one is cached.
+     *
+     * Same result as {@see parse()}, memoised through
+     * {@see ParsedThemeFileCache} so listing a theme's templates and parts
+     * does not re-hydrate every file on every request (#424). The cache key
+     * includes the hydrator in play, so a tree parsed without visual-editor
+     * is never served once it is installed (or the reverse), and a parse
+     * whose hydration threw is kept out of the cache store so the next
+     * request retries it.
+     *
+     * @since 2.15.6
+     *
+     * @param  string  $markup  The raw contents of a theme `.html` file.
+     *
+     * @return array<int, array<string, mixed>> The parsed block tree.
+     */
+    public static function parseCached( string $markup ): array
+    {
+        if ( '' === trim( $markup ) ) {
+            return [];
+        }
+
         $hydrator = self::hydrator();
 
+        return app( ParsedThemeFileCache::class )->remember(
+            'blocks',
+            $markup,
+            self::hydratorSignature( $hydrator ),
+            function ( bool &$store ) use ( $hydrator, $markup ): array {
+                $result = self::parseWith( $hydrator, $markup );
+                $store  = ! $result['degraded'];
+
+                return $result['blocks'];
+            },
+        );
+    }
+
+    /**
+     * Parse non-blank markup with the given hydrator, falling back to the
+     * WP `parse_blocks()` shape when there is none or it throws.
+     *
+     * @since 2.15.6
+     *
+     * @param  object|null  $hydrator  visual-editor's hydrator, or null when unavailable.
+     * @param  string       $markup    The raw block markup.
+     *
+     * @return array{blocks: array<int, array<string, mixed>>, degraded: bool} The tree, and whether the hydrator threw.
+     */
+    private static function parseWith( ?object $hydrator, string $markup ): array
+    {
         if ( null !== $hydrator ) {
             try {
-                return $hydrator->hydrate( $markup );
+                return ['blocks' => $hydrator->hydrate( $markup ), 'degraded' => false];
             } catch ( Throwable $exception ) {
                 // A hydrator failure must not take the whole template down —
                 // the WP-shape parse below still gives consumers a tree.
@@ -93,10 +147,34 @@ final class ThemeFileBlockParser
                         'exception' => $exception->getMessage(),
                     ],
                 );
+
+                return ['blocks' => BlockMarkupParser::parse( $markup ), 'degraded' => true];
             }
         }
 
-        return BlockMarkupParser::parse( $markup );
+        return ['blocks' => BlockMarkupParser::parse( $markup ), 'degraded' => false];
+    }
+
+    /**
+     * Identify the hydrator for cache keys: its class plus the installed
+     * visual-editor build, so an upgrade that changes the hydrated shape
+     * misses the cache instead of serving trees from the old version.
+     *
+     * @since 2.15.6
+     */
+    private static function hydratorSignature( ?object $hydrator ): string
+    {
+        if ( null === $hydrator ) {
+            return 'parse_blocks';
+        }
+
+        $build = '';
+
+        if ( class_exists( InstalledVersions::class ) && InstalledVersions::isInstalled( 'artisanpack-ui/visual-editor' ) ) {
+            $build = ( InstalledVersions::getPrettyVersion( 'artisanpack-ui/visual-editor' ) ?? '' ) . '@' . ( InstalledVersions::getReference( 'artisanpack-ui/visual-editor' ) ?? '' );
+        }
+
+        return $hydrator::class . '|' . $build;
     }
 
     /**

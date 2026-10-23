@@ -392,6 +392,18 @@ A run interrupted during download or extraction is not resumable — the applica
 
 The marker is a flat JSON file rather than a cache entry on purpose: step 8 runs `cache:clear`, and the database cache driver is unavailable while step 7's migrations are mid-flight. `storage/` is in `exclude_from_update`, so it survives extraction of the new release.
 
+### OPcache and compiled caches after an update (2.15.6)
+
+With `opcache.validate_timestamps=0` (Laravel Forge's OPcache optimisation, and common in production), PHP-FPM never re-reads a file it has already compiled. Before 2.15.6 the updater cleared Laravel's caches but not OPcache, so the site ran a mix of old and new code until PHP-FPM was reloaded. A route cache built afterwards could name middleware the stale provider never registered, and every page returned 500.
+
+The updater now calls `opcache_reset()` once the files on disk are final: after a successful update (after step 9's cleanup, before maintenance mode is lifted), after a rollback, and after a failure that leaves new or half-applied code in place.
+
+- **From a PHP-FPM request** (the admin UI calling `performUpdate()`), the reset clears the pool's shared cache and nothing more is needed.
+- **From the CLI or a queue worker** (`update:perform`, `update:rollback`, `dispatchUpdate()`), `opcache_reset()` only clears that process's own cache. The updater logs a warning, records `php_reload_required: true` in the update state, and `update:perform`, `update:rollback` and `update:status` print a reminder to reload PHP-FPM. The same happens when `opcache.restrict_api` blocks the reset. If OPcache runs with `validate_timestamps=0`, reload PHP-FPM after a CLI or queued update.
+- `ApplicationUpdateManager::phpReloadRequired()` returns the same flag for the last update or rollback that instance ran, for an admin UI that wants to show it.
+
+The compiled caches that were in place before the update are also rebuilt. Step 8 notes which of the config, route and event caches exist before clearing them, and after step 9 the updater runs `config:cache`, `route:cache` and `event:cache` for those, and only those, so a production install no longer drops to uncached config and routes. Each command runs in a fresh PHP process (the same interpreter used for composer, see [PHP interpreter used to invoke composer](#php-interpreter-used-to-invoke-composer)), so the cache is compiled from the new code rather than from the classes the updating process still holds in memory. A failed rebuild is logged with the command to run by hand and does not fail the update.
+
 > **Note:** the guards above make the HTTP path safe to *fail*; they don't make it a good place to run a multi-minute job. Run updates from the CLI with `php artisan update:perform`, where `max_execution_time` is `0` and there is no gateway timeout to hit — or, when the trigger has to be an HTTP request, dispatch to a queue worker with [`dispatchUpdate()`](#queued-updates-280).
 
 ### Keep `performUpdate()` behind admin authorization
