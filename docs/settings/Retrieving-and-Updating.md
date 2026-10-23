@@ -112,6 +112,8 @@ app(SettingsManager::class)->flushCache();
 
 `forgetLoadedSettings()` clears only the in-memory copy and leaves the shared cache entry in place.
 
+Since 2.15.5, an unavailable cache store doesn't break settings. If the store throws a database error (for example, the `database` cache store before its `cache` table is migrated), a read is treated as a cache miss and goes to the database, and the cache write and flush are skipped. The in-memory copy still works, so a request still runs at most one settings query.
+
 ## Sanitization on Update
 
 All updates go through the registered sanitization callback for the setting key. The callback should:

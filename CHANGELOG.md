@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.15.5] - 2026-10-22
+
+### Fixed
+
+- **Apps boot against an unmigrated database again with the `database` cache store** ([#420](https://github.com/ArtisanPack-UI/cms-framework/issues/420)). 2.15.4 made `SettingsManager` read the `cms.settings.all` cache entry before checking that the `settings` table exists. With Laravel's default `CACHE_STORE=database` and no `cache` table yet, that read threw `no such table: cache` while `ThemesServiceProvider` booted, so `package:discover` (and therefore `composer install`) and any other artisan command failed before `migrate` could run. The settings table is now checked first, and registered defaults are returned when it is missing, as in 2.15.3. A database error from the cache store is treated as a cache miss on read, and the cache write and flush are skipped, so a migrated `settings` table with no `cache` table still reads from the database, and saving or deleting a setting no longer throws after the row is written.
+
 ## [2.15.4] - 2026-10-22
 
 ### Fixed

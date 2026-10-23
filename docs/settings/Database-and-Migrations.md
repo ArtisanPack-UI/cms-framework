@@ -42,11 +42,13 @@ The `ArtisanPackUI\CMSFramework\Modules\Settings\Models\Setting` model:
 
 ## Safe Reads Before Migration
 
-The SettingsManager checks `Schema::hasTable('settings')` before querying. If the table does not exist yet, reads will fall back to:
+The SettingsManager checks `Schema::hasTable('settings')` before querying the table or reading the cache. If the table does not exist yet, reads will fall back to:
 1) The explicit default you pass to `getSetting($key, $default)`
 2) Otherwise the registered default for the key
 
 This allows you to safely call `apGetSetting()` during early boot even before migrations run. A positive table check is remembered for the rest of the process, so the check runs once rather than on every read. See [Caching](Retrieving-and-Updating.md#caching) for how stored values are cached.
+
+This also holds with Laravel's default `database` cache store, whose `cache` table is created by the same `migrate` run, so `composer install` (`package:discover`) and other artisan commands can boot the app against an empty database. If the `cache` table is missing while the `settings` table exists, settings are read from the database and saves still succeed; they just aren't cached.
 
 ## Backing Up and Seeding
 
