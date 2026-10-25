@@ -120,11 +120,29 @@ The filter runs in two places:
 - **API writes.** A Site Editor API write runs the filter only when the request carries a `block_content` array; a write that leaves the blocks alone, or sets them to `null`, skips it. The first write that overrides a theme-file template, template part or pattern passes that file's parsed blocks (from the same resolver the index and show endpoints use) as `$storedBlocks`, so Custom CSS the theme ships survives the first save. Blade templates are read-only and never reach the filter.
 - **Theme pattern clones.** Since 2.15.1, `PatternResolver::cloneToUser()` always runs the theme pattern's blocks through the filter, with the same blocks as `$storedBlocks` and `block-pattern` as `$context`. No request is involved, so a model-level guard such as visual-editor's doesn't strip the theme's Custom CSS from the clone.
 
+## Framework actions
+
+| Action | Arguments | Since | Purpose |
+|---|---|---|---|
+| `ap.cmsFramework.siteEditor.reverted` | `(string $type, ?string $slug, string $theme)` | 2.16.0 | Fires after a revert deletes a DB override for the active theme. `$type` is `template`, `template-part`, `global-styles` or `menu-location`. `$slug` is the template or part slug, or the menu location key; it is `null` for `global-styles`, which has one row per theme. `$theme` is the theme slug the row belonged to. |
+
+The action fires from `TemplateResolver::revert()`, `TemplatePartResolver::revert()`, `GlobalStylesResolver::revert()` and `Menus::unassign()` (which `MenuResolver::revert()` calls), so it covers the `DELETE` API endpoints as well as reverts from console commands, jobs and direct calls. It fires only when a row was actually deleted. Nothing fires when there was no override to revert, or when a `deleting` listener cancels the delete by returning `false`; in both cases the method returns `false`.
+
+Use it to invalidate caches the same way you do on save:
+
+```php
+addAction( 'ap.cmsFramework.siteEditor.reverted', function ( string $type, ?string $slug, string $theme ): void {
+    Cache::forget( "my-app.site-editor.{$theme}.{$type}." . ( $slug ?? 'global' ) );
+} );
+```
+
 ## Model events
+
+Since 2.16.0 ([#423](https://github.com/ArtisanPack-UI/cms-framework/issues/423)), reverts delete the `Template`, `TemplatePart`, `GlobalStyles` and `MenuLocationAssignment` row through the model, so `eloquent.deleting` and `eloquent.deleted` fire for reverts just as `eloquent.saved` does for saves. Before 2.16.0 they used a query-level delete and fired no model event.
 
 The `GlobalStyles` model has a registered observer (in `SiteEditorServiceProvider::boot()`) that:
 
 - On `saved` — invalidates the `GlobalStylesEmitter` cache so the next render re-emits CSS.
-- On `deleted` — same.
+- On `deleted` — same. Since 2.16.0 this includes `GlobalStylesResolver::revert()` and `DELETE /api/v1/global-styles`.
 
 This is the *only* event-driven cache invalidation in the module; the other entities resolve fresh on each request (and lean on per-request request-local caches where appropriate).

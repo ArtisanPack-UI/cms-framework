@@ -94,9 +94,14 @@ class Menus
 
     /**
      * Unassign a location for the active theme. Returns true when an
-     * assignment row was deleted, false when none existed.
+     * assignment row was deleted, false when none existed or a `deleting`
+     * listener cancelled the delete.
+     *
+     * Deletes through the model, so `deleting`/`deleted` fire, then fires
+     * the `ap.cmsFramework.siteEditor.reverted` action.
      *
      * @since 2.0.0
+     * @since 2.16.0 Deletes through the model and fires `ap.cmsFramework.siteEditor.reverted`.
      */
     public static function unassign( string $location ): bool
     {
@@ -106,12 +111,20 @@ class Menus
             return false;
         }
 
-        return MenuLocationAssignment::query()
+        $assignment = MenuLocationAssignment::query()
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config) and is bound as an Eloquent query parameter.
             ->where( 'theme', $theme )
             // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $location is a registered menu-location identifier and is bound as an Eloquent query parameter.
             ->where( 'location', $location )
-            ->delete() > 0;
+            ->first();
+
+        if ( null === $assignment || true !== $assignment->delete() ) {
+            return false;
+        }
+
+        doAction( 'ap.cmsFramework.siteEditor.reverted', 'menu-location', $location, $theme );
+
+        return true;
     }
 
     /**

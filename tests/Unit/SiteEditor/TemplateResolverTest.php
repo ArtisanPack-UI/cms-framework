@@ -314,6 +314,85 @@ describe( 'TemplateResolver::revert()', function (): void {
     it( 'returns false when no DB row exists for the slug', function (): void {
         expect( $this->resolver->revert( 'never-existed' ) )->toBeFalse();
     } );
+
+    it( 'deletes through the model so the deleted event fires', function (): void {
+        $row = Template::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'page',
+            'title' => 'Page',
+        ] );
+
+        $deletedIds = [];
+
+        Template::deleted( function ( Template $template ) use ( &$deletedIds ): void {
+            $deletedIds[] = $template->id;
+        } );
+
+        $this->resolver->revert( 'page' );
+
+        expect( $deletedIds )->toBe( [$row->id] );
+    } );
+
+    it( 'fires the siteEditor.reverted action with the type, slug and theme', function (): void {
+        Template::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'page',
+            'title' => 'Page',
+        ] );
+
+        $fired = [];
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function ( string $type, ?string $slug, string $theme ) use ( &$fired ): void {
+            $fired[] = [$type, $slug, $theme];
+        } );
+
+        $this->resolver->revert( 'page' );
+
+        expect( $fired )->toBe( [['template', 'page', $this->themeSlug]] );
+    } );
+
+    it( 'does not fire the action when there is nothing to revert', function (): void {
+        $fired = false;
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function () use ( &$fired ): void {
+            $fired = true;
+        } );
+
+        $this->resolver->revert( 'never-existed' );
+
+        expect( $fired )->toBeFalse();
+    } );
+
+    it( 'returns false and keeps the row when a deleting listener cancels the delete', function (): void {
+        Template::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'page',
+            'title' => 'Page',
+        ] );
+
+        Template::deleting( fn (): bool => false );
+
+        $fired = false;
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function () use ( &$fired ): void {
+            $fired = true;
+        } );
+
+        expect( $this->resolver->revert( 'page' ) )->toBeFalse()
+            ->and( Template::where( 'slug', 'page' )->exists() )->toBeTrue()
+            ->and( $fired )->toBeFalse();
+    } );
+
+    it( 'leaves the same slug in another theme untouched', function (): void {
+        Template::create( [
+            'theme' => 'other-theme',
+            'slug'  => 'page',
+            'title' => 'Other Theme Page',
+        ] );
+
+        expect( $this->resolver->revert( 'page' ) )->toBeFalse()
+            ->and( Template::where( 'theme', 'other-theme' )->where( 'slug', 'page' )->exists() )->toBeTrue();
+    } );
 } );
 
 describe( 'theme isolation', function (): void {

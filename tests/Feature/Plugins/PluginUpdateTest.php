@@ -8,9 +8,12 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
+use ArtisanPackUI\CMSFramework\Tests\Support\Plugins\PluginTestHelper;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 
 beforeEach( function (): void {
     $this->pluginManager   = app( PluginManager::class );
@@ -24,13 +27,17 @@ beforeEach( function (): void {
 
 afterEach( function (): void {
     // Cleanup test plugins
-    if ( File::exists( $this->pluginsPath . '/valid-plugin' ) ) {
-        File::deleteDirectory( $this->pluginsPath . '/valid-plugin' );
+    foreach ( ['valid-plugin', 'test-plugin'] as $slug ) {
+        if ( File::exists( $this->pluginsPath . '/' . $slug ) ) {
+            File::deleteDirectory( $this->pluginsPath . '/' . $slug );
+        }
     }
 
-    // Cleanup backups
-    $backupPath = storage_path( 'app/plugin-backups' );
-    if ( File::exists( $backupPath ) ) {
+    // Cleanup backups. Guard the config value: an empty one would resolve to
+    // the storage root and delete all of it.
+    $backupDir  = (string) config( 'cms.plugins.backupPath' );
+    $backupPath = storage_path( $backupDir );
+    if ( '' !== trim( $backupDir, '/' ) && File::exists( $backupPath ) ) {
         File::deleteDirectory( $backupPath );
     }
 
@@ -45,46 +52,71 @@ afterEach( function (): void {
 } );
 
 describe( 'Plugin Update Flow', function (): void {
-    it( 'successfully updates a plugin', function (): void {
-        // Setup: Install plugin
-        File::copyDirectory(
-            $this->testPluginsPath . '/valid-plugin',
-            $this->pluginsPath . '/valid-plugin',
-        );
+    // Install `test-plugin` 1.0.0 from its fixture archive, wired to a legacy
+    // update feed that offers the 2.0.0 fixture. $sha256 overrides the digest
+    // the feed advertises.
+    $installTestPlugin = function ( bool $isActive, ?string $sha256 = null ): void {
+        PluginTestHelper::extractPluginZip( PluginTestHelper::fixturePath( 'test-plugin-1.0.0' ), $this->pluginsPath );
+
+        $manifest = json_decode( File::get( $this->pluginsPath . '/test-plugin/plugin.json' ), true );
 
         Plugin::create( [
-            'slug'      => 'valid-plugin',
-            'name'      => 'Valid Test Plugin',
+            'slug'      => 'test-plugin',
+            'name'      => 'Test Plugin',
             'version'   => '1.0.0',
-            'is_active' => false,
-            'meta'      => [
-                'update_url' => 'https://example.com/updates/valid-plugin',
-            ],
-        ] );
-
-        // Mock update check
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+            'is_active' => $isActive,
+            'meta'      => array_merge( $manifest, [
+                'update_url' => PluginTestHelper::updateFeedUrl( 'test-plugin' ),
             ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response(
-                File::get( $this->testPluginsPath . '/valid-plugin.zip' ),
-            ),
         ] );
 
-        // Create mock ZIP for testing
-        $this->createMockUpdateZip();
+        PluginTestHelper::fakeUpdateFeed( 'test-plugin', '2.0.0', PluginTestHelper::fixturePath( 'test-plugin-2.0.0' ), $sha256 );
+    };
 
-        // Update plugin
-        $result = $this->updateManager->updatePlugin( 'valid-plugin' );
+    it( 'successfully updates a plugin', function () use ( $installTestPlugin ): void {
+        $installTestPlugin->call( $this, false );
+
+        $result = $this->updateManager->updatePlugin( 'test-plugin' );
 
         expect( $result )->toBeTrue();
 
-        // Verify version updated in database
-        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
-        expect( $plugin->version )->toBe( '2.0.0' );
-    } )->skip( 'Requires mock ZIP creation' );
+        // Version and manifest seated in the database.
+        $plugin = Plugin::where( 'slug', 'test-plugin' )->first();
+        expect( $plugin->version )->toBe( '2.0.0' )
+            ->and( $plugin->meta['version'] )->toBe( '2.0.0' )
+            ->and( $plugin->is_active )->toBeFalse();
+
+        // The 2.0.0 files replaced the 1.0.0 ones on disk.
+        $pluginPath = $this->pluginsPath . '/test-plugin';
+        $onDisk     = json_decode( File::get( $pluginPath . '/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '2.0.0' )
+            ->and( File::exists( $pluginPath . '/src/Feature.php' ) )->toBeTrue()
+            ->and( File::exists( $pluginPath . '/src/Legacy.php' ) )->toBeFalse();
+
+        // A 1.0.0 backup was taken before the files were replaced.
+        expect( File::glob( storage_path( config( 'cms.plugins.backupPath' ) . '/test-plugin-1.0.0-*.zip' ) ) )->not->toBeEmpty();
+    } );
+
+    it( 'does not re-run an update once the plugin is on the advertised version', function () use ( $installTestPlugin ): void {
+        $installTestPlugin->call( $this, false );
+
+        expect( $this->updateManager->updatePlugin( 'test-plugin' ) )->toBeTrue()
+            ->and( $this->updateManager->updatePlugin( 'test-plugin' ) )->toBeFalse();
+    } );
+
+    it( 'rolls back when the downloaded archive does not match the advertised sha256', function () use ( $installTestPlugin ): void {
+        $installTestPlugin->call( $this, false, hash( 'sha256', 'not-the-archive' ) );
+
+        expect( fn () => $this->updateManager->updatePlugin( 'test-plugin' ) )
+            ->toThrow( PluginUpdateException::class );
+
+        $plugin = Plugin::where( 'slug', 'test-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' );
+
+        $pluginPath = $this->pluginsPath . '/test-plugin';
+        expect( File::exists( $pluginPath . '/src/Legacy.php' ) )->toBeTrue()
+            ->and( File::exists( $pluginPath . '/src/Feature.php' ) )->toBeFalse();
+    } );
 
     it( 'creates backup before updating', function (): void {
         // Setup: Install plugin
@@ -113,36 +145,45 @@ describe( 'Plugin Update Flow', function (): void {
         expect( $backupPath )->toContain( 'valid-plugin-1.0.0' );
     } );
 
-    it( 'deactivates plugin before updating if active', function (): void {
-        // Setup: Install and activate plugin
-        File::copyDirectory(
-            $this->testPluginsPath . '/valid-plugin',
-            $this->pluginsPath . '/valid-plugin',
-        );
+    it( 'deactivates plugin before updating if active', function () use ( $installTestPlugin ): void {
+        $installTestPlugin->call( $this, true );
 
-        $manifest = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        // Record the lifecycle hooks in the order they fire, along with whether
+        // the row was active at the time, to prove the update ran while the
+        // plugin was deactivated and reactivated it afterwards.
+        $events    = [];
+        $listeners = [];
+        foreach ( ['updating', 'deactivated', 'activated', 'updated'] as $hook ) {
+            $listeners[ $hook ] = function () use ( $hook, &$events ): void {
+                $events[] = [
+                    $hook,
+                    (bool) Plugin::where( 'slug', 'test-plugin' )->value( 'is_active' ),
+                ];
+            };
+            addAction( 'ap.cmsFramework.plugin.' . $hook, $listeners[ $hook ] );
+        }
 
-        Plugin::create( [
-            'slug'      => 'valid-plugin',
-            'name'      => 'Valid Test Plugin',
-            'version'   => '1.0.0',
-            'is_active' => true,
-            'meta'      => array_merge( $manifest, [
-                'update_url' => 'https://example.com/updates/valid-plugin',
-            ] ),
-        ] );
+        try {
+            expect( Plugin::where( 'slug', 'test-plugin' )->first()->is_active )->toBeTrue();
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-            ] ),
-        ] );
+            expect( $this->updateManager->updatePlugin( 'test-plugin' ) )->toBeTrue();
 
-        // Verify plugin is active before update
-        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
-        expect( $plugin->is_active )->toBeTrue();
-    } )->skip( 'Requires complete update flow mock' );
+            expect( $events )->toBe( [
+                ['updating', true],
+                ['deactivated', false],
+                ['activated', true],
+                ['updated', true],
+            ] );
+
+            $plugin = Plugin::where( 'slug', 'test-plugin' )->first();
+            expect( $plugin->version )->toBe( '2.0.0' )
+                ->and( $plugin->is_active )->toBeTrue();
+        } finally {
+            foreach ( $listeners as $hook => $listener ) {
+                removeAction( 'ap.cmsFramework.plugin.' . $hook, $listener );
+            }
+        }
+    } );
 
     it( 'throws exception when plugin not found', function (): void {
         expect( fn () => $this->updateManager->updatePlugin( 'non-existent' ) )
@@ -309,30 +350,6 @@ describe( 'Update Hooks', function (): void {
 } );
 
 describe( 'Manifest re-validation on update (#283)', function (): void {
-    // Build an update ZIP whose top-level directory is the plugin slug and
-    // whose plugin.json carries $manifestOverrides merged over a clean base.
-    // Returns [zipPath, sha256] so the caller can advertise the digest the
-    // download is verified against.
-    $buildUpdateZip = function ( array $manifestOverrides ): array {
-        $manifest = array_merge( [
-            'slug'        => 'valid-plugin',
-            'name'        => 'Valid Test Plugin',
-            'version'     => '2.0.0',
-            'description' => 'Updated plugin',
-            'author'      => 'Test Author',
-        ], $manifestOverrides );
-
-        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
-
-        $zip = new ZipArchive;
-        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
-        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
-        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
-        $zip->close();
-
-        return [$zipPath, hash( 'sha256', File::get( $zipPath ) )];
-    };
-
     // Install a clean valid-plugin at 1.0.0 wired to a legacy update feed.
     $installPlugin = function (): void {
         File::copyDirectory(
@@ -354,20 +371,13 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
         ] );
     };
 
-    it( 'rejects an update whose manifest declares a migrations_path traversal', function () use ( $buildUpdateZip, $installPlugin ): void {
+    it( 'rejects an update whose manifest declares a migrations_path traversal', function () use ( $installPlugin ): void {
         $installPlugin->call( $this );
-        [$zipPath, $sha256] = $buildUpdateZip( [
+        $zipPath = PluginTestHelper::buildUpdateZip( [
             'migrations_path' => '../../database/migrations',
         ] );
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => $sha256,
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
             ->toThrow( PluginUpdateException::class );
@@ -385,20 +395,13 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
         File::delete( $zipPath );
     } );
 
-    it( 'rejects an update whose manifest declares an unprefixed permission', function () use ( $buildUpdateZip, $installPlugin ): void {
+    it( 'rejects an update whose manifest declares an unprefixed permission', function () use ( $installPlugin ): void {
         $installPlugin->call( $this );
-        [$zipPath, $sha256] = $buildUpdateZip( [
+        $zipPath = PluginTestHelper::buildUpdateZip( [
             'permissions' => ['manage_users'],
         ] );
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => $sha256,
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
             ->toThrow( PluginUpdateException::class );
@@ -410,21 +413,14 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
         File::delete( $zipPath );
     } );
 
-    it( 'applies an update whose manifest passes validation', function () use ( $buildUpdateZip, $installPlugin ): void {
+    it( 'applies an update whose manifest passes validation', function () use ( $installPlugin ): void {
         $installPlugin->call( $this );
-        [$zipPath, $sha256] = $buildUpdateZip( [
+        $zipPath = PluginTestHelper::buildUpdateZip( [
             'migrations_path' => 'database/migrations',
             'permissions'     => ['valid-plugin.manage'],
         ] );
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => $sha256,
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         $result = $this->updateManager->updatePlugin( 'valid-plugin' );
 
@@ -437,24 +433,17 @@ describe( 'Manifest re-validation on update (#283)', function (): void {
         File::delete( $zipPath );
     } );
 
-    it( 'rejects an update whose manifest slug differs from the plugin being updated (#315)', function () use ( $buildUpdateZip, $installPlugin ): void {
+    it( 'rejects an update whose manifest slug differs from the plugin being updated (#315)', function () use ( $installPlugin ): void {
         $installPlugin->call( $this );
         // The archive's directory is still `valid-plugin` (so extraction lines
         // up), but its manifest declares a different `slug` — with a permission
         // namespace to match — the divergence this fix rejects.
-        [$zipPath, $sha256] = $buildUpdateZip( [
+        $zipPath = PluginTestHelper::buildUpdateZip( [
             'slug'        => 'other-plugin',
             'permissions' => ['other-plugin.manage'],
         ] );
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => $sha256,
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
             ->toThrow( PluginUpdateException::class );
@@ -496,28 +485,8 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
             ],
         ] );
 
-        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
-
-        $zip = new ZipArchive;
-        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
-        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( array_merge( [
-            'slug'        => 'valid-plugin',
-            'name'        => 'Valid Test Plugin',
-            'version'     => '2.0.0',
-            'description' => 'Updated plugin',
-            'author'      => 'Test Author',
-        ], $manifestOverrides ) ) );
-        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
-        $zip->close();
-
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => hash( 'sha256', File::get( $zipPath ) ),
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        $zipPath = PluginTestHelper::buildUpdateZip( $manifestOverrides );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         return $zipPath;
     };
@@ -661,31 +630,13 @@ describe( 'Reactivation failure after update (#45)', function (): void {
 
         // The new manifest requires a plugin that is not installed, so the
         // reactivation at step 7 throws DependencyNotSatisfiedException.
-        $manifest = [
-            'slug'        => 'valid-plugin',
-            'name'        => 'Valid Test Plugin',
-            'version'     => '2.0.0',
-            'description' => 'Updated plugin',
-            'author'      => 'Test Author',
-            'requires'    => [ 'plugins' => [ 'ghost-plugin' => '^1.0' ] ],
+        $manifestOverrides = [
+            'requires' => [ 'plugins' => [ 'ghost-plugin' => '^1.0' ] ],
         ];
 
-        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
-        $zip     = new ZipArchive;
-        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
-        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
-        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
-        $zip->close();
-        $sha256 = hash( 'sha256', File::get( $zipPath ) );
+        $zipPath = PluginTestHelper::buildUpdateZip( $manifestOverrides );
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => $sha256,
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
             ->toThrow( PluginUpdateException::class, 'dependencies are not satisfied' );
@@ -705,12 +656,12 @@ describe( 'Reactivation failure after update (#45)', function (): void {
     } );
 
     it( 'rolls back and reports the composer reason when the new manifest adds an unsatisfiable composer package (#323)', function (): void {
-        // Auto-install is opt-in (off by default); this test exercises the
-        // installer-failure rollback path, so it turns auto-install on.
+        // This test exercises the installer-failure rollback path, so it pins
+        // auto-install on rather than relying on the default.
         config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
 
         // A fake installer that reports nothing installed and fails any install,
-        // so the reactivation at step 7 cannot satisfy the new composer block.
+        // so the update cannot satisfy the new composer block (#430).
         $installer              = new FakeComposerPackageInstaller;
         $installer->failInstall = true;
         $installer->failReason  = 'Could not reach Packagist.';
@@ -734,31 +685,13 @@ describe( 'Reactivation failure after update (#45)', function (): void {
             ],
         ] );
 
-        $manifest = [
-            'slug'        => 'valid-plugin',
-            'name'        => 'Valid Test Plugin',
-            'version'     => '2.0.0',
-            'description' => 'Updated plugin',
-            'author'      => 'Test Author',
-            'composer'    => [ 'acme/engine' => '^1.0' ],
+        $manifestOverrides = [
+            'composer' => [ 'acme/engine' => '^1.0' ],
         ];
 
-        $zipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
-        $zip     = new ZipArchive;
-        $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
-        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( $manifest ) );
-        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
-        $zip->close();
-        $sha256 = hash( 'sha256', File::get( $zipPath ) );
+        $zipPath = PluginTestHelper::buildUpdateZip( $manifestOverrides );
 
-        Http::fake( [
-            'https://example.com/updates/valid-plugin' => Http::response( [
-                'version'      => '2.0.0',
-                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
-                'sha256'       => $sha256,
-            ] ),
-            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $zipPath ) ),
-        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
 
         expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
             ->toThrow( PluginUpdateException::class, 'Could not reach Packagist.' );
@@ -777,9 +710,97 @@ describe( 'Reactivation failure after update (#45)', function (): void {
     } );
 } );
 
-// Helper function
-function createMockUpdateZip(): void
-{
-    // This would create a mock ZIP file for testing
-    // Implementation depends on test requirements
-}
+describe( 'Composer packages on update (#430)', function (): void {
+    beforeEach( function (): void {
+        $this->installer = new FakeComposerPackageInstaller;
+        app()->instance( ComposerPackageInstallerInterface::class, $this->installer );
+
+        // An inactive valid-plugin at 1.0.0 with no composer block, wired to a
+        // legacy feed that offers 2.0.0 declaring `acme/engine`.
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        $this->updateZipPath = PluginTestHelper::buildUpdateZip( [
+            'composer' => [ 'acme/engine' => '^1.0' ],
+        ] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $this->updateZipPath );
+    } );
+
+    afterEach( function (): void {
+        File::delete( $this->updateZipPath );
+    } );
+
+    it( 'installs the new version\'s packages when updating an inactive plugin', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'acme/engine' => '1.3.0' ];
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->installer->installCalls )->toBe( [
+                [ 'slug' => 'valid-plugin', 'constraints' => [ 'acme/engine' => '^1.0' ] ],
+            ] );
+
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '2.0.0' )
+            ->and( $plugin->is_active )->toBeFalse()
+            ->and( $plugin->meta['composer'] )->toBe( [ 'acme/engine' => '^1.0' ] );
+    } );
+
+    it( 'migrates the new packages in a fresh process when updating an active plugin (#431)', function (): void {
+        // The update installs the packages, then reactivates in this same
+        // process, where their providers never booted. Activation finds them
+        // satisfied, but must still migrate them in a fresh process.
+        Process::fake();
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'acme/engine' => '1.3.0' ];
+        Plugin::where( 'slug', 'valid-plugin' )->update( [ 'is_active' => true ] );
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+            ->and( Plugin::where( 'slug', 'valid-plugin' )->first()->is_active )->toBeTrue();
+
+        Process::assertRanTimes(
+            fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && [ 'artisan', 'migrate', '--force', '--no-interaction', '--no-ansi' ] === array_slice( $process->command, 1 ),
+            1,
+        );
+    } );
+
+    it( 'rolls an inactive plugin\'s update back when its packages cannot be installed', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->failInstall = true;
+        $this->installer->failReason  = 'Could not reach Packagist.';
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class, 'Could not reach Packagist.' );
+
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' )
+            ->and( $plugin->is_active )->toBeFalse()
+            ->and( $plugin->meta )->not->toHaveKey( 'composer' );
+
+        $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '1.0.0' );
+    } );
+
+    it( 'leaves the composer block alone when updating an inactive plugin with auto-install off', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', false );
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->installer->installCalls )->toBe( [] )
+            ->and( Plugin::where( 'slug', 'valid-plugin' )->first()->version )->toBe( '2.0.0' );
+    } );
+} );

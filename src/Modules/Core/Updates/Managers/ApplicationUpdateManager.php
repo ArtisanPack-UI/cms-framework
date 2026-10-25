@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
@@ -11,6 +12,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ArchiveChecksum;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\UpdateStateStore;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
@@ -36,6 +38,8 @@ use ZipArchive;
  */
 class ApplicationUpdateManager
 {
+    use ResolvesCliPhpBinary;
+
     /**
      * Default composer install command shipped with the framework. Used as the
      * "unchanged" sentinel when deciding whether the operator has explicitly
@@ -136,6 +140,24 @@ class ApplicationUpdateManager
      * @since 2.15.6
      */
     protected bool $phpReloadRequired = false;
+
+    /**
+     * How the last update or rollback this instance ran reset the web
+     * server's OPcache, or null when it could not (#429).
+     *
+     * @since 2.16.0
+     */
+    protected ?string $opcacheResetMethod = null;
+
+    /**
+     * Why each web OPcache reset mechanism failed on the last attempt, keyed
+     * by mechanism, for the warning logged when none worked.
+     *
+     * @since 2.16.0
+     *
+     * @var array<string, string>
+     */
+    protected array $webOpcacheResetFailures = [];
 
     /**
      * Whether the shutdown guard has already been registered, so repeated
@@ -479,6 +501,25 @@ class ApplicationUpdateManager
     }
 
     /**
+     * How the last update or rollback this instance ran reset the web
+     * server's OPcache (#429).
+     *
+     * `web-request` when the run itself was a web server request; `fastcgi`,
+     * `loopback` or `command` when a CLI or queued run reached the web server
+     * through {@see WebOpcacheResetter}; null when no reset reached it, which
+     * is when {@see phpReloadRequired()} is true. Callers in another process
+     * read the `opcache_reset_method` field of `updateState()` instead.
+     *
+     * @since 2.16.0
+     *
+     * @return string|null The mechanism, or null.
+     */
+    public function opcacheResetMethod(): ?string
+    {
+        return $this->opcacheResetMethod;
+    }
+
+    /**
      * Discard the persisted update state record.
      *
      * Also releases the dispatch lock. The record and the lock live in
@@ -663,6 +704,14 @@ class ApplicationUpdateManager
         // that would let `update:status` report "the snapshot was restored
         // successfully" over a half-restored tree — the exact false reassurance
         // the `rolled_back` field exists to prevent.
+        // The restore is about to rewrite PHP files, so a reset recorded by an
+        // earlier run no longer holds. Clear it first, so a restore that fails
+        // before `resetOpcache()` below leaves `update:status` saying PHP-FPM
+        // needs a reload rather than showing that earlier run's reset (#429).
+        $this->opcacheResetMethod = null;
+        $this->phpReloadRequired  = true;
+        $this->state()->recordOpcacheReset( null );
+
         if ( true !== $zip->extractTo( base_path(), $restore ) ) {
             $zip->close();
 
@@ -815,6 +864,7 @@ class ApplicationUpdateManager
         // empty ledger and removes nothing.
         $this->extractionAdditions = [];
         $this->phpReloadRequired   = false;
+        $this->opcacheResetMethod  = null;
 
         $this->state()->begin( $targetVersion, $updateInfo->resolveCurrentVersion() );
 
@@ -2588,32 +2638,6 @@ class ApplicationUpdateManager
     }
 
     /**
-     * Absolute path to Laravel Herd's macOS `bin/` directory, or `null` when
-     * `HOME` is unset or empty.
-     *
-     * Herd keeps both its `php` symlink and its bundled `composer` script in
-     * this one directory, and both `phpCandidatePaths()` and
-     * `composerCandidatePaths()` need it. Deriving it in one place keeps the
-     * two lists from drifting apart — the drift that produced #254, where the
-     * PHP list learned about Herd in #225 and the composer list never did.
-     *
-     * The directory is not checked for existence: callers append a filename
-     * and stat that, and a non-Herd host simply misses on every candidate.
-     *
-     * @since 2.7.1
-     */
-    protected function herdBinPath(): ?string
-    {
-        $home = getenv( 'HOME' );
-
-        if ( ! is_string( $home ) || '' === $home ) {
-            return null;
-        }
-
-        return $home . '/Library/Application Support/Herd/bin';
-    }
-
-    /**
      * Build the composer command line from a binary path. Invokes composer via
      * a resolved CLI PHP interpreter so PHP-FPM's `PATH` never needs to
      * resolve `php` for composer's shebang, and so we never hand the PHAR to
@@ -2631,96 +2655,6 @@ class ApplicationUpdateManager
         $args ??= self::DEFAULT_COMPOSER_INSTALL_ARGS;
 
         return escapeshellarg( $this->resolvePhpBinary() ) . ' ' . escapeshellarg( $binary ) . ' ' . $args;
-    }
-
-    /**
-     * Resolve a CLI PHP binary suitable for executing composer's PHAR.
-     *
-     * `PHP_BINARY` is only trustworthy when the current SAPI is `cli` — under
-     * PHP-FPM (which is where the self-updater actually runs from the admin
-     * UI) it resolves to the FPM daemon binary, which cannot execute scripts.
-     * Handing composer to it produces the classic "prints usage, exits 64,
-     * empty stderr" failure that led to #225 and reappeared under Herd.
-     *
-     * Resolution order:
-     * 1. `CMS_PHP_BINARY` environment variable — absolute path, wins.
-     * 2. `PHP_BINARY` when `PHP_SAPI === 'cli'` — the CLI-invoked update
-     *    command path (artisan, workers) hits this and gets the same
-     *    interpreter as the parent process.
-     * 3. A curated candidate list of CLI installs, filtering out anything
-     *    whose basename smells like an FPM/CGI SAPI binary.
-     * 4. `PHP_BINARY` as a last-resort fallback so callers still get *a*
-     *    command to execute; the surrounding diagnostic will surface the
-     *    real failure.
-     *
-     * @since 2.5.4
-     */
-    protected function resolvePhpBinary(): string
-    {
-        $override = getenv( 'CMS_PHP_BINARY' );
-        if ( is_string( $override ) && '' !== $override ) {
-            return $override;
-        }
-
-        if ( 'cli' === PHP_SAPI ) {
-            return PHP_BINARY;
-        }
-
-        foreach ( $this->phpCandidatePaths() as $candidate ) {
-            if ( $this->isCliPhpBinary( $candidate ) ) {
-                return $candidate;
-            }
-        }
-
-        return PHP_BINARY;
-    }
-
-    /**
-     * Common CLI PHP install paths, in preference order. Extracted so tests
-     * and the `composerVerificationFailed` diagnostic can share the same list.
-     *
-     * @since 2.5.4
-     *
-     * @return array<int, string>
-     */
-    protected function phpCandidatePaths(): array
-    {
-        $herdBin = $this->herdBinPath();
-
-        $candidates = [];
-
-        if ( null !== $herdBin ) {
-            // Laravel Herd on macOS ships a `php` symlink pointing at the
-            // currently-active CLI binary (e.g. `php84`). Prefer it so hosts
-            // that use Herd for both FPM and CLI stay on a single toolchain.
-            $candidates[] = $herdBin . '/php';
-        }
-
-        $candidates[] = '/opt/homebrew/bin/php';
-        $candidates[] = '/usr/local/bin/php';
-        $candidates[] = '/usr/bin/php';
-
-        return $candidates;
-    }
-
-    /**
-     * Return true when the path points at what looks like a CLI PHP binary —
-     * executable, and whose basename does not smell like an FPM or CGI SAPI
-     * binary (`php-fpm`, `php84-fpm`, `php-cgi`, …). Cheap heuristic; the
-     * only real cost of a false-positive is the caller falling through to
-     * `PHP_BINARY` and surfacing the resulting diagnostic.
-     *
-     * @since 2.5.4
-     */
-    protected function isCliPhpBinary( string $path ): bool
-    {
-        if ( ! is_file( $path ) || ! is_executable( $path ) ) {
-            return false;
-        }
-
-        $basename = strtolower( basename( $path ) );
-
-        return ! str_contains( $basename, 'fpm' ) && ! str_contains( $basename, 'cgi' );
     }
 
     /**
@@ -2832,7 +2766,7 @@ class ApplicationUpdateManager
 
     /**
      * Reset OPcache so the web server stops running bytecode compiled from the
-     * pre-update tree (#425).
+     * pre-update tree (#425, #429).
      *
      * With `opcache.validate_timestamps=0` (Laravel Forge's OPcache
      * optimisation, and common in production) PHP-FPM never re-reads a file
@@ -2840,9 +2774,11 @@ class ApplicationUpdateManager
      * code until it is reloaded. Called from inside a PHP-FPM request,
      * `opcache_reset()` clears the pool's shared cache. From the CLI (the
      * `update:perform` command, or the queue worker behind `dispatchUpdate()`)
-     * it only clears this process's own cache, so the operator is told to
-     * reload PHP-FPM instead, through the log and the `php_reload_required`
-     * state field that `update:status` reads.
+     * it only clears this process's own cache, so {@see resetWebOpcache()}
+     * reaches the web server another way. Only when that fails too is the
+     * operator told to reload PHP-FPM, through the log and the
+     * `php_reload_required` state field that `update:status` reads. The
+     * mechanism that worked is recorded as `opcache_reset_method`.
      *
      * @since 2.15.6
      */
@@ -2850,26 +2786,40 @@ class ApplicationUpdateManager
     {
         $reset = $this->attemptOpcacheReset();
 
-        $this->phpReloadRequired = $this->runningUnderCli() || false === $reset;
+        if ( $this->runningUnderCli() ) {
+            $method = $this->resetWebOpcache();
+        } else {
+            $method = false === $reset ? null : 'web-request';
+        }
 
-        $this->state()->recordPhpReloadRequired( $this->phpReloadRequired );
+        $this->opcacheResetMethod = $method;
+        $this->phpReloadRequired  = null === $method;
+
+        $this->state()->recordOpcacheReset( $method );
+
+        if ( null !== $method ) {
+            if ( $this->runningUnderCli() ) {
+                Log::info( "cms-framework: reset PHP-FPM's OPcache after the update ({$method}).", ['php_sapi' => $this->phpSapi()] );
+            }
+
+            return;
+        }
 
         if ( $this->runningUnderCli() ) {
             Log::warning(
-                'cms-framework: the update ran outside the web server, so it could not reset PHP-FPM\'s OPcache. If OPcache runs with `opcache.validate_timestamps=0`, reload PHP-FPM so it serves the updated code.',
-                ['php_sapi' => $this->phpSapi()],
+                'cms-framework: the update ran outside the web server and could not reset PHP-FPM\'s OPcache. If OPcache runs with `opcache.validate_timestamps=0`, reload PHP-FPM so it serves the updated code, or set `cms.updates.opcache.fpm_socket` or `cms.updates.php_reload_command`.',
+                [
+                    'php_sapi' => $this->phpSapi(),
+                    'attempts' => $this->webOpcacheResetFailures,
+                ],
             );
-        } elseif ( false === $reset ) {
+        } else {
             Log::warning( 'cms-framework: OPcache could not be reset after the update (check `opcache.restrict_api`). Reload PHP-FPM so it serves the updated code.' );
         }
     }
 
     /**
      * Reset this process's OPcache.
-     *
-     * `opcache_reset()` raises a warning, which Laravel turns into an
-     * exception, when `opcache.restrict_api` excludes this script. That case
-     * is reported as a failed reset rather than allowed to throw.
      *
      * @since 2.15.6
      *
@@ -2878,21 +2828,31 @@ class ApplicationUpdateManager
      */
     protected function attemptOpcacheReset(): ?bool
     {
-        if ( ! function_exists( 'opcache_reset' ) ) {
-            return null;
-        }
+        return WebOpcacheResetter::resetThisProcess( $this->runningUnderCli() );
+    }
 
-        $directive = $this->runningUnderCli() ? 'opcache.enable_cli' : 'opcache.enable';
+    /**
+     * Reset the web server's OPcache from a CLI or queued run (#429).
+     *
+     * Tries FastCGI to the FPM socket, then the signed loopback route, then
+     * the operator's `cms.updates.php_reload_command`. Why each one failed is
+     * kept in {@see $webOpcacheResetFailures} for the warning.
+     *
+     * @since 2.16.0
+     *
+     * @return string|null The mechanism that worked, or null when none did.
+     */
+    protected function resetWebOpcache(): ?string
+    {
+        $resetter = app( WebOpcacheResetter::class );
+        $method   = $resetter->reset();
 
-        if ( ! in_array( strtolower( trim( (string) ini_get( $directive ) ) ), ['1', 'on', 'true', 'yes'], true ) ) {
-            return null;
-        }
+        $this->webOpcacheResetFailures = array_map(
+            fn ( string $reason ): string => $this->sanitizeForLog( $reason ),
+            $resetter->failures(),
+        );
 
-        try {
-            return opcache_reset();
-        } catch ( Throwable $e ) {
-            return false;
-        }
+        return $method;
     }
 
     /**
