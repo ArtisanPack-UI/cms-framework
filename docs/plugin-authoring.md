@@ -837,16 +837,25 @@ running class loader, so its classes are autoloadable if the plugin is activated
 in that same request. Composer itself arbitrates any conflict with the host's
 existing lock, and every install is logged. This is controlled by
 `cms.plugins.autoInstallComposerDependencies`, which is **on by default** since
-2.16.0 (it was off before). Installing a plugin is already agreeing to run its
-code, and the packages it declares are part of that code.
+2.16.0 (it was off before).
+
+> **Security note.** Packages are installed when a plugin is *installed*, not
+> when it is activated. Laravel's package discovery registers their service
+> providers, so they boot on every request even while the plugin is inactive,
+> and anyone who can install or update plugins can bring new third-party code
+> into the host. Set `PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES=false` where
+> plugin installers aren't fully trusted.
 
 **Package migrations (2.11.0).** A package that registers its own migrations
 (`loadMigrationsFrom()` in its service provider) can only have them run once its
 service provider boots, which is when the plugin is activated. So with
 auto-install on, activating a plugin that declares a `composer` block runs
 `migrate --force` after the plugin's service provider registers, so the
-package's tables exist before first use. The command is idempotent; migrations
-already applied are skipped. A migration failure fails the activation and rolls
+package's tables exist before first use. When the packages were installed in
+the same process (by that activation, or by an update of an active plugin that
+reactivates it straight away), the migrate runs in a fresh `php artisan migrate`
+process, because this one booted before their providers existed *(2.16.0)*.
+The command is idempotent; migrations already applied are skipped. A migration failure fails the activation and rolls
 it back.
 
 **Failing closed.** A plugin never installs or activates with its packages

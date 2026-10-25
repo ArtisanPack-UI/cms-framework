@@ -173,9 +173,11 @@ return [
     |   back. Activation resolves again as a backstop, putting back a package
     |   lost since install.
     |
-    |   Installing a plugin is already agreeing to run its code: it is arbitrary
-    |   PHP the host will boot. The packages the plugin declares are part of
-    |   that code, so installing them is part of installing the plugin.
+    |   Security: this happens at install, not activation. The installed
+    |   packages' auto-discovered service providers boot on every request, even
+    |   while the plugin is inactive, so anyone who can install or update
+    |   plugins can bring third-party code into the host. Turn this off where
+    |   plugin installers aren't fully trusted.
     |
     |   When false, install and update never touch the `composer` block, and
     |   activation fails closed on an unmet requirement, expecting the operator
