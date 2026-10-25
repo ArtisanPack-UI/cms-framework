@@ -15,7 +15,6 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
-use RuntimeException;
 
 beforeEach( function (): void {
     // A fresh install migrates in a subprocess (#431); never spawn a real one.
@@ -39,6 +38,39 @@ function makeComposerPlugin( string $slug, array $composer ): Plugin
         'is_active' => false,
         'meta'      => [ 'slug' => $slug, 'composer' => $composer ],
     ] );
+}
+
+/**
+ * A PluginManager wired to the fake installer that counts which package
+ * migrate ran instead of running it: in-process or fresh-process (#431).
+ */
+function composerMigrateProbeManager( FakeComposerPackageInstaller $installer ): PluginManager
+{
+    return new class ( $installer ) extends PluginManager {
+        public int $packageMigrateCalls = 0;
+
+        public int $freshProcessMigrateCalls = 0;
+
+        public function __construct( private FakeComposerPackageInstaller $bound )
+        {
+            parent::__construct();
+        }
+
+        protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+        {
+            return $this->bound;
+        }
+
+        protected function runComposerPackageMigrations( Plugin $plugin ): void
+        {
+            $this->packageMigrateCalls++;
+        }
+
+        protected function runComposerPackageMigrationsInFreshProcess( Plugin $plugin ): void
+        {
+            $this->freshProcessMigrateCalls++;
+        }
+    };
 }
 
 /**
@@ -690,32 +722,42 @@ describe( 'Install-time Composer packages (#430)', function (): void {
         $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
 
         $installer = $this->installer;
-        $manager   = new class ( $installer ) extends PluginManager {
-            public int $packageMigrateCalls = 0;
-
-            public function __construct( private FakeComposerPackageInstaller $bound )
-            {
-                parent::__construct();
-            }
-
-            protected function composerPackageInstaller(): ComposerPackageInstallerInterface
-            {
-                return $this->bound;
-            }
-
-            protected function runComposerPackageMigrations( Plugin $plugin ): void
-            {
-                $this->packageMigrateCalls++;
-            }
-        };
+        $manager   = composerMigrateProbeManager( $installer );
 
         $manager->installFromZip( ( $this->buildZip )() );
 
-        expect( $manager->packageMigrateCalls )->toBe( 0 );
+        expect( $manager->packageMigrateCalls )->toBe( 0 )
+            ->and( $manager->freshProcessMigrateCalls )->toBe( 0 );
 
-        // A later request: the packages are already satisfied, but their
+        // A later request, so a new manager: the packages are already
+        // satisfied and their providers booted with this process, but their
         // migrations still have to run once the plugin's provider boots.
+        $later = composerMigrateProbeManager( $installer );
+
+        expect( $later->activate( 'ck-install' ) )->toBeTrue()
+            ->and( $later->packageMigrateCalls )->toBe( 1 )
+            ->and( $later->freshProcessMigrateCalls )->toBe( 0 );
+    } );
+
+    it( 'migrates in a fresh process when activating in the same process that installed the packages (#431)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+
+        $manager = composerMigrateProbeManager( $this->installer );
+
+        $manager->installFromZip( ( $this->buildZip )() );
+
+        // Satisfied now, but this process booted before the packages existed,
+        // so their providers and migrations are not registered here.
         expect( $manager->activate( 'ck-install' ) )->toBeTrue()
+            ->and( $manager->freshProcessMigrateCalls )->toBe( 1 )
+            ->and( $manager->packageMigrateCalls )->toBe( 0 );
+
+        // Only the first activation after the install needs the fresh process.
+        $manager->deactivate( 'ck-install' );
+
+        expect( $manager->activate( 'ck-install' ) )->toBeTrue()
+            ->and( $manager->freshProcessMigrateCalls )->toBe( 1 )
             ->and( $manager->packageMigrateCalls )->toBe( 1 );
     } );
 } );

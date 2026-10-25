@@ -9,9 +9,11 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
 use ArtisanPackUI\CMSFramework\Tests\Support\Plugins\PluginTestHelper;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 
 beforeEach( function (): void {
     $this->pluginManager   = app( PluginManager::class );
@@ -756,6 +758,25 @@ describe( 'Composer packages on update (#430)', function (): void {
         expect( $plugin->version )->toBe( '2.0.0' )
             ->and( $plugin->is_active )->toBeFalse()
             ->and( $plugin->meta['composer'] )->toBe( [ 'acme/engine' => '^1.0' ] );
+    } );
+
+    it( 'migrates the new packages in a fresh process when updating an active plugin (#431)', function (): void {
+        // The update installs the packages, then reactivates in this same
+        // process, where their providers never booted. Activation finds them
+        // satisfied, but must still migrate them in a fresh process.
+        Process::fake();
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'acme/engine' => '1.3.0' ];
+        Plugin::where( 'slug', 'valid-plugin' )->update( [ 'is_active' => true ] );
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+            ->and( Plugin::where( 'slug', 'valid-plugin' )->first()->is_active )->toBeTrue();
+
+        Process::assertRanTimes(
+            fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && [ 'artisan', 'migrate', '--force', '--no-interaction', '--no-ansi' ] === array_slice( $process->command, 1 ),
+            1,
+        );
     } );
 
     it( 'rolls an inactive plugin\'s update back when its packages cannot be installed', function (): void {

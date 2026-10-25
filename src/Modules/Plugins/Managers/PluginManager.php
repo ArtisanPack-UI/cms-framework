@@ -50,6 +50,22 @@ class PluginManager
      */
     protected const PACKAGE_MIGRATION_TIMEOUT = 600;
 
+    /**
+     * Slugs whose Composer packages {@see installComposerDependenciesForManifest()}
+     * installed in this process, so a later {@see activate()} in the same
+     * process still migrates them in a fresh one (#431).
+     *
+     * The update of an active plugin installs the new version's packages and
+     * then reactivates it straight away. Activation finds them satisfied, but
+     * this process booted before they existed, so their providers — and the
+     * migrations those register — are not loaded here.
+     *
+     * @since 2.16.0
+     *
+     * @var array<string, true>
+     */
+    protected array $composerPackagesInstalledThisProcess = [];
+
     private ClassLoader $classLoader;
 
     /**
@@ -426,7 +442,12 @@ class PluginManager
         // Returns true when packages were freshly installed this request, so
         // the caller can run migrations the packages ship after the plugin's
         // service provider has booted (and registered them) — see #338.
-        $composerPackagesInstalled = $this->ensureComposerDependencies( $plugin );
+        //
+        // Packages installed earlier in this same process — by the update of
+        // an active plugin, just before it reactivates — count as installed
+        // too: their providers are just as absent from this process (#431).
+        $composerPackagesInstalled = $this->ensureComposerDependencies( $plugin )
+            || isset( $this->composerPackagesInstalledThisProcess[ $plugin->slug ] );
 
         // With auto-install on, the packages are normally installed when the
         // plugin is installed or updated (#430), so this activation finds them
@@ -503,6 +524,8 @@ class PluginManager
             // instead, which boots that manifest (#431).
             if ( $composerPackagesInstalled ) {
                 $this->runComposerPackageMigrationsInFreshProcess( $plugin );
+
+                unset( $this->composerPackagesInstalledThisProcess[ $plugin->slug ] );
             } elseif ( $runComposerPackageMigrations ) {
                 $this->runComposerPackageMigrations( $plugin );
             }
@@ -944,6 +967,8 @@ class PluginManager
 
         if ( $installed ) {
             $this->registerComposerPackageAutoloaders();
+
+            $this->composerPackagesInstalledThisProcess[ $slug ] = true;
         }
 
         return $installed;
