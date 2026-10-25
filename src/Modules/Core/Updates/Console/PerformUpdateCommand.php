@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\Concerns\ReportsOpcacheReset;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use Illuminate\Console\Command;
 use Throwable;
@@ -17,6 +18,8 @@ use Throwable;
  */
 class PerformUpdateCommand extends Command
 {
+    use ReportsOpcacheReset;
+
     /**
      * The name and signature of the console command.
      *
@@ -106,12 +109,7 @@ class PerformUpdateCommand extends Command
             $this->info( '✓ Update completed successfully!' );
             $this->line( "Application updated to version {$version}" );
 
-            // This command runs outside PHP-FPM, so it cannot reset the web
-            // server's OPcache (#425).
-            if ( $manager->phpReloadRequired() ) {
-                $this->newLine();
-                $this->warn( 'Reload PHP-FPM if OPcache runs with opcache.validate_timestamps=0, or it keeps serving the previous code.' );
-            }
+            $this->reportOpcacheReset( $manager, 'the previous code' );
 
             return self::SUCCESS;
         } catch ( Throwable $e ) {

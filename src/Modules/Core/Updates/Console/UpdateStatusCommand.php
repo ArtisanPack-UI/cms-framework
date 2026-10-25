@@ -141,6 +141,15 @@ class UpdateStatusCommand extends Command
             [__( 'PHP SAPI' ), $this->stringField( $state, 'php_sapi' ) ?: '—'],
         ];
 
+        // How a finished run reset the web server's OPcache (#429). Absent
+        // from records written before 2.16 and from runs that never got that
+        // far.
+        $opcacheResetMethod = $this->stringField( $state, 'opcache_reset_method' );
+
+        if ( '' !== $opcacheResetMethod ) {
+            $rows[] = [__( 'OPcache reset' ), $this->opcacheResetLabel( $opcacheResetMethod )];
+        }
+
         // Only present for a run that came through `dispatchUpdate()`. Shown
         // for the whole lifetime of such a run, not just while it is queued —
         // "which worker is meant to be running this" stays the operative
@@ -181,6 +190,26 @@ class UpdateStatusCommand extends Command
         if ( UpdateRunStatus::Queued === $status ) {
             $this->renderQueuedGuidance( $state );
         }
+    }
+
+    /**
+     * Describe how the web server's OPcache was reset.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $method  The recorded `opcache_reset_method`.
+     *
+     * @return string Human-readable description.
+     */
+    protected function opcacheResetLabel( string $method ): string
+    {
+        return match ( $method ) {
+            'web-request' => __( 'Inside the web server request' ),
+            'fastcgi'     => __( 'Over FastCGI to PHP-FPM' ),
+            'loopback'    => __( 'Through the signed loopback route' ),
+            'command'     => __( 'By the PHP reload command' ),
+            default       => $method,
+        };
     }
 
     /**

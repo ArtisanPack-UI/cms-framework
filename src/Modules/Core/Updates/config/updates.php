@@ -263,6 +263,47 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Web OPcache Reset After CLI Updates
+    |--------------------------------------------------------------------------
+    |
+    | An update or rollback run from the CLI (`update:perform`,
+    | `update:rollback`) or a queue worker (`dispatchUpdate()`) cannot reset
+    | PHP-FPM's OPcache with `opcache_reset()`, which only clears the CLI's
+    | own cache. With `opcache.validate_timestamps=0` (Laravel Forge's OPcache
+    | optimisation) FPM would keep serving a mix of old and new code. So once
+    | the files are final, the updater tries these in order, and stops at the
+    | first that works (#429):
+    |
+    | 1. `fastcgi`: run a one-off reset script through the FPM socket. Set
+    |    `fpm_socket` to the pool's `listen` address (`/run/php/php8.4-fpm.sock`,
+    |    `unix:///…`, or `127.0.0.1:9000`). Left empty, the updater looks for
+    |    the usual Debian/Ubuntu, Forge isolated-site and RHEL socket paths for
+    |    the running PHP version. The script is written under
+    |    `storage/framework/`, so `opcache.restrict_api`, when set, must allow it.
+    | 2. `loopback`: request a signed URL, valid for one minute, on
+    |    `loopback_url` (default `app.url`), which resets OPcache inside FPM.
+    |    Turning this off also stops the route being registered.
+    | 3. `php_reload_command`: a shell command run from `base_path()`, such as
+    |    `sudo -S service php8.4-fpm reload`. Empty by default.
+    |
+    | If none works, the updater logs a warning and `update:perform`,
+    | `update:rollback` and `update:status` tell the operator to reload
+    | PHP-FPM by hand. `update:status` shows which mechanism reset the cache.
+    | `timeout` bounds the FastCGI and loopback requests, in seconds.
+    |
+    */
+    'opcache' => [
+        'fastcgi'      => env( 'CMS_UPDATES_OPCACHE_FASTCGI', true ),
+        'fpm_socket'   => env( 'CMS_UPDATES_FPM_SOCKET' ),
+        'loopback'     => env( 'CMS_UPDATES_OPCACHE_LOOPBACK', true ),
+        'loopback_url' => env( 'CMS_UPDATES_OPCACHE_LOOPBACK_URL' ),
+        'timeout'      => env( 'CMS_UPDATES_OPCACHE_TIMEOUT', 5 ),
+    ],
+
+    'php_reload_command' => env( 'CMS_UPDATES_PHP_RELOAD_COMMAND' ),
+
+    /*
+    |--------------------------------------------------------------------------
     | Backup Settings
     |--------------------------------------------------------------------------
     |
