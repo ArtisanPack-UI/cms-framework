@@ -704,6 +704,14 @@ class ApplicationUpdateManager
         // that would let `update:status` report "the snapshot was restored
         // successfully" over a half-restored tree — the exact false reassurance
         // the `rolled_back` field exists to prevent.
+        // The restore is about to rewrite PHP files, so a reset recorded by an
+        // earlier run no longer holds. Clear it first, so a restore that fails
+        // before `resetOpcache()` below leaves `update:status` saying PHP-FPM
+        // needs a reload rather than showing that earlier run's reset (#429).
+        $this->opcacheResetMethod = null;
+        $this->phpReloadRequired  = true;
+        $this->state()->recordOpcacheReset( null );
+
         if ( true !== $zip->extractTo( base_path(), $restore ) ) {
             $zip->close();
 

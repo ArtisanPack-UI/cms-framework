@@ -222,8 +222,9 @@ class WebOpcacheResetter
      * The URL is signed relative to the application, so a proxy that rewrites
      * the host or scheme, or an `http` to `https` redirect, does not
      * invalidate it. It expires after a minute. Redirects are followed only
-     * on the same host, so a misconfigured base URL cannot hand the signed
-     * URL to another site.
+     * to the same host and port, or from `http` on 80 to `https` on 443, so a
+     * misconfigured base URL cannot hand the signed URL to another site, or
+     * to another application on the same host, and report its reset as ours.
      *
      * @since 2.16.0
      *
@@ -251,7 +252,7 @@ class WebOpcacheResetter
             return false;
         }
 
-        $host     = strtolower( (string) parse_url( $baseUrl, PHP_URL_HOST ) );
+        $origin   = $this->origin( (string) parse_url( $baseUrl, PHP_URL_SCHEME ), (string) parse_url( $baseUrl, PHP_URL_HOST ), parse_url( $baseUrl, PHP_URL_PORT ) );
         $path     = URL::temporarySignedRoute( self::LOOPBACK_ROUTE, now()->addMinute(), [], false );
         $response = Http::timeout( (int) ceil( $this->timeout() ) )
             ->acceptJson()
@@ -259,9 +260,9 @@ class WebOpcacheResetter
                 'allow_redirects' => [
                     'max'         => 3,
                     'protocols'   => ['http', 'https'],
-                    'on_redirect' => function ( RequestInterface $request, ResponseInterface $redirect, UriInterface $uri ) use ( $host ): void {
-                        if ( strtolower( $uri->getHost() ) !== $host ) {
-                            throw new RuntimeException( "refused to follow a redirect to another host ({$uri->getHost()})" );
+                    'on_redirect' => function ( RequestInterface $request, ResponseInterface $redirect, UriInterface $uri ) use ( $origin ): void {
+                        if ( ! $this->isAllowedRedirect( $origin, $this->origin( $uri->getScheme(), $uri->getHost(), $uri->getPort() ) ) ) {
+                            throw new RuntimeException( "refused to follow a redirect to another origin ({$uri->getScheme()}://{$uri->getAuthority()})" );
                         }
                     },
                 ],
@@ -279,6 +280,53 @@ class WebOpcacheResetter
             : "{$baseUrl} answered HTTP {$response->status()}";
 
         return false;
+    }
+
+    /**
+     * A URL's scheme, host and effective port.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $scheme  URL scheme.
+     * @param  string  $host  URL host.
+     * @param  int|null  $port  Explicit port, or null for the scheme default.
+     *
+     * @return array{scheme: string, host: string, port: int} The origin.
+     */
+    protected function origin( string $scheme, string $host, ?int $port ): array
+    {
+        $scheme = strtolower( $scheme );
+
+        return [
+            'scheme' => $scheme,
+            'host'   => strtolower( $host ),
+            'port'   => $port ?? ( 'https' === $scheme ? 443 : 80 ),
+        ];
+    }
+
+    /**
+     * Whether the loopback may follow a redirect: same host and port, or the
+     * standard upgrade from `http` on 80 to `https` on 443.
+     *
+     * @since 2.16.0
+     *
+     * @param  array{scheme: string, host: string, port: int}  $from  Origin of the base URL.
+     * @param  array{scheme: string, host: string, port: int}  $to  Origin of the redirect target.
+     *
+     * @return bool True when the redirect stays on the configured service.
+     */
+    protected function isAllowedRedirect( array $from, array $to ): bool
+    {
+        if ( $from['host'] !== $to['host'] ) {
+            return false;
+        }
+
+        if ( $from['port'] === $to['port'] ) {
+            return true;
+        }
+
+        return 'http' === $from['scheme'] && 80 === $from['port']
+            && 'https' === $to['scheme'] && 443 === $to['port'];
     }
 
     /**

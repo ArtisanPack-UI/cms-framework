@@ -324,6 +324,65 @@ class OpcacheResetTest extends TestCase
     }
 
     /**
+     * Test that a rollback that rewrites files and then fails clears the
+     * reset an earlier run recorded, so `update:status` asks for a reload
+     * instead of showing that stale reset (#429).
+     *
+     * @since 2.16.0
+     */
+    public function test_failed_rollback_clears_a_previously_recorded_reset(): void
+    {
+        $store = new UpdateStateStore;
+        $store->begin( '2.0.0', '1.0.0' );
+        $store->recordOpcacheReset( 'fastcgi' );
+
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-opcache-rollback-fail-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/Old.php', "<?php\n// old\n" );
+        $backup->close();
+
+        $manager = new class extends RecordingApplicationUpdateManager {
+            protected function verifyComposerBinaryAvailable(): void
+            {
+                throw new RuntimeException( 'Simulated failure: composer missing' );
+            }
+        };
+        $manager->sapi                  = 'cli';
+        $manager->webOpcacheResetMethod = 'fastcgi';
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            try {
+                $manager->rollback( $backupPath );
+                $this->fail( 'Expected the simulated failure to propagate.' );
+            } catch ( RuntimeException $e ) {
+                $this->assertStringContainsString( 'Simulated failure', $e->getMessage() );
+            }
+
+            $this->assertFileExists( $target . '/app/Old.php', 'The restore rewrote files before failing.' );
+            $this->assertNotContains( 'opcache-reset', $manager->calls );
+            $this->assertNull( $manager->opcacheResetMethod() );
+            $this->assertTrue( $manager->phpReloadRequired() );
+            $this->assertNull( $store->read()['opcache_reset_method'] );
+            $this->assertTrue( $store->read()['php_reload_required'] );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/app/Old.php' );
+            @rmdir( $target . '/app' );
+            @rmdir( $target );
+            @unlink( $backupPath );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
      * Test that the caches the site had compiled before the update are
      * rebuilt, each in a fresh PHP process so it is compiled from the new
      * code rather than the classes this process still holds.

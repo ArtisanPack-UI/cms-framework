@@ -119,6 +119,42 @@ class FastCgiClientTest extends TestCase
     }
 
     /**
+     * Test that an end-request record reporting failure is rejected even when
+     * stdout looks like a reset.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $endRequest  End-request record content.
+     * @param  string  $message  Expected exception message fragment.
+     */
+    #[DataProvider( 'failedEndRequests' )]
+    public function test_unsuccessful_end_request_throws( string $endRequest, string $message ): void
+    {
+        $stream = $this->streamWith( $this->record( 6, 'cms-framework-opcache:reset' ) . $this->record( 3, $endRequest ) );
+
+        $this->expectException( RuntimeException::class );
+        $this->expectExceptionMessage( $message );
+
+        ( new FastCgiClient )->readResponse( $stream );
+    }
+
+    /**
+     * End-request records that report failure.
+     *
+     * @since 2.16.0
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function failedEndRequests(): array
+    {
+        return [
+            'nonzero app status'  => [pack( 'NCx3', 255, 0 ), 'app status 255'],
+            'overloaded protocol' => [pack( 'NCx3', 0, 2 ), 'protocol status 2'],
+            'malformed record'    => ['short', 'malformed end-request record'],
+        ];
+    }
+
+    /**
      * Test that a listener that keeps sending output is cut off.
      *
      * @since 2.16.0

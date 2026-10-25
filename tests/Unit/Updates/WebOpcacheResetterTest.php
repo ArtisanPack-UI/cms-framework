@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\URL;
 use Orchestra\Testbench\TestCase;
+use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
  * Web OPcache Resetter Tests
@@ -243,6 +244,57 @@ class WebOpcacheResetterTest extends TestCase
         Http::assertSent( fn ( Request $request ): bool => str_starts_with( $request->url(), 'https://keystone.test/cms-framework/updates/opcache-reset?' )
             && str_contains( $request->url(), 'signature=' )
             && str_contains( $request->url(), 'expires=' ) );
+    }
+
+    /**
+     * Test which loopback redirects are followed: same host and port, or
+     * `http` on 80 to `https` on 443, and nothing else.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $from  Base URL.
+     * @param  string  $to  Redirect target.
+     * @param  bool  $allowed  Whether the redirect is followed.
+     */
+    #[DataProvider( 'redirects' )]
+    public function test_loopback_redirects_stay_on_the_configured_service( string $from, string $to, bool $allowed ): void
+    {
+        $resetter = new class extends WebOpcacheResetter {
+            public function allows( string $from, string $to ): bool
+            {
+                $origin = fn ( string $url ): array => $this->origin(
+                    (string) parse_url( $url, PHP_URL_SCHEME ),
+                    (string) parse_url( $url, PHP_URL_HOST ),
+                    parse_url( $url, PHP_URL_PORT ),
+                );
+
+                return $this->isAllowedRedirect( $origin( $from ), $origin( $to ) );
+            }
+        };
+
+        $this->assertSame( $allowed, $resetter->allows( $from, $to ) );
+    }
+
+    /**
+     * Base URLs and redirect targets.
+     *
+     * @since 2.16.0
+     *
+     * @return array<string, array{0: string, 1: string, 2: bool}>
+     */
+    public static function redirects(): array
+    {
+        return [
+            'http to https upgrade'     => ['http://site.test', 'https://site.test/x', true],
+            'same origin'               => ['https://site.test', 'https://site.test/x', true],
+            'host case differs'         => ['https://Site.test', 'https://site.TEST/x', true],
+            'explicit default port'     => ['https://site.test', 'https://site.test:443/x', true],
+            'same custom port'          => ['http://site.test:8080', 'http://site.test:8080/x', true],
+            'another host'              => ['https://site.test', 'https://example.com/x', false],
+            'another port on the host'  => ['https://site.test', 'https://site.test:8443/x', false],
+            'custom http port to https' => ['http://site.test:8080', 'https://site.test/x', false],
+            'https downgrade'           => ['https://site.test', 'http://site.test/x', false],
+        ];
     }
 
     /**

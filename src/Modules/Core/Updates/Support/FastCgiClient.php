@@ -192,6 +192,8 @@ class FastCgiClient
             } elseif ( self::TYPE_STDERR === $record['type'] ) {
                 $stderr .= $content;
             } elseif ( self::TYPE_END_REQUEST === $record['type'] ) {
+                $this->assertRequestCompleted( $content );
+
                 break;
             }
         }
@@ -201,6 +203,30 @@ class FastCgiClient
         }
 
         return $stdout;
+    }
+
+    /**
+     * Reject an end-request record that reports failure: a nonzero exit
+     * status, or a protocol status other than `FCGI_REQUEST_COMPLETE`.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $content  The end-request record's content.
+     *
+     * @throws RuntimeException When the record is malformed or reports failure.
+     */
+    protected function assertRequestCompleted( string $content ): void
+    {
+        if ( 8 !== strlen( $content ) ) {
+            throw new RuntimeException( 'PHP-FPM sent a malformed end-request record' );
+        }
+
+        /** @var array{appStatus: int, protocolStatus: int} $status */
+        $status = unpack( 'NappStatus/CprotocolStatus', $content );
+
+        if ( 0 !== $status['appStatus'] || 0 !== $status['protocolStatus'] ) {
+            throw new RuntimeException( "PHP-FPM ended the request unsuccessfully (app status {$status['appStatus']}, protocol status {$status['protocolStatus']})" );
+        }
     }
 
     /**
