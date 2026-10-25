@@ -303,6 +303,41 @@ describe( 'GlobalStylesResolver::update() / revert()', function (): void {
         expect( $this->resolver->revert() )->toBeFalse();
     } );
 
+    it( 'reverts through the model and fires the reverted action', function (): void {
+        $row = GlobalStyles::create( [
+            'theme'  => $this->themeSlug,
+            'styles' => ['color' => ['background' => '#000000']],
+        ] );
+
+        $deletedIds = [];
+        $fired      = [];
+
+        GlobalStyles::deleted( function ( GlobalStyles $globalStyles ) use ( &$deletedIds ): void {
+            $deletedIds[] = $globalStyles->id;
+        } );
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function ( string $type, ?string $slug, string $theme ) use ( &$fired ): void {
+            $fired[] = [$type, $slug, $theme];
+        } );
+
+        $this->resolver->revert();
+
+        expect( $deletedIds )->toBe( [$row->id] )
+            ->and( $fired )->toBe( [['global-styles', null, $this->themeSlug]] );
+    } );
+
+    it( 'does not fire the reverted action when there is no row', function (): void {
+        $fired = false;
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function () use ( &$fired ): void {
+            $fired = true;
+        } );
+
+        $this->resolver->revert();
+
+        expect( $fired )->toBeFalse();
+    } );
+
     it( 'preserves explicit null updates so PUT can clear stored fields', function (): void {
         $row = GlobalStyles::create( [
             'theme'     => $this->themeSlug,
