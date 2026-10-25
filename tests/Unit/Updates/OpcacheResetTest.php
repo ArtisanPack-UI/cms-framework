@@ -93,13 +93,17 @@ class OpcacheResetTest extends TestCase
 
         $this->assertFalse( $manager->phpReloadRequired() );
         $this->assertFalse( $manager->updateState()['php_reload_required'] );
+        $this->assertSame( 'web-request', $manager->opcacheResetMethod() );
+        $this->assertSame( 'web-request', $manager->updateState()['opcache_reset_method'] );
+        $this->assertNotContains( 'web-opcache-reset', $manager->calls, 'A web request needs no second route to PHP-FPM.' );
         $this->assertSame( UpdateRunStatus::Completed->value, $manager->updateState()['status'] );
     }
 
     /**
      * Test that an update run from the CLI (the `update:perform` command or a
      * queue worker), whose OPcache is not PHP-FPM's, warns that PHP-FPM must
-     * be reloaded and records it for `update:status`.
+     * be reloaded and records it for `update:status` when no mechanism could
+     * reach the web server.
      *
      * @since 2.15.6
      */
@@ -114,12 +118,59 @@ class OpcacheResetTest extends TestCase
         $this->assertTrue( $manager->performUpdate() );
 
         $this->assertContains( 'opcache-reset', $manager->calls, 'The worker\'s own OPcache is still reset.' );
+        $this->assertContains( 'web-opcache-reset', $manager->calls );
         $this->assertTrue( $manager->phpReloadRequired() );
         $this->assertTrue( $manager->updateState()['php_reload_required'] );
+        $this->assertNull( $manager->opcacheResetMethod() );
+        $this->assertNull( $manager->updateState()['opcache_reset_method'] );
 
         Log::shouldHaveReceived( 'warning' )->withArgs(
             fn ( string $message ): bool => str_contains( $message, 'reload PHP-FPM' ),
         );
+    }
+
+    /**
+     * Test that a CLI update that reaches PHP-FPM records how, needs no
+     * reload and logs no warning (#429).
+     *
+     * @since 2.16.0
+     */
+    public function test_successful_update_under_cli_records_how_the_web_opcache_was_reset(): void
+    {
+        Log::spy();
+
+        $manager                        = $this->managerWithUpdateAvailable();
+        $manager->sapi                  = 'cli';
+        $manager->opcacheResetResult    = true;
+        $manager->webOpcacheResetMethod = 'fastcgi';
+
+        $this->assertTrue( $manager->performUpdate() );
+
+        $this->assertSame( ['cleanup', 'opcache-reset', 'web-opcache-reset', 'disable'], array_slice( $manager->calls, -4 ) );
+        $this->assertFalse( $manager->phpReloadRequired() );
+        $this->assertSame( 'fastcgi', $manager->opcacheResetMethod() );
+        $this->assertFalse( $manager->updateState()['php_reload_required'] );
+        $this->assertSame( 'fastcgi', $manager->updateState()['opcache_reset_method'] );
+
+        Log::shouldNotHaveReceived( 'warning' );
+    }
+
+    /**
+     * Test that a CLI rollback also reaches PHP-FPM.
+     *
+     * @since 2.16.0
+     */
+    public function test_cli_rollback_resets_the_web_opcache(): void
+    {
+        $manager                        = new RecordingApplicationUpdateManager;
+        $manager->sapi                  = 'cli';
+        $manager->webOpcacheResetMethod = 'command';
+
+        $manager->callResetOpcache();
+
+        $this->assertSame( ['opcache-reset', 'web-opcache-reset'], $manager->calls );
+        $this->assertSame( 'command', $manager->opcacheResetMethod() );
+        $this->assertFalse( $manager->phpReloadRequired() );
     }
 
     /**
@@ -323,6 +374,7 @@ class OpcacheResetTest extends TestCase
         $checker->method( 'downloadUpdate' )->willReturn( '/tmp/does-not-matter.zip' );
 
         $manager->setUpdateChecker( $checker );
+        $manager->sapi                   = 'fpm-fcgi';
         $manager->cachedArtifactCommands = ['config:cache', 'event:cache'];
 
         $this->assertTrue( $manager->performUpdate() );
@@ -445,6 +497,26 @@ class OpcacheResetTest extends TestCase
     }
 
     /**
+     * Test that `update:perform` says how a CLI update reset the web server's
+     * OPcache, and asks for no reload.
+     *
+     * @since 2.16.0
+     */
+    public function test_perform_command_reports_how_the_web_opcache_was_reset(): void
+    {
+        $manager                        = $this->managerWithUpdateAvailable();
+        $manager->sapi                  = 'cli';
+        $manager->webOpcacheResetMethod = 'loopback';
+
+        $this->app->instance( ApplicationUpdateManager::class, $manager );
+
+        $this->artisan( 'update:perform', ['--force' => true] )
+            ->expectsOutputToContain( 'OPcache reset for the web server (loopback)' )
+            ->doesntExpectOutputToContain( 'Reload PHP-FPM' )
+            ->assertSuccessful();
+    }
+
+    /**
      * Test that `update:perform` stays quiet when OPcache was reset for the
      * web server.
      *
@@ -478,6 +550,27 @@ class OpcacheResetTest extends TestCase
 
         $this->artisan( 'update:status' )
             ->expectsOutputToContain( 'reload PHP-FPM' )
+            ->assertSuccessful();
+    }
+
+    /**
+     * Test that `update:status` shows how the web server's OPcache was reset.
+     *
+     * @since 2.16.0
+     */
+    public function test_status_command_shows_the_opcache_reset_method(): void
+    {
+        $store = new UpdateStateStore;
+        $store->begin( '2.0.0', '1.0.0' );
+        $store->markStep( UpdateStep::DisableMaintenanceMode );
+        $store->recordOpcacheReset( 'fastcgi' );
+        $store->markStatus( UpdateRunStatus::Completed );
+
+        $this->assertFalse( $store->read()['php_reload_required'] );
+
+        $this->artisan( 'update:status' )
+            ->expectsOutputToContain( 'Over FastCGI to PHP-FPM' )
+            ->doesntExpectOutputToContain( 'reload PHP-FPM' )
             ->assertSuccessful();
     }
 

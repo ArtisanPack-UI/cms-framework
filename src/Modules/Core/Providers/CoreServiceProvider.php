@@ -20,6 +20,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\RollbackUpdateComman
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Console\UpdateStatusCommand;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers\ApplicationUpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCapability;
+use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -74,6 +75,8 @@ class CoreServiceProvider extends ServiceProvider
 
         $this->registerUpdateCapabilities();
 
+        $this->registerOpcacheResetRoute();
+
         // Register update commands
         if ( $this->app->runningInConsole() ) {
             $this->commands( [
@@ -84,6 +87,27 @@ class CoreServiceProvider extends ServiceProvider
                 CheckForUpdateScheduled::class,
             ] );
         }
+    }
+
+    /**
+     * Register the signed loopback route the updater requests to reset
+     * PHP-FPM's OPcache after a CLI or queued update (#429).
+     *
+     * The updater requests it while the site is still in maintenance mode, so
+     * it is exempt from the maintenance middleware. It is signed, expires
+     * after a minute, and can do nothing but reset OPcache.
+     *
+     * @since 2.16.0
+     */
+    protected function registerOpcacheResetRoute(): void
+    {
+        if ( false === config( 'cms.updates.opcache.loopback', true ) ) {
+            return;
+        }
+
+        $this->loadRoutesFrom( __DIR__ . '/../Updates/routes/web.php' );
+
+        PreventRequestsDuringMaintenance::except( 'cms-framework/updates/opcache-reset' );
     }
 
     /**

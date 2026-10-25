@@ -87,6 +87,14 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     public ?bool $opcacheResetResult = null;
 
     /**
+     * What the stubbed web OPcache reset returns from the CLI: the mechanism
+     * that worked, or null when none did.
+     *
+     * @since 2.16.0
+     */
+    public ?string $webOpcacheResetMethod = null;
+
+    /**
      * Cache commands `cachedArtifacts()` reports as in place before the update.
      *
      * @since 2.15.6
@@ -129,6 +137,17 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     public function callRaiseExecutionLimits(): void
     {
         $this->raiseExecutionLimits();
+    }
+
+    /**
+     * Invoke the protected OPcache reset, as `rollback()` does once the
+     * snapshot is restored.
+     *
+     * @since 2.16.0
+     */
+    public function callResetOpcache(): void
+    {
+        $this->resetOpcache();
     }
 
     /**
@@ -328,6 +347,18 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     protected function phpSapi(): string
     {
         return $this->sapi ?? parent::phpSapi();
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * @since 2.16.0
+     */
+    protected function resetWebOpcache(): ?string
+    {
+        $this->calls[] = 'web-opcache-reset';
+
+        return $this->webOpcacheResetMethod;
     }
 
     /**

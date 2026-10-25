@@ -229,6 +229,31 @@ class UpdateStateStore
     }
 
     /**
+     * Record how the last update or rollback reset the web server's OPcache
+     * (#429), and so whether PHP-FPM still needs a reload.
+     *
+     * Only merged into an existing record, like
+     * {@see recordPhpReloadRequired()}.
+     *
+     * @since 2.16.0
+     *
+     * @param  string|null  $method  `web-request`, `fastcgi`, `loopback` or
+     *                               `command`, or null when no reset reached
+     *                               the web server.
+     */
+    public function recordOpcacheReset( ?string $method ): void
+    {
+        if ( null === $this->read() ) {
+            return;
+        }
+
+        $this->merge( [
+            'opcache_reset_method' => $method,
+            'php_reload_required'  => null === $method,
+        ] );
+    }
+
+    /**
      * Persist the ledger of files the current extraction added.
      *
      * The in-memory ledger dies with the process, so an update killed during

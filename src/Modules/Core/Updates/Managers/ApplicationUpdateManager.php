@@ -12,6 +12,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Jobs\PerformUpdateJob;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ArchiveChecksum;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\UpdateStateStore;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\ValueObjects\UpdateInfo;
@@ -139,6 +140,24 @@ class ApplicationUpdateManager
      * @since 2.15.6
      */
     protected bool $phpReloadRequired = false;
+
+    /**
+     * How the last update or rollback this instance ran reset the web
+     * server's OPcache, or null when it could not (#429).
+     *
+     * @since 2.16.0
+     */
+    protected ?string $opcacheResetMethod = null;
+
+    /**
+     * Why each web OPcache reset mechanism failed on the last attempt, keyed
+     * by mechanism, for the warning logged when none worked.
+     *
+     * @since 2.16.0
+     *
+     * @var array<string, string>
+     */
+    protected array $webOpcacheResetFailures = [];
 
     /**
      * Whether the shutdown guard has already been registered, so repeated
@@ -482,6 +501,25 @@ class ApplicationUpdateManager
     }
 
     /**
+     * How the last update or rollback this instance ran reset the web
+     * server's OPcache (#429).
+     *
+     * `web-request` when the run itself was a web server request; `fastcgi`,
+     * `loopback` or `command` when a CLI or queued run reached the web server
+     * through {@see WebOpcacheResetter}; null when no reset reached it, which
+     * is when {@see phpReloadRequired()} is true. Callers in another process
+     * read the `opcache_reset_method` field of `updateState()` instead.
+     *
+     * @since 2.16.0
+     *
+     * @return string|null The mechanism, or null.
+     */
+    public function opcacheResetMethod(): ?string
+    {
+        return $this->opcacheResetMethod;
+    }
+
+    /**
      * Discard the persisted update state record.
      *
      * Also releases the dispatch lock. The record and the lock live in
@@ -818,6 +856,7 @@ class ApplicationUpdateManager
         // empty ledger and removes nothing.
         $this->extractionAdditions = [];
         $this->phpReloadRequired   = false;
+        $this->opcacheResetMethod  = null;
 
         $this->state()->begin( $targetVersion, $updateInfo->resolveCurrentVersion() );
 
@@ -2719,7 +2758,7 @@ class ApplicationUpdateManager
 
     /**
      * Reset OPcache so the web server stops running bytecode compiled from the
-     * pre-update tree (#425).
+     * pre-update tree (#425, #429).
      *
      * With `opcache.validate_timestamps=0` (Laravel Forge's OPcache
      * optimisation, and common in production) PHP-FPM never re-reads a file
@@ -2727,9 +2766,11 @@ class ApplicationUpdateManager
      * code until it is reloaded. Called from inside a PHP-FPM request,
      * `opcache_reset()` clears the pool's shared cache. From the CLI (the
      * `update:perform` command, or the queue worker behind `dispatchUpdate()`)
-     * it only clears this process's own cache, so the operator is told to
-     * reload PHP-FPM instead, through the log and the `php_reload_required`
-     * state field that `update:status` reads.
+     * it only clears this process's own cache, so {@see resetWebOpcache()}
+     * reaches the web server another way. Only when that fails too is the
+     * operator told to reload PHP-FPM, through the log and the
+     * `php_reload_required` state field that `update:status` reads. The
+     * mechanism that worked is recorded as `opcache_reset_method`.
      *
      * @since 2.15.6
      */
@@ -2737,26 +2778,40 @@ class ApplicationUpdateManager
     {
         $reset = $this->attemptOpcacheReset();
 
-        $this->phpReloadRequired = $this->runningUnderCli() || false === $reset;
+        if ( $this->runningUnderCli() ) {
+            $method = $this->resetWebOpcache();
+        } else {
+            $method = false === $reset ? null : 'web-request';
+        }
 
-        $this->state()->recordPhpReloadRequired( $this->phpReloadRequired );
+        $this->opcacheResetMethod = $method;
+        $this->phpReloadRequired  = null === $method;
+
+        $this->state()->recordOpcacheReset( $method );
+
+        if ( null !== $method ) {
+            if ( $this->runningUnderCli() ) {
+                Log::info( "cms-framework: reset PHP-FPM's OPcache after the update ({$method}).", ['php_sapi' => $this->phpSapi()] );
+            }
+
+            return;
+        }
 
         if ( $this->runningUnderCli() ) {
             Log::warning(
-                'cms-framework: the update ran outside the web server, so it could not reset PHP-FPM\'s OPcache. If OPcache runs with `opcache.validate_timestamps=0`, reload PHP-FPM so it serves the updated code.',
-                ['php_sapi' => $this->phpSapi()],
+                'cms-framework: the update ran outside the web server and could not reset PHP-FPM\'s OPcache. If OPcache runs with `opcache.validate_timestamps=0`, reload PHP-FPM so it serves the updated code, or set `cms.updates.opcache.fpm_socket` or `cms.updates.php_reload_command`.',
+                [
+                    'php_sapi' => $this->phpSapi(),
+                    'attempts' => $this->webOpcacheResetFailures,
+                ],
             );
-        } elseif ( false === $reset ) {
+        } else {
             Log::warning( 'cms-framework: OPcache could not be reset after the update (check `opcache.restrict_api`). Reload PHP-FPM so it serves the updated code.' );
         }
     }
 
     /**
      * Reset this process's OPcache.
-     *
-     * `opcache_reset()` raises a warning, which Laravel turns into an
-     * exception, when `opcache.restrict_api` excludes this script. That case
-     * is reported as a failed reset rather than allowed to throw.
      *
      * @since 2.15.6
      *
@@ -2765,21 +2820,31 @@ class ApplicationUpdateManager
      */
     protected function attemptOpcacheReset(): ?bool
     {
-        if ( ! function_exists( 'opcache_reset' ) ) {
-            return null;
-        }
+        return WebOpcacheResetter::resetThisProcess( $this->runningUnderCli() );
+    }
 
-        $directive = $this->runningUnderCli() ? 'opcache.enable_cli' : 'opcache.enable';
+    /**
+     * Reset the web server's OPcache from a CLI or queued run (#429).
+     *
+     * Tries FastCGI to the FPM socket, then the signed loopback route, then
+     * the operator's `cms.updates.php_reload_command`. Why each one failed is
+     * kept in {@see $webOpcacheResetFailures} for the warning.
+     *
+     * @since 2.16.0
+     *
+     * @return string|null The mechanism that worked, or null when none did.
+     */
+    protected function resetWebOpcache(): ?string
+    {
+        $resetter = app( WebOpcacheResetter::class );
+        $method   = $resetter->reset();
 
-        if ( ! in_array( strtolower( trim( (string) ini_get( $directive ) ) ), ['1', 'on', 'true', 'yes'], true ) ) {
-            return null;
-        }
+        $this->webOpcacheResetFailures = array_map(
+            fn ( string $reason ): string => $this->sanitizeForLog( $reason ),
+            $resetter->failures(),
+        );
 
-        try {
-            return opcache_reset();
-        } catch ( Throwable $e ) {
-            return false;
-        }
+        return $method;
     }
 
     /**
