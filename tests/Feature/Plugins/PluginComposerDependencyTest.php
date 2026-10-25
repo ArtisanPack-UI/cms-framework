@@ -10,6 +10,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
 use Composer\Autoload\ClassLoader;
 use Illuminate\Support\Facades\File;
+use RuntimeException;
 
 beforeEach( function (): void {
     $this->installer = new FakeComposerPackageInstaller;
@@ -492,6 +493,18 @@ describe( 'Install-time Composer packages (#430)', function (): void {
         expect( File::exists( $this->pluginsPath . '/ck-install' ) )->toBeFalse()
             ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeFalse()
             ->and( $events )->toBe( [] );
+    } );
+
+    it( 'removes the extracted plugin and rethrows when seating the installed packages fails unexpectedly', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply     = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        $this->installer->autoloadMapsFailure = new RuntimeException( 'Autoload maps are unreadable.' );
+
+        expect( fn () => $this->manager->installFromZip( ( $this->buildZip )() ) )
+            ->toThrow( RuntimeException::class, 'Autoload maps are unreadable.' );
+
+        expect( File::exists( $this->pluginsPath . '/ck-install' ) )->toBeFalse()
+            ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeFalse();
     } );
 
     it( 'leaves an on-disk plugin in place when installFromDisk cannot install its packages', function (): void {

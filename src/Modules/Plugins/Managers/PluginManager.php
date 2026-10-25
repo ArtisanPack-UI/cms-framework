@@ -200,14 +200,21 @@ class PluginManager
 
         // Install the plugin's declared Composer packages (#430) before the row
         // exists, so a plugin whose dependencies cannot be installed is never
-        // listed. Remove the extracted directory on failure, exactly like the
-        // invalid-manifest paths above, so a retry starts clean.
+        // listed. Remove the extracted directory on any failure, exactly like the
+        // invalid-manifest paths above, so a retry starts clean: a directory
+        // left behind without a row would make every later upload of this slug
+        // fail `isSlugTaken()`. Anything other than a Composer-dependency
+        // failure (e.g. from seating the new autoload maps) is rethrown as is.
         try {
             $this->installComposerDependenciesForManifest( $slug, $manifest );
         } catch ( ComposerDependencyNotSatisfiedException $e ) {
             File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
 
             throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
+        } catch ( Throwable $e ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw $e;
         }
 
         doAction( 'ap.cmsFramework.plugin.installing', $slug );
