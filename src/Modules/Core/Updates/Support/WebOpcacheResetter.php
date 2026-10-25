@@ -169,7 +169,7 @@ class WebOpcacheResetter
      */
     protected function resetViaFastCgi(): bool
     {
-        if ( false === config( 'cms.updates.opcache.fastcgi', true ) ) {
+        if ( ! config( 'cms.updates.opcache.fastcgi', true ) ) {
             $this->failures['fastcgi'] = 'disabled by cms.updates.opcache.fastcgi';
 
             return false;
@@ -232,7 +232,7 @@ class WebOpcacheResetter
      */
     protected function resetViaLoopback(): bool
     {
-        if ( false === config( 'cms.updates.opcache.loopback', true ) ) {
+        if ( ! config( 'cms.updates.opcache.loopback', true ) ) {
             $this->failures['loopback'] = 'disabled by cms.updates.opcache.loopback';
 
             return false;

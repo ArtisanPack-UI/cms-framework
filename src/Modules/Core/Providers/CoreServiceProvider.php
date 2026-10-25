@@ -101,7 +101,7 @@ class CoreServiceProvider extends ServiceProvider
      */
     protected function registerOpcacheResetRoute(): void
     {
-        if ( false === config( 'cms.updates.opcache.loopback', true ) ) {
+        if ( ! config( 'cms.updates.opcache.loopback', true ) ) {
             return;
         }
 
