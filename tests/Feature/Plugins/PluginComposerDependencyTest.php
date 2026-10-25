@@ -4,11 +4,13 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
 use Composer\Autoload\ClassLoader;
 use Illuminate\Support\Facades\File;
+use RuntimeException;
 
 beforeEach( function (): void {
     $this->installer = new FakeComposerPackageInstaller;
@@ -294,9 +296,11 @@ describe( 'Composer-package activation gate', function (): void {
             ->and( $manager->packageMigrateSlug )->toBe( 'convertkit' );
     } );
 
-    it( 'skips the unscoped migrate when composer requirements are already satisfied', function (): void {
+    it( 'skips the unscoped migrate when composer requirements are already satisfied and auto-install is off', function (): void {
         // No auto-install needed; the requirement is already in range in the
         // vendor tree, so no packages are freshly installed this activation.
+        // With auto-install off this keeps the pre-2.16 rule (#430).
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', false );
         $this->installer->installed = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
         makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
 
@@ -407,5 +411,164 @@ describe( 'Composer-package activation gate', function (): void {
 
         expect( $this->installer->installCalls )->toHaveCount( 1 )
             ->and( Plugin::where( 'slug', 'convertkit' )->first()->is_active )->toBeFalse();
+    } );
+} );
+
+describe( 'Install-time Composer packages (#430)', function (): void {
+    beforeEach( function (): void {
+        $this->pluginsPath = base_path( 'plugins' );
+        $this->zipPaths    = [];
+
+        File::ensureDirectoryExists( $this->pluginsPath );
+
+        // Discovery is cached by default; disable so installFromDisk sees a
+        // directory written mid-test.
+        config()->set( 'cms.plugins.cacheEnabled', false );
+
+        $this->manifest = [
+            'slug'     => 'ck-install',
+            'name'     => 'ConvertKit Install',
+            'version'  => '1.0.0',
+            'composer' => [ 'artisanpack-ui/convertkit' => '^1.2' ],
+        ];
+
+        $this->buildZip = function (): string {
+            $zipPath = storage_path( 'app/composer-install-' . uniqid() . '.zip' );
+            File::ensureDirectoryExists( dirname( $zipPath ) );
+
+            $zip = new ZipArchive;
+            $zip->open( $zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+            $zip->addFromString( 'ck-install/plugin.json', json_encode( $this->manifest ) );
+            $zip->close();
+
+            $this->zipPaths[] = $zipPath;
+
+            return $zipPath;
+        };
+    } );
+
+    afterEach( function (): void {
+        File::deleteDirectory( $this->pluginsPath . '/ck-install' );
+
+        foreach ( $this->zipPaths as $zipPath ) {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'installs unmet packages when a plugin is installed from a ZIP', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+
+        $plugin = $this->manager->installFromZip( ( $this->buildZip )() );
+
+        expect( $plugin->slug )->toBe( 'ck-install' )
+            ->and( $this->installer->installCalls )->toBe( [
+                [ 'slug' => 'ck-install', 'constraints' => [ 'artisanpack-ui/convertkit' => '^1.2' ] ],
+            ] )
+            ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeTrue();
+
+        // The packages are now satisfied, so activation installs nothing more.
+        expect( $this->manager->activate( 'ck-install' ) )->toBeTrue()
+            ->and( $this->installer->installCalls )->toHaveCount( 1 );
+    } );
+
+    it( 'removes the extracted plugin and reports the Composer reason when a ZIP install cannot install its packages', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->failInstall = true;
+        $this->installer->failReason  = 'Could not reach Packagist.';
+
+        $events = [];
+        addAction( 'ap.cmsFramework.plugin.installing', function ( string $slug ) use ( &$events ): void {
+            $events[] = $slug;
+        } );
+
+        try {
+            $this->manager->installFromZip( ( $this->buildZip )() );
+            $this->fail( 'Expected PluginInstallationException.' );
+        } catch ( PluginInstallationException $e ) {
+            expect( $e->getMessage() )->toBe( "Plugin 'ck-install' could not install its required Composer packages: Could not reach Packagist." )
+                ->and( $e->getPrevious() )->toBeInstanceOf( ComposerDependencyNotSatisfiedException::class );
+        }
+
+        expect( File::exists( $this->pluginsPath . '/ck-install' ) )->toBeFalse()
+            ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeFalse()
+            ->and( $events )->toBe( [] );
+    } );
+
+    it( 'removes the extracted plugin and rethrows when seating the installed packages fails unexpectedly', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply     = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        $this->installer->autoloadMapsFailure = new RuntimeException( 'Autoload maps are unreadable.' );
+
+        expect( fn () => $this->manager->installFromZip( ( $this->buildZip )() ) )
+            ->toThrow( RuntimeException::class, 'Autoload maps are unreadable.' );
+
+        expect( File::exists( $this->pluginsPath . '/ck-install' ) )->toBeFalse()
+            ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeFalse();
+    } );
+
+    it( 'leaves an on-disk plugin in place when installFromDisk cannot install its packages', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->failInstall = true;
+        $this->installer->failReason  = 'Could not reach Packagist.';
+
+        File::ensureDirectoryExists( $this->pluginsPath . '/ck-install' );
+        File::put( $this->pluginsPath . '/ck-install/plugin.json', json_encode( $this->manifest ) );
+
+        expect( fn () => $this->manager->installFromDisk( 'ck-install' ) )
+            ->toThrow( PluginInstallationException::class, 'Could not reach Packagist.' );
+
+        expect( File::exists( $this->pluginsPath . '/ck-install/plugin.json' ) )->toBeTrue()
+            ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeFalse();
+    } );
+
+    it( 'leaves the composer block alone at install and fails closed at activation when auto-install is off', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', false );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+
+        $this->manager->installFromZip( ( $this->buildZip )() );
+
+        expect( $this->installer->installCalls )->toBe( [] )
+            ->and( Plugin::where( 'slug', 'ck-install' )->exists() )->toBeTrue();
+
+        expect( fn () => $this->manager->activate( 'ck-install' ) )
+            ->toThrow( ComposerDependencyNotSatisfiedException::class );
+
+        expect( $this->installer->installCalls )->toBe( [] )
+            ->and( Plugin::where( 'slug', 'ck-install' )->first()->is_active )->toBeFalse();
+    } );
+
+    it( 'runs package migrations when activating a plugin whose packages were installed at install time', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+
+        $installer = $this->installer;
+        $manager   = new class ( $installer ) extends PluginManager {
+            public int $packageMigrateCalls = 0;
+
+            public function __construct( private FakeComposerPackageInstaller $bound )
+            {
+                parent::__construct();
+            }
+
+            protected function composerPackageInstaller(): ComposerPackageInstallerInterface
+            {
+                return $this->bound;
+            }
+
+            protected function runComposerPackageMigrations( Plugin $plugin ): void
+            {
+                $this->packageMigrateCalls++;
+            }
+        };
+
+        $manager->installFromZip( ( $this->buildZip )() );
+
+        expect( $manager->packageMigrateCalls )->toBe( 0 );
+
+        // A later request: the packages are already satisfied, but their
+        // migrations still have to run once the plugin's provider boots.
+        expect( $manager->activate( 'ck-install' ) )->toBeTrue()
+            ->and( $manager->packageMigrateCalls )->toBe( 1 );
     } );
 } );

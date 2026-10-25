@@ -705,12 +705,12 @@ describe( 'Reactivation failure after update (#45)', function (): void {
     } );
 
     it( 'rolls back and reports the composer reason when the new manifest adds an unsatisfiable composer package (#323)', function (): void {
-        // Auto-install is opt-in (off by default); this test exercises the
-        // installer-failure rollback path, so it turns auto-install on.
+        // This test exercises the installer-failure rollback path, so it pins
+        // auto-install on rather than relying on the default.
         config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
 
         // A fake installer that reports nothing installed and fails any install,
-        // so the reactivation at step 7 cannot satisfy the new composer block.
+        // so the update cannot satisfy the new composer block (#430).
         $installer              = new FakeComposerPackageInstaller;
         $installer->failInstall = true;
         $installer->failReason  = 'Could not reach Packagist.';
@@ -774,6 +774,101 @@ describe( 'Reactivation failure after update (#45)', function (): void {
         expect( $onDisk['version'] )->toBe( '1.0.0' );
 
         File::delete( $zipPath );
+    } );
+} );
+
+describe( 'Composer packages on update (#430)', function (): void {
+    beforeEach( function (): void {
+        $this->installer = new FakeComposerPackageInstaller;
+        app()->instance( ComposerPackageInstallerInterface::class, $this->installer );
+
+        // An inactive valid-plugin at 1.0.0 with no composer block, wired to a
+        // legacy feed that offers 2.0.0 declaring `acme/engine`.
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        $this->updateZipPath = storage_path( 'app/test-update-' . uniqid() . '.zip' );
+
+        $zip = new ZipArchive;
+        $zip->open( $this->updateZipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE );
+        $zip->addFromString( 'valid-plugin/plugin.json', json_encode( [
+            'slug'        => 'valid-plugin',
+            'name'        => 'Valid Test Plugin',
+            'version'     => '2.0.0',
+            'description' => 'Updated plugin',
+            'author'      => 'Test Author',
+            'composer'    => [ 'acme/engine' => '^1.0' ],
+        ] ) );
+        $zip->addFromString( 'valid-plugin/src/Stub.php', "<?php\n" );
+        $zip->close();
+
+        Http::fake( [
+            'https://example.com/updates/valid-plugin' => Http::response( [
+                'version'      => '2.0.0',
+                'download_url' => 'https://example.com/downloads/valid-plugin-2.0.0.zip',
+                'sha256'       => hash( 'sha256', File::get( $this->updateZipPath ) ),
+            ] ),
+            'https://example.com/downloads/valid-plugin-2.0.0.zip' => Http::response( File::get( $this->updateZipPath ) ),
+        ] );
+    } );
+
+    afterEach( function (): void {
+        File::delete( $this->updateZipPath );
+    } );
+
+    it( 'installs the new version\'s packages when updating an inactive plugin', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'acme/engine' => '1.3.0' ];
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->installer->installCalls )->toBe( [
+                [ 'slug' => 'valid-plugin', 'constraints' => [ 'acme/engine' => '^1.0' ] ],
+            ] );
+
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '2.0.0' )
+            ->and( $plugin->is_active )->toBeFalse()
+            ->and( $plugin->meta['composer'] )->toBe( [ 'acme/engine' => '^1.0' ] );
+    } );
+
+    it( 'rolls an inactive plugin\'s update back when its packages cannot be installed', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->failInstall = true;
+        $this->installer->failReason  = 'Could not reach Packagist.';
+
+        expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+            ->toThrow( PluginUpdateException::class, 'Could not reach Packagist.' );
+
+        $plugin = Plugin::where( 'slug', 'valid-plugin' )->first();
+        expect( $plugin->version )->toBe( '1.0.0' )
+            ->and( $plugin->is_active )->toBeFalse()
+            ->and( $plugin->meta )->not->toHaveKey( 'composer' );
+
+        $onDisk = json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true );
+        expect( $onDisk['version'] )->toBe( '1.0.0' );
+    } );
+
+    it( 'leaves the composer block alone when updating an inactive plugin with auto-install off', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', false );
+
+        expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->installer->installCalls )->toBe( [] )
+            ->and( Plugin::where( 'slug', 'valid-plugin' )->first()->version )->toBe( '2.0.0' );
     } );
 } );
 

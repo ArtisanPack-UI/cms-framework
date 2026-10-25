@@ -160,31 +160,38 @@ return [
     | Plugin Composer-package Dependencies
     |--------------------------------------------------------------------------
     | A plugin may declare Packagist dependencies in its manifest `composer`
-    | block, e.g. `"composer": { "artisanpack-ui/convertkit": "^1.2" }`. At
-    | activation the framework resolves those constraints against the host's
-    | installed packages.
+    | block, e.g. `"composer": { "artisanpack-ui/convertkit": "^1.2" }`.
     |
     | autoInstallComposerDependencies:
-    |   When false (the default), activation fails closed on an unmet requirement
-    |   and the operator is expected to have installed the package themselves —
-    |   the safe default, since auto-install fetches and boots arbitrary
-    |   third-party Packagist code (its service provider via `package:discover`,
-    |   and any eager `autoload.files`) in the host process. When true, an unmet
-    |   requirement is installed on activation by shelling out to `composer
-    |   require` in the host root, so the dependency survives a fresh deploy;
-    |   enable it only where you trust every installed plugin's declared
-    |   dependencies and the host may run Composer at runtime.
+    |   When true (the default since 2.16.0), installing a plugin installs its
+    |   declared packages too. Installing from a ZIP or from disk, and updating
+    |   (active or not), resolve the `composer` block and shell out to
+    |   `composer require` in the host root for any unmet requirement, so the
+    |   dependency is added to the host's `composer.json` / `composer.lock` and
+    |   survives a fresh deploy. If the packages can't be installed, the install
+    |   fails (a ZIP install's extracted files are removed) and an update rolls
+    |   back. Activation resolves again as a backstop, putting back a package
+    |   lost since install.
     |
-    | Resolution always fails closed: if a required package is missing (and
-    | auto-install is off or cannot complete — Packagist unreachable, a
-    | `composer.lock` conflict, or a missing binary), the activation transaction
-    | unwinds rather than booting a plugin with an absent vendor tree.
+    |   Installing a plugin is already agreeing to run its code: it is arbitrary
+    |   PHP the host will boot. The packages the plugin declares are part of
+    |   that code, so installing them is part of installing the plugin.
+    |
+    |   When false, install and update never touch the `composer` block, and
+    |   activation fails closed on an unmet requirement, expecting the operator
+    |   to have installed the package themselves. This is the behavior before
+    |   2.16.0. Use it on hosts that can't run Composer at runtime: read-only
+    |   filesystems, immutable container images.
+    |
+    | Resolution always fails closed: a plugin never activates with a missing
+    | or out-of-range package, and a plugin may not name a package the host
+    | itself requires in its root `composer.json`.
     |
     | Packages brought in by a plugin are left in place on deactivate/delete —
     | they are never auto-removed, since the host or another plugin may share
     | them and Composer offers no safe ref-counted uninstall here.
     */
-    'autoInstallComposerDependencies' => env( 'PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES', false ),
+    'autoInstallComposerDependencies' => env( 'PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES', true ),
 
     // Override the composer binary/command used to install plugin dependencies.
     // Null falls back to the `COMPOSER_BINARY` env var, then a bare `composer`

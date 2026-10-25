@@ -132,7 +132,7 @@ with no `register*()` call required. See
 | `min_app_version`   | string ( semver ) | *2.14.0*. Minimum version of the **host application** ( e.g. Keystone CMS ), compared against the host's `cms.plugins.appVersion` config. Enforced on activation. See [Versioning & host compatibility](#versioning--host-compatibility). |
 | `requires`          | object          | Semver constraints: `{ "cms-framework": "^2.4", "php": "^8.2" }`. A nested `plugins` object declares plugin-to-plugin dependencies. Enforced on activation. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
 | `conflicts`         | object          | Map of plugin slug to version constraint. Activation is refused when a matching plugin is installed. See [Plugin dependencies & conflicts](#plugin-dependencies--conflicts). |
-| `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Resolved from Packagist on activation. See [Composer-package dependencies](#composer-package-dependencies). |
+| `composer`          | object          | Map of Composer package name to version constraint, e.g. `{ "artisanpack-ui/convertkit": "^1.2" }`. Installed from Packagist when the plugin is installed or updated, and checked again on activation. See [Composer-package dependencies](#composer-package-dependencies). |
 | `autoload`          | object          | PSR-4 map. The framework hands this to Composer's runtime `ClassLoader`. Since *2.13.0* each namespace must end in a backslash ( `"HelloWorld\\"` ) and each path must be a relative string inside the plugin ( no `..`, no absolute paths ); anything else is refused at install and update. |
 | `migrations_path`   | string ( path ) | Relative path to your migrations directory. Auto-run on activate. See [Migrations](#migrations). |
 | `rollback_migrations_on_delete` | boolean | Default `false`. When `true`, deleting the plugin reverts every migration under `migrations_path`. See [Migrations](#migrations). |
@@ -819,37 +819,49 @@ requirement that reached the row unvalidated still fails closed. A plugin also
 may not name a package the host itself requires in its root `composer.json` — it
 may bring in new packages, but never change the version of one the host owns.
 
-**When it runs.** On activation, before the service provider boots, the
-framework resolves the `composer` block against the host's installed packages
-(reusing `composer/semver`). Requirements already satisfied are left untouched.
+**When it runs.** *(2.16.0)* When the plugin is installed. `installFromZip()`
+and `installFromDisk()` resolve the `composer` block against the host's installed
+packages (reusing `composer/semver`) once the manifest and slug checks pass,
+before the plugin's row is created, and install whatever is unmet. An update
+does the same after it extracts the new version, whether or not the plugin is
+active. Activation resolves the block again before the service provider boots,
+as a backstop: a package lost since install (a host `composer install` from a
+lock that doesn't have it, a restored `vendor/`) is put back or reported.
+Requirements already satisfied are left untouched.
 
-**Installing.** When a requirement is unmet and
-`cms.plugins.autoInstallComposerDependencies` is `true`, the framework runs
+**Installing.** An unmet requirement is installed by running
 `composer require <package>:<constraint>` in the host root, so the dependency is
 added to the host's `composer.json` / `composer.lock` and survives a fresh
 deploy. The freshly installed package's PSR-4 prefixes are registered on the
-running class loader so its classes are autoloadable when the plugin boots in
-that same request. Composer itself arbitrates any conflict with the host's
-existing lock. **This is off by default** (`false`): auto-install fetches and
-boots arbitrary third-party Packagist code (its service provider via
-`package:discover`, and any eager `autoload.files`) in the host process, so it
-is opt-in and every declared install is logged. Enable it only where you trust
-every installed plugin's declared dependencies.
+running class loader, so its classes are autoloadable if the plugin is activated
+in that same request. Composer itself arbitrates any conflict with the host's
+existing lock, and every install is logged. This is controlled by
+`cms.plugins.autoInstallComposerDependencies`, which is **on by default** since
+2.16.0 (it was off before). Installing a plugin is already agreeing to run its
+code, and the packages it declares are part of that code.
 
-**Package migrations (2.11.0).** When activation freshly installs a package that
-registers its own migrations (`loadMigrationsFrom()` in its service provider),
-the framework runs `migrate --force` after the plugin's service provider
-registers, so the package's tables exist before first use. A migration failure
-fails the activation and rolls it back.
+**Package migrations (2.11.0).** A package that registers its own migrations
+(`loadMigrationsFrom()` in its service provider) can only have them run once its
+service provider boots, which is when the plugin is activated. So with
+auto-install on, activating a plugin that declares a `composer` block runs
+`migrate --force` after the plugin's service provider registers, so the
+package's tables exist before first use. The command is idempotent; migrations
+already applied are skipped. A migration failure fails the activation and rolls
+it back.
 
-**Failing closed.** Resolution never half-activates a plugin. If a requirement
-is unmet and auto-install is disabled (the default), or an install cannot
-complete — Packagist unreachable, a `composer.lock` conflict, or a missing
-`composer` binary — activation raises `ComposerDependencyNotSatisfiedException`
-and the activation
-transaction unwinds. Over HTTP the activate endpoint returns `409` with code
-`plugin_composer_dependencies_unsatisfied`. On the update flow the same failure
-restores the previous version through the backup-restore path.
+**Failing closed.** A plugin never installs or activates with its packages
+missing. If an install cannot complete — Packagist unreachable, a
+`composer.lock` conflict, a missing `composer` binary, a package the host itself
+requires — `installFromZip()` and `installFromDisk()` throw a
+`PluginInstallationException` carrying Composer's reason, and no row is created.
+A ZIP install also removes the extracted plugin directory; `installFromDisk()`
+leaves the directory alone, since the framework didn't put it there. Over HTTP
+the install endpoint returns the reason as a `plugin_zip` validation error. On
+the update flow the failure restores the previous version through the
+backup-restore path. At activation, an unmet requirement raises
+`ComposerDependencyNotSatisfiedException` and the activation transaction
+unwinds; the activate endpoint returns `409` with code
+`plugin_composer_dependencies_unsatisfied`.
 
 **Deactivation & removal.** Packages a plugin brought in are **left in place**
 on deactivate and delete. They are never auto-removed: the host or another
@@ -857,8 +869,10 @@ plugin may share the same package, and Composer offers no safe ref-counted
 uninstall here. Remove an unwanted package with `composer remove` yourself.
 
 **Hardened hosts.** Set `PLUGINS_AUTO_INSTALL_COMPOSER_DEPENDENCIES=false` to
-forbid runtime Composer installs; activation then requires the operator to have
-installed the declared packages ahead of time. `PLUGINS_COMPOSER_BINARY`
+forbid runtime Composer installs, e.g. on a read-only filesystem or an immutable
+container image. Install and update then never touch the `composer` block, and
+activation fails closed until the operator has installed the declared packages
+themselves — the behavior before 2.16.0. `PLUGINS_COMPOSER_BINARY`
 overrides the resolved `composer` command for sandboxed PHP-FPM pools.
 
 ## Shipping updates

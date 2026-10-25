@@ -6,6 +6,7 @@ namespace ArtisanPackUI\CMSFramework\Tests\Support\Composer;
 
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
+use Throwable;
 
 /**
  * In-memory {@see ComposerPackageInstallerInterface} for tests: it models the
@@ -45,6 +46,12 @@ class FakeComposerPackageInstaller implements ComposerPackageInstallerInterface
      * Reason surfaced when $failInstall is true.
      */
     public ?string $failReason = null;
+
+    /**
+     * When set, autoloadMaps() throws it, to simulate a failure while the
+     * freshly installed packages are seated on the class loader.
+     */
+    public ?Throwable $autoloadMapsFailure = null;
 
     /**
      * Recorded install() invocations, for assertions.
@@ -87,6 +94,10 @@ class FakeComposerPackageInstaller implements ComposerPackageInstallerInterface
      */
     public function autoloadMaps(): array
     {
+        if ( null !== $this->autoloadMapsFailure ) {
+            throw $this->autoloadMapsFailure;
+        }
+
         return [
             'psr-4'    => $this->autoloadMaps['psr-4'] ?? [],
             'classmap' => $this->autoloadMaps['classmap'] ?? [],

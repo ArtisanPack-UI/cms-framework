@@ -314,6 +314,14 @@ class UpdateManager
                 );
             }
 
+            // 5b. Install the new version's `composer` packages (#430), whether
+            //     or not the plugin is active, so an inactive plugin can't drift
+            //     onto a version whose dependencies were never installed. A
+            //     no-op when `cms.plugins.autoInstallComposerDependencies` is
+            //     off. A failure throws ComposerDependencyNotSatisfiedException
+            //     and unwinds through the backup-restore path below.
+            $this->pluginManager->installComposerDependenciesForManifest( $plugin->slug, $manifest );
+
             // 6. Update database
             $plugin->version          = $updateInfo['version'];
             $plugin->meta             = $manifest;
@@ -357,8 +365,8 @@ class UpdateManager
             throw $e;
         } catch ( DependencyNotSatisfiedException | PluginConflictException | ComposerDependencyNotSatisfiedException $e ) {
             // The reactivate at step 7 rejected the new manifest's `requires` /
-            // `conflicts` declaration (#45) or could not satisfy its `composer`
-            // block (#323). Unwind exactly like the other post-extraction
+            // `conflicts` declaration (#45), or step 5b or 7 could not satisfy
+            // its `composer` block (#323, #430). Unwind exactly like the other post-extraction
             // failures — restore files and revert the row — and surface the
             // dependency reason instead of collapsing it into the generic
             // `downloadFailed()`, which would misreport a satisfiable-dependency
