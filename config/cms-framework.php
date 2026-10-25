@@ -32,7 +32,7 @@ return [
 
         'info' => [
             'title'       => 'ArtisanPack CMS Framework API',
-            'version'     => '2.15.6',
+            'version'     => '2.16.0',
             'description' => 'RESTful API for the ArtisanPack CMS Framework. Provides endpoints for managing posts, pages, content types, users, roles, permissions, settings, notifications, plugins, and themes.',
         ],
 
