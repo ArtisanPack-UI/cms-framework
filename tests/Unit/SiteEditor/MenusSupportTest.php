@@ -167,6 +167,38 @@ describe( 'Menus::assign() / unassign() / assigned()', function (): void {
         expect( Menus::unassign( 'primary' ) )->toBeFalse();
     } );
 
+    it( 'unassign deletes through the model and fires the reverted action', function (): void {
+        $assignment = Menus::assign( 'primary', $this->menu->id );
+
+        $deletedIds = [];
+        $fired      = [];
+
+        MenuLocationAssignment::deleted( function ( MenuLocationAssignment $deleted ) use ( &$deletedIds ): void {
+            $deletedIds[] = $deleted->id;
+        } );
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function ( string $type, ?string $slug, string $theme ) use ( &$fired ): void {
+            $fired[] = [$type, $slug, $theme];
+        } );
+
+        Menus::unassign( 'primary' );
+
+        expect( $deletedIds )->toBe( [$assignment->id] )
+            ->and( $fired )->toBe( [['menu-location', 'primary', $this->themeSlug]] );
+    } );
+
+    it( 'unassign fires nothing when nothing was assigned', function (): void {
+        $fired = false;
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function () use ( &$fired ): void {
+            $fired = true;
+        } );
+
+        Menus::unassign( 'primary' );
+
+        expect( $fired )->toBeFalse();
+    } );
+
     it( 'assigned returns the menu model when assigned', function (): void {
         Menus::assign( 'primary', $this->menu->id );
 

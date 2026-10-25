@@ -239,3 +239,53 @@ describe( 'TemplatePartResolver::all()', function (): void {
         }
     } );
 } );
+
+describe( 'TemplatePartResolver::revert()', function (): void {
+    it( 'deletes the DB row through the model and fires the reverted action', function (): void {
+        $row = TemplatePart::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'header',
+            'title' => 'Header',
+            'area'  => 'header',
+        ] );
+
+        $deletedIds = [];
+        $fired      = [];
+
+        TemplatePart::deleted( function ( TemplatePart $part ) use ( &$deletedIds ): void {
+            $deletedIds[] = $part->id;
+        } );
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function ( string $type, ?string $slug, string $theme ) use ( &$fired ): void {
+            $fired[] = [$type, $slug, $theme];
+        } );
+
+        expect( $this->resolver->revert( 'header' ) )->toBeTrue()
+            ->and( TemplatePart::where( 'slug', 'header' )->exists() )->toBeFalse()
+            ->and( $deletedIds )->toBe( [$row->id] )
+            ->and( $fired )->toBe( [['template-part', 'header', $this->themeSlug]] );
+    } );
+
+    it( 'returns false and fires nothing when no DB row exists', function (): void {
+        $fired = false;
+
+        addAction( 'ap.cmsFramework.siteEditor.reverted', function () use ( &$fired ): void {
+            $fired = true;
+        } );
+
+        expect( $this->resolver->revert( 'header' ) )->toBeFalse()
+            ->and( $fired )->toBeFalse();
+    } );
+
+    it( 'returns false for invalid slugs without touching the database', function (): void {
+        TemplatePart::create( [
+            'theme' => $this->themeSlug,
+            'slug'  => 'header',
+            'title' => 'Header',
+            'area'  => 'header',
+        ] );
+
+        expect( $this->resolver->revert( '../header' ) )->toBeFalse()
+            ->and( TemplatePart::where( 'slug', 'header' )->exists() )->toBeTrue();
+    } );
+} );

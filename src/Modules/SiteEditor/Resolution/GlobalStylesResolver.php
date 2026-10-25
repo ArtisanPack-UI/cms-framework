@@ -154,9 +154,14 @@ class GlobalStylesResolver
     /**
      * Revert user customization for the active theme by deleting its DB row.
      *
-     * Returns true when a row was deleted, false when no row existed.
+     * Deletes through the model, so `deleting`/`deleted` fire, then fires
+     * the `ap.cmsFramework.siteEditor.reverted` action.
+     *
+     * Returns true when a row was deleted, false when no row existed or a
+     * `deleting` listener cancelled the delete.
      *
      * @since 2.0.0
+     * @since 2.16.0 Deletes through the model and fires `ap.cmsFramework.siteEditor.reverted`.
      */
     public function revert(): bool
     {
@@ -167,7 +172,15 @@ class GlobalStylesResolver
         }
 
         // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme resolved from ThemeManager (internal config, not request input) and its slug is bound as an Eloquent query parameter.
-        return GlobalStyles::query()->where( 'theme', $theme['slug'] )->delete() > 0;
+        $globalStyles = GlobalStyles::query()->where( 'theme', $theme['slug'] )->first();
+
+        if ( null === $globalStyles || true !== $globalStyles->delete() ) {
+            return false;
+        }
+
+        doAction( 'ap.cmsFramework.siteEditor.reverted', 'global-styles', null, $theme['slug'] );
+
+        return true;
     }
 
     /**

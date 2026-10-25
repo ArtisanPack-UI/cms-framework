@@ -101,7 +101,12 @@ class TemplateResolver implements EntityResolver
     }
 
     /**
+     * Deletes the active theme's DB override for the slug through the model,
+     * so `deleting`/`deleted` fire, then fires the
+     * `ap.cmsFramework.siteEditor.reverted` action.
+     *
      * @since 2.0.0
+     * @since 2.16.0 Deletes through the model and fires `ap.cmsFramework.siteEditor.reverted`.
      */
     public function revert( string $slug ): bool
     {
@@ -116,7 +121,15 @@ class TemplateResolver implements EntityResolver
         }
 
         // phpcs:ignore ArtisanPackUI.Security.ValidatedSanitizedInput.VariableNotSanitized -- $theme is the active theme slug (internal config); $slug is guarded by SlugValidator at the top of this method. Both are bound as Eloquent query parameters.
-        return Template::query()->where( 'theme', $theme )->where( 'slug', $slug )->delete() > 0;
+        $template = Template::query()->where( 'theme', $theme )->where( 'slug', $slug )->first();
+
+        if ( null === $template || true !== $template->delete() ) {
+            return false;
+        }
+
+        doAction( 'ap.cmsFramework.siteEditor.reverted', 'template', $slug, $theme );
+
+        return true;
     }
 
     /**
