@@ -144,13 +144,15 @@ class PluginManager
      * 2. Extract to temporary location
      * 3. Validate plugin.json manifest
      * 4. Move to plugins directory
-     * 5. Register in database
-     * 6. Fire installation hooks
+     * 5. Install the manifest's `composer` packages, when
+     *    `cms.plugins.autoInstallComposerDependencies` is on (#430)
+     * 6. Register in database
+     * 7. Fire installation hooks
      *
      * @param  string  $zipPath  Absolute path to uploaded ZIP file
      *
      * @throws PluginValidationException If ZIP or manifest is invalid
-     * @throws PluginInstallationException If extraction or registration fails
+     * @throws PluginInstallationException If extraction, the Composer-package install, or registration fails
      *
      * @return Plugin The installed plugin model
      */
@@ -196,6 +198,18 @@ class PluginManager
             throw PluginInstallationException::alreadyInstalled( $slug );
         }
 
+        // Install the plugin's declared Composer packages (#430) before the row
+        // exists, so a plugin whose dependencies cannot be installed is never
+        // listed. Remove the extracted directory on failure, exactly like the
+        // invalid-manifest paths above, so a retry starts clean.
+        try {
+            $this->installComposerDependenciesForManifest( $slug, $manifest );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
+        }
+
         doAction( 'ap.cmsFramework.plugin.installing', $slug );
 
         // Register in database
@@ -230,13 +244,19 @@ class PluginManager
      * {@see activate()} for both install paths, so a disk-installed plugin
      * clears the same bar a ZIP-installed one does before it can go active.
      *
+     * Since 2.16.0 it also installs the manifest's `composer` packages when
+     * `cms.plugins.autoInstallComposerDependencies` is on, as the ZIP path does
+     * (#430). Unlike the ZIP path, a failure never deletes the plugin directory:
+     * the framework did not put it there, and it is often a developer's working
+     * copy or part of the host's own repository.
+     *
      * @since 2.9.0
      *
      * @param  string  $slug  Plugin slug (validated against the plugins directory).
      *
      * @throws PluginNotFoundException If no discoverable plugin exists for the slug.
      * @throws PluginValidationException If the on-disk manifest is invalid.
-     * @throws PluginInstallationException If the plugin is already registered.
+     * @throws PluginInstallationException If the plugin is already registered, or its Composer packages cannot be installed.
      *
      * @return Plugin The installed plugin model.
      */
@@ -265,6 +285,14 @@ class PluginManager
 
         if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
             throw PluginInstallationException::alreadyInstalled( $slug );
+        }
+
+        // Same Composer-package step as `installFromZip()` (#430), minus the
+        // cleanup: the on-disk plugin is left exactly where it was found.
+        try {
+            $this->installComposerDependenciesForManifest( $slug, $manifest );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
         }
 
         doAction( 'ap.cmsFramework.plugin.installing', $slug );
@@ -349,7 +377,7 @@ class PluginManager
      * 3. Run plugin's own `migrations_path` migrations (if any)
      * 4. Register service provider
      * 5. Update database (is_active = true)
-     * 6. Run migrations shipped by Composer packages installed this activation (#338)
+     * 6. Run migrations shipped by the plugin's Composer packages (#338, #430)
      * 7. Fire activation hooks
      *
      * @param  string  $slug  Plugin slug
@@ -382,6 +410,18 @@ class PluginManager
         // the caller can run migrations the packages ship after the plugin's
         // service provider has booted (and registered them) — see #338.
         $composerPackagesInstalled = $this->ensureComposerDependencies( $plugin );
+
+        // With auto-install on, the packages are normally installed when the
+        // plugin is installed or updated (#430), so this activation finds them
+        // already satisfied. Their migrations can't run at install time — the
+        // package's service provider, which registers them, only boots once the
+        // plugin is active — so run the idempotent package migrate on every
+        // activation of a plugin that declares packages. With auto-install off
+        // this is exactly the pre-2.16 rule: only after an install, which then
+        // never happens.
+        $runComposerPackageMigrations = $composerPackagesInstalled
+            || ( config( 'cms.plugins.autoInstallComposerDependencies', true )
+                && ! empty( $plugin->required_composer_packages ) );
 
         doAction( 'ap.cmsFramework.plugin.activating', $slug );
 
@@ -439,7 +479,7 @@ class PluginManager
             // provider typically pulls in — has already announced its
             // migration paths to the migrator. Idempotent by filename, so
             // migrations already applied are skipped.
-            if ( $composerPackagesInstalled ) {
+            if ( $runComposerPackageMigrations ) {
                 $this->runComposerPackageMigrations( $plugin );
             }
         } catch ( Throwable $e ) {
@@ -833,6 +873,56 @@ class PluginManager
                 ] );
             }
         }
+    }
+
+    /**
+     * Install a plugin manifest's declared Composer packages while the plugin
+     * is being installed or updated (#430).
+     *
+     * Called by {@see installFromZip()} and {@see installFromDisk()} after the
+     * manifest and slug checks pass and before the `plugins` row exists, and by
+     * `UpdateManager::updatePlugin()` after it extracts and re-validates a new
+     * version, whether or not the plugin is active. A no-op when
+     * `cms.plugins.autoInstallComposerDependencies` is off: install and update
+     * then leave the `composer` block alone, and {@see activate()} fails
+     * closed on an unmet requirement as it did before 2.16.0.
+     *
+     * When packages are installed, the regenerated autoload maps are seated on
+     * the running class loader here, not left to activation. Activation
+     * resolves first, finds the packages already satisfied, and seats nothing,
+     * so without this a plugin activated in the same request — an update of an
+     * active plugin reactivates straight after this step — would boot a service
+     * provider whose package classes this process cannot load.
+     *
+     * Package migrations are not run here. A package registers them from its
+     * own service provider, which does not boot until the plugin is active, so
+     * a migrate now would find nothing to run. {@see activate()} runs them
+     * instead.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $slug  The plugin's slug.
+     * @param  array<string,mixed>  $manifest  The validated plugin manifest.
+     *
+     * @throws ComposerDependencyNotSatisfiedException When the requirements cannot be satisfied.
+     *
+     * @return bool True when at least one package was installed.
+     */
+    public function installComposerDependenciesForManifest( string $slug, array $manifest ): bool
+    {
+        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', true ) ) {
+            return false;
+        }
+
+        $requirements = is_array( $manifest['composer'] ?? null ) ? $manifest['composer'] : [];
+
+        $installed = $this->resolveAndInstallComposerDependencies( $slug, $requirements );
+
+        if ( $installed ) {
+            $this->registerComposerPackageAutoloaders();
+        }
+
+        return $installed;
     }
 
     /**
@@ -1979,7 +2069,10 @@ class PluginManager
      * conflict, a missing binary), raises
      * {@see ComposerDependencyNotSatisfiedException}. Called from
      * `activate()` before any state mutation, so a failure aborts activation
-     * without a rollback.
+     * without a rollback. Since 2.16.0 the packages are normally installed
+     * when the plugin is installed or updated
+     * ({@see installComposerDependenciesForManifest()}), and this is the
+     * backstop for a package lost after that (#430).
      *
      * @since 2.10.0
      *
@@ -1993,22 +2086,59 @@ class PluginManager
      */
     protected function ensureComposerDependencies( Plugin $plugin ): bool
     {
-        $requirements = $plugin->required_composer_packages;
+        $installed = $this->resolveAndInstallComposerDependencies(
+            $plugin->slug,
+            $plugin->required_composer_packages,
+        );
+
+        if ( $installed ) {
+            // Packages were just installed this request; seat the regenerated
+            // autoload maps so their classes are usable before the provider boots.
+            $this->registerComposerPackageAutoloaders();
+        }
+
+        return $installed;
+    }
+
+    /**
+     * Resolve a set of declared Composer requirements against the host's
+     * installed packages and, when auto-install is enabled, install the unmet
+     * ones.
+     *
+     * Shared by activation ({@see ensureComposerDependencies()}) and by install
+     * and update ({@see installComposerDependenciesForManifest()}), so every
+     * entry point applies the same guards: the requirements are re-validated,
+     * a package the host itself requires is refused, and an install Composer
+     * reports as successful but this process cannot see fails closed.
+     *
+     * @since 2.16.0
+     *
+     * @param  string  $slug  The plugin's slug.
+     * @param  array<mixed,mixed>  $requirements  Composer package name to version constraint.
+     *
+     * @throws ComposerDependencyNotSatisfiedException When the requirements cannot be satisfied.
+     *
+     * @return bool True when at least one package was installed. The caller
+     *              seats the regenerated autoload maps.
+     */
+    protected function resolveAndInstallComposerDependencies( string $slug, array $requirements ): bool
+    {
         if ( empty( $requirements ) ) {
             return false;
         }
 
-        // Re-validate the persisted requirements before they reach the resolver
-        // or `composer require`. `validateManifest()` vetted them at install and
-        // update time, but this reads them back from `meta`, which a later write
-        // path (or direct row tampering) could have seated unvalidated — the same
-        // reason `UpdateManager` re-checks `isUsableUpdateSource()` at update
-        // time. Fail closed on anything that would not pass validation today.
+        // Re-validate the requirements before they reach the resolver or
+        // `composer require`. `validateManifest()` vetted them at install and
+        // update time, but activation reads them back from `meta`, which a later
+        // write path (or direct row tampering) could have seated unvalidated —
+        // the same reason `UpdateManager` re-checks `isUsableUpdateSource()` at
+        // update time. Fail closed on anything that would not pass validation
+        // today.
         foreach ( $requirements as $package => $constraint ) {
             if ( ! is_string( $package ) || ! $this->isValidComposerPackageName( $package )
                 || ! is_string( $constraint ) || ! $this->isValidComposerConstraint( $constraint ) ) {
                 throw ComposerDependencyNotSatisfiedException::invalidRequirement(
-                    $plugin->slug,
+                    $slug,
                     is_string( $package ) ? $package : '(non-string package name)',
                 );
             }
@@ -2021,15 +2151,13 @@ class PluginManager
 
         // Already satisfied: the packages were installed in a prior request, so
         // the host autoloader that booted this process already knows them — no
-        // install and no in-request autoload seating needed. Migrations those
-        // packages ship also ran on an earlier activation (or a prior deploy),
-        // so return false to keep the post-activation migrate a no-op.
+        // install and no in-request autoload seating needed.
         if ( $result->isSatisfied() ) {
             return false;
         }
 
-        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', false ) ) {
-            throw ComposerDependencyNotSatisfiedException::forResult( $plugin->slug, $result );
+        if ( ! config( 'cms.plugins.autoInstallComposerDependencies', true ) ) {
+            throw ComposerDependencyNotSatisfiedException::forResult( $slug, $result );
         }
 
         $constraints = $result->unresolvedConstraints();
@@ -2043,16 +2171,16 @@ class PluginManager
         $declared      = array_map( 'strtolower', array_keys( $constraints ) );
         $rootConflicts = array_values( array_intersect( $declared, $this->hostRootComposerPackages() ) );
         if ( ! empty( $rootConflicts ) ) {
-            throw ComposerDependencyNotSatisfiedException::rootPackageConflict( $plugin->slug, $rootConflicts );
+            throw ComposerDependencyNotSatisfiedException::rootPackageConflict( $slug, $rootConflicts );
         }
 
         // Hand only the unmet constraints to Composer, which arbitrates any
         // conflict against the host's existing lock. A non-zero exit throws
         // ComposerDependencyNotSatisfiedException from the installer.
-        $installer->install( $plugin->slug, $constraints );
+        $installer->install( $slug, $constraints );
 
         // Re-resolve against the post-install snapshot to confirm the
-        // constraints are now met before booting the provider.
+        // constraints are now met before anything relies on them.
         $result = $resolver->resolve( $requirements, $installer->installedVersions() );
 
         if ( ! $result->isSatisfied() ) {
@@ -2063,13 +2191,9 @@ class PluginManager
             // disabled, with `opcache.validate_timestamps=0`). Fail closed —
             // never boot a provider whose classes may be unresolvable — but say
             // so, since a fresh request (which reads the regenerated metadata)
-            // completes the activation without reinstalling.
-            throw ComposerDependencyNotSatisfiedException::installedButUnverified( $plugin->slug, $result );
+            // completes the step without reinstalling.
+            throw ComposerDependencyNotSatisfiedException::installedButUnverified( $slug, $result );
         }
-
-        // Packages were just installed this request; seat the regenerated
-        // autoload maps so their classes are usable before the provider boots.
-        $this->registerComposerPackageAutoloaders();
 
         return true;
     }
