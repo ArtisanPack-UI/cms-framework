@@ -9,10 +9,18 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
 use Composer\Autoload\ClassLoader;
+use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Process;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\ServiceProvider;
 use RuntimeException;
 
 beforeEach( function (): void {
+    // A fresh install migrates in a subprocess (#431); never spawn a real one.
+    Process::fake();
+
     $this->installer = new FakeComposerPackageInstaller;
     app()->instance( ComposerPackageInstallerInterface::class, $this->installer );
 
@@ -259,18 +267,19 @@ describe( 'Composer-package activation gate', function (): void {
         }
     } );
 
-    it( 'runs unscoped migrations after installing packages that ship their own (#338)', function (): void {
+    it( 'migrates in a fresh process after installing packages that ship their own (#338, #431)', function (): void {
         config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
         $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
         makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
 
-        // Probe subclass records whether the post-activation unscoped migrate
-        // fired, and its slug, so we can assert both firing and ordering
-        // (packages installed → migrate) without touching Composer, the
-        // filesystem, or Artisan.
+        // Probe subclass records which package migrate fired, and its slug, so
+        // we can assert a fresh install takes the fresh-process path (#431)
+        // without touching Composer, the filesystem, or Artisan.
         $installer = $this->installer;
         $manager   = new class ( $installer ) extends PluginManager {
             public int $packageMigrateCalls = 0;
+
+            public int $freshProcessMigrateCalls = 0;
 
             public ?string $packageMigrateSlug = null;
 
@@ -287,13 +296,150 @@ describe( 'Composer-package activation gate', function (): void {
             protected function runComposerPackageMigrations( Plugin $plugin ): void
             {
                 $this->packageMigrateCalls++;
+            }
+
+            protected function runComposerPackageMigrationsInFreshProcess( Plugin $plugin ): void
+            {
+                $this->freshProcessMigrateCalls++;
                 $this->packageMigrateSlug = $plugin->slug;
             }
         };
 
         expect( $manager->activate( 'convertkit' ) )->toBeTrue()
-            ->and( $manager->packageMigrateCalls )->toBe( 1 )
+            ->and( $manager->freshProcessMigrateCalls )->toBe( 1 )
+            ->and( $manager->packageMigrateCalls )->toBe( 0 )
             ->and( $manager->packageMigrateSlug )->toBe( 'convertkit' );
+    } );
+
+    it( 'runs the fresh-process migrate as php artisan migrate --force in the host root (#431)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        expect( $this->manager->activate( 'convertkit' ) )->toBeTrue();
+
+        Process::assertRanTimes( function ( PendingProcess $process ): bool {
+            $command = ( array ) $process->command;
+
+            return base_path() === $process->path
+                && [ 'artisan', 'migrate', '--force', '--no-interaction', '--no-ansi' ] === array_slice( $command, 1 )
+                && is_string( $command[0] ) && '' !== $command[0];
+        }, 1 );
+    } );
+
+    it( 'does not spawn a migrate process when the packages were already installed', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installed = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        expect( $this->manager->activate( 'convertkit' ) )->toBeTrue();
+
+        Process::assertNothingRan();
+    } );
+
+    it( 'creates the tables of a package whose provider only registers in a freshly booted process (#431)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        $migrationsPath = sys_get_temp_dir() . '/cms-431-' . uniqid() . '/migrations';
+        File::ensureDirectoryExists( $migrationsPath );
+        File::put( $migrationsPath . '/2026_01_01_000000_create_convertkit_feeds_table.php', <<<'PHP'
+            <?php
+
+            use Illuminate\Database\Migrations\Migration;
+            use Illuminate\Database\Schema\Blueprint;
+            use Illuminate\Support\Facades\Schema;
+
+            return new class extends Migration {
+                public function up(): void
+                {
+                    Schema::create( 'convertkit_feeds', function ( Blueprint $table ): void {
+                        $table->id();
+                    } );
+                }
+            };
+            PHP );
+
+        // Stand-in for the package's own provider: registers its migrations
+        // through `loadMigrationsFrom()`, as `artisanpack-ui/convertkit` does.
+        $packageProvider = new class ( app(), $migrationsPath ) extends ServiceProvider {
+            public function __construct( $app, private string $migrationsPath )
+            {
+                parent::__construct( $app );
+            }
+
+            public function boot(): void
+            {
+                $this->loadMigrationsFrom( $this->migrationsPath );
+            }
+        };
+
+        // The fake subprocess boots the way a real one would: from the
+        // regenerated package manifest, so the package provider is registered
+        // before `migrate` runs. The activating process never registers it.
+        $packageProviderRegisteredInProcess = null;
+        Process::fake( function () use ( $packageProvider, &$packageProviderRegisteredInProcess ) {
+            $packageProviderRegisteredInProcess = null !== app()->getProvider( $packageProvider::class );
+
+            app()->register( $packageProvider );
+            Artisan::call( 'migrate', [ '--force' => true ] );
+
+            return Process::result();
+        } );
+
+        try {
+            expect( Schema::hasTable( 'convertkit_feeds' ) )->toBeFalse();
+
+            expect( $this->manager->activate( 'convertkit' ) )->toBeTrue()
+                ->and( $packageProviderRegisteredInProcess )->toBeFalse()
+                ->and( Schema::hasTable( 'convertkit_feeds' ) )->toBeTrue();
+        } finally {
+            File::deleteDirectory( dirname( $migrationsPath ) );
+        }
+    } );
+
+    it( 'rolls back activation and surfaces the output when the fresh-process migrate fails (#431)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        Process::fake( [ '*' => Process::result( errorOutput: "\e[31mSQLSTATE[42S01]: table already exists\e[0m", exitCode: 1 ) ] );
+
+        try {
+            $this->manager->activate( 'convertkit' );
+            $this->fail( 'Expected RuntimeException.' );
+        } catch ( RuntimeException $e ) {
+            expect( $e->getMessage() )
+                ->toContain( "plugin 'convertkit'" )
+                ->toContain( 'SQLSTATE[42S01]: table already exists' )
+                ->not->toContain( "\e" )
+                ->not->toContain( '[31m' );
+        }
+
+        expect( Plugin::where( 'slug', 'convertkit' )->first()->is_active )->toBeFalse();
+    } );
+
+    it( 'rolls back activation when the fresh-process migrate cannot run at all (#431)', function (): void {
+        config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
+        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
+
+        Process::fake( function (): void {
+            throw new RuntimeException( 'The process exceeded the timeout of 600 seconds.' );
+        } );
+
+        try {
+            $this->manager->activate( 'convertkit' );
+            $this->fail( 'Expected RuntimeException.' );
+        } catch ( RuntimeException $e ) {
+            expect( $e->getMessage() )
+                ->toContain( "plugin 'convertkit'" )
+                ->toContain( 'exceeded the timeout' )
+                ->and( $e->getPrevious() )->toBeInstanceOf( RuntimeException::class );
+        }
+
+        expect( Plugin::where( 'slug', 'convertkit' )->first()->is_active )->toBeFalse();
     } );
 
     it( 'skips the unscoped migrate when composer requirements are already satisfied and auto-install is off', function (): void {
@@ -361,9 +507,10 @@ describe( 'Composer-package activation gate', function (): void {
             ->and( $manager->packageMigrateCalls )->toBe( 0 );
     } );
 
-    it( 'rolls back activation when the post-install unscoped migrate throws (#338)', function (): void {
+    it( 'rolls back activation when the in-process package migrate throws (#338)', function (): void {
+        // Already installed, so the migrate runs in-process (#430, #431).
         config()->set( 'cms.plugins.autoInstallComposerDependencies', true );
-        $this->installer->installsToApply = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
+        $this->installer->installed = [ 'artisanpack-ui/convertkit' => '1.4.0' ];
         makeComposerPlugin( 'convertkit', [ 'artisanpack-ui/convertkit' => '^1.2' ] );
 
         $installer = $this->installer;

@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
@@ -31,6 +32,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Process;
 use ReflectionClass;
 use RuntimeException;
 use Throwable;
@@ -39,6 +41,14 @@ use ZipArchive;
 class PluginManager
 {
     use HasManifestParsing;
+    use ResolvesCliPhpBinary;
+
+    /**
+     * Timeout, in seconds, for the fresh-process package migrate (#431).
+     *
+     * @since 2.16.0
+     */
+    protected const PACKAGE_MIGRATION_TIMEOUT = 600;
 
     private ClassLoader $classLoader;
 
@@ -486,7 +496,14 @@ class PluginManager
             // provider typically pulls in — has already announced its
             // migration paths to the migrator. Idempotent by filename, so
             // migrations already applied are skipped.
-            if ( $runComposerPackageMigrations ) {
+            //
+            // When the packages were installed by this very activation, their
+            // providers are not registered in this process: the regenerated
+            // package manifest is only read at boot. Migrate in a fresh process
+            // instead, which boots that manifest (#431).
+            if ( $composerPackagesInstalled ) {
+                $this->runComposerPackageMigrationsInFreshProcess( $plugin );
+            } elseif ( $runComposerPackageMigrations ) {
                 $this->runComposerPackageMigrations( $plugin );
             }
         } catch ( Throwable $e ) {
@@ -2234,6 +2251,61 @@ class PluginManager
         Artisan::call( 'migrate', [
             '--force' => true,
         ] );
+    }
+
+    /**
+     * Run migrations that Composer packages installed by this activation ship,
+     * in a fresh `php artisan migrate --force` process (#431).
+     *
+     * {@see runComposerPackageMigrations()} only sees the migration paths that
+     * providers registered in this process. A package installed moments ago
+     * by `composer require` has its provider listed in the regenerated
+     * `bootstrap/cache/packages.php`, but this application booted from the
+     * old manifest, so its `loadMigrationsFrom()` never ran here and an
+     * in-process migrate finds nothing new. A fresh process boots the
+     * regenerated manifest, plus the now-active plugin's own provider, so the
+     * package's migrations are registered and applied.
+     *
+     * Uses the same CLI PHP resolution as the self-updater, since activation
+     * usually runs under PHP-FPM, where `PHP_BINARY` cannot run scripts.
+     *
+     * @since 2.16.0
+     *
+     * @param  Plugin  $plugin  The plugin being activated (for error context).
+     *
+     * @throws RuntimeException When the migrate process fails, so activation rolls back.
+     */
+    protected function runComposerPackageMigrationsInFreshProcess( Plugin $plugin ): void
+    {
+        try {
+            $result = Process::timeout( self::PACKAGE_MIGRATION_TIMEOUT )
+                ->path( base_path() )
+                ->run( [ $this->resolvePhpBinary(), 'artisan', 'migrate', '--force', '--no-interaction', '--no-ansi' ] );
+        } catch ( Throwable $e ) {
+            throw new RuntimeException(
+                "Could not run the migrations for the Composer packages of plugin '{$plugin->slug}': {$e->getMessage()}",
+                0,
+                $e,
+            );
+        }
+
+        if ( $result->successful() ) {
+            return;
+        }
+
+        $reason = '' !== trim( $result->errorOutput() )
+            ? $result->errorOutput()
+            : $result->output();
+
+        // The output reaches admins and the log. Strip control characters
+        // (keeping line breaks) so escape sequences can't corrupt either.
+        $reason = ( string ) preg_replace( '/\e\[[0-9;?]*[ -\/]*[@-~]/', '', $reason );
+        $reason = trim( ( string ) preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $reason ) );
+
+        throw new RuntimeException(
+            "Could not run the migrations for the Composer packages of plugin '{$plugin->slug}': "
+            . ( '' !== $reason ? mb_strimwidth( $reason, 0, 1000, '…' ) : 'php artisan migrate exited with a non-zero status.' ),
+        );
     }
 
     /**
