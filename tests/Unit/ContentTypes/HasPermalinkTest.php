@@ -97,10 +97,15 @@ test( 'an unusable filter result falls back to the default url', function ( mixe
 
     expect( $this->post->permalink )->toBe( url( '/blog/my-post' ) );
 } )->with( [
-    'null'         => [null],
-    'empty string' => [''],
-    'false'        => [false],
-    'array'        => [['/my-post']],
+    'null'                => [null],
+    'empty string'        => [''],
+    'false'               => [false],
+    'array'               => [['/my-post']],
+    'bare path'           => ['my-post'],
+    'protocol-relative'   => ['//example.com/my-post'],
+    'mailto scheme'       => ['mailto:help@example.com'],
+    'javascript scheme'   => ['javascript://example.com/%0aalert(1)'],
+    'scheme with no host' => ['https://'],
 ] );
 
 test( 'urls built on the post permalink follow the filter', function (): void {

@@ -25,9 +25,9 @@ trait HasPermalink
     /**
      * Get the public URL for the model.
      *
-     * A callback may return an absolute URL or a root-relative path such as
-     * `/`, which is made absolute. A callback that returns anything other
-     * than a non-empty string is ignored and the default URL is returned.
+     * A callback may return an HTTP(S) URL or a root-relative path such as
+     * `/`, which is made absolute. Anything else, including other schemes and
+     * protocol-relative URLs, is ignored and the default URL is returned.
      * Callbacks must build their URL from the model's fields, because reading
      * `$model->permalink` inside a callback runs the filter again.
      *
@@ -38,7 +38,11 @@ trait HasPermalink
         $default   = $this->defaultPermalink();
         $permalink = applyFilters( $this->permalinkHook(), $default, $this );
 
-        return is_string( $permalink ) && '' !== $permalink ? url( $permalink ) : $default;
+        if ( ! is_string( $permalink ) || 1 !== preg_match( '~^(?:https?://[^/\s]|/(?!/))~i', $permalink ) ) {
+            return $default;
+        }
+
+        return url( $permalink );
     }
 
     /**
