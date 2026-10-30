@@ -10,6 +10,7 @@ CMS Framework v1.1.0 introduces several shared traits to eliminate code duplicat
 - [HasContentFilters](#hascontentfilters)
 - [HasManifestParsing](#hasmanifestparsing)
 - [HasIncludableRelationships](#hasincludablerelationships)
+- [HasPermalink](#haspermalink)
 
 ## HasContentStatus
 
@@ -295,3 +296,45 @@ $version = $manifest['version'] ?? '0.0.0';
 Provides support for dynamically including Eloquent relationships in API responses via query parameters. This trait is used by API controllers to allow clients to request related data using an `include` query parameter.
 
 For full details on how includable relationships work, see the [Includable Relationships API documentation](../api/README.md).
+
+## HasPermalink
+
+**Namespace:** `ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasPermalink`
+
+*Since 2.17.0.* Provides the filterable `permalink` accessor used by `Post` and `Page`. The accessor runs the model's default URL through its filter hook, then returns the result as an absolute URL. See [Content: Permalinks](../Hooks-and-Events.md#content-permalinks) for the hooks and the values a callback can return.
+
+### Methods
+
+#### `getPermalinkAttribute(): string`
+
+Returns the model's public URL. Read it as `$model->permalink`.
+
+#### `defaultPermalink(): string`
+
+Abstract and protected. Returns the URL used when no callback replaces it.
+
+#### `permalinkHook(): string`
+
+Abstract and protected. Returns the name of the filter hook.
+
+### Usage Examples
+
+```php
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasPermalink;
+use Illuminate\Database\Eloquent\Model;
+
+class Product extends Model
+{
+    use HasPermalink;
+
+    protected function defaultPermalink(): string
+    {
+        return url( "/products/{$this->slug}" );
+    }
+
+    protected function permalinkHook(): string
+    {
+        return 'myPlugin.product.permalink';
+    }
+}
+```

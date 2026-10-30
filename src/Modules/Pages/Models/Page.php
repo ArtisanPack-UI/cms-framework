@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecyc
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasPermalink;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasSupports;
 use ArtisanPackUI\MediaLibrary\Models\Media;
@@ -63,6 +64,7 @@ class Page extends Model
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
+    use HasPermalink;
     use HasRenderedBlockContent;
     use HasSupports;
     use SoftDeletes;
@@ -287,11 +289,11 @@ class Page extends Model
     }
 
     /**
-     * Get the permalink for the page.
+     * Get the URL used when no callback replaces it. Overrides {@see HasPermalink::defaultPermalink()}.
      *
-     * @since 1.0.0
+     * @since 2.17.0
      */
-    public function getPermalinkAttribute(): string
+    protected function defaultPermalink(): string
     {
         $ancestors = $this->ancestors();
 
@@ -302,6 +304,16 @@ class Page extends Model
         $path = $ancestors->pluck( 'slug' )->implode( '/' ) . '/' . $this->slug;
 
         return url( "/{$path}" );
+    }
+
+    /**
+     * Get the name of the filter hook that can replace the URL. Overrides {@see HasPermalink::permalinkHook()}.
+     *
+     * @since 2.17.0
+     */
+    protected function permalinkHook(): string
+    {
+        return 'ap.cmsFramework.page.permalink';
     }
 
     /**

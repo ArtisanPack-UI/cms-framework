@@ -99,6 +99,44 @@ addFilter('ap.taxonomies.registeredTaxonomies', function ($taxonomies) {
 });
 ```
 
+### Permalinks
+
+#### `ap.cmsFramework.post.permalink`
+
+*Since 2.17.0.* Replace the public URL of a post. Runs whenever `$post->permalink` is read.
+
+**Parameters:**
+- `$url` (string) - The default URL, `/blog/{slug}` as an absolute URL
+- `$post` (Post) - The post
+
+**Returns:** string - An HTTP(S) URL or a root-relative path, which is made absolute. Anything else is ignored and the default is used. Build the URL from the post's fields, because reading `$post->permalink` here runs the filter again and never returns.
+
+**Example:**
+
+```php
+addFilter('ap.cmsFramework.post.permalink', function (string $url, Post $post) {
+    return url("/{$post->slug}");
+});
+```
+
+#### `ap.cmsFramework.page.permalink`
+
+*Since 2.17.0.* Replace the public URL of a page. Runs whenever `$page->permalink` is read. The same return rules apply as for `ap.cmsFramework.post.permalink`.
+
+**Parameters:**
+- `$url` (string) - The default URL, the page's slug path under its ancestors as an absolute URL
+- `$page` (Page) - The page
+
+**Returns:** string - An HTTP(S) URL or a root-relative path.
+
+**Example:**
+
+```php
+addFilter('ap.cmsFramework.page.permalink', function (string $url, Page $page) {
+    return 'home' === $page->slug ? '/' : $url;
+});
+```
+
 ### Admin Menu
 
 #### `ap.admin.menuStructure`

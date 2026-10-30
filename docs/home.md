@@ -137,6 +137,7 @@ Hierarchical page management with templates.
 - Template support for custom layouts
 - Categories and tags for pages
 - Breadcrumb generation
+- Filterable permalinks for posts and pages
 
 ### Content Types Module
 
@@ -297,4 +298,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers CMS Framework v2.16.0*
+*This documentation covers CMS Framework v2.17.0*
