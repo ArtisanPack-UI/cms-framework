@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`Post` and `Page` permalinks can now follow the app's permalink structure** ([#440](https://github.com/ArtisanPack-UI/cms-framework/issues/440)). `Post::getPermalinkAttribute()` always returned `/blog/{slug}`, so on a site with any other structure, every post title, query loop, latest-posts and share link pointed at a non-canonical URL. `Page` had the same limit, so an app couldn't return `/` for its homepage. Both models now share a new `HasPermalink` trait that runs the URL through the `ap.cmsFramework.post.permalink` or `ap.cmsFramework.page.permalink` filter, with `(string $url, Post|Page $model)`. The defaults are unchanged. A callback can return an HTTP(S) URL or a root-relative path, which is made absolute. Anything else, including other schemes and protocol-relative URLs, is ignored and the default is used. Callbacks must build the URL from the model's fields, because reading `$model->permalink` inside a callback recurses. Anything built on the permalink follows the filter, including `comments_url`, comment permalinks, page breadcrumbs, API resources and visual-editor's `PostResolver`.
+
 ## [2.16.0] - 2026-10-25
 
 > [!WARNING]

@@ -18,6 +18,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\FiresLifecyc
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasContentStatus;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasCustomFields;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasFeaturedImage;
+use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasPermalink;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasSupports;
 use ArtisanPackUI\MediaLibrary\Models\Media;
@@ -61,6 +62,7 @@ class Post extends Model
     use HasCustomFields;
     use HasFactory;
     use HasFeaturedImage;
+    use HasPermalink;
     use HasRenderedBlockContent;
     use HasSupports;
     use SoftDeletes;
@@ -323,16 +325,6 @@ class Post extends Model
     }
 
     /**
-     * Get the permalink for the post.
-     *
-     * @since 1.0.0
-     */
-    public function getPermalinkAttribute(): string
-    {
-        return url( "/blog/{$this->slug}" );
-    }
-
-    /**
      * Resolve the adjacent published post in the requested direction
      * (`'previous'` or `'next'`). Honors the same
      * status-Published / `published_at <= now()` semantics as
@@ -396,6 +388,26 @@ class Post extends Model
         $this->adjacentPostCache[ $direction ] = $post;
 
         return $post;
+    }
+
+    /**
+     * Get the URL used when no callback replaces it. Overrides {@see HasPermalink::defaultPermalink()}.
+     *
+     * @since 2.17.0
+     */
+    protected function defaultPermalink(): string
+    {
+        return url( "/blog/{$this->slug}" );
+    }
+
+    /**
+     * Get the name of the filter hook that can replace the URL. Overrides {@see HasPermalink::permalinkHook()}.
+     *
+     * @since 2.17.0
+     */
+    protected function permalinkHook(): string
+    {
+        return 'ap.cmsFramework.post.permalink';
     }
 
     /**
