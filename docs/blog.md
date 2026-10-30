@@ -45,6 +45,8 @@ The `Post` model lives at `ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post`.
 
 The `block_content` column is read by visual-editor when the editor is wired in. cms-framework loads the column as an array via the `HasBlockContent` trait (or its compatibility shim — see [[site-editor/Visual Editor Integration]]).
 
+`$post->permalink` returns the post's public URL, `/blog/{slug}` by default. An app with its own permalink structure can replace it with the `ap.cmsFramework.post.permalink` filter *(2.17.0)*. See [Content: Permalinks](Hooks-and-Events.md#content-permalinks).
+
 ## Bulk actions
 
 `POST /api/v1/posts/bulk` accepts a `{ ids: [...], action: "..." }` payload. Supported actions:

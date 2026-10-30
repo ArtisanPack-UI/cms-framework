@@ -75,6 +75,31 @@ Every `Post` and `Page` model emits lifecycle actions via the `FiresLifecycleHoo
 - ap.cmsFramework.{post,page}.trashed — soft delete only; force-delete is skipped.
 - ap.cmsFramework.{post,page}.restored
 
+## Content: Permalinks
+
+> **Added in 2.17.0** ([#440](https://github.com/ArtisanPack-UI/cms-framework/issues/440)).
+
+`$post->permalink` and `$page->permalink` run through a filter, so an app with its own URL structure can replace them:
+
+- ap.cmsFramework.post.permalink — `(string $url, Post $post)`. The default is `/blog/{slug}`.
+- ap.cmsFramework.page.permalink — `(string $url, Page $page)`. The default is the page's slug path under its ancestors, such as `/services/web-development`.
+
+```php
+addFilter('ap.cmsFramework.post.permalink', function (string $url, Post $post) {
+    return url("/{$post->slug}");
+});
+
+addFilter('ap.cmsFramework.page.permalink', function (string $url, Page $page) {
+    return 'home' === $page->slug ? '/' : $url;
+});
+```
+
+A callback can return an HTTP(S) URL or a root-relative path, which is made absolute. Anything else, including a path with no leading slash, a protocol-relative URL or another scheme such as `mailto:`, is ignored and the default is used.
+
+Build the URL from the model's fields. Reading `$post->permalink` inside a callback runs the filter again and never returns.
+
+Everything built on the permalink follows the filter, including `comments_url`, comment permalinks and reply links, page breadcrumbs, the `permalink` field in API resources, and visual-editor's `PostResolver`. Category and tag archive permalinks aren't filtered.
+
 ## Admin: Dashboard Widgets
 
 > **Added in 2.5.0** ([#196](https://github.com/ArtisanPack-UI/cms-framework/issues/196)).
