@@ -291,6 +291,10 @@ return [
     | PHP-FPM by hand. `update:status` shows which mechanism reset the cache.
     | `timeout` bounds the FastCGI and loopback requests, in seconds.
     |
+    | The same chain runs when a plugin's Composer packages are installed from
+    | the CLI, such as by `workshop:checkin` (#438). If none works there, the
+    | install still succeeds and only the log warning tells the operator.
+    |
     */
     'opcache' => [
         'fastcgi'      => env( 'CMS_UPDATES_OPCACHE_FASTCGI', true ),

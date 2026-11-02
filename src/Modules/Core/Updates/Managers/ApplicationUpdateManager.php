@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResetsWebOpcache;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
@@ -38,6 +39,7 @@ use ZipArchive;
  */
 class ApplicationUpdateManager
 {
+    use ResetsWebOpcache;
     use ResolvesCliPhpBinary;
 
     /**
@@ -148,16 +150,6 @@ class ApplicationUpdateManager
      * @since 2.16.0
      */
     protected ?string $opcacheResetMethod = null;
-
-    /**
-     * Why each web OPcache reset mechanism failed on the last attempt, keyed
-     * by mechanism, for the warning logged when none worked.
-     *
-     * @since 2.16.0
-     *
-     * @var array<string, string>
-     */
-    protected array $webOpcacheResetFailures = [];
 
     /**
      * Whether the shutdown guard has already been registered, so repeated
@@ -1272,32 +1264,6 @@ class ApplicationUpdateManager
         }
 
         return false;
-    }
-
-    /**
-     * Strip control characters from an attacker-controlled value before it
-     * reaches a log record.
-     *
-     * Entry names come from the archive. They already go into the log
-     * *context* array rather than being interpolated into the message, which
-     * is the important half — but a name carrying newlines or terminal escape
-     * sequences can still corrupt a plain-text log or a console tailing it.
-     *
-     * @since 2.7.1
-     *
-     * @param  string  $value  Untrusted value.
-     *
-     * @return string Value with control characters removed and length bounded.
-     */
-    protected function sanitizeForLog( string $value ): string
-    {
-        $clean = preg_replace( '/[\x00-\x1F\x7F]/u', '', $value );
-
-        if ( ! is_string( $clean ) ) {
-            $clean = preg_replace( '/[\x00-\x1F\x7F]/', '', $value ) ?? '';
-        }
-
-        return mb_strimwidth( $clean, 0, 512, '…' );
     }
 
     /**
@@ -2784,13 +2750,7 @@ class ApplicationUpdateManager
      */
     protected function resetOpcache(): void
     {
-        $reset = $this->attemptOpcacheReset();
-
-        if ( $this->runningUnderCli() ) {
-            $method = $this->resetWebOpcache();
-        } else {
-            $method = false === $reset ? null : 'web-request';
-        }
+        $method = $this->resetOpcacheForWebServer();
 
         $this->opcacheResetMethod = $method;
         $this->phpReloadRequired  = null === $method;
@@ -2816,68 +2776,6 @@ class ApplicationUpdateManager
         } else {
             Log::warning( 'cms-framework: OPcache could not be reset after the update (check `opcache.restrict_api`). Reload PHP-FPM so it serves the updated code.' );
         }
-    }
-
-    /**
-     * Reset this process's OPcache.
-     *
-     * @since 2.15.6
-     *
-     * @return bool|null True when reset, false when the reset failed, null
-     *                   when OPcache is not enabled for this SAPI.
-     */
-    protected function attemptOpcacheReset(): ?bool
-    {
-        return WebOpcacheResetter::resetThisProcess( $this->runningUnderCli() );
-    }
-
-    /**
-     * Reset the web server's OPcache from a CLI or queued run (#429).
-     *
-     * Tries FastCGI to the FPM socket, then the signed loopback route, then
-     * the operator's `cms.updates.php_reload_command`. Why each one failed is
-     * kept in {@see $webOpcacheResetFailures} for the warning.
-     *
-     * @since 2.16.0
-     *
-     * @return string|null The mechanism that worked, or null when none did.
-     */
-    protected function resetWebOpcache(): ?string
-    {
-        $resetter = app( WebOpcacheResetter::class );
-        $method   = $resetter->reset();
-
-        $this->webOpcacheResetFailures = array_map(
-            fn ( string $reason ): string => $this->sanitizeForLog( $reason ),
-            $resetter->failures(),
-        );
-
-        return $method;
-    }
-
-    /**
-     * Whether this process runs under a CLI SAPI, whose OPcache is not shared
-     * with the web server.
-     *
-     * @since 2.15.6
-     *
-     * @return bool True for the CLI and phpdbg SAPIs.
-     */
-    protected function runningUnderCli(): bool
-    {
-        return in_array( $this->phpSapi(), ['cli', 'phpdbg'], true );
-    }
-
-    /**
-     * The SAPI this process runs under.
-     *
-     * @since 2.15.6
-     *
-     * @return string The PHP SAPI name.
-     */
-    protected function phpSapi(): string
-    {
-        return PHP_SAPI;
     }
 
     /**

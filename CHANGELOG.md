@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A plugin's Composer packages now reach PHP-FPM without a manual reload** ([#438](https://github.com/ArtisanPack-UI/cms-framework/issues/438)). On a host with `opcache.validate_timestamps=0`, installing, updating or activating a plugin with a `composer` block succeeded, but every later request ran from PHP-FPM's cached pre-install `autoload_static.php`, `bootstrap/cache/packages.php` and `services.php`. The package's classes and service provider didn't exist for the site until PHP-FPM was reloaded. `PluginManager` now resets OPcache once the packages are installed. In a web request it calls `opcache_reset()`. From the CLI, such as `workshop:checkin` or `cms:plugins:*`, it uses the self-updater's chain from [#429](https://github.com/ArtisanPack-UI/cms-framework/issues/429): FastCGI to `cms.updates.opcache.fpm_socket`, then the signed loopback route, then `cms.updates.php_reload_command`. If nothing reaches the web server, the install still succeeds and a warning tells the operator to reload PHP-FPM, with the reason each mechanism failed. The chain moved from `ApplicationUpdateManager` into a new `ResetsWebOpcache` trait, which both managers use.
+
 ## [2.17.0] - 2026-10-30
 
 ### Fixed
