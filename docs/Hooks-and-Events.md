@@ -160,7 +160,7 @@ addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
 
 > **Added in 2.16.0** ([#423](https://github.com/ArtisanPack-UI/cms-framework/issues/423)).
 
-Reverting a template, template part or global-styles override, or unassigning a menu location, fires `ap.cmsFramework.siteEditor.reverted` with `(string $type, ?string $slug, string $theme)` after the row is deleted. The row is deleted through its model, so `eloquent.deleting` / `eloquent.deleted` fire too. See [Site Editor: Hooks and Events](site-editor/Hooks-and-Events.md#framework-actions).
+Reverting a template, template part or global-styles override, or unassigning a menu location, fires `ap.cmsFramework.siteEditor.reverted` with `(string $type, ?string $slug, string $theme)` after the row is deleted. The row is deleted through its model, so `eloquent.deleting` / `eloquent.deleted` fire too. Since visual-editor 1.20.0, its site-editor `DELETE` endpoints fire the action as well, and they can revert a theme that isn't active, so use `$theme` rather than assuming the active theme. See [Site Editor: Hooks and Events](site-editor/Hooks-and-Events.md#framework-actions).
 
 ## Conventions
 
