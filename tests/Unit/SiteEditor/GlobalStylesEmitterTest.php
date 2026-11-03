@@ -879,7 +879,7 @@ describe( 'GlobalStylesEmitter cache', function (): void {
         // Cache key carries the schema version so a deploy with a
         // bumped emitter automatically busts every cached entry
         // (Keystone #53). Mirror that here.
-        $cacheKey = 'cms.global-styles.css.v13.test-theme.' . $resolved->contentHash();
+        $cacheKey = 'cms.global-styles.css.v14.test-theme.' . $resolved->contentHash();
         expect( Cache::has( $cacheKey ) )->toBeTrue();
 
         $this->emitter->invalidate();
@@ -1994,6 +1994,149 @@ describe( 'GlobalStylesEmitter artisanpack block selectors (#405)', function ():
     } );
 } );
 
+describe( 'GlobalStylesEmitter inner-element block styles (#449)', function (): void {
+    it( 'moves an Image block\'s border and shadow to its img and keeps the rest on the figure', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/image' => [
+                        'color'   => ['background' => '#eeeeee'],
+                        'border'  => ['width' => '2px', 'style' => 'solid', 'color' => '#111111', 'radius' => '4px'],
+                        'shadow'  => '0 1px 2px #000000',
+                        'spacing' => ['margin' => '1rem'],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-image) {\n\tbackground-color: #eeeeee;\n\tmargin: 1rem;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-image:not([class^=\"ve-gb-\"], [class*=\" ve-gb-\"]) img) {\n\tborder-radius: 4px;\n\tborder-color: #111111;\n\tborder-style: solid;\n\tborder-width: 2px;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-image img) {\n\tbox-shadow: 0 1px 2px #000000;\n}" )
+            ->and( $css )->not->toMatch( '/:where\(\.wp-block-image\) \{[^}]*(border|box-shadow)/' );
+    } );
+
+    it( 'moves per-side borders and corner radii with the border group', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/post-featured-image' => [
+                        'border' => [
+                            'top'    => ['width' => '3px'],
+                            'radius' => ['topLeft' => '8px'],
+                        ],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-post-featured-image:not([class^=\"ve-gb-\"], [class*=\" ve-gb-\"]) img) {\n\tborder-top-left-radius: 8px;\n\tborder-top-width: 3px;\n}" )
+            ->and( $css )->not->toContain( ':root :where(.wp-block-post-featured-image) {' );
+    } );
+
+    it( 'moves an Avatar\'s border but leaves its shadow on the wrapper', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/avatar' => [
+                        'border' => ['width' => '1px'],
+                        'shadow' => '0 0 4px #000000',
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-avatar) {\n\tbox-shadow: 0 0 4px #000000;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-avatar:not([class^=\"ve-gb-\"], [class*=\" ve-gb-\"]) img) {\n\tborder-width: 1px;\n}" );
+    } );
+
+    it( 'appends the suffix to each selector of an artisanpack block', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'artisanpack/image' => ['shadow' => '0 0 1px #000000'],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        expect( $this->emitter->emit() )->toContain( ":root :where(.wp-block-image img, .wp-block-artisanpack-image img) {\n\tbox-shadow: 0 0 1px #000000;\n}" );
+    } );
+
+    it( 'moves only the shadow of a root-mapped block such as Button or Table', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/button' => [
+                        'border' => ['width' => '1px'],
+                        'shadow' => '0 0 2px #000000',
+                    ],
+                    'core/table'  => ['color' => ['text' => '#222222'], 'shadow' => '0 0 3px #000000'],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-button) {\n\tborder-width: 1px;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-button .wp-block-button__link) {\n\tbox-shadow: 0 0 2px #000000;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-table) {\n\tcolor: #222222;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-table > table) {\n\tbox-shadow: 0 0 3px #000000;\n}" );
+    } );
+
+    it( 'leaves unmapped blocks and third-party image blocks on their wrapper', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/group' => ['border' => ['width' => '1px'], 'shadow' => '0 0 1px #000000'],
+                    'acme/image' => ['border' => ['width' => '2px']],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-group) {\n\tborder-width: 1px;\n\tbox-shadow: 0 0 1px #000000;\n}" )
+            ->and( $css )->toContain( ":root :where(.wp-block-acme-image) {\n\tborder-width: 2px;\n}" );
+    } );
+
+    it( 'keeps element rules on the block wrapper', function (): void {
+        $resolved = makeResolved(
+            styles: [
+                'blocks' => [
+                    'core/image' => [
+                        'border'   => ['width' => '2px'],
+                        'elements' => ['caption' => ['color' => ['text' => '#333333']]],
+                    ],
+                ],
+            ],
+        );
+
+        $this->resolver->shouldReceive( 'resolve' )->andReturn( $resolved );
+
+        $css = $this->emitter->emit();
+
+        expect( $css )->toContain( ":root :where(.wp-block-image .wp-element-caption) {\n\tcolor: #333333;\n}" )
+            ->and( $css )->not->toContain( 'img .wp-element-caption' );
+    } );
+} );
+
 describe( 'GlobalStylesEmitter CSS filter', function (): void {
     afterEach( function (): void {
         removeAllFilters( 'ap.cmsFramework.globalStyles.css' );
@@ -2045,6 +2188,6 @@ describe( 'GlobalStylesEmitter CSS filter', function (): void {
         addFilter( 'ap.cmsFramework.globalStyles.css', fn ( string $css ): string => $css . "\n/* host */" );
 
         expect( $this->emitter->emit() )->toBe( $unfiltered . "\n/* host */" )
-            ->and( Cache::get( 'cms.global-styles.css.v13.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
+            ->and( Cache::get( 'cms.global-styles.css.v14.test-theme.' . $resolved->contentHash() ) )->toBe( $unfiltered );
     } );
 } );

@@ -80,6 +80,22 @@ namespace ArtisanPackUI\VisualEditor\Resources {
         {
             public static mixed $lastPost = null;
 
+            public static int $stripCalls = 0;
+
+            /**
+             * Mirrors visual-editor 1.20's `stripSavedAttributes()`.
+             *
+             * @param  array<int, array<string, mixed>>  $tree
+             *
+             * @return array<int, array<string, mixed>>
+             */
+            public function stripSavedAttributes( array $tree ): array
+            {
+                self::$stripCalls++;
+
+                return $this->stripTree( $tree );
+            }
+
             /**
              * @param  array<int, array<string, mixed>>  $tree
              *
@@ -116,6 +132,32 @@ namespace ArtisanPackUI\VisualEditor\Resources {
 
                 return $out;
             }
+
+            /**
+             * @param  array<int, array<string, mixed>>  $tree
+             *
+             * @return array<int, array<string, mixed>>
+             */
+            private function stripTree( array $tree ): array
+            {
+                foreach ( $tree as $index => $block ) {
+                    if ( isset( $block['attributes'] ) && is_array( $block['attributes'] ) ) {
+                        $block['attributes'] = array_filter(
+                            $block['attributes'],
+                            static fn ( mixed $key ): bool => ! is_string( $key ) || ! str_starts_with( $key, '_resolved' ),
+                            ARRAY_FILTER_USE_KEY,
+                        );
+                    }
+
+                    if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+                        $block['innerBlocks'] = $this->stripTree( $block['innerBlocks'] );
+                    }
+
+                    $tree[ $index ] = $block;
+                }
+
+                return $tree;
+            }
         }
     }
 
@@ -130,14 +172,17 @@ namespace ArtisanPackUI\VisualEditor\Resources {
 
             public static ?\Closure $expand = null;
 
+            public static ?bool $lastStripSavedResolved = null;
+
             /**
              * @param  array<int, array<string, mixed>>  $tree
              *
              * @return array<int, array<string, mixed>>
              */
-            public function inline( array $tree, ?object $hostPost = null ): array
+            public function inline( array $tree, ?object $hostPost = null, bool $stripSavedResolved = true ): array
             {
-                self::$lastHostPost = $hostPost;
+                self::$lastHostPost           = $hostPost;
+                self::$lastStripSavedResolved = $stripSavedResolved;
 
                 return null !== self::$expand ? ( self::$expand )( $tree, $hostPost ) : $tree;
             }
@@ -167,12 +212,66 @@ namespace ArtisanPackUI\VisualEditor\Resources {
     }
 }
 
+namespace ArtisanPackUI\CMSFramework\Tests\Unit\ContentTypes\Stubs {
+
+    /**
+     * Test-only stand-in for visual-editor 1.20's `ResolvedAttributes`.
+     *
+     * Declared under a test namespace, not visual-editor's, so the rest of
+     * the suite keeps exercising the `PostResolver` fallback; a test opts
+     * in by overriding the trait's `RESOLVED_ATTRIBUTES_CLASS` constant.
+     */
+    class ResolvedAttributesStub
+    {
+        public static int $calls = 0;
+
+        public static bool $throw = false;
+
+        /**
+         * @param  array<int, array<string, mixed>>  $tree
+         *
+         * @return array<int, array<string, mixed>>
+         */
+        public static function strip( array $tree ): array
+        {
+            self::$calls++;
+
+            if ( self::$throw ) {
+                throw new \RuntimeException( 'stripper failure' );
+            }
+
+            return self::walk( $tree );
+        }
+
+        /**
+         * @param  array<int, array<string, mixed>>  $tree
+         *
+         * @return array<int, array<string, mixed>>
+         */
+        private static function walk( array $tree ): array
+        {
+            return array_map( static function ( array $block ): array {
+                $block['attributes'] = array_filter(
+                    $block['attributes'] ?? [],
+                    static fn ( mixed $key ): bool => ! is_string( $key ) || ! str_starts_with( $key, '_resolved' ),
+                    ARRAY_FILTER_USE_KEY,
+                );
+
+                $block['innerBlocks'] = self::walk( $block['innerBlocks'] ?? [] );
+
+                return $block;
+            }, $tree );
+        }
+    }
+}
+
 namespace {
 
     use ArtisanPackUI\CMSFramework\Modules\Blog\Models\Post;
     use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\Concerns\HasRenderedBlockContent;
     use ArtisanPackUI\CMSFramework\Modules\Pages\Models\Page;
     use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
+    use ArtisanPackUI\CMSFramework\Tests\Unit\ContentTypes\Stubs\ResolvedAttributesStub;
     use ArtisanPackUI\VisualEditor\Concerns\HasBlockContent;
     use ArtisanPackUI\VisualEditor\Resources\PatternInliner;
     use ArtisanPackUI\VisualEditor\Resources\PostResolver;
@@ -191,9 +290,14 @@ namespace {
         BlockRenderer::$lastBindingContext = null;
 
         PostResolver::$lastPost       = null;
+        PostResolver::$stripCalls     = 0;
         QueryInliner::$lastHostPost   = null;
         QueryInliner::$expand         = null;
         PatternInliner::$called       = false;
+
+        QueryInliner::$lastStripSavedResolved = null;
+        ResolvedAttributesStub::$calls        = 0;
+        ResolvedAttributesStub::$throw        = false;
     } );
 
     /**
@@ -292,6 +396,109 @@ namespace {
 
         expect( $post->rendered_content )->toBe( '<p>stubbed render</p>' );
         expect( BlockRenderer::$lastTree )->toBe( $blocks );
+    } );
+
+    test( 'a saved _resolved* attribute is dropped even when the query pass throws (#448)', function (): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/social-share-content', 'attributes' => [
+                'services'            => ['x'],
+                '_resolvedShareLinks' => [['service' => 'x', 'url' => 'https://evil.test/']],
+            ], 'innerBlocks' => []],
+        ] );
+
+        QueryInliner::$expand = fn (): array => throw new RuntimeException( 'query failure' );
+
+        $post->rendered_content;
+
+        expect( PostResolver::$stripCalls )->toBe( 1 )
+            ->and( BlockRenderer::$lastTree[0]['attributes'] )->toBe( ['services' => ['x']] );
+    } );
+
+    test( 'the query pass is told the tree is already stripped (#448)', function (): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/query', 'attributes' => [], 'innerBlocks' => []],
+        ] );
+
+        $post->rendered_content;
+
+        expect( QueryInliner::$lastStripSavedResolved )->toBeFalse();
+    } );
+
+    test( 'a saved _resolvedContent on a nested post-content block still renders empty (#448)', function (): void {
+        $post = postWithContent( [
+            ['name' => 'artisanpack/post-content', 'attributes' => ['_resolvedContent' => '<a href="https://evil.test/">x</a>'], 'innerBlocks' => []],
+        ] );
+
+        $post->rendered_content;
+
+        expect( BlockRenderer::$lastTree[0]['attributes']['_resolvedContent'] )->toBe( '' );
+    } );
+
+    test( 'ResolvedAttributes::strip() is preferred over the PostResolver fallback (#448)', function (): void {
+        $post = new class extends Post {
+            protected const RESOLVED_ATTRIBUTES_CLASS = ResolvedAttributesStub::class;
+        };
+
+        $post->title = 'Stripped';
+        $post->setBlockContent( [
+            ['name' => 'artisanpack/loginout', 'attributes' => ['_resolvedLoginoutUrl' => 'https://evil.test/'], 'innerBlocks' => []],
+        ] );
+
+        $post->renderContent();
+
+        expect( ResolvedAttributesStub::$calls )->toBe( 1 )
+            ->and( PostResolver::$stripCalls )->toBe( 0 )
+            ->and( BlockRenderer::$lastTree[0]['attributes'] )->toBe( [] )
+            ->and( QueryInliner::$lastStripSavedResolved )->toBeFalse();
+    } );
+
+    test( 'a stripper that throws still renders the tree, without its saved _resolved* values (#448)', function (): void {
+        ResolvedAttributesStub::$throw = true;
+
+        $post = new class extends Post {
+            protected const RESOLVED_ATTRIBUTES_CLASS = ResolvedAttributesStub::class;
+        };
+
+        $post->title = 'Stripper failure';
+        $post->setBlockContent( [
+            ['name' => 'artisanpack/group', 'attributes' => ['tagName' => 'section'], 'innerBlocks' => [
+                ['name' => 'artisanpack/social-share-content', 'attributes' => [
+                    'services'            => ['x'],
+                    '_resolvedShareLinks' => [['service' => 'x', 'url' => 'https://evil.test/']],
+                ], 'innerBlocks' => []],
+                ['name' => 'core/paragraph', 'attrs' => ['_resolvedThing' => 'saved', 'align' => 'left'], 'innerBlocks' => []],
+            ]],
+        ] );
+
+        expect( $post->renderContent() )->toBe( '<p>stubbed render</p>' )
+            ->and( ResolvedAttributesStub::$calls )->toBe( 1 )
+            ->and( BlockRenderer::$lastTree[0]['attributes'] )->toBe( ['tagName' => 'section'] )
+            ->and( BlockRenderer::$lastTree[0]['innerBlocks'][0]['attributes'] )->toBe( ['services' => ['x']] )
+            ->and( BlockRenderer::$lastTree[0]['innerBlocks'][1]['attrs'] ?? BlockRenderer::$lastTree[0]['innerBlocks'][1]['attributes'] )->not->toHaveKey( '_resolvedThing' )
+            ->and( QueryInliner::$lastStripSavedResolved )->toBeFalse();
+    } );
+
+    test( 'the query pass keeps its own default when no stripper is installed (#448)', function (): void {
+        app()->instance( PostResolver::class, new class {
+            /**
+             * @param  array<int, array<string, mixed>>  $tree
+             *
+             * @return array<int, array<string, mixed>>
+             */
+            public function stampTree( array $tree, object $post ): array
+            {
+                return $tree;
+            }
+        } );
+
+        $post = postWithContent( [
+            ['name' => 'artisanpack/query', 'attributes' => ['_resolvedThing' => 'saved'], 'innerBlocks' => []],
+        ] );
+
+        $post->rendered_content;
+
+        expect( QueryInliner::$lastStripSavedResolved )->toBeTrue()
+            ->and( BlockRenderer::$lastTree[0]['attributes'] )->toBe( ['_resolvedThing' => 'saved'] );
     } );
 
     test( 'the tree renders unchanged when visual-editor\'s content passes are not installed', function (): void {

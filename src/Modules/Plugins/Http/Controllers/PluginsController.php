@@ -288,7 +288,13 @@ class PluginsController extends Controller
      *
      * Endpoint: POST /api/v1/plugins/{slug}/update
      *
+     * When an update was installed, the response also reports how the web
+     * server's OPcache was reset (`opcache_reset_method`), and when no reset
+     * reached it, sets `php_reload_required` and a `warning` telling the
+     * admin to reload PHP-FPM (#450).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  string  $slug  Plugin slug identifier.
      *
@@ -330,12 +336,12 @@ class PluginsController extends Controller
             ] );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => $updated
                 ? __( 'Plugin updated successfully' )
                 : __( 'Plugin is already up to date.' ),
             'updated' => $updated,
-        ] );
+        ], $updated ? $this->runtimeRefreshPayload() : [] ) );
     }
 
     /**
@@ -469,5 +475,26 @@ class PluginsController extends Controller
             'order'   => $order,
             'results' => $results,
         ] );
+    }
+
+    /**
+     * How the last update reached the running site, for the update response.
+     *
+     * @since 2.18.0
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function runtimeRefreshPayload(): array
+    {
+        $payload = [
+            'opcache_reset_method' => $this->updateManager->opcacheResetMethod(),
+            'php_reload_required'  => $this->updateManager->phpReloadRequired(),
+        ];
+
+        if ( $payload['php_reload_required'] ) {
+            $payload['warning'] = __( 'The plugin was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' );
+        }
+
+        return $payload;
     }
 }

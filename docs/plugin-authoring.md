@@ -1072,6 +1072,18 @@ runs after the `updated` hook. An active plugin is already cleared by the
 deactivate / activate around the update, so the extra clear only runs for an
 inactive one. See [Configuration](./Configuration.md#plugin-framework-cache-clearing).
 
+**Going live on production hosts (2.18.0).** After a successful update,
+whatever `autoClearFrameworkCaches` says, the config, route and event caches the
+site had before the update are rebuilt in a fresh process, the web server's
+OPcache is reset (the self-updater's chain: `opcache_reset()` in a web request,
+otherwise `cms.updates.opcache.fpm_socket`, the signed loopback route, then
+`cms.updates.php_reload_command`), and `queue:restart` signals the workers. With
+a route cache in place, a plugin's routes are exactly what `routes-v7.php`
+holds, so this is what makes new named routes resolve. None of it fails the
+update. `POST /api/v1/plugins/{slug}/update` reports `opcache_reset_method` and
+`php_reload_required`, plus a `warning` to reload PHP-FPM when no reset
+reached it.
+
 ## Testing your plugin
 
 Plugins ship their own Pest / PHPUnit test suites. A minimal `TestCase`

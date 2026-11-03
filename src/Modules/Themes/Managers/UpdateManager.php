@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionUpdate;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
@@ -55,6 +56,7 @@ use ZipArchive;
 class UpdateManager
 {
     use ManagesExtensionUpdates;
+    use RefreshesRuntimeAfterExtensionUpdate;
 
     /**
      * Constructs the UpdateManager instance.
@@ -271,7 +273,10 @@ class UpdateManager
      * 4. Back up the installed directory to `cms.themes.backupPath`.
      * 5. Swap the staged directory into place.
      * 6. Forget the discovery and update caches, re-register view paths.
-     * 7. Fire `ap.cmsFramework.theme.updated`.
+     * 7. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers (#450). {@see opcacheResetMethod()}
+     *    and {@see phpReloadRequired()} report how that went.
+     * 8. Fire `ap.cmsFramework.theme.updated`.
      *
      * A failure at or after step 5 restores from the backup and forgets the
      * caches again. The restore deletes the live directory outright before
@@ -279,6 +284,7 @@ class UpdateManager
      * than left orphaned alongside the restored ones (#272).
      *
      * @since 2.8.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the update.
      *
      * @param  string  $slug  Theme slug.
      *
@@ -305,6 +311,10 @@ class UpdateManager
         $newVersion = (string) $updateInfo['version'];
 
         doAction( 'ap.cmsFramework.theme.updating', $slug, $oldVersion, $newVersion );
+
+        $cachedArtifacts = $this->cachedArtifacts();
+
+        $this->resetRuntimeRefreshOutcome();
 
         $zipPath       = null;
         $stagingPath   = null;
@@ -360,6 +370,12 @@ class UpdateManager
         // `theme.updating` above is its update-path equivalent; the post hooks
         // are notifications, and `installFromZip()` fires `theme.installed`
         // the same way.
+        // Once the new files are final, make them live (#450): rebuild the
+        // caches the site had, reset PHP-FPM's OPcache and signal the queue
+        // workers. Before the `updated` hook, so a listener that throws
+        // can't leave the site on stale bytecode. Never throws.
+        $this->refreshRuntimeAfterUpdate( 'theme', $slug, $cachedArtifacts );
+
         doAction( 'ap.cmsFramework.theme.updated', $slug, $newVersion, $newManifest );
 
         return true;

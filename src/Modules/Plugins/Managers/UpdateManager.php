@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionUpdate;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
@@ -30,6 +31,7 @@ use ZipArchive;
 class UpdateManager
 {
     use ManagesExtensionUpdates;
+    use RefreshesRuntimeAfterExtensionUpdate;
 
     /**
      * @param  PluginManager  $pluginManager  Used to deactivate and reactivate a plugin around an update.
@@ -220,6 +222,15 @@ class UpdateManager
     /**
      * Update a plugin to latest version.
      *
+     * Once the update is in place, the compiled caches the site had are
+     * rebuilt, the web server's OPcache is reset and the queue workers are
+     * signalled, so the site runs the new version without a manual PHP-FPM
+     * reload (#450). {@see opcacheResetMethod()} and
+     * {@see phpReloadRequired()} report how that went.
+     *
+     * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the update.
+     *
      * @param  string  $slug  Plugin slug
      *
      * @throws PluginUpdateException On update failure
@@ -256,6 +267,12 @@ class UpdateManager
         $oldServiceProvider     = $plugin->service_provider;
         $backupPath             = null;
         $zipPath                = null;
+
+        // Read before the deactivate/activate below can clear them, so the
+        // caches the site had are the ones rebuilt (#450).
+        $cachedArtifacts = $this->cachedArtifacts();
+
+        $this->resetRuntimeRefreshOutcome();
 
         doAction( 'ap.cmsFramework.plugin.updating', $slug, $oldVersion, $updateInfo['version'] );
 
@@ -352,6 +369,14 @@ class UpdateManager
             if ( ! $wasActive && config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
                 $this->pluginManager->clearFrameworkCaches();
             }
+
+            // 10. Make the new version live (#450): rebuild the caches the
+            //     site had, whatever `autoClearFrameworkCaches` says, then
+            //     reset PHP-FPM's OPcache and signal the queue workers. With
+            //     a route cache in place a plugin's routes are exactly what
+            //     `routes-v7.php` holds, so re-registering them at runtime
+            //     can't help. Never throws.
+            $this->refreshRuntimeAfterUpdate( 'plugin', $plugin->slug, $cachedArtifacts );
 
             return true;
         } catch ( IncompatiblePluginException $e ) {
