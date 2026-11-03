@@ -600,6 +600,29 @@ it( 'applies a taxQuery listener constraint with ordering and pagination intact'
         ->and( array_map( fn ( Post $post ): int => $post->id, $result->items() ) )->toBe( [$oldest->id, $middle->id] );
 } );
 
+it( 'applies every taxQuery listener when each returns the builder', function (): void {
+    $first  = publishedPost( $this->user->id, 'First' );
+    $second = publishedPost( $this->user->id, 'Second' );
+    $third  = publishedPost( $this->user->id, 'Third' );
+
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query ): Builder => $query->whereIn( 'id', [$first->id, $second->id] ),
+    );
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query ): Builder => $query->whereIn( 'id', [$second->id, $third->id] ),
+    );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [7]],
+    ] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $second->id );
+} );
+
 it( 'keeps the published constraint when a taxQuery listener constrains the query', function (): void {
     $published = publishedPage( $this->user->id, 'Published' );
     $draft     = draftPage( $this->user->id, 'Draft' );

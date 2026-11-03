@@ -74,7 +74,7 @@ Unknown attributes are ignored — visual-editor passes through some block-side 
 
 ## Taxonomy filtering
 
-`taxQuery` names one taxonomy and a list of term IDs. Multiple terms OR together:
+`taxQuery` names one taxonomy and a list of term IDs. For the built-in taxonomies, multiple terms OR together. For a custom taxonomy, the listener decides how its terms combine:
 
 ```php
 $runtime->resolve([

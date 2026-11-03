@@ -394,9 +394,11 @@ class QueryRuntime
      * filter, with any operator, so a host can constrain the builder
      * against its own term storage. Listeners mutate the builder in
      * place, the same as `ap.cmsFramework.search.query`, so the filter's
-     * return value is ignored. Without a listener the taxonomy is a
-     * no-op. The taxonomy and operator can come from block attributes,
-     * so they are sanitized here and listeners must still bind them.
+     * final return value is ignored. They must still return the builder,
+     * because each listener receives the previous one's return value.
+     * Without a listener the taxonomy is a no-op. The taxonomy and
+     * operator can come from block attributes, so they are sanitized
+     * here and listeners must still bind them.
      *
      * @since 2.0.0
      * @since 2.18.0 Passes unmapped taxonomies to `ap.cmsFramework.query.taxQuery`.

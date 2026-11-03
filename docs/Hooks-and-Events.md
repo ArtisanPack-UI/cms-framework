@@ -154,7 +154,7 @@ addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
 
 > **Added in 2.18.0** ([#439](https://github.com/ArtisanPack-UI/cms-framework/issues/439)).
 
-`QueryRuntime` handles `category` and `post_tag` itself. Any other `taxQuery.taxonomy` runs `ap.cmsFramework.query.taxQuery` with `(Builder $query, string $taxonomy, array $terms, string $operator, string $postType)`, so a host can constrain the query against its own term storage. With no listener, the query stays unfiltered. See [Custom taxonomies](blog/Query-Runtime.md#custom-taxonomies).
+`QueryRuntime` handles `category`/`post_category` and `post_tag`/`tag` itself. Any other `taxQuery.taxonomy` runs `ap.cmsFramework.query.taxQuery` with `(Builder $query, string $taxonomy, array $terms, string $operator, string $postType)`, so a host can constrain the query against its own term storage. With no listener, the query stays unfiltered. See [Custom taxonomies](blog/Query-Runtime.md#custom-taxonomies).
 
 ## Site Editor: Reverts
 
