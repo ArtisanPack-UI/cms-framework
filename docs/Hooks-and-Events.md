@@ -150,6 +150,12 @@ addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
 
 `HasContentFilters::applySearchFilter()` — used by both `BlogManager::getArchiveQuery()` and `PageManager::getPageQuery()` — runs the assembled search query through `ap.cmsFramework.search.query` with `(Builder $q, string $term, array $context)` where `$context` carries the calling manager class, the queried model class, and the full filter array. Enough for a subscriber to swap in a full-text index or route to an external search service.
 
+## Query: Custom Taxonomies
+
+> **Added in 2.18.0** ([#439](https://github.com/ArtisanPack-UI/cms-framework/issues/439)).
+
+`QueryRuntime` handles `category` and `post_tag` itself. Any other `taxQuery.taxonomy` runs `ap.cmsFramework.query.taxQuery` with `(Builder $query, string $taxonomy, array $terms, string $operator, string $postType)`, so a host can constrain the query against its own term storage. With no listener, the query stays unfiltered. See [Custom taxonomies](blog/Query-Runtime.md#custom-taxonomies).
+
 ## Site Editor: Reverts
 
 > **Added in 2.16.0** ([#423](https://github.com/ArtisanPack-UI/cms-framework/issues/423)).

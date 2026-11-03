@@ -390,7 +390,16 @@ class QueryRuntime
      * `category` / `post_tag` for both posts and pages (Page exposes
      * the same `categories()` and `tags()` relations as Post).
      *
+     * Any other taxonomy goes to the `ap.cmsFramework.query.taxQuery`
+     * filter, with any operator, so a host can constrain the builder
+     * against its own term storage. Listeners mutate the builder in
+     * place, the same as `ap.cmsFramework.search.query`, so the filter's
+     * return value is ignored. Without a listener the taxonomy is a
+     * no-op. The taxonomy and operator can come from block attributes,
+     * so they are sanitized here and listeners must still bind them.
+     *
      * @since 2.0.0
+     * @since 2.18.0 Passes unmapped taxonomies to `ap.cmsFramework.query.taxQuery`.
      *
      * @param  array<string, mixed>  $attributes
      */
@@ -409,7 +418,7 @@ class QueryRuntime
             : 'IN';
         $terms    = $this->normalizeIdList( $taxQuery['terms'] ?? null );
 
-        if ( null === $taxonomy || [] === $terms || 'IN' !== $operator ) {
+        if ( null === $taxonomy || [] === $terms ) {
             return;
         }
 
@@ -420,6 +429,19 @@ class QueryRuntime
         };
 
         if ( null === $relation ) {
+            applyFilters(
+                'ap.cmsFramework.query.taxQuery',
+                $query,
+                sanitizeText( $taxonomy ),
+                $terms,
+                sanitizeText( $operator ),
+                $postType,
+            );
+
+            return;
+        }
+
+        if ( 'IN' !== $operator ) {
             return;
         }
 

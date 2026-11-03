@@ -137,6 +137,35 @@ addFilter('ap.cmsFramework.page.permalink', function (string $url, Page $page) {
 });
 ```
 
+### Query Loops
+
+#### `ap.cmsFramework.query.taxQuery`
+
+*Since 2.18.0.* Constrain a `core/query` loop by a taxonomy that `QueryRuntime` doesn't handle itself. Runs when `taxQuery.taxonomy` is anything other than `category`, `post_category`, `post_tag` or `tag`, and `taxQuery.terms` has at least one ID. For posts, pages and custom content types.
+
+**Parameters:**
+- `$query` (Builder) - The Eloquent query for the loop
+- `$taxonomy` (string) - The taxonomy slug from the payload
+- `$terms` (array) - The term IDs, as a list of integers
+- `$operator` (string) - The operator, uppercased. `IN` by default. Any operator reaches the filter, so return early on one you don't support. Visual-editor's REST endpoint only accepts `IN`
+- `$postType` (string) - The post type being queried
+
+**Returns:** Builder - The same `$query`, after changing it in place. `QueryRuntime` ignores the return value, so a new or cloned builder has no effect, but the next listener receives whatever you return.
+
+Check `$taxonomy` and return `$query` untouched when it isn't yours. `$taxonomy` and `$operator` can come from visitors, so bind them as parameters and never put them in raw SQL. Wrap any `orWhere` in a closure, because a top-level `orWhere` escapes the query's published constraint.
+
+**Example:**
+
+```php
+addFilter('ap.cmsFramework.query.taxQuery', function (Builder $query, string $taxonomy, array $terms, string $operator, string $postType) {
+    if ('packages' !== $taxonomy || 'IN' !== $operator) {
+        return $query;
+    }
+
+    return $query->whereIn('id', PackageTerm::query()->whereIn('term_id', $terms)->select('post_id'));
+});
+```
+
 ### Admin Menu
 
 #### `ap.admin.menuStructure`

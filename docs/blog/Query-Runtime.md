@@ -31,7 +31,8 @@ $result = $runtime->resolve([
     'orderBy'  => 'date',
     'order'    => 'desc',
     'taxQuery' => [
-        'category' => [12],
+        'taxonomy' => 'category',
+        'terms'    => [12],
     ],
 ]);
 
@@ -65,7 +66,7 @@ For custom types, the slug must be a known content type registered via the Conte
 | `orderBy` | string | `date` | `date`, `title`, `menu_order`, `random` |
 | `order` | string | `desc` | `asc` or `desc` |
 | `parents` | array of int | `[]` | Pages only — limit to children of these parents |
-| `taxQuery` | array | `[]` | Map of taxonomy slug → term IDs |
+| `taxQuery` | array | — | `{ taxonomy, terms, operator }` — see "Taxonomy filtering" |
 | `sticky` | string | — | `exclude` to skip sticky posts; `only` to filter to them |
 | `search` | string | — | Free-text title/content search |
 
@@ -73,17 +74,40 @@ Unknown attributes are ignored — visual-editor passes through some block-side 
 
 ## Taxonomy filtering
 
-`taxQuery` is a `taxonomy => [term_ids]` map. Multiple taxonomies AND together; multiple terms within a taxonomy OR together:
+`taxQuery` names one taxonomy and a list of term IDs. Multiple terms OR together:
 
 ```php
 $runtime->resolve([
     'postType' => 'post',
     'taxQuery' => [
-        'category' => [5, 12],      // category 5 OR 12
-        'tag'      => [42],         // AND tag 42
+        'taxonomy' => 'category',
+        'terms'    => [5, 12],      // category 5 OR 12
+        'operator' => 'IN',         // the default
     ],
 ]);
 ```
+
+`category` (or `post_category`) and `post_tag` (or `tag`) are built in, for any model with `categories()` or `tags()` relations. They support the `IN` operator only. Any other operator drops the constraint.
+
+### Custom taxonomies
+
+> **Added in 2.18.0** ([#439](https://github.com/ArtisanPack-UI/cms-framework/issues/439)).
+
+Any other taxonomy goes to the `ap.cmsFramework.query.taxQuery` filter, so a host that stores its own terms can constrain the query. With no listener, the query stays unfiltered.
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+
+addFilter('ap.cmsFramework.query.taxQuery', function (Builder $query, string $taxonomy, array $terms, string $operator, string $postType) {
+    if ('packages' !== $taxonomy || 'post' !== $postType || 'IN' !== $operator) {
+        return $query;
+    }
+
+    return $query->whereIn('id', PackageTerm::query()->whereIn('term_id', $terms)->select('post_id'));
+});
+```
+
+This runs inside the query, so ordering and pagination work as they do for a built-in taxonomy. See [ap.cmsFramework.query.taxQuery](../developer/hooks-reference.md#apcmsframeworkquerytaxquery) for the rules listeners must follow.
 
 ## Ordering
 
