@@ -839,6 +839,16 @@ existing lock, and every install is logged. This is controlled by
 `cms.plugins.autoInstallComposerDependencies`, which is **on by default** since
 2.16.0 (it was off before).
 
+**OPcache.** With `opcache.validate_timestamps=0`, PHP-FPM never re-reads the
+autoloader and package manifest that `composer require` rewrites, so the
+framework resets OPcache after an install *(2.18.0)*. From a web request it calls
+`opcache_reset()`. From the CLI, which has its own cache, it reaches PHP-FPM the
+way the self-updater does; see
+[Resetting PHP-FPM's OPcache from the CLI](self-updater.md#resetting-php-fpms-opcache-from-the-cli-2160).
+If no reset reaches PHP-FPM, the install still succeeds and a warning in the log
+tells you to reload it. Until then, the package's classes aren't loadable on the
+site.
+
 > **Security note.** Packages are installed when a plugin is *installed*, not
 > when it is activated. Laravel's package discovery registers their service
 > providers, so they boot on every request even while the plugin is inactive,

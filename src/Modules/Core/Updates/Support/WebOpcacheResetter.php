@@ -19,9 +19,10 @@ use Throwable;
  *
  * Resets the web server's OPcache from a process that does not share it: the
  * `update:perform` / `update:rollback` commands, or the queue worker behind
- * `dispatchUpdate()` (#429). Calling `opcache_reset()` there only clears the
- * CLI's own cache, which on a host with `opcache.validate_timestamps=0`
- * leaves PHP-FPM running a mix of pre- and post-update bytecode.
+ * `dispatchUpdate()` (#429), or a plugin's Composer install run from the CLI
+ * (#438). Calling `opcache_reset()` there only clears the CLI's own cache,
+ * which on a host with `opcache.validate_timestamps=0` leaves PHP-FPM running
+ * the bytecode it compiled before the files changed.
  *
  * Three mechanisms are tried in order, and the first that works wins:
  *

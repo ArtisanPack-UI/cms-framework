@@ -5,6 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResetsWebOpcache;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
@@ -32,6 +33,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use ReflectionClass;
 use RuntimeException;
@@ -41,6 +43,7 @@ use ZipArchive;
 class PluginManager
 {
     use HasManifestParsing;
+    use ResetsWebOpcache;
     use ResolvesCliPhpBinary;
 
     /**
@@ -966,7 +969,7 @@ class PluginManager
         $installed = $this->resolveAndInstallComposerDependencies( $slug, $requirements );
 
         if ( $installed ) {
-            $this->registerComposerPackageAutoloaders();
+            $this->seatInstalledComposerPackages( $slug );
 
             $this->composerPackagesInstalledThisProcess[ $slug ] = true;
         }
@@ -2143,7 +2146,7 @@ class PluginManager
         if ( $installed ) {
             // Packages were just installed this request; seat the regenerated
             // autoload maps so their classes are usable before the provider boots.
-            $this->registerComposerPackageAutoloaders();
+            $this->seatInstalledComposerPackages( $plugin->slug );
         }
 
         return $installed;
@@ -2168,7 +2171,8 @@ class PluginManager
      * @throws ComposerDependencyNotSatisfiedException When the requirements cannot be satisfied.
      *
      * @return bool True when at least one package was installed. The caller
-     *              seats the regenerated autoload maps.
+     *              seats the regenerated autoload maps and resets OPcache,
+     *              through {@see seatInstalledComposerPackages()}.
      */
     protected function resolveAndInstallComposerDependencies( string $slug, array $requirements ): bool
     {
@@ -2240,11 +2244,90 @@ class PluginManager
             // disabled, with `opcache.validate_timestamps=0`). Fail closed —
             // never boot a provider whose classes may be unresolvable — but say
             // so, since a fresh request (which reads the regenerated metadata)
-            // completes the step without reinstalling.
+            // completes the step without reinstalling. That request only sees
+            // the regenerated metadata if the web server's OPcache is reset.
+            $this->resetOpcacheAfterComposerInstall( $slug );
+
             throw ComposerDependencyNotSatisfiedException::installedButUnverified( $slug, $result );
         }
 
         return true;
+    }
+
+    /**
+     * Seat freshly installed packages on this process's class loader, then
+     * make them visible to every later web request (#438).
+     *
+     * The reset comes second so the in-request reads of the autoload maps,
+     * which invalidate each file first, are finished before the cache is
+     * cleared. It still runs if seating throws: the packages are on disk and
+     * in the host's `composer.json` by then, even when the plugin that asked
+     * for them is removed.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  The plugin the packages were installed for.
+     */
+    protected function seatInstalledComposerPackages( string $slug ): void
+    {
+        try {
+            $this->registerComposerPackageAutoloaders();
+        } finally {
+            $this->resetOpcacheAfterComposerInstall( $slug );
+        }
+    }
+
+    /**
+     * Reset the web server's OPcache after `composer require` rewrote the
+     * host's autoloader and package manifest (#438).
+     *
+     * A new request boots through `vendor/autoload.php`, `autoload_real.php`
+     * and `autoload_static.php`, and Laravel reads its providers from
+     * `bootstrap/cache/packages.php` and `services.php`. With
+     * `opcache.validate_timestamps=0`, PHP-FPM keeps serving its compiled
+     * pre-install copies of all of them, so the package's classes and service
+     * provider don't exist for the site until it is reloaded.
+     *
+     * A failed reset doesn't fail the install, which has already succeeded.
+     * When no reset reaches the web server, the operator is told to reload
+     * PHP-FPM.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  The plugin the packages were installed for.
+     */
+    protected function resetOpcacheAfterComposerInstall( string $slug ): void
+    {
+        $method = $this->resetOpcacheForWebServer();
+
+        if ( null !== $method ) {
+            if ( $this->runningUnderCli() ) {
+                Log::info( "cms-framework: reset PHP-FPM's OPcache after installing plugin Composer packages ({$method}).", [
+                    'plugin'   => $slug,
+                    'php_sapi' => $this->phpSapi(),
+                ] );
+            }
+
+            return;
+        }
+
+        if ( $this->runningUnderCli() ) {
+            Log::warning(
+                'cms-framework: plugin Composer packages were installed outside the web server, and PHP-FPM\'s OPcache could not be reset. If OPcache runs with `opcache.validate_timestamps=0`, reload PHP-FPM so it can load them, or set `cms.updates.opcache.fpm_socket` or `cms.updates.php_reload_command`.',
+                [
+                    'plugin'   => $slug,
+                    'php_sapi' => $this->phpSapi(),
+                    'attempts' => $this->webOpcacheResetFailures,
+                ],
+            );
+
+            return;
+        }
+
+        Log::warning(
+            'cms-framework: OPcache could not be reset after installing plugin Composer packages (check `opcache.restrict_api`). Reload PHP-FPM so it can load them.',
+            ['plugin' => $slug],
+        );
     }
 
     /**

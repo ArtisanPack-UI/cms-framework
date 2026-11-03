@@ -2,12 +2,14 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Tests\Support\Plugins\PluginTestHelper;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
@@ -16,6 +18,9 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 
 beforeEach( function (): void {
+    // A CLI install resets PHP-FPM's OPcache (#438); never reach for a real one.
+    app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
+
     $this->pluginManager   = app( PluginManager::class );
     $this->updateManager   = new UpdateManager( $this->pluginManager );
     $this->testPluginsPath = __DIR__ . '/../../Support/Plugins';
