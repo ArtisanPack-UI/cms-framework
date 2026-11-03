@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RebuildsCompiledCaches;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResetsWebOpcache;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
@@ -39,6 +40,7 @@ use ZipArchive;
  */
 class ApplicationUpdateManager
 {
+    use RebuildsCompiledCaches;
     use ResetsWebOpcache;
     use ResolvesCliPhpBinary;
 
@@ -2650,84 +2652,6 @@ class ApplicationUpdateManager
         Artisan::call( 'cache:clear' );
         Artisan::call( 'route:clear' );
         Artisan::call( 'view:clear' );
-    }
-
-    /**
-     * The `artisan` commands that rebuild the compiled caches the site has in
-     * place right now, in the order they should run.
-     *
-     * Read before `clearCaches()` drops them, so the update puts back exactly
-     * what the operator had cached, and nothing they had not. The files are
-     * checked directly because `configurationIsCached()` and its siblings
-     * memoise their answer for the life of the process, which on a
-     * long-running queue worker can predate the operator's last `optimize`.
-     *
-     * @since 2.15.6
-     *
-     * @return array<int, string> Cache commands, e.g. `config:cache`.
-     */
-    protected function cachedArtifacts(): array
-    {
-        $app      = app();
-        $commands = [];
-
-        if ( is_file( $app->getCachedConfigPath() ) ) {
-            $commands[] = 'config:cache';
-        }
-
-        if ( is_file( $app->getCachedRoutesPath() ) ) {
-            $commands[] = 'route:cache';
-        }
-
-        if ( is_file( $app->getCachedEventsPath() ) ) {
-            $commands[] = 'event:cache';
-        }
-
-        return $commands;
-    }
-
-    /**
-     * Rebuild the compiled caches that were in place before the update (#425).
-     *
-     * Each command runs in a fresh PHP process rather than through
-     * `Artisan::call()`. This process still holds the pre-update classes in
-     * memory, so a cache compiled here could describe providers and routes
-     * that no longer match the code on disk. A route cache naming a middleware
-     * alias the stale provider never registered is the 500 #425 reports.
-     *
-     * Best-effort by design: the update is already applied, and a missing
-     * cache only costs performance until the operator rebuilds it, so a
-     * failure is logged rather than thrown.
-     *
-     * @since 2.15.6
-     *
-     * @param  array<int, string>  $commands  Cache commands from `cachedArtifacts()`.
-     */
-    protected function rebuildCaches( array $commands ): void
-    {
-        foreach ( $commands as $command ) {
-            try {
-                $result = Process::timeout( 120 )
-                    ->path( base_path() )
-                    ->run( [$this->resolvePhpBinary(), 'artisan', $command] );
-
-                if ( $result->successful() ) {
-                    continue;
-                }
-
-                $error = '' !== trim( $result->errorOutput() ) ? $result->errorOutput() : $result->output();
-            } catch ( Throwable $e ) {
-                $error = $e->getMessage();
-            }
-
-            Log::warning(
-                "cms-framework: could not rebuild a compiled cache after the update. Run `php artisan {$command}` on the host.",
-                [
-                    'command' => $command,
-                    'error'   => $this->sanitizeForLog( trim( $error ) ),
-                ],
-            );
-        }
     }
 
     /**

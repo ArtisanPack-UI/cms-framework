@@ -2,13 +2,19 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
+use ArtisanPackUI\CMSFramework\Tests\Support\Plugins\PluginTestHelper;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
 beforeEach( function (): void {
+    // A CLI update resets PHP-FPM's OPcache (#450); never reach for a real one.
+    app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
+
     // Privileged user: mutating plugin routes gate on `manage-plugins`.
     $this->admin = grantPermissions( TestUser::factory()->create(), 'manage-plugins' );
 
@@ -293,8 +299,54 @@ describe( 'Plugin API - Update', function (): void {
 
         $response->assertOk()
             ->assertJsonPath( 'updated', false )
-            ->assertJsonPath( 'message', 'Plugin is already up to date.' );
+            ->assertJsonPath( 'message', 'Plugin is already up to date.' )
+            ->assertJsonMissingPath( 'php_reload_required' );
     } );
+
+    it( 'reports how OPcache was reset, and a reload notice when it was not (#450)', function ( ?string $method, bool $reloadRequired ): void {
+        $this->actingAs( $this->admin );
+        app( WebOpcacheResetter::class )->method = $method;
+
+        File::copyDirectory(
+            __DIR__ . '/../../Support/Plugins/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        $zipPath = PluginTestHelper::buildUpdateZip();
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
+
+        try {
+            $response = $this->postJson( '/api/v1/plugins/valid-plugin/update' )
+                ->assertOk()
+                ->assertJsonPath( 'updated', true )
+                ->assertJsonPath( 'opcache_reset_method', $method )
+                ->assertJsonPath( 'php_reload_required', $reloadRequired );
+
+            if ( $reloadRequired ) {
+                $response->assertJsonPath( 'warning', 'The plugin was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' );
+            } else {
+                $response->assertJsonMissingPath( 'warning' );
+            }
+        } finally {
+            File::delete( $zipPath );
+        }
+    } )->with( [
+        'reset'     => ['fastcgi', false],
+        'not reset' => [null, true],
+    ] );
 
     it( 'returns a structured 409, not a generic 422, when the new version requires a newer host', function (): void {
         $this->actingAs( $this->admin );

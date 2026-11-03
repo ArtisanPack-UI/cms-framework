@@ -138,6 +138,12 @@ apps using Inertia get a working error bag instead of an unhandled response.
 The unknown-slug case matches `activate()` and the plugin module: the slug is
 form input there, not a resource path.
 
+When an update was installed, the response also carries
+`opcache_reset_method` (`web-request`, `fastcgi`, `loopback`, `command`, or
+`null`) and `php_reload_required`. When no OPcache reset reached the web
+server, `php_reload_required` is `true` and a translated `warning` tells the
+admin to reload PHP-FPM. *2.18.0*
+
 ## What happens during an update
 
 1. `ap.cmsFramework.theme.updating` fires with `( $slug, $oldVersion,
@@ -159,7 +165,13 @@ form input there, not a resource path.
 5. The staged directory is swapped into place.
 6. The discovery and update caches are forgotten, view paths are re-registered,
    and the compiled view cache is cleared if the updated theme is active.
-7. `ap.cmsFramework.theme.updated` fires with `( $slug, $newVersion, $manifest )`.
+7. The site is pointed at the new files (*2.18.0*): the config, route and
+   event caches that existed before the update are rebuilt in a fresh process,
+   the web server's OPcache is reset (in a web request with `opcache_reset()`,
+   from the CLI or a queue worker through `cms.updates.opcache.fpm_socket`, the
+   signed loopback route, then `cms.updates.php_reload_command`), and
+   `queue:restart` signals the workers. None of this fails the update.
+8. `ap.cmsFramework.theme.updated` fires with `( $slug, $newVersion, $manifest )`.
 
 A failure at or after step 5 restores from the backup. The restore deletes the
 live directory outright before re-extracting, so files the failed update

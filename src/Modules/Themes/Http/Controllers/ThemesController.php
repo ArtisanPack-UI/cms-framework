@@ -109,7 +109,13 @@ class ThemesController extends Controller
      *
      * Endpoint: POST /v1/themes/{slug}/update
      *
+     * When an update was installed, the response also reports how the web
+     * server's OPcache was reset (`opcache_reset_method`), and when no reset
+     * reached it, sets `php_reload_required` and a `warning` telling the
+     * admin to reload PHP-FPM (#450).
+     *
      * @since 2.8.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  string  $slug  Theme slug identifier.
      *
@@ -143,13 +149,13 @@ class ThemesController extends Controller
             ], 500 );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => $updated
                 ? __( 'Theme updated successfully.' )
                 : __( 'Theme is already up to date.' ),
             'updated' => $updated,
             'theme'   => $this->themeManager->getTheme( $slug ),
-        ] );
+        ], $updated ? $this->runtimeRefreshPayload() : [] ) );
     }
 
     /**
@@ -271,5 +277,26 @@ class ThemesController extends Controller
             'message' => __( 'Theme activated successfully.' ),
             'theme'   => $theme,
         ] );
+    }
+
+    /**
+     * How the last update reached the running site, for the update response.
+     *
+     * @since 2.18.0
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function runtimeRefreshPayload(): array
+    {
+        $payload = [
+            'opcache_reset_method' => $this->updateManager->opcacheResetMethod(),
+            'php_reload_required'  => $this->updateManager->phpReloadRequired(),
+        ];
+
+        if ( $payload['php_reload_required'] ) {
+            $payload['warning'] = __( 'The theme was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' );
+        }
+
+        return $payload;
     }
 }

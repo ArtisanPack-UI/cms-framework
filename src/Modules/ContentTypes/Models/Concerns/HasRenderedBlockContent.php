@@ -91,6 +91,15 @@ trait HasRenderedBlockContent
     protected const POST_RESOLVER_CLASS = 'ArtisanPackUI\\VisualEditor\\Resources\\PostResolver';
 
     /**
+     * Fully-qualified class name of visual-editor's `_resolved*` stripper.
+     *
+     * Read through `static::` so a test can point it at a stand-in.
+     *
+     * @since 2.18.0
+     */
+    protected const RESOLVED_ATTRIBUTES_CLASS = 'ArtisanPackUI\\VisualEditor\\Support\\ResolvedAttributes';
+
+    /**
      * Records whose content is being rendered right now, keyed by
      * {@see self::renderingContentKey()}.
      *
@@ -206,7 +215,12 @@ trait HasRenderedBlockContent
      * inlined here. Each pass is skipped when its class is not installed,
      * and a pass that throws leaves the tree as it was.
      *
+     * Saved `_resolved*` attributes are stripped once, after the pattern
+     * pass and before any pass stamps, so a saved value can never beat
+     * what the resolvers compute, even when the query pass throws.
+     *
      * @since 2.15.3
+     * @since 2.18.0 Strips saved `_resolved*` attributes as its own step.
      *
      * @param  array<int, array<string, mixed>>  $blocks
      *
@@ -232,13 +246,23 @@ trait HasRenderedBlockContent
             } );
         }
 
+        $postResolver = $this->contentPipelineService( self::POST_RESOLVER_CLASS );
+        $stripped     = $this->stripSavedResolvedAttributes( $blocks, $postResolver );
+
+        if ( null !== $stripped ) {
+            $blocks = $stripped;
+        }
+
         $queryInliner = $this->contentPipelineService( self::QUERY_INLINER_CLASS );
 
         if ( null !== $queryInliner ) {
-            $blocks = $this->applyContentPass( $blocks, fn ( array $tree ): array => $queryInliner->inline( $tree, $this ) );
+            $blocks = $this->applyContentPass(
+                $blocks,
+                fn ( array $tree ): array => null !== $stripped
+                    ? $queryInliner->inline( $tree, $this, false )
+                    : $queryInliner->inline( $tree, $this ),
+            );
         }
-
-        $postResolver = $this->contentPipelineService( self::POST_RESOLVER_CLASS );
 
         if ( null !== $postResolver ) {
             $blocks = $this->applyContentPass(
@@ -248,6 +272,37 @@ trait HasRenderedBlockContent
         }
 
         return $blocks;
+    }
+
+    /**
+     * Remove saved `_resolved*` attributes from the model's block tree.
+     *
+     * Prefers visual-editor's `ResolvedAttributes::strip()`, which drops
+     * every `_resolved*` key, and falls back to
+     * `PostResolver::stripSavedAttributes()`. Both arrived in visual-editor
+     * 1.20; with neither installed there is nothing to strip, and null
+     * tells the caller to leave the query pass on its own default.
+     *
+     * @since 2.18.0
+     *
+     * @param  array<int, array<string, mixed>>  $blocks
+     * @param  object|null                       $postResolver  Visual-editor's `PostResolver`, when installed.
+     *
+     * @return array<int, array<string, mixed>>|null The stripped tree, or null when no stripper is installed.
+     */
+    protected function stripSavedResolvedAttributes( array $blocks, ?object $postResolver ): ?array
+    {
+        $resolvedAttributes = static::RESOLVED_ATTRIBUTES_CLASS;
+
+        if ( class_exists( $resolvedAttributes ) && method_exists( $resolvedAttributes, 'strip' ) ) {
+            return $resolvedAttributes::strip( $blocks );
+        }
+
+        if ( null !== $postResolver && method_exists( $postResolver, 'stripSavedAttributes' ) ) {
+            return $postResolver->stripSavedAttributes( $blocks );
+        }
+
+        return null;
     }
 
     /**
