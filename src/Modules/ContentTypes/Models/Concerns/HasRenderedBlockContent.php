@@ -283,6 +283,10 @@ trait HasRenderedBlockContent
      * 1.20; with neither installed there is nothing to strip, and null
      * tells the caller to leave the query pass on its own default.
      *
+     * A stripper that throws must neither blank the render nor hand the
+     * unstripped tree on, where saved values would beat the resolvers, so
+     * the tree is then stripped by {@see self::stripResolvedKeys()}.
+     *
      * @since 2.18.0
      *
      * @param  array<int, array<string, mixed>>  $blocks
@@ -294,15 +298,61 @@ trait HasRenderedBlockContent
     {
         $resolvedAttributes = static::RESOLVED_ATTRIBUTES_CLASS;
 
-        if ( class_exists( $resolvedAttributes ) && method_exists( $resolvedAttributes, 'strip' ) ) {
-            return $resolvedAttributes::strip( $blocks );
-        }
+        try {
+            if ( class_exists( $resolvedAttributes ) && method_exists( $resolvedAttributes, 'strip' ) ) {
+                return $resolvedAttributes::strip( $blocks );
+            }
 
-        if ( null !== $postResolver && method_exists( $postResolver, 'stripSavedAttributes' ) ) {
-            return $postResolver->stripSavedAttributes( $blocks );
+            if ( null !== $postResolver && method_exists( $postResolver, 'stripSavedAttributes' ) ) {
+                return $postResolver->stripSavedAttributes( $blocks );
+            }
+        } catch ( Throwable ) {
+            return $this->stripResolvedKeys( $blocks );
         }
 
         return null;
+    }
+
+    /**
+     * Remove every `_resolved*` attribute from every block in a tree, in
+     * the `attributes` and legacy `attrs` shapes and at any depth.
+     *
+     * The fallback for a visual-editor stripper that throws. Mirrors
+     * visual-editor's `ResolvedAttributes::strip()`.
+     *
+     * @since 2.18.0
+     *
+     * @param  array<int|string, mixed>  $blocks
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    protected function stripResolvedKeys( array $blocks ): array
+    {
+        $out = [];
+
+        foreach ( $blocks as $block ) {
+            if ( ! is_array( $block ) ) {
+                continue;
+            }
+
+            foreach ( ['attributes', 'attrs'] as $key ) {
+                if ( isset( $block[ $key ] ) && is_array( $block[ $key ] ) ) {
+                    $block[ $key ] = array_filter(
+                        $block[ $key ],
+                        static fn ( mixed $name ): bool => ! is_string( $name ) || ! str_starts_with( $name, '_resolved' ),
+                        ARRAY_FILTER_USE_KEY,
+                    );
+                }
+            }
+
+            if ( isset( $block['innerBlocks'] ) && is_array( $block['innerBlocks'] ) ) {
+                $block['innerBlocks'] = $this->stripResolvedKeys( $block['innerBlocks'] );
+            }
+
+            $out[] = $block;
+        }
+
+        return $out;
     }
 
     /**

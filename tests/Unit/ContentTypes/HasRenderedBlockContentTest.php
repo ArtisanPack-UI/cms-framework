@@ -225,6 +225,8 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\ContentTypes\Stubs {
     {
         public static int $calls = 0;
 
+        public static bool $throw = false;
+
         /**
          * @param  array<int, array<string, mixed>>  $tree
          *
@@ -233,6 +235,10 @@ namespace ArtisanPackUI\CMSFramework\Tests\Unit\ContentTypes\Stubs {
         public static function strip( array $tree ): array
         {
             self::$calls++;
+
+            if ( self::$throw ) {
+                throw new \RuntimeException( 'stripper failure' );
+            }
 
             return self::walk( $tree );
         }
@@ -291,6 +297,7 @@ namespace {
 
         QueryInliner::$lastStripSavedResolved = null;
         ResolvedAttributesStub::$calls        = 0;
+        ResolvedAttributesStub::$throw        = false;
     } );
 
     /**
@@ -442,6 +449,32 @@ namespace {
         expect( ResolvedAttributesStub::$calls )->toBe( 1 )
             ->and( PostResolver::$stripCalls )->toBe( 0 )
             ->and( BlockRenderer::$lastTree[0]['attributes'] )->toBe( [] )
+            ->and( QueryInliner::$lastStripSavedResolved )->toBeFalse();
+    } );
+
+    test( 'a stripper that throws still renders the tree, without its saved _resolved* values (#448)', function (): void {
+        ResolvedAttributesStub::$throw = true;
+
+        $post = new class extends Post {
+            protected const RESOLVED_ATTRIBUTES_CLASS = ResolvedAttributesStub::class;
+        };
+
+        $post->title = 'Stripper failure';
+        $post->setBlockContent( [
+            ['name' => 'artisanpack/group', 'attributes' => ['tagName' => 'section'], 'innerBlocks' => [
+                ['name' => 'artisanpack/social-share-content', 'attributes' => [
+                    'services'            => ['x'],
+                    '_resolvedShareLinks' => [['service' => 'x', 'url' => 'https://evil.test/']],
+                ], 'innerBlocks' => []],
+                ['name' => 'core/paragraph', 'attrs' => ['_resolvedThing' => 'saved', 'align' => 'left'], 'innerBlocks' => []],
+            ]],
+        ] );
+
+        expect( $post->renderContent() )->toBe( '<p>stubbed render</p>' )
+            ->and( ResolvedAttributesStub::$calls )->toBe( 1 )
+            ->and( BlockRenderer::$lastTree[0]['attributes'] )->toBe( ['tagName' => 'section'] )
+            ->and( BlockRenderer::$lastTree[0]['innerBlocks'][0]['attributes'] )->toBe( ['services' => ['x']] )
+            ->and( BlockRenderer::$lastTree[0]['innerBlocks'][1]['attrs'] ?? BlockRenderer::$lastTree[0]['innerBlocks'][1]['attributes'] )->not->toHaveKey( '_resolvedThing' )
             ->and( QueryInliner::$lastStripSavedResolved )->toBeFalse();
     } );
 
