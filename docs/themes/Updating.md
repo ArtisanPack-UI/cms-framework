@@ -144,6 +144,17 @@ When an update was installed, the response also carries
 server, `php_reload_required` is `true` and a translated `warning` tells the
 admin to reload PHP-FPM. *2.18.0*
 
+When a failed update was rolled back and no OPcache reset reached the web
+server, the 422's error bag also carries a `php_reload_required` message, and
+the 500 for an unexpected failure carries `opcache_reset_method` and
+`php_reload_required`. *2.18.0*
+
+`POST /v1/themes` (install) and `POST /v1/themes/{slug}/activate` return the
+same `opcache_reset_method`, `php_reload_required` and `warning` fields:
+installs and activations get the same refresh as step 7 below, and
+`ThemeManager::opcacheResetMethod()` and `phpReloadRequired()` report it.
+*2.18.0*
+
 ## What happens during an update
 
 1. `ap.cmsFramework.theme.updating` fires with `( $slug, $oldVersion,
@@ -175,7 +186,9 @@ admin to reload PHP-FPM. *2.18.0*
 
 A failure at or after step 5 restores from the backup. The restore deletes the
 live directory outright before re-extracting, so files the failed update
-*added* are removed rather than left orphaned alongside the restored ones.
+*added* are removed rather than left orphaned alongside the restored ones. The
+restored files then get step 7's refresh, so PHP-FPM serves the restored
+version rather than bytecode compiled from the failed one (*2.18.0*).
 
 ## Updating the active theme
 

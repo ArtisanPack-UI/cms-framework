@@ -112,10 +112,13 @@ class ThemesController extends Controller
      * When an update was installed, the response also reports how the web
      * server's OPcache was reset (`opcache_reset_method`), and when no reset
      * reached it, sets `php_reload_required` and a `warning` telling the
-     * admin to reload PHP-FPM (#450).
+     * admin to reload PHP-FPM (#450). When a failed update was rolled back
+     * and no reset reached the web server, the error response says so too:
+     * the 500 carries the same fields, and the 422's error bag gains a
+     * `php_reload_required` message (#454).
      *
      * @since 2.8.0
-     * @since 2.18.0 Reports the OPcache reset outcome.
+     * @since 2.18.0 Reports the OPcache reset outcome, after an update or its rollback.
      *
      * @param  string  $slug  Theme slug identifier.
      *
@@ -135,18 +138,22 @@ class ThemesController extends Controller
             // `UpdateManager` funnels every in-flight failure — corrupt archive,
             // checksum mismatch, failed swap — through this type, carrying the
             // underlying reason verbatim.
-            throw ValidationException::withMessages( [
+            throw ValidationException::withMessages( array_merge( [
                 'slug' => $e->getMessage(),
-            ] );
+            ], $this->rollbackReloadErrors() ) );
         } catch ( Exception $e ) {
             // Anything else is a server fault rather than a rejected update, so
             // it stays a 500 instead of being dressed up as a field error —
             // matching `upload()` and `activate()`.
             report( $e );
 
-            return response()->json( [
+            return response()->json( array_merge( [
                 'message' => __( 'An unexpected error occurred while updating the theme.' ),
-            ], 500 );
+            ], $this->refreshPayload(
+                $this->updateManager->opcacheResetMethod(),
+                $this->updateManager->phpReloadRequired(),
+                $this->rollbackReloadWarning(),
+            ) ), 500 );
         }
 
         return response()->json( array_merge( [
@@ -200,7 +207,12 @@ class ThemesController extends Controller
      *
      * Endpoint: POST /v1/themes
      *
+     * The response reports how the web server's OPcache was reset
+     * (`opcache_reset_method`), and when no reset reached it, sets
+     * `php_reload_required` and a `warning` (#453).
+     *
      * @since 2.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  UploadThemeRequest  $request  Validated request carrying the uploaded theme_zip.
      *
@@ -227,10 +239,10 @@ class ThemesController extends Controller
             ], 500 );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => __( 'Theme installed successfully.' ),
             'theme'   => $manifest,
-        ], 201 );
+        ], $this->managerRefreshPayload( __( 'The theme was installed, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the theme\'s files.' ) ) ), 201 );
     }
 
     /**
@@ -247,7 +259,12 @@ class ThemesController extends Controller
      *
      * Endpoint: POST /v1/themes/{slug}/activate
      *
+     * The response reports how the web server's OPcache was reset
+     * (`opcache_reset_method`), and when no reset reached it, sets
+     * `php_reload_required` and a `warning` (#453).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  string  $slug  Theme slug identifier.
      *
@@ -273,10 +290,10 @@ class ThemesController extends Controller
             ], 500 );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => __( 'Theme activated successfully.' ),
             'theme'   => $theme,
-        ] );
+        ], $this->managerRefreshPayload( __( 'The theme was activated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the theme.' ) ) ) );
     }
 
     /**
@@ -288,13 +305,82 @@ class ThemesController extends Controller
      */
     protected function runtimeRefreshPayload(): array
     {
+        return $this->refreshPayload(
+            $this->updateManager->opcacheResetMethod(),
+            $this->updateManager->phpReloadRequired(),
+            __( 'The theme was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' ),
+        );
+    }
+
+    /**
+     * How the last install or activation reached the running site, for its
+     * response (#453).
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $warning  What to tell the admin when PHP-FPM needs a reload.
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function managerRefreshPayload( string $warning ): array
+    {
+        return $this->refreshPayload(
+            $this->themeManager->opcacheResetMethod(),
+            $this->themeManager->phpReloadRequired(),
+            $warning,
+        );
+    }
+
+    /**
+     * An extra error-bag entry telling the admin to reload PHP-FPM when a
+     * rolled-back update's OPcache reset reached no web server (#454).
+     *
+     * @since 2.18.0
+     *
+     * @return array<string, string> `php_reload_required` => message, or empty.
+     */
+    protected function rollbackReloadErrors(): array
+    {
+        if ( ! $this->updateManager->phpReloadRequired() ) {
+            return [];
+        }
+
+        return ['php_reload_required' => $this->rollbackReloadWarning()];
+    }
+
+    /**
+     * The warning for a rolled-back update that left PHP-FPM needing a
+     * reload.
+     *
+     * @since 2.18.0
+     *
+     * @return string The translated warning.
+     */
+    protected function rollbackReloadWarning(): string
+    {
+        return __( 'The update was rolled back, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the restored version.' );
+    }
+
+    /**
+     * Build the OPcache outcome fields for a response.
+     *
+     * @since 2.18.0
+     *
+     * @param  string|null  $method  How OPcache was reset, or null when no reset reached the web server.
+     * @param  bool  $reloadRequired  Whether PHP-FPM needs a reload.
+     * @param  string  $warning  What to tell the admin when it does.
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function refreshPayload( ?string $method, bool $reloadRequired, string $warning ): array
+    {
         $payload = [
-            'opcache_reset_method' => $this->updateManager->opcacheResetMethod(),
-            'php_reload_required'  => $this->updateManager->phpReloadRequired(),
+            'opcache_reset_method' => $method,
+            'php_reload_required'  => $reloadRequired,
         ];
 
-        if ( $payload['php_reload_required'] ) {
-            $payload['warning'] = __( 'The theme was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' );
+        if ( $reloadRequired ) {
+            $payload['warning'] = $warning;
         }
 
         return $payload;

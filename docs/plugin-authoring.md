@@ -1084,6 +1084,24 @@ update. `POST /api/v1/plugins/{slug}/update` reports `opcache_reset_method` and
 `php_reload_required`, plus a `warning` to reload PHP-FPM when no reset
 reached it.
 
+A rolled-back update gets the same refresh once its backup is restored, so
+PHP-FPM serves the restored version rather than bytecode compiled from the
+failed one, and the caches a deactivate cleared are rebuilt. When no OPcache
+reset reached the web server, the failed update's 422 adds a
+`php_reload_required` message to its error bag, and the 409 for an
+incompatible version carries `opcache_reset_method` and `php_reload_required`.
+
+Installs, activations, deactivations and deletes get the same refresh too, so
+a newly activated plugin's named routes resolve under `route:cache` without
+`optimize`. `PluginManager` reports the outcome through `opcacheResetMethod()`
+and `phpReloadRequired()`, and the install, activate, deactivate and delete
+endpoints return the same fields as the update endpoint. The refresh runs once
+per request: an update's own deactivate and reactivate, a delete's deactivate,
+and the OPcache reset after a plugin's Composer install
+([#438](https://github.com/ArtisanPack-UI/cms-framework/issues/438)) are folded
+into it, and `cms:plugins:sync` refreshes once for the whole sync, only when
+something changed.
+
 ## Testing your plugin
 
 Plugins ship their own Pest / PHPUnit test suites. A minimal `TestCase`

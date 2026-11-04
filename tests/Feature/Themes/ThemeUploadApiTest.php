@@ -76,6 +76,22 @@ describe( 'POST /v1/themes (upload)', function (): void {
         expect( File::exists( $this->themesPath . '/api-upload-theme/theme.json' ) )->toBeTrue();
     } );
 
+    it( 'reports how OPcache was reset after installing (#453)', function (): void {
+        $this->actingAs( $this->admin );
+
+        $file = makeUploadedThemeZip( $this->tmpPath, 'api-refresh-upload-theme', [
+            'slug'    => 'api-refresh-upload-theme',
+            'name'    => 'API Refresh Upload Theme',
+            'version' => '1.0.0',
+        ], $this->testSlugs );
+
+        $this->postJson( '/v1/themes', ['theme_zip' => $file] )
+            ->assertCreated()
+            ->assertJsonPath( 'opcache_reset_method', 'fastcgi' )
+            ->assertJsonPath( 'php_reload_required', false )
+            ->assertJsonMissingPath( 'warning' );
+    } );
+
     it( 'returns 422 with an errors bag keyed by theme_zip when no file is uploaded', function (): void {
         $this->actingAs( $this->admin );
 

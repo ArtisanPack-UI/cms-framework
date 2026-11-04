@@ -403,6 +403,8 @@ The updater now calls `opcache_reset()` once the files on disk are final: after 
 - If no reset reaches the web server (from the CLI, or because `opcache.restrict_api` blocks it), the updater logs a warning, records `php_reload_required: true` in the update state, and `update:perform`, `update:rollback` and `update:status` tell the operator to reload PHP-FPM.
 - `ApplicationUpdateManager::phpReloadRequired()` returns the same flag for the last update or rollback that instance ran, and `opcacheResetMethod()` returns how the reset happened, for an admin UI that wants to show it.
 
+Since 2.18 the updater also runs `queue:restart` after the OPcache reset, both after a successful update and when a failure finishes forward on the new code. Long-running queue workers hold the pre-update framework and job classes in memory, so without it they kept running the old version until someone restarted them by hand. `queue:restart` only writes a timestamp to the cache, so each worker, including the one running a queued update's `PerformUpdateJob`, exits after its current job and its supervisor starts it on the new code. A failure is logged and doesn't fail the update.
+
 #### Resetting PHP-FPM's OPcache from the CLI (2.16.0)
 
 The CLI is the recommended way to run an update, so a CLI update should not leave FPM on stale bytecode until someone remembers to reload it. After a CLI or queued run, the updater tries these in order and stops at the first that works:

@@ -88,7 +88,7 @@ class OpcacheResetTest extends TestCase
 
         $this->assertTrue( $manager->performUpdate() );
 
-        $this->assertSame( ['cleanup', 'opcache-reset', 'disable'], array_slice( $manager->calls, -3 ) );
+        $this->assertSame( ['cleanup', 'opcache-reset', 'queue-restart', 'disable'], array_slice( $manager->calls, -4 ) );
         $this->assertSame( 1, count( array_keys( $manager->calls, 'opcache-reset', true ) ) );
 
         $this->assertFalse( $manager->phpReloadRequired() );
@@ -146,7 +146,7 @@ class OpcacheResetTest extends TestCase
 
         $this->assertTrue( $manager->performUpdate() );
 
-        $this->assertSame( ['cleanup', 'opcache-reset', 'web-opcache-reset', 'disable'], array_slice( $manager->calls, -4 ) );
+        $this->assertSame( ['cleanup', 'opcache-reset', 'web-opcache-reset', 'queue-restart', 'disable'], array_slice( $manager->calls, -5 ) );
         $this->assertFalse( $manager->phpReloadRequired() );
         $this->assertSame( 'fastcgi', $manager->opcacheResetMethod() );
         $this->assertFalse( $manager->updateState()['php_reload_required'] );
@@ -439,8 +439,8 @@ class OpcacheResetTest extends TestCase
         $this->assertTrue( $manager->performUpdate() );
 
         $this->assertSame(
-            ['caches', 'cleanup', 'removed-paths', 'rebuild:config:cache,event:cache', 'opcache-reset', 'disable'],
-            array_slice( $manager->calls, -6 ),
+            ['caches', 'cleanup', 'removed-paths', 'rebuild:config:cache,event:cache', 'opcache-reset', 'queue-restart', 'disable'],
+            array_slice( $manager->calls, -7 ),
         );
     }
 
@@ -650,6 +650,65 @@ class OpcacheResetTest extends TestCase
         $this->artisan( 'update:status' )
             ->doesntExpectOutputToContain( 'reload PHP-FPM' )
             ->assertSuccessful();
+    }
+
+    /**
+     * Test that a successful update signals the queue workers to restart once
+     * every file is final and OPcache is reset, before the site comes back up
+     * (#452).
+     *
+     * @since 2.18.0
+     */
+    public function test_successful_update_restarts_queue_workers_after_the_opcache_reset(): void
+    {
+        $manager                     = $this->managerWithUpdateAvailable();
+        $manager->sapi               = 'fpm-fcgi';
+        $manager->opcacheResetResult = true;
+
+        $this->assertTrue( $manager->performUpdate() );
+
+        $this->assertSame( 1, count( array_keys( $manager->calls, 'queue-restart', true ) ) );
+
+        $restart = array_search( 'queue-restart', $manager->calls, true );
+
+        $this->assertGreaterThan( array_search( 'opcache-reset', $manager->calls, true ), $restart );
+        $this->assertLessThan( array_search( 'disable', $manager->calls, true ), $restart );
+    }
+
+    /**
+     * Test that a failure after the code and schema were applied, which
+     * finishes forward on the new version, restarts the queue workers too
+     * (#452).
+     *
+     * @since 2.18.0
+     */
+    public function test_finish_forward_failure_restarts_queue_workers(): void
+    {
+        $manager                     = $this->managerWithUpdateAvailable();
+        $manager->sapi               = 'fpm-fcgi';
+        $manager->opcacheResetResult = true;
+        $manager->failAtStep         = UpdateStep::Cleanup;
+
+        $this->expectFailure( $manager );
+
+        $this->assertContains( 'queue-restart', $manager->calls );
+    }
+
+    /**
+     * Test that a failure before extraction, which left the old code in
+     * place, leaves the queue workers alone.
+     *
+     * @since 2.18.0
+     */
+    public function test_failure_before_extraction_does_not_restart_queue_workers(): void
+    {
+        $manager             = $this->managerWithUpdateAvailable();
+        $manager->sapi       = 'fpm-fcgi';
+        $manager->failAtStep = UpdateStep::Download;
+
+        $this->expectFailure( $manager );
+
+        $this->assertNotContains( 'queue-restart', $manager->calls );
     }
 
     /**

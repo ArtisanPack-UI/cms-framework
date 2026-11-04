@@ -7,6 +7,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RebuildsCompiledCaches;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResetsWebOpcache;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RestartsQueueWorkers;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
@@ -43,6 +44,7 @@ class ApplicationUpdateManager
     use RebuildsCompiledCaches;
     use ResetsWebOpcache;
     use ResolvesCliPhpBinary;
+    use RestartsQueueWorkers;
 
     /**
      * Default composer install command shipped with the framework. Used as the
@@ -836,7 +838,12 @@ class ApplicationUpdateManager
     /**
      * Run the ten update steps under an already-held update lock.
      *
+     * Once every file is final, the compiled caches the site had are rebuilt,
+     * the web server's OPcache is reset and the queue workers are signalled
+     * to restart, before maintenance mode is lifted.
+     *
      * @since 2.7.1
+     * @since 2.18.0 Signals the queue workers to restart after the update.
      *
      * @param  string  $targetVersion  Version being installed.
      * @param  UpdateInfo  $updateInfo  Resolved update metadata.
@@ -920,6 +927,11 @@ class ApplicationUpdateManager
             // Last, once every file on disk is final, so the web server stops
             // running bytecode compiled from the pre-update tree (#425).
             $this->resetOpcache();
+
+            // Queue workers hold the pre-update framework classes in memory,
+            // the one running this update's job included, so signal them to
+            // restart on the new code, as plugin and theme updates do (#452).
+            $this->restartQueueWorkers( 'the update' );
 
             // Step 10: Disable maintenance mode
             $this->beginStep( UpdateStep::DisableMaintenanceMode );
@@ -3745,8 +3757,10 @@ class ApplicationUpdateManager
             $this->clearCompiledCachesAfterFailure();
 
             // The new code is on disk, so the web server must stop running the
-            // pre-update bytecode before the site comes back up (#425).
+            // pre-update bytecode before the site comes back up (#425), and
+            // the queue workers must stop running the old classes (#452).
             $this->resetOpcache();
+            $this->restartQueueWorkers( 'the update' );
 
             // The code and schema are already in place, so the site can serve
             // the new version. Bring it back up (best-effort, as before).

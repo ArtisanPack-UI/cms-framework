@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionChange;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeInstallationException;
@@ -44,6 +45,7 @@ use ZipArchive;
 class ThemeManager
 {
     use HasManifestParsing;
+    use RefreshesRuntimeAfterExtensionChange;
 
     /**
      * Constructs the ThemeManager instance.
@@ -142,7 +144,14 @@ class ThemeManager
      * Sets the specified theme as active in the settings, clears theme and view caches,
      * and validates that the theme exists before activation.
      *
+     * Afterwards the compiled caches the site had are rebuilt, the web
+     * server's OPcache is reset and the queue workers are signalled, so the
+     * theme is live on a production host without a PHP-FPM reload (#453).
+     * {@see opcacheResetMethod()} and {@see phpReloadRequired()} report how
+     * that went.
+     *
      * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the activation.
      *
      * @param  string  $slug  Theme slug identifier.
      *
@@ -152,37 +161,11 @@ class ThemeManager
      */
     public function activateTheme( string $slug ): bool
     {
-        $theme = $this->getTheme( $slug );
-
-        if ( null === $theme ) {
-            throw ThemeNotFoundException::forSlug( $slug );
-        }
-
-        // Pre-activation hook: listeners may throw to short-circuit activation
-        // before any persistent state changes.
-        doAction( 'ap.cmsFramework.theme.activating', $slug, $theme );
-
-        $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
-
-        // Clear theme cache
-        $cacheKey = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
-        Cache::forget( $cacheKey );
-
-        // Clear view cache
-        try {
-            Artisan::call( 'view:clear' );
-        } catch ( Exception $e ) {
-            // Log the error but don't fail activation
-            if ( function_exists( 'logger' ) ) {
-                logger()->warning( 'Failed to clear view cache during theme activation', [
-                    'error' => $e->getMessage(),
-                ] );
-            }
-        }
-
-        doAction( 'ap.cmsFramework.theme.activated', $slug, $theme );
-
-        return true;
+        return $this->withRuntimeRefresh(
+            'activating a theme',
+            ['theme'    => $slug],
+            fn (): bool => $this->activateThemeWithoutRefresh( $slug ),
+        );
     }
 
     /**
@@ -196,11 +179,17 @@ class ThemeManager
      * 3. Validate the extracted theme's manifest against the WP theme.json schema.
      *    If validation fails, the extracted directory is removed before throwing.
      * 4. Invalidate the discovery cache so the new theme is picked up immediately.
+     * 5. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers (#453). A theme reinstalled at
+     *    a path PHP-FPM has compiled before would otherwise run the old
+     *    bytecode. {@see opcacheResetMethod()} and {@see phpReloadRequired()}
+     *    report how that went.
      *
      * The first top-level directory in the ZIP becomes the theme slug, matching
      * the Plugins module convention.
      *
      * @since 2.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the install.
      *
      * @param  string  $zipPath  Absolute path to the uploaded ZIP file.
      *
@@ -211,67 +200,11 @@ class ThemeManager
      */
     public function installFromZip( string $zipPath ): array
     {
-        $this->validateZip( $zipPath );
-
-        $slug = $this->extractZip( $zipPath );
-
-        $themePath = $this->getThemesPath() . '/' . $slug;
-
-        if ( ! $this->validateTheme( $themePath ) ) {
-            // Rollback: remove the freshly extracted directory so we don't leave
-            // a half-installed theme on disk.
-            File::deleteDirectory( $themePath );
-
-            throw ThemeValidationException::invalidManifest( "Theme '{$slug}' failed schema validation after extraction." );
-        }
-
-        $manifest = $this->parseManifest( $themePath . '/theme.json' );
-
-        if ( null === $manifest ) {
-            File::deleteDirectory( $themePath );
-
-            throw ThemeValidationException::invalidManifest( "Theme '{$slug}' manifest could not be parsed after extraction." );
-        }
-
-        try {
-            $this->validateManifest( $manifest );
-        } catch ( ThemeValidationException $e ) {
-            File::deleteDirectory( $themePath );
-
-            throw $e;
-        }
-
-        // `validateManifest()` already enforced that a non-empty,
-        // well-formed `slug` is present. Now make sure that slug matches
-        // the extracted directory name — `getTheme()`, view-path
-        // registration, and `activateTheme()` all key off the directory,
-        // so a mismatch would leave the theme installed-but-unreachable.
-        if ( $manifest['slug'] !== $slug ) {
-            File::deleteDirectory( $themePath );
-
-            throw ThemeValidationException::invalidManifest(
-                "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
-            );
-        }
-
-        // Pre-install hook: listeners may throw to abort the install. The
-        // extracted directory is rolled back so we never leave a half-installed
-        // theme on disk after a vetoed install. We catch Throwable (not just
-        // Exception) so that Error/TypeError thrown from listener callbacks
-        // also trigger rollback before propagating.
-        try {
-            doAction( 'ap.cmsFramework.theme.installing', $slug, $manifest );
-        } catch ( Throwable $e ) {
-            File::deleteDirectory( $themePath );
-
-            throw $e;
-        }
-
-        Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
-
-        doAction( 'ap.cmsFramework.theme.installed', $slug, $manifest );
-
-        return $manifest;
+        return $this->withRuntimeRefresh(
+            'installing a theme',
+            [],
+            fn (): array => $this->installThemeFromZip( $zipPath ),
+        );
     }
 
     /**
@@ -673,6 +606,130 @@ class ThemeManager
     public function isUsableUpdateSource( mixed $update ): bool
     {
         return null === $this->checkUpdateSourceManifestField( $update );
+    }
+
+    /**
+     * Activate a theme, without the runtime refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  Theme slug identifier.
+     *
+     * @throws ThemeNotFoundException If the theme does not exist.
+     *
+     * @return bool True on successful activation.
+     */
+    protected function activateThemeWithoutRefresh( string $slug ): bool
+    {
+        $theme = $this->getTheme( $slug );
+
+        if ( null === $theme ) {
+            throw ThemeNotFoundException::forSlug( $slug );
+        }
+
+        // Pre-activation hook: listeners may throw to short-circuit activation
+        // before any persistent state changes.
+        doAction( 'ap.cmsFramework.theme.activating', $slug, $theme );
+
+        $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
+
+        // Clear theme cache
+        $cacheKey = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
+        Cache::forget( $cacheKey );
+
+        // Clear view cache
+        try {
+            Artisan::call( 'view:clear' );
+        } catch ( Exception $e ) {
+            // Log the error but don't fail activation
+            if ( function_exists( 'logger' ) ) {
+                logger()->warning( 'Failed to clear view cache during theme activation', [
+                    'error' => $e->getMessage(),
+                ] );
+            }
+        }
+
+        doAction( 'ap.cmsFramework.theme.activated', $slug, $theme );
+
+        return true;
+    }
+
+    /**
+     * Install a theme from an uploaded ZIP archive, without the runtime
+     * refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $zipPath  Absolute path to the uploaded ZIP file.
+     *
+     * @throws ThemeValidationException If the ZIP or extracted manifest fails validation.
+     * @throws ThemeInstallationException If extraction fails or the slug is already installed.
+     *
+     * @return array The parsed manifest of the installed theme.
+     */
+    protected function installThemeFromZip( string $zipPath ): array
+    {
+        $this->validateZip( $zipPath );
+
+        $slug = $this->extractZip( $zipPath );
+
+        $themePath = $this->getThemesPath() . '/' . $slug;
+
+        if ( ! $this->validateTheme( $themePath ) ) {
+            // Rollback: remove the freshly extracted directory so we don't leave
+            // a half-installed theme on disk.
+            File::deleteDirectory( $themePath );
+
+            throw ThemeValidationException::invalidManifest( "Theme '{$slug}' failed schema validation after extraction." );
+        }
+
+        $manifest = $this->parseManifest( $themePath . '/theme.json' );
+
+        if ( null === $manifest ) {
+            File::deleteDirectory( $themePath );
+
+            throw ThemeValidationException::invalidManifest( "Theme '{$slug}' manifest could not be parsed after extraction." );
+        }
+
+        try {
+            $this->validateManifest( $manifest );
+        } catch ( ThemeValidationException $e ) {
+            File::deleteDirectory( $themePath );
+
+            throw $e;
+        }
+
+        // `validateManifest()` already enforced that a non-empty,
+        // well-formed `slug` is present. Now make sure that slug matches
+        // the extracted directory name — `getTheme()`, view-path
+        // registration, and `activateTheme()` all key off the directory,
+        // so a mismatch would leave the theme installed-but-unreachable.
+        if ( $manifest['slug'] !== $slug ) {
+            File::deleteDirectory( $themePath );
+
+            throw ThemeValidationException::invalidManifest(
+                "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
+            );
+        }
+
+        // Pre-install hook: listeners may throw to abort the install. The
+        // extracted directory is rolled back so we never leave a half-installed
+        // theme on disk after a vetoed install. We catch Throwable (not just
+        // Exception) so that Error/TypeError thrown from listener callbacks
+        // also trigger rollback before propagating.
+        try {
+            doAction( 'ap.cmsFramework.theme.installing', $slug, $manifest );
+        } catch ( Throwable $e ) {
+            File::deleteDirectory( $themePath );
+
+            throw $e;
+        }
+
+        Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
+
+        doAction( 'ap.cmsFramework.theme.installed', $slug, $manifest );
+
+        return $manifest;
     }
 
     /**
