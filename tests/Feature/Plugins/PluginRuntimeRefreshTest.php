@@ -191,6 +191,31 @@ describe( 'installing a plugin', function (): void {
             ->and( array_count_values( $artisan->calls )['queue:restart'] )->toBe( 1 );
     } );
 
+    it( 'still refreshes, then rethrows, when a failure escapes the sync', function (): void {
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $this->pluginsPath . '/object-author-plugin' );
+        $artisan = ( $this->swapArtisan )();
+
+        // Not one of the exceptions the sync turns into a `failed` row.
+        $listener = function ( string $slug ): void {
+            if ( 'valid-plugin' === $slug ) {
+                throw new RuntimeException( 'Listener exploded.' );
+            }
+        };
+        addAction( 'ap.cmsFramework.plugin.installing', $listener );
+
+        try {
+            expect( fn () => $this->manager->syncFromDisk() )
+                ->toThrow( RuntimeException::class, 'Listener exploded.' );
+
+            expect( $this->resetter->resets )->toBe( 1 )
+                ->and( $artisan->calls )->toBe( ['queue:restart'] )
+                ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.installing', $listener );
+        }
+    } );
+
     it( 'does not refresh for a sync that changed nothing', function (): void {
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
         $this->manager->syncFromDisk();

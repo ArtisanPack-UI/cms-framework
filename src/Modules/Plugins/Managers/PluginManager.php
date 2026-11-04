@@ -256,7 +256,8 @@ class PluginManager
      *
      * The runtime is refreshed once for the whole sync (#453), and only when
      * a plugin was installed, updated or failed part-way, rather than once per
-     * installed plugin.
+     * installed plugin. A failure that escapes the sync still refreshes before
+     * it is rethrown, since plugins registered before it must go live too.
      *
      * @since 2.9.0
      * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers once after a sync that changed something.
@@ -275,7 +276,16 @@ class PluginManager
 
         $this->resetRuntimeRefreshOutcome();
 
-        $results = $this->withoutRuntimeRefresh( fn (): array => $this->syncPluginsFromDisk() );
+        try {
+            $results = $this->withoutRuntimeRefresh( fn (): array => $this->syncPluginsFromDisk() );
+        } catch ( Throwable $e ) {
+            // Plugins registered before the failure, and any Composer packages
+            // installed for them, still have to go live. Which ones is unknown
+            // here, so refresh fully, then report the original failure.
+            $this->refreshRuntime( 'syncing plugins from disk', [], $cachedArtifacts );
+
+            throw $e;
+        }
 
         $changed = array_filter( $results, fn ( array $result ): bool => 'unchanged' !== $result['status'] );
 
