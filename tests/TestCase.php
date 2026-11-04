@@ -12,6 +12,8 @@ namespace ArtisanPackUI\CMSFramework\Tests;
 
 use ArtisanPackUI\Ai\AiServiceProvider;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use ArtisanPackUI\Rbac\RbacServiceProvider;
@@ -30,6 +32,11 @@ class TestCase extends \Orchestra\Testbench\TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Plugin and theme installs, activations and updates reset PHP-FPM's
+        // OPcache from the CLI (#438, #450, #453). Never reach for a real FPM
+        // socket or the loopback route from a test.
+        $this->app->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
 
         // Load the package's migrations (includes users, roles, permissions, settings, etc.)
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );

@@ -14,7 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
-use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionUpdate;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionChange;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
@@ -56,7 +56,7 @@ use ZipArchive;
 class UpdateManager
 {
     use ManagesExtensionUpdates;
-    use RefreshesRuntimeAfterExtensionUpdate;
+    use RefreshesRuntimeAfterExtensionChange;
 
     /**
      * Constructs the UpdateManager instance.
@@ -281,10 +281,11 @@ class UpdateManager
      * A failure at or after step 5 restores from the backup and forgets the
      * caches again. The restore deletes the live directory outright before
      * re-extracting the backup, so files the update *added* are removed rather
-     * than left orphaned alongside the restored ones (#272).
+     * than left orphaned alongside the restored ones (#272). It then gets the
+     * same refresh as step 7, so the restored version is what runs (#454).
      *
      * @since 2.8.0
-     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the update.
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the update or its rollback.
      *
      * @param  string  $slug  Theme slug.
      *
@@ -295,6 +296,10 @@ class UpdateManager
      */
     public function updateTheme( string $slug ): bool
     {
+        // First, so a failure before anything changed never reports an
+        // earlier update's outcome.
+        $this->resetRuntimeRefreshOutcome();
+
         $manifest = $this->themeManager->getTheme( $slug );
 
         if ( null === $manifest ) {
@@ -313,8 +318,6 @@ class UpdateManager
         doAction( 'ap.cmsFramework.theme.updating', $slug, $oldVersion, $newVersion );
 
         $cachedArtifacts = $this->cachedArtifacts();
-
-        $this->resetRuntimeRefreshOutcome();
 
         $zipPath       = null;
         $stagingPath   = null;
@@ -351,6 +354,12 @@ class UpdateManager
             if ( $swapAttempted ) {
                 $this->restoreFromBackup( $slug, $backupPath );
                 $this->refreshThemeState( $slug );
+
+                // The swap may have put the failed version's files in front
+                // of PHP-FPM, so make the restored version live the way a
+                // successful update is (#454). Never throws, so the failure
+                // below is still the one reported.
+                $this->refreshRuntimeAfterRollback( 'theme', $slug, $cachedArtifacts );
             }
 
             throw $this->wrapUpdateFailure( $slug, $e );

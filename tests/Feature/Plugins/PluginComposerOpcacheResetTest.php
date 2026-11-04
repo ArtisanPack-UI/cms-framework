@@ -107,6 +107,24 @@ describe( 'after a plugin Composer install under PHP-FPM', function (): void {
             ->and( array_count_values( $manager->calls )['opcache-reset'] )->toBe( 1 );
     } );
 
+    it( 'still resets once when an activation installs the packages and then fails (#453)', function (): void {
+        Plugin::create( [
+            'slug'             => 'convertkit',
+            'name'             => 'ConvertKit',
+            'version'          => '1.0.0',
+            'is_active'        => false,
+            'service_provider' => 'ConvertKit\\MissingServiceProvider',
+            'meta'             => [ 'slug' => 'convertkit' ] + $this->manifest,
+        ] );
+
+        $manager = opcacheProbeManager( $this->installer, 'fpm-fcgi' );
+
+        expect( fn () => $manager->activate( 'convertkit' ) )->toThrow( Error::class, 'MissingServiceProvider' );
+
+        expect( array_count_values( $manager->calls )['opcache-reset'] ?? 0 )->toBe( 1 )
+            ->and( $manager->opcacheResetMethod() )->toBe( 'web-request' );
+    } );
+
     it( 'treats OPcache being off as nothing to reset', function (): void {
         $manager = opcacheProbeManager( $this->installer, 'fpm-fcgi', null );
 

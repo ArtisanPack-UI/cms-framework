@@ -4,6 +4,10 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Support\Facades\Cache;
@@ -274,11 +278,59 @@ describe( 'POST /v1/themes/{slug}/update', function (): void {
 
         fakeApiThemeRelease( 'api-broken-theme', 'v2.0.0', $zipPath );
 
+        // Nothing was swapped, so there is no rollback to report on (#454),
+        // even on a host where no OPcache reset would reach PHP-FPM.
+        app( WebOpcacheResetter::class )->method = null;
+
         $response = $this->postJson( '/v1/themes/api-broken-theme/update' );
 
-        $response->assertStatus( 422 )->assertJsonValidationErrors( ['slug'] );
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( ['slug'] )
+            ->assertJsonMissingValidationErrors( ['php_reload_required'] );
 
         expect( File::get( $this->themesPath . '/api-broken-theme/index.blade.php' ) )->toBe( 'original' );
+    } );
+
+    it( 'tells the admin to reload PHP-FPM when a rolled-back update could not reset OPcache (#454)', function (): void {
+        $this->actingAs( $this->admin );
+        app( WebOpcacheResetter::class )->method = null;
+
+        installApiTestTheme( $this->themesPath, 'api-rollback-theme', [
+            'slug'    => 'api-rollback-theme',
+            'name'    => 'API Rollback Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs, ['index.blade.php' => 'original'] );
+
+        $zipPath = buildApiThemeUpdateZip( $this->tmpPath, 'api-rollback-theme', [
+            'slug'    => 'api-rollback-theme',
+            'name'    => 'API Rollback Theme',
+            'version' => '2.0.0',
+        ], ['index.blade.php' => 'replacement'] );
+
+        fakeApiThemeRelease( 'api-rollback-theme', 'v2.0.0', $zipPath );
+
+        // A swap that disturbs the live directory and then fails, so the
+        // backup is restored.
+        app()->instance( UpdateManager::class, new UpdateManager(
+            new class( app( SettingsManager::class ), app( WpThemeJsonValidator::class ) ) extends ThemeManager {
+                public function swapStagedTheme( string $slug, string $stagedThemePath ): void
+                {
+                    File::deleteDirectory( $this->getThemesPath() . '/' . $slug );
+
+                    throw new RuntimeException( 'Swap died halfway.' );
+                }
+            },
+        ) );
+
+        $this->postJson( '/v1/themes/api-rollback-theme/update' )
+            ->assertStatus( 422 )
+            ->assertJsonValidationErrors( [
+                'slug'                => 'Swap died halfway.',
+                'php_reload_required' => 'The update was rolled back, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the restored version.',
+            ] );
+
+        expect( File::get( $this->themesPath . '/api-rollback-theme/index.blade.php' ) )->toBe( 'original' );
     } );
 
     it( 'requires authentication', function (): void {

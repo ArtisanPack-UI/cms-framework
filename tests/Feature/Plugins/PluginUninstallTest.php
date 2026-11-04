@@ -93,6 +93,9 @@ it( 'runs the uninstall class after the deleting hook and before the deleted hoo
 it( 'logs and still deletes the plugin when the uninstall class throws', function (): void {
     ( $this->createPlugin )( [ 'uninstall' => 'PluginWithUninstaller\\ThrowingUninstall' ] );
 
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
+
     Log::shouldReceive( 'error' )
         ->once()
         ->withArgs( fn ( string $message, array $context ): bool => str_contains( $message, 'plugin-with-uninstaller' )
@@ -105,6 +108,9 @@ it( 'logs and still deletes the plugin when the uninstall class throws', functio
 
 it( 'logs and still deletes the plugin when the uninstall class is missing or not invokable', function ( string $class, string $reason ): void {
     ( $this->createPlugin )( [ 'uninstall' => $class ] );
+
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
 
     Log::shouldReceive( 'error' )
         ->once()
@@ -120,6 +126,9 @@ it( 'logs and still deletes the plugin when the uninstall class is missing or no
 it( 'skips an uninstall class outside the plugin namespace on a legacy row', function (): void {
     ( $this->createPlugin )( [ 'uninstall' => 'Illuminate\\Support\\Str' ] );
 
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
+
     Log::shouldReceive( 'warning' )
         ->once()
         ->withArgs( fn ( string $message ): bool => str_contains( $message, 'outside its autoload.psr-4 namespaces' ) );
@@ -130,6 +139,9 @@ it( 'skips an uninstall class outside the plugin namespace on a legacy row', fun
 
 it( 'refuses an uninstall class that resolves outside the plugin directory', function ( array $autoload, string $class ): void {
     ( $this->createPlugin )( [ 'autoload' => $autoload, 'uninstall' => $class ] );
+
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
 
     Log::shouldReceive( 'error' )
         ->once()
@@ -167,6 +179,9 @@ it( 'refuses an uninstall class loaded through a psr-4 path that climbs out of t
         'autoload'  => [ 'psr-4' => [ 'TraversalPlugin\\' => '../uninstall-traversal-target/' ] ],
         'uninstall' => 'TraversalPlugin\\Uninstall',
     ] );
+
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
 
     Log::shouldReceive( 'error' )
         ->once()
@@ -211,6 +226,9 @@ it( 'restores the PSR-4 map after running an inactive plugin\'s uninstall class'
 it( 'skips the uninstall class on a legacy row whose psr-4 prefix lacks a trailing backslash', function (): void {
     ( $this->createPlugin )( [ 'autoload' => [ 'psr-4' => [ 'PluginWithUninstaller' => 'src/' ] ] ] );
 
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
+
     Log::shouldReceive( 'warning' )
         ->once()
         ->withArgs( fn ( string $message ): bool => str_contains( $message, 'outside its autoload.psr-4 namespaces' ) );
@@ -230,6 +248,9 @@ it( 'completes the delete when a malformed psr-4 prefix makes the autoloader res
     ( $this->createPlugin )( [
         'autoload' => [ 'psr-4' => [ 'PluginWithUninstaller\\' => 'src/', 'Broken' => 'src/' ] ],
     ] );
+
+    // The runtime refresh after the delete logs its OPcache reset (#453).
+    Log::shouldReceive( 'info' );
 
     Log::shouldReceive( 'error' )
         ->once()

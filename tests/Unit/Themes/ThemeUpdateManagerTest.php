@@ -1150,3 +1150,76 @@ describe( 'Making the update live on production hosts (#450)', function (): void
             ->and( $this->updateManager->phpReloadRequired() )->toBeFalse();
     } );
 } );
+
+describe( 'Making a rolled-back update\'s restored files live (#454)', function (): void {
+    beforeEach( function (): void {
+        config()->set( 'cms.updates.allow_unverified_updates', true );
+
+        $this->routeCache = app()->getCachedRoutesPath();
+        $this->hadRoutes  = is_file( $this->routeCache );
+
+        installTestTheme( $this->themesPath, 'rollback-prod-theme', [
+            'slug'    => 'rollback-prod-theme',
+            'name'    => 'Rollback Prod Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs, ['index.blade.php' => 'original'] );
+
+        $this->zipPath = buildThemeUpdateZip( $this->tmpPath, 'rollback-prod-theme', [
+            'slug'    => 'rollback-prod-theme',
+            'name'    => 'Rollback Prod Theme',
+            'version' => '2.0.0',
+        ], ['index.blade.php' => 'replacement'] );
+
+        fakeThemeRelease( 'rollback-prod-theme', 'v2.0.0', $this->zipPath );
+
+        // A swap that disturbs the live directory and then fails, so the
+        // backup has to be restored.
+        $this->failingUpdateManager = new UpdateManager(
+            new class( app( SettingsManager::class ), app( WpThemeJsonValidator::class ) ) extends ThemeManager {
+                public function swapStagedTheme( string $slug, string $stagedThemePath ): void
+                {
+                    File::deleteDirectory( $this->getThemesPath() . '/' . $slug );
+
+                    throw new RuntimeException( 'Swap died halfway.' );
+                }
+            },
+        );
+    } );
+
+    afterEach( function (): void {
+        if ( ! $this->hadRoutes && is_file( $this->routeCache ) ) {
+            File::delete( $this->routeCache );
+        }
+    } );
+
+    it( 'rebuilds the caches, resets OPcache and signals the queue workers after restoring the backup', function (): void {
+        $resetter = app( WebOpcacheResetter::class );
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+        Cache::forget( 'illuminate:queue:restart' );
+
+        expect( fn () => $this->failingUpdateManager->updateTheme( 'rollback-prod-theme' ) )
+            ->toThrow( ThemeUpdateException::class, 'Swap died halfway.' );
+
+        expect( File::get( $this->themesPath . '/rollback-prod-theme/index.blade.php' ) )->toBe( 'original' )
+            ->and( $resetter->resets )->toBe( 1 )
+            ->and( $this->failingUpdateManager->opcacheResetMethod() )->toBe( 'fastcgi' )
+            ->and( $this->failingUpdateManager->phpReloadRequired() )->toBeFalse()
+            ->and( Cache::get( 'illuminate:queue:restart' ) )->not->toBeNull();
+
+        Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+            && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+    } );
+
+    it( 'flags a PHP-FPM reload when the rollback\'s OPcache reset reaches no web server', function (): void {
+        app( WebOpcacheResetter::class )->method = null;
+
+        expect( fn () => $this->failingUpdateManager->updateTheme( 'rollback-prod-theme' ) )
+            ->toThrow( ThemeUpdateException::class );
+
+        expect( $this->failingUpdateManager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->failingUpdateManager->phpReloadRequired() )->toBeTrue();
+    } );
+} );
