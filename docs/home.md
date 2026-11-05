@@ -298,4 +298,4 @@ For issues, feature requests, and contributions:
 
 ---
 
-*This documentation covers CMS Framework v2.17.0*
+*This documentation covers CMS Framework v2.18.0*
