@@ -76,6 +76,15 @@ trait RefreshesRuntimeAfterExtensionChange
     protected bool $opcacheResetOwed = false;
 
     /**
+     * Whether a step inside the open scope has already persisted its change
+     * (a DB row, a setting or files on disk), so a failure after that point
+     * must still refresh the runtime.
+     *
+     * @since 2.18.0
+     */
+    protected bool $runtimeChangePersisted = false;
+
+    /**
      * How the last change this instance made reset the web server's OPcache.
      *
      * @since 2.18.0
@@ -127,7 +136,8 @@ trait RefreshesRuntimeAfterExtensionChange
             $this->runtimeRefreshDepth--;
 
             if ( 0 === $this->runtimeRefreshDepth ) {
-                $this->opcacheResetOwed = false;
+                $this->opcacheResetOwed       = false;
+                $this->runtimeChangePersisted = false;
             }
         }
     }
@@ -137,8 +147,10 @@ trait RefreshesRuntimeAfterExtensionChange
      *
      * The caches in place are read first, before the change can clear them
      * (`cms.plugins.autoClearFrameworkCaches`). When the change succeeds,
-     * {@see refreshRuntime()} rebuilds them and resets OPcache. When it fails,
-     * only an OPcache reset a step skipped is made up for. Inside another
+     * {@see refreshRuntime()} rebuilds them and resets OPcache. When it fails
+     * after a step called {@see notePersistedRuntimeChange()}, the runtime is
+     * refreshed in full before the failure is rethrown; otherwise only an
+     * OPcache reset a step skipped is made up for. Inside another
      * scope, the change just runs and the outer scope refreshes.
      *
      * @since 2.18.0
@@ -160,7 +172,8 @@ trait RefreshesRuntimeAfterExtensionChange
         $cachedArtifacts = $this->cachedArtifacts();
 
         $this->resetRuntimeRefreshOutcome();
-        $this->opcacheResetOwed = false;
+        $this->opcacheResetOwed       = false;
+        $this->runtimeChangePersisted = false;
 
         $this->runtimeRefreshDepth++;
 
@@ -169,8 +182,18 @@ trait RefreshesRuntimeAfterExtensionChange
         } catch ( Throwable $e ) {
             $this->runtimeRefreshDepth--;
 
-            if ( $this->opcacheResetOwed ) {
-                $this->opcacheResetOwed = false;
+            $persisted = $this->runtimeChangePersisted;
+            $owed      = $this->opcacheResetOwed;
+
+            $this->runtimeChangePersisted = false;
+            $this->opcacheResetOwed       = false;
+
+            if ( $persisted ) {
+                // The change is already in the database or on disk, and a
+                // later step (often a listener) failed. Make what was
+                // persisted live, as syncFromDisk() does, then rethrow.
+                $this->refreshRuntime( $change, $context, $cachedArtifacts );
+            } elseif ( $owed ) {
                 $this->resetOpcacheAfterChange( $change, $context );
             }
 
@@ -178,7 +201,8 @@ trait RefreshesRuntimeAfterExtensionChange
         }
 
         $this->runtimeRefreshDepth--;
-        $this->opcacheResetOwed = false;
+        $this->opcacheResetOwed       = false;
+        $this->runtimeChangePersisted = false;
 
         $this->refreshRuntime( $change, $context, $cachedArtifacts );
 
@@ -207,6 +231,23 @@ trait RefreshesRuntimeAfterExtensionChange
         $this->opcacheResetOwed = true;
 
         return true;
+    }
+
+    /**
+     * Record that the running change has persisted its effect, so a failure
+     * after this point still refreshes the runtime.
+     *
+     * Call it right after the write that makes the change real: the row is
+     * saved, the setting is updated or the files are kept on disk. A no-op
+     * outside a scope.
+     *
+     * @since 2.18.0
+     */
+    protected function notePersistedRuntimeChange(): void
+    {
+        if ( $this->runtimeRefreshDepth > 0 ) {
+            $this->runtimeChangePersisted = true;
+        }
     }
 
     /**

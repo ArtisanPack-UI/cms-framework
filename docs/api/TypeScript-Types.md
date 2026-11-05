@@ -81,7 +81,7 @@ Each module file exports types matching its API responses. Some key examples:
 - **`users.d.ts`**: `UserResponse`, `RoleResponse`, `PermissionResponse`, `RoleSummary`, `PermissionSummary`
 - **`settings.d.ts`**: `SettingResponse`, `SettingRequestData`, `SettingType`
 - **`notifications.d.ts`**: `NotificationResponse`, `NotificationPreferenceResponse`, `NotificationType`
-- **`plugins.d.ts`**: `PluginResponse`, `UpdateType`
+- **`plugins.d.ts`**: `PluginResponse`, `UpdateType`, `RuntimeRefreshOutcome`
 
 ## Frontend Integration
 

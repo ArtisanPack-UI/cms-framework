@@ -93,7 +93,7 @@ $runtime->resolve([
 
 > **Added in 2.18.0** ([#439](https://github.com/ArtisanPack-UI/cms-framework/issues/439)).
 
-Any other taxonomy goes to the `ap.cmsFramework.query.taxQuery` filter, so a host that stores its own terms can constrain the query. With no listener, the query stays unfiltered.
+Any other taxonomy goes to the `ap.cmsFramework.query.taxQuery` filter, so a host that stores its own terms can constrain the query. With no listener, the query stays unfiltered. The operator must be one of `IN`, `NOT IN`, `AND`, `EXISTS` or `NOT EXISTS`, and the taxonomy must be 1–64 letters, digits, `_`, `-`, `.` or `:`. Anything else never reaches the filter, and the query stays unfiltered.
 
 ```php
 use Illuminate\Database\Eloquent\Builder;

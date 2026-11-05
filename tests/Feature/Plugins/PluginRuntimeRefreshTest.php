@@ -130,6 +130,28 @@ describe( 'activating a plugin', function (): void {
             ->and( $artisan->calls )->toBe( [] );
     } );
 
+    it( 'still refreshes, then rethrows, when an activated listener throws', function (): void {
+        ( $this->installValidPlugin )();
+        $artisan = ( $this->swapArtisan )();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Listener exploded.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.activated', $listener );
+
+        try {
+            expect( fn () => $this->manager->activate( 'valid-plugin' ) )
+                ->toThrow( RuntimeException::class, 'Listener exploded.' );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->value( 'is_active' ) )->toBeTruthy()
+                ->and( $this->resetter->resets )->toBe( 1 )
+                ->and( $artisan->calls )->toContain( 'queue:restart' )
+                ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.activated', $listener );
+        }
+    } );
+
     it( 'does not report an earlier change\'s outcome for a refused activation', function (): void {
         $this->resetter->method = null;
         ( $this->installValidPlugin )();
@@ -218,6 +240,50 @@ describe( 'deactivating and deleting a plugin', function (): void {
 
         expect( $this->resetter->resets )->toBe( 1 )
             ->and( array_count_values( $artisan->calls )['queue:restart'] )->toBe( 1 );
+    } );
+
+    it( 'still refreshes once when a delete fails after its deactivate', function (): void {
+        config()->set( 'cms.plugins.autoClearFrameworkCaches', true );
+        ( $this->installValidPlugin )( ['is_active' => true] );
+        $artisan = ( $this->swapArtisan )();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Delete vetoed.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.deleting', $listener );
+
+        try {
+            expect( fn () => $this->manager->delete( 'valid-plugin' ) )
+                ->toThrow( RuntimeException::class, 'Delete vetoed.' );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->value( 'is_active' ) )->toBeFalsy()
+                ->and( $this->resetter->resets )->toBe( 1 )
+                ->and( array_count_values( $artisan->calls )['queue:restart'] ?? 0 )->toBe( 1 );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.deleting', $listener );
+        }
+    } );
+
+    it( 'does not refresh when a deactivating listener vetoes before anything is saved', function (): void {
+        config()->set( 'cms.plugins.autoClearFrameworkCaches', false );
+        ( $this->installValidPlugin )( ['is_active' => true] );
+        $artisan = ( $this->swapArtisan )();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Deactivation vetoed.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.deactivating', $listener );
+
+        try {
+            expect( fn () => $this->manager->deactivate( 'valid-plugin' ) )
+                ->toThrow( RuntimeException::class, 'Deactivation vetoed.' );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->value( 'is_active' ) )->toBeTruthy()
+                ->and( $this->resetter->resets )->toBe( 0 )
+                ->and( $artisan->calls )->toBe( [] );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.deactivating', $listener );
+        }
     } );
 } );
 
