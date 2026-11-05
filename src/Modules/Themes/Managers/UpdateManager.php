@@ -642,7 +642,9 @@ class UpdateManager
 
         File::ensureDirectoryExists( $backupDir );
 
-        $backupFile = $backupDir . '/' . $slug . '-' . $version . '-' . time() . '.zip';
+        // The random suffix keeps two backups of the same theme version taken
+        // in the same second from sharing a file (#460).
+        $backupFile = $backupDir . '/' . $slug . '-' . $version . '-' . time() . '-' . bin2hex( random_bytes( 8 ) ) . '.zip';
 
         $zip = new ZipArchive;
 

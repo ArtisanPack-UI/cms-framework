@@ -65,6 +65,20 @@ Before contributing, make sure you have:
 7. Push to your fork
 8. Create a merge/pull request
 
+### Running the Tests
+
+CI runs the suites in parallel, so run them that way locally too:
+
+```bash
+./vendor/bin/pest --parallel
+```
+
+Each parallel process gets its own plugins and themes directories, `bootstrap/cache` files and compiled views. A test that reaches past that isolation passes on its own and then fails, or breaks another test, under `--parallel`:
+
+- Build plugin and theme paths with `testPluginsDirectory()` and `testThemesDirectory()` (from `tests/Helpers/TestHelpers.php`). Never hardcode `base_path( 'plugins' )` or `base_path( 'themes' )`.
+- Don't write fixtures anywhere else in Testbench's shared skeleton (`vendor/orchestra/testbench-core/laravel`).
+- When a test asserts that nothing was left in `storage/`, wrap it in `withIsolatedStoragePath()`. Testbench's `storage/` is shared by every process.
+
 ## Issue Templates
 
 When creating an issue, you'll be prompted to choose a template. We have several templates to help you provide the right

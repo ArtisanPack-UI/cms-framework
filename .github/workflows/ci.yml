@@ -82,14 +82,14 @@ jobs:
       - name: Run Unit tests
         env:
           XDEBUG_MODE: off
-        run: vendor/bin/pest --testsuite=Unit --no-coverage
+        run: vendor/bin/pest --testsuite=Unit --parallel --no-coverage
 
       - name: Run Feature tests
         env:
           XDEBUG_MODE: off
-        run: vendor/bin/pest --testsuite=Feature --no-coverage
+        run: vendor/bin/pest --testsuite=Feature --parallel --no-coverage
 
       - name: Run AI tests
         env:
           XDEBUG_MODE: off
-        run: vendor/bin/pest --testsuite=Ai --no-coverage
+        run: vendor/bin/pest --testsuite=Ai --parallel --no-coverage

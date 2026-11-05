@@ -849,6 +849,24 @@ describe( 'Theme Updating', function (): void {
             ->and( json_decode( File::get( $themePath . '/theme.json' ), true )['version'] )->toBe( '1.0.0' );
     } );
 
+    it( 'gives each backup of the same version its own archive, even within the same second', function (): void {
+        $slug = 'twin-backup-theme';
+        installTestTheme( $this->themesPath, $slug, [
+            'slug'    => $slug,
+            'name'    => 'Twin Backup Theme',
+            'version' => '1.0.0',
+        ], $this->testSlugs, ['index.blade.php' => 'original'] );
+
+        // The name used to end in `time()` alone, so two backups in the same
+        // second overwrote each other (#460).
+        $first  = invokeMethod( $this->updateManager, 'backupTheme', [$slug, '1.0.0'] );
+        $second = invokeMethod( $this->updateManager, 'backupTheme', [$slug, '1.0.0'] );
+
+        expect( $first )->not->toBe( $second )
+            ->and( File::exists( $first ) )->toBeTrue()
+            ->and( File::exists( $second ) )->toBeTrue();
+    } );
+
     it( 'restores from backup and deletes files the update added when the swap is undone', function (): void {
         $slug      = 'rollback-theme';
         $themePath = installTestTheme( $this->themesPath, $slug, [

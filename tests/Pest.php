@@ -96,14 +96,36 @@ if ( is_scalar( $parallelToken ) && '' !== (string) $parallelToken ) {
         throw new RuntimeException( "Could not create the compiled-view directory {$compiledViews}." );
     }
 
-    register_shutdown_function( static function () use ( $compiledViews ): void {
-        Illuminate\Support\Facades\File::deleteDirectory( $compiledViews );
+    // When the worker exits, also remove the per-process plugins and themes
+    // directories (see `TestCase::getEnvironmentSetUp()`) and cache files it
+    // left in Testbench's skeleton, so they don't pile up there run after
+    // run (#461). A `Filesystem` instance rather than the `File` facade: the
+    // facade's application may already be torn down by the time this runs.
+    $skeleton = Orchestra\Testbench\default_skeleton_path();
+
+    register_shutdown_function( static function () use ( $compiledViews, $skeleton, $parallelToken ): void {
+        $directories = [$compiledViews];
+        $files       = [];
+
+        if ( is_string( $skeleton ) && '' !== $skeleton ) {
+            $directories[] = "{$skeleton}/plugins-test-{$parallelToken}";
+            $directories[] = "{$skeleton}/themes-test-{$parallelToken}";
+            $files         = glob( "{$skeleton}/bootstrap/cache/*-test-{$parallelToken}.php" ) ?: [];
+        }
+
+        $filesystem = new Illuminate\Filesystem\Filesystem;
+
+        foreach ( $directories as $directory ) {
+            $filesystem->deleteDirectory( $directory );
+        }
+
+        $filesystem->delete( $files );
     } );
 
     $_SERVER['VIEW_COMPILED_PATH'] = $_ENV['VIEW_COMPILED_PATH'] = $compiledViews;
 }
 
-unset( $parallelToken, $variable, $file, $compiledViews );
+unset( $parallelToken, $variable, $file, $compiledViews, $skeleton );
 
 function something(): void
 {
