@@ -534,7 +534,7 @@ it( 'passes operators outside IN to the taxQuery filter so a listener can implem
         ->and( $result->items()[0]->id )->toBe( $kept->id );
 } );
 
-it( 'strips markup from the taxonomy and operator it passes to the taxQuery filter', function (): void {
+it( 'normalizes the operator it passes to the taxQuery filter', function (): void {
     $received = null;
 
     addFilter(
@@ -548,11 +548,32 @@ it( 'strips markup from the taxonomy and operator it passes to the taxQuery filt
 
     $this->runtime->resolve( [
         'postType' => 'post',
-        'taxQuery' => ['taxonomy' => '<b>packages</b>', 'terms' => [7], 'operator' => '<i>in</i>'],
+        'taxQuery' => ['taxonomy' => 'product.cat', 'terms' => [7], 'operator' => "  not \t exists "],
     ] );
 
-    expect( $received )->toBe( ['packages', 'IN'] );
+    expect( $received )->toBe( ['product.cat', 'NOT EXISTS'] );
 } );
+
+it( 'does not run the taxQuery filter for a malformed taxonomy or an unknown operator', function ( array $taxQuery ): void {
+    $calls = 0;
+
+    addFilter( 'ap.cmsFramework.query.taxQuery', function ( Builder $query ) use ( &$calls ): Builder {
+        $calls++;
+
+        return $query;
+    } );
+
+    $this->runtime->resolve( ['postType' => 'post', 'taxQuery' => $taxQuery] );
+
+    expect( $calls )->toBe( 0 );
+} )->with( [
+    'markup in taxonomy'    => [['taxonomy' => '<b>packages</b>', 'terms' => [7]]],
+    'markup in operator'    => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => '<i>in</i>']],
+    'unknown operator'      => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => 'BETWEEN']],
+    'sql in operator'       => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => 'IN) OR 1=1 --']],
+    'space in taxonomy'     => [['taxonomy' => 'my packages', 'terms' => [7]]],
+    'taxonomy over 64 long' => [['taxonomy' => str_repeat( 'a', 65 ), 'terms' => [7]]],
+] );
 
 it( 'does not run the taxQuery filter without a taxonomy or terms', function ( array $taxQuery ): void {
     $calls = 0;

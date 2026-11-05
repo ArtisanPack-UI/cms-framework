@@ -147,7 +147,7 @@ addFilter('ap.cmsFramework.page.permalink', function (string $url, Page $page) {
 - `$query` (Builder) - The Eloquent query for the loop
 - `$taxonomy` (string) - The taxonomy slug from the payload
 - `$terms` (array) - The term IDs, as a list of integers
-- `$operator` (string) - The operator, uppercased. `IN` by default. Any operator reaches the filter, so return early on one you don't support. Visual-editor's REST endpoint only accepts `IN`
+- `$operator` (string) - The operator, uppercased with whitespace collapsed. `IN` by default. One of `IN`, `NOT IN`, `AND`, `EXISTS` or `NOT EXISTS`; any other operator, or a taxonomy that isn't 1–64 letters, digits, `_`, `-`, `.` or `:`, never reaches the filter. Return early on an operator you don't support. Visual-editor's REST endpoint only accepts `IN`
 - `$postType` (string) - The post type being queried
 
 **Returns:** Builder - The same `$query`, after changing it in place. You must return it: filters chain return values, so a listener that returns nothing passes `null` to the next listener, and a listener that type-hints `Builder` then throws a `TypeError`. `QueryRuntime` ignores the final return value, so returning a new or cloned builder has no effect.

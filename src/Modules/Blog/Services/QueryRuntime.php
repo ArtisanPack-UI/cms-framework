@@ -72,6 +72,16 @@ class QueryRuntime
     ];
 
     /**
+     * Operators a `taxQuery` may hand to `ap.cmsFramework.query.taxQuery`,
+     * mirroring WordPress's `tax_query`.
+     *
+     * @since 2.18.0
+     *
+     * @var array<int, string>
+     */
+    protected const TAX_QUERY_OPERATORS = ['IN', 'NOT IN', 'AND', 'EXISTS', 'NOT EXISTS'];
+
+    /**
      * Whether each model table has a `status` column, keyed by
      * `connection|table`.
      *
@@ -391,14 +401,17 @@ class QueryRuntime
      * the same `categories()` and `tags()` relations as Post).
      *
      * Any other taxonomy goes to the `ap.cmsFramework.query.taxQuery`
-     * filter, with any operator, so a host can constrain the builder
+     * filter, with any operator in {@see self::TAX_QUERY_OPERATORS}
+     * (not only `IN`), so a host can constrain the builder
      * against its own term storage. Listeners mutate the builder in
      * place, the same as `ap.cmsFramework.search.query`, so the filter's
      * final return value is ignored. They must still return the builder,
      * because each listener receives the previous one's return value.
      * Without a listener the taxonomy is a no-op. The taxonomy and
-     * operator can come from block attributes, so they are sanitized
-     * here and listeners must still bind them.
+     * operator can come from block attributes, so only an operator in
+     * {@see self::TAX_QUERY_OPERATORS} and a taxonomy of 1-64 letters,
+     * digits, `_`, `-`, `.` or `:` reach the filter. Listeners must
+     * still bind them.
      *
      * @since 2.0.0
      * @since 2.18.0 Passes unmapped taxonomies to `ap.cmsFramework.query.taxQuery`.
@@ -431,12 +444,19 @@ class QueryRuntime
         };
 
         if ( null === $relation ) {
+            $operator = (string) preg_replace( '/\s+/', ' ', trim( $operator ) );
+
+            if ( ! in_array( $operator, self::TAX_QUERY_OPERATORS, true )
+                || 1 !== preg_match( '/^[A-Za-z0-9_.:-]{1,64}$/', $taxonomy ) ) {
+                return;
+            }
+
             applyFilters(
                 'ap.cmsFramework.query.taxQuery',
                 $query,
-                sanitizeText( $taxonomy ),
+                $taxonomy,
                 $terms,
-                sanitizeText( $operator ),
+                $operator,
                 $postType,
             );
 

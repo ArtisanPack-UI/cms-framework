@@ -757,6 +757,8 @@ class PluginManager
             'installed_at'     => now(),
         ] );
 
+        $this->notePersistedRuntimeChange();
+
         $this->clearCaches();
 
         doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
@@ -824,6 +826,8 @@ class PluginManager
             'meta'             => $manifest,
             'installed_at'     => now(),
         ] );
+
+        $this->notePersistedRuntimeChange();
 
         $this->clearCaches();
 
@@ -1004,6 +1008,10 @@ class PluginManager
             throw $e;
         }
 
+        // The activation is committed. A listener that throws below must
+        // not leave the site on stale caches and bytecode (#453).
+        $this->notePersistedRuntimeChange();
+
         if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
             $this->clearFrameworkCaches();
         }
@@ -1069,6 +1077,8 @@ class PluginManager
 
         $plugin->is_active = false;
         $plugin->save();
+
+        $this->notePersistedRuntimeChange();
 
         if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
             $this->clearFrameworkCaches();
@@ -1140,6 +1150,8 @@ class PluginManager
 
         // Remove from database
         $plugin->delete();
+
+        $this->notePersistedRuntimeChange();
 
         // Remove from filesystem. Build the path from the trusted database slug,
         // not the raw route parameter, so a value that only matches a row after
@@ -2485,6 +2497,8 @@ class PluginManager
      */
     protected function resetOpcacheAfterComposerInstall( string $slug ): void
     {
+        $slug = $this->sanitizeForLog( $slug );
+
         // Inside an install, activation or update, the reset after the whole
         // change covers the Composer install too, so OPcache is reset once
         // per request rather than twice (#453).

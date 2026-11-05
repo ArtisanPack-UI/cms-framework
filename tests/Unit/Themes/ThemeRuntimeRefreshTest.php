@@ -109,6 +109,23 @@ describe( 'activating a theme', function (): void {
             ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
     } );
 
+    it( 'still refreshes, then rethrows, when an activated listener throws', function (): void {
+        $listener = function (): void {
+            throw new RuntimeException( 'Listener exploded.' );
+        };
+        addAction( 'ap.cmsFramework.theme.activated', $listener );
+
+        try {
+            expect( fn () => $this->manager->activateTheme( 'active-theme' ) )
+                ->toThrow( RuntimeException::class, 'Listener exploded.' );
+
+            expect( $this->resetter->resets )->toBe( 1 )
+                ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+        } finally {
+            removeAction( 'ap.cmsFramework.theme.activated', $listener );
+        }
+    } );
+
     it( 'rebuilds a route cache the site had, in a fresh process', function (): void {
         File::ensureDirectoryExists( dirname( $this->routeCache ) );
         File::put( $this->routeCache, '<?php' );

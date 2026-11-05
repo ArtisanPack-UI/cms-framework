@@ -101,5 +101,6 @@ export type {
 	PluginManifestRequires,
 	PluginResponse,
 	PluginVersionMismatch,
+	RuntimeRefreshOutcome,
 	UpdateType,
 } from './plugins';

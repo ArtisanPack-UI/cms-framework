@@ -208,13 +208,31 @@ export interface PluginCircularDependencyResponse {
 // ---------------------------------------------------------------------------
 
 /**
+ * How a plugin or theme change reached the running site. Returned by the
+ * install, activate, deactivate, delete and update endpoints of
+ * `/api/v1/plugins` and `/v1/themes`, and on a rolled-back update's error
+ * response.
+ *
+ * @since 2.18.0
+ */
+export interface RuntimeRefreshOutcome {
+	/** How the web server's OPcache was reset, or null when no reset reached it (or it was skipped). */
+	opcache_reset_method: 'web-request' | 'fastcgi' | 'loopback' | 'command' | null;
+	/** True when PHP-FPM must be reloaded by hand before it serves the change. */
+	php_reload_required: boolean;
+	/** Present only when `php_reload_required` is true. Human-readable. */
+	warning?: string;
+}
+
+/**
  * Error response when a plugin's declared minimum version is newer than the
  * host provides (HTTP 409), from `POST /api/v1/plugins/{slug}/activate` and
  * `POST /api/v1/plugins/{slug}/update`.
  *
  * @since 2.14.0
+ * @since 2.18.0 Carries the OPcache outcome fields on the update endpoint's 409.
  */
-export interface PluginIncompatibleResponse {
+export interface PluginIncompatibleResponse extends Partial<RuntimeRefreshOutcome> {
 	/** Human-readable failure message (English; localize from the fields below). */
 	message: string;
 	/** Machine-readable error code. */

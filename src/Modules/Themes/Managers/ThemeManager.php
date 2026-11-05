@@ -633,6 +633,8 @@ class ThemeManager
 
         $this->settingsManager->updateSetting( 'themes.activeTheme', $slug );
 
+        $this->notePersistedRuntimeChange();
+
         // Clear theme cache
         $cacheKey = config( 'cms.themes.cacheKey', 'cms.themes.discovered' );
         Cache::forget( $cacheKey );
@@ -724,6 +726,8 @@ class ThemeManager
 
             throw $e;
         }
+
+        $this->notePersistedRuntimeChange();
 
         Cache::forget( config( 'cms.themes.cacheKey', 'cms.themes.discovered' ) );
 
