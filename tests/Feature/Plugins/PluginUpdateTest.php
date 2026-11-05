@@ -47,10 +47,7 @@ afterEach( function (): void {
     }
 
     // Cleanup temp files
-    $tempFiles = array_merge(
-        File::glob( storage_path( 'app/temp-plugin-*.zip' ) ),
-        File::glob( storage_path( 'app/test-update-*.zip' ) ),
-    );
+    $tempFiles = File::glob( storage_path( 'app/test-update-*.zip' ) );
     foreach ( $tempFiles as $tempFile ) {
         File::delete( $tempFile );
     }
@@ -246,6 +243,28 @@ describe( 'Backup and Restore', function (): void {
         expect( $zip->numFiles )->toBeGreaterThan( 0 );
 
         $zip->close();
+    } );
+
+    it( 'gives each backup of the same version its own archive, even within the same second', function (): void {
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'    => 'valid-plugin',
+            'name'    => 'Valid Test Plugin',
+            'version' => '1.0.0',
+        ] );
+
+        // The name used to end in `time()` alone, so two backups in the same
+        // second overwrote each other (#460).
+        $first  = invokeMethod( $this->updateManager, 'backupPlugin', ['valid-plugin'] );
+        $second = invokeMethod( $this->updateManager, 'backupPlugin', ['valid-plugin'] );
+
+        expect( $first )->not->toBe( $second )
+            ->and( File::exists( $first ) )->toBeTrue()
+            ->and( File::exists( $second ) )->toBeTrue();
     } );
 
     it( 'restores plugin from backup', function (): void {

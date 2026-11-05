@@ -575,7 +575,7 @@ describe( 'Archive Integrity Verification', function (): void {
 } );
 
 describe( 'Update Archive Download', function (): void {
-    it( 'uses the legacy buffered download for update_url plugins', function (): void {
+    it( 'streams the legacy download for update_url plugins', function (): void {
         $plugin = new Plugin( [
             'slug'    => 'test-plugin',
             'name'    => 'Test Plugin',
@@ -601,6 +601,54 @@ describe( 'Update Archive Download', function (): void {
         expect( file_get_contents( $path ) )->toBe( 'fake-zip-content' );
 
         unlink( $path );
+    } );
+
+    it( 'gives each legacy download its own temp file, even within the same second', function (): void {
+        // Two updates downloading in the same second used to share a
+        // `time()`-named file, so one could extract the other's archive after
+        // its own checksum passed (#460).
+        Http::fake( [
+            'https://example.com/downloads/first.zip'  => Http::response( 'first-archive' ),
+            'https://example.com/downloads/second.zip' => Http::response( 'second-archive' ),
+        ] );
+
+        $first  = invokeMethod( $this->updateManager, 'downloadUpdate', ['https://example.com/downloads/first.zip'] );
+        $second = invokeMethod( $this->updateManager, 'downloadUpdate', ['https://example.com/downloads/second.zip'] );
+
+        try {
+            expect( $first )->not->toBe( $second )
+                ->and( file_get_contents( $first ) )->toBe( 'first-archive' )
+                ->and( file_get_contents( $second ) )->toBe( 'second-archive' );
+        } finally {
+            unlink( $first );
+            unlink( $second );
+        }
+    } );
+
+    it( 'reports a failed legacy download as a download failure', function (): void {
+        $plugin = new Plugin( [
+            'slug'    => 'test-plugin',
+            'name'    => 'Test Plugin',
+            'version' => '1.0.0',
+            'meta'    => ['update_url' => 'https://example.com/updates/test-plugin'],
+        ] );
+
+        Http::fake( [
+            'https://example.com/downloads/test-plugin.zip' => Http::response( 'Not Found', 404 ),
+        ] );
+
+        withIsolatedStoragePath( function ( string $storagePath ) use ( $plugin ): void {
+            expect( fn () => invokeMethod( $this->updateManager, 'downloadUpdateArchive', [
+                $plugin,
+                [
+                    'version'      => '2.0.0',
+                    'download_url' => 'https://example.com/downloads/test-plugin.zip',
+                    'sha256'       => hash( 'sha256', 'fake-zip-content' ),
+                ],
+            ] ) )->toThrow( PluginUpdateException::class );
+
+            expect( glob( $storagePath . '/app/temp/update-*.zip' ) ?: [] )->toBe( [] );
+        } );
     } );
 
     it( 'refuses a legacy update_url download over http', function (): void {

@@ -10,6 +10,7 @@ use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
@@ -32,6 +33,7 @@ class UpdateManager
 {
     use ManagesExtensionUpdates;
     use RefreshesRuntimeAfterExtensionChange;
+    use StreamsDownloadsToDisk;
 
     /**
      * @param  PluginManager  $pluginManager  Used to deactivate and reactivate a plugin around an update.
@@ -800,7 +802,9 @@ class UpdateManager
             File::makeDirectory( $backupDir, 0755, true );
         }
 
-        $backupFile = $backupDir . '/' . $slug . '-' . $plugin->version . '-' . time() . '.zip';
+        // The random suffix keeps two backups of the same plugin version taken
+        // in the same second from sharing a file (#460).
+        $backupFile = $backupDir . '/' . $slug . '-' . $plugin->version . '-' . time() . '-' . bin2hex( random_bytes( 8 ) ) . '.zip';
 
         $zip = new ZipArchive;
 
@@ -956,7 +960,7 @@ class UpdateManager
      * streams the archive to disk via `StreamsDownloadsToDisk` instead of
      * buffering it in memory, enforces https on the download and every
      * redirect, and gives us a digest to verify against. Legacy `update_url`
-     * plugins keep the original buffered `Http::get()` path.
+     * plugins stream through the same trait via `downloadUpdate()`.
      *
      * @param  Plugin  $plugin  Plugin being updated.
      * @param  array  $updateInfo  Update info from `checkPluginUpdate()`.
@@ -984,7 +988,13 @@ class UpdateManager
                 throw PluginUpdateException::downloadFailed( $plugin->slug );
             }
 
-            $zipPath = $this->downloadUpdate( $downloadUrl );
+            try {
+                $zipPath = $this->downloadUpdate( $downloadUrl );
+            } catch ( UpdateException ) {
+                // A non-2xx response is a download failure, not an integrity
+                // failure, so keep reporting it as one.
+                throw PluginUpdateException::downloadFailed( $plugin->slug );
+            }
 
             try {
                 $this->verifyArchiveChecksum( $zipPath, $updateInfo['sha256'] ?? null, $version );
@@ -1015,21 +1025,22 @@ class UpdateManager
     /**
      * Download plugin update from URL.
      *
+     * Streams the archive to its own randomly named temp file. The previous
+     * `time()`-based name let two updates downloading in the same second
+     * write to the same file, so one update could extract the other's
+     * archive after its own checksum had passed, and either update's cleanup
+     * deleted the other's archive (#460).
+     *
+     * @since 2.18.0 Streams to a randomly named file via `StreamsDownloadsToDisk`.
+     *
      * @param  string  $updateUrl  URL to download ZIP
+     *
+     * @throws UpdateException When the response is not a 2xx.
      *
      * @return string Path to downloaded file
      */
     protected function downloadUpdate( string $updateUrl ): string
     {
-        $response = Http::timeout( 60 )->get( $updateUrl );
-
-        if ( ! $response->successful() ) {
-            throw new Exception( 'Failed to download update' );
-        }
-
-        $tempPath = storage_path( 'app/temp-plugin-' . time() . '.zip' );
-        File::put( $tempPath, $response->body() );
-
-        return $tempPath;
+        return $this->streamDownloadToTempFile( $updateUrl );
     }
 }
