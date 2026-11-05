@@ -412,6 +412,35 @@ it( 'ignores taxQuery operators outside the V1 IN subset', function (): void {
     expect( $result->total() )->toBe( 2 );
 } );
 
+it( 'drops a built-in taxQuery constraint whose operator is not a string', function (): void {
+    $cat = PostCategory::create( ['name' => 'Laravel', 'slug' => 'laravel'] );
+    $a   = publishedPost( $this->user->id, 'A' );
+    $a->categories()->attach( $cat->id );
+    publishedPost( $this->user->id, 'B' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'category', 'terms' => [$cat->id], 'operator' => false],
+    ] );
+
+    expect( $result->total() )->toBe( 2 );
+} );
+
+it( 'treats a null taxQuery operator as the IN default', function (): void {
+    $cat = PostCategory::create( ['name' => 'Laravel', 'slug' => 'laravel'] );
+    $a   = publishedPost( $this->user->id, 'A' );
+    $a->categories()->attach( $cat->id );
+    publishedPost( $this->user->id, 'B' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'category', 'terms' => [$cat->id], 'operator' => null],
+    ] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $a->id );
+} );
+
 it( 'does not run the taxQuery filter for mapped taxonomies', function ( string $taxonomy ): void {
     $calls = 0;
 
@@ -573,6 +602,9 @@ it( 'does not run the taxQuery filter for a malformed taxonomy or an unknown ope
     'sql in operator'       => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => 'IN) OR 1=1 --']],
     'space in taxonomy'     => [['taxonomy' => 'my packages', 'terms' => [7]]],
     'taxonomy over 64 long' => [['taxonomy' => str_repeat( 'a', 65 ), 'terms' => [7]]],
+    'trailing newline'      => [['taxonomy' => "packages\n", 'terms' => [7]]],
+    'false operator'        => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => false]],
+    'array operator'        => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => ['IN']]],
 ] );
 
 it( 'does not run the taxQuery filter without a taxonomy or terms', function ( array $taxQuery ): void {

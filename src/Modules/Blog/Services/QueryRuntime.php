@@ -428,9 +428,14 @@ class QueryRuntime
         $taxonomy = isset( $taxQuery['taxonomy'] ) && is_string( $taxQuery['taxonomy'] )
             ? $taxQuery['taxonomy']
             : null;
-        $operator = isset( $taxQuery['operator'] ) && is_string( $taxQuery['operator'] )
-            ? strtoupper( $taxQuery['operator'] )
-            : 'IN';
+        // `IN` only when no operator is given. One that is present but not a
+        // string is invalid, so it drops the constraint like any unknown
+        // operator rather than passing as `IN`.
+        $operator = match ( true ) {
+            ! isset( $taxQuery['operator'] )      => 'IN',
+            is_string( $taxQuery['operator'] )    => strtoupper( $taxQuery['operator'] ),
+            default                               => null,
+        };
         $terms    = $this->normalizeIdList( $taxQuery['terms'] ?? null );
 
         if ( null === $taxonomy || [] === $terms ) {
@@ -443,11 +448,16 @@ class QueryRuntime
             default                      => null,
         };
 
+        if ( null === $operator ) {
+            return;
+        }
+
         if ( null === $relation ) {
             $operator = (string) preg_replace( '/\s+/', ' ', trim( $operator ) );
 
+            // `\z`, not `$`: `$` also matches before a trailing newline.
             if ( ! in_array( $operator, self::TAX_QUERY_OPERATORS, true )
-                || 1 !== preg_match( '/^[A-Za-z0-9_.:-]{1,64}$/', $taxonomy ) ) {
+                || 1 !== preg_match( '/^[A-Za-z0-9_.:-]{1,64}\z/', $taxonomy ) ) {
                 return;
             }
 
