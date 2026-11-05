@@ -2494,6 +2494,10 @@ class PluginManager
 
         $method = $this->resetOpcacheForWebServer();
 
+        if ( $this->webOpcacheResetWasSkipped() ) {
+            return;
+        }
+
         if ( null !== $method ) {
             if ( $this->runningUnderCli() ) {
                 Log::info( "cms-framework: reset PHP-FPM's OPcache after installing plugin Composer packages ({$method}).", [

@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
     $this->user        = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
-    $this->themesPath  = base_path( 'themes' );
+    $this->themesPath  = testThemesDirectory();
     $this->themeSlug   = 'test-theme';
     $this->themeRoot   = $this->themesPath . '/' . $this->themeSlug;
     $this->stylesDir   = $this->themeRoot . '/styles';
@@ -41,7 +41,7 @@ beforeEach( function (): void {
         $mock->shouldReceive( 'validateSlug' )->andReturnUsing(
             static fn ( string $slug ): bool => (bool) preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ),
         );
-        $mock->shouldReceive( 'getThemesPath' )->andReturn( base_path( 'themes' ) );
+        $mock->shouldReceive( 'getThemesPath' )->andReturn( testThemesDirectory() );
     } );
 } );
 

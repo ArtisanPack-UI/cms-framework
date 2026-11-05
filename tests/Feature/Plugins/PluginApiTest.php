@@ -19,7 +19,7 @@ beforeEach( function (): void {
     $this->admin = grantPermissions( TestUser::factory()->create(), 'manage-plugins' );
 
     // Ensure plugins directory exists
-    $this->pluginsPath = base_path( 'plugins' );
+    $this->pluginsPath = testPluginsDirectory();
     File::ensureDirectoryExists( $this->pluginsPath );
 } );
 

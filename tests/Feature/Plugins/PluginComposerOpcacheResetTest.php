@@ -177,6 +177,19 @@ describe( 'after a plugin Composer install under the CLI', function (): void {
     } );
 } );
 
+describe( 'after a plugin Composer install in a host app\'s test suite (#456)', function (): void {
+    it( 'leaves PHP-FPM alone and warns about nothing', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', null );
+
+        $manager = opcacheProbeManager( $this->installer, 'cli' );
+
+        expect( $manager->installComposerDependenciesForManifest( 'convertkit', $this->manifest ) )->toBeTrue()
+            ->and( $this->resetter->resets )->toBe( 0 );
+
+        Log::shouldNotHaveReceived( 'warning' );
+    } );
+} );
+
 describe( 'when the packages reach the disk but not the process', function (): void {
     it( 'still resets when the install cannot be verified, so a fresh request can finish it', function (): void {
         $this->installer->installsToApply = [];

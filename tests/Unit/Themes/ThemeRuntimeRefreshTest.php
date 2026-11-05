@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\Process;
 beforeEach( function (): void {
     $this->manager    = app( ThemeManager::class );
     $this->resetter   = app( WebOpcacheResetter::class );
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->tmpPath    = storage_path( 'app/themes-refresh-tmp' );
     $this->testSlugs  = [];
     $this->routeCache = app()->getCachedRoutesPath();
@@ -134,5 +134,22 @@ describe( 'activating a theme', function (): void {
             ->toThrow( ThemeNotFoundException::class );
 
         expect( $this->resetter->resets )->toBe( 0 );
+    } );
+} );
+
+describe( 'in a host app\'s test suite (#456)', function (): void {
+    it( 'installs a theme without reaching for the web server\'s OPcache or flagging a reload', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', null );
+        $zipPath = ( $this->buildThemeZip )( 'skip-reset-theme', [
+            'slug'    => 'skip-reset-theme',
+            'name'    => 'Skip Reset Theme',
+            'version' => '1.0.0',
+        ] );
+
+        $this->manager->installFromZip( $zipPath );
+
+        expect( $this->resetter->resets )->toBe( 0 )
+            ->and( $this->manager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->manager->phpReloadRequired() )->toBeFalse();
     } );
 } );

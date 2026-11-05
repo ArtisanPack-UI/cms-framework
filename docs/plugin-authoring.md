@@ -1128,6 +1128,16 @@ Test what matters: your admin page renders, your migrations run, your hook
 subscriptions fire, and any custom field types round-trip through
 `HasCustomFields`.
 
+Since 2.18, installing, activating, deactivating, deleting or updating a
+plugin or theme resets the web server's OPcache. Under the CLI that means a
+FastCGI request to a PHP-FPM socket, an HTTP request to the signed loopback
+route, or the operator's reload command. While `APP_ENV` is `testing`, the
+framework skips that chain unless `cms.updates.opcache.web_reset`
+(`CMS_UPDATES_OPCACHE_WEB_RESET`) is set, so your suite needs nothing extra.
+`opcacheResetMethod()` returns `null` and `phpReloadRequired()` returns `false`
+after a skipped reset. See
+[Resetting PHP-FPM's OPcache from the CLI](self-updater.md#resetting-php-fpms-opcache-from-the-cli-2160).
+
 ---
 
 Reference plugin: [`examples/hello-world-plugin/`](../examples/hello-world-plugin/).

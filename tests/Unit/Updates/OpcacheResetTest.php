@@ -156,6 +156,52 @@ class OpcacheResetTest extends TestCase
     }
 
     /**
+     * Test that a CLI update in a test suite, where `web_reset` is unset,
+     * leaves PHP-FPM alone and neither warns nor records a needed reload
+     * (#456).
+     *
+     * @since 2.18.0
+     */
+    public function test_cli_update_skips_the_web_reset_under_unit_tests_when_web_reset_is_unset(): void
+    {
+        config( ['cms.updates.opcache.web_reset' => null] );
+        Log::spy();
+
+        $manager                     = $this->managerWithUpdateAvailable();
+        $manager->sapi               = 'cli';
+        $manager->opcacheResetResult = true;
+
+        $this->assertTrue( $manager->performUpdate() );
+
+        $this->assertContains( 'opcache-reset', $manager->calls, 'The process\'s own OPcache is still reset.' );
+        $this->assertNotContains( 'web-opcache-reset', $manager->calls );
+        $this->assertFalse( $manager->phpReloadRequired() );
+        $this->assertNull( $manager->opcacheResetMethod() );
+        $this->assertFalse( $manager->updateState()['php_reload_required'] );
+        $this->assertNull( $manager->updateState()['opcache_reset_method'] );
+
+        Log::shouldNotHaveReceived( 'warning' );
+    }
+
+    /**
+     * Test that `web_reset` set to false skips the web reset (#456).
+     *
+     * @since 2.18.0
+     */
+    public function test_cli_update_skips_the_web_reset_when_web_reset_is_off(): void
+    {
+        config( ['cms.updates.opcache.web_reset' => false] );
+
+        $manager       = $this->managerWithUpdateAvailable();
+        $manager->sapi = 'cli';
+
+        $this->assertTrue( $manager->performUpdate() );
+
+        $this->assertNotContains( 'web-opcache-reset', $manager->calls );
+        $this->assertFalse( $manager->phpReloadRequired() );
+    }
+
+    /**
      * Test that a CLI rollback also reaches PHP-FPM.
      *
      * @since 2.16.0
@@ -276,6 +322,13 @@ class OpcacheResetTest extends TestCase
         $this->expectFailure( $manager );
 
         $this->assertContains( 'opcache-reset', $manager->calls );
+
+        // A worker that loaded classes mid-update must stop running them (#457).
+        $this->assertContains( 'queue-restart', $manager->calls );
+        $this->assertGreaterThan(
+            array_search( 'opcache-reset', $manager->calls, true ),
+            array_search( 'queue-restart', $manager->calls, true ),
+        );
     }
 
     /**
@@ -311,7 +364,7 @@ class OpcacheResetTest extends TestCase
             $manager->rollback( $backupPath );
 
             $this->assertFileExists( $target . '/app/Old.php' );
-            $this->assertSame( ['composer', 'caches', 'opcache-reset'], $manager->calls );
+            $this->assertSame( ['composer', 'caches', 'opcache-reset', 'queue-restart'], $manager->calls, 'The queue workers restart after OPcache is reset (#457).' );
             $this->assertFalse( $manager->phpReloadRequired() );
         } finally {
             app()->setBasePath( $originalBase );

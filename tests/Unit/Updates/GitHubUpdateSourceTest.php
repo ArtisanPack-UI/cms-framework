@@ -15,6 +15,7 @@ use GuzzleHttp\Psr7\Response as GuzzleResponse;
 use Illuminate\Http\Client\Events\RequestSending;
 use Illuminate\Http\Client\Events\ResponseReceived;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Orchestra\Testbench\TestCase;
@@ -372,13 +373,14 @@ class GitHubUpdateSourceTest extends TestCase
             'example.com/app-2.0.0.zip' => Http::response( 'partial', 500 ),
         ] );
 
-        $tempDir = storage_path( 'app/temp' );
-
-        if ( is_dir( $tempDir ) ) {
-            foreach ( glob( $tempDir . '/update-*.zip' ) ?: [] as $file ) {
-                @unlink( $file );
-            }
-        }
+        // A storage path of its own, so a download another test process
+        // leaves in the shared `storage/app/temp` under `pest --parallel`
+        // isn't counted as this one's leftover (#458).
+        $originalStorage = storage_path();
+        $storagePath     = sys_get_temp_dir() . '/cmsfw-github-download-' . bin2hex( random_bytes( 6 ) );
+        $tempDir         = $storagePath . '/app/temp';
+        File::ensureDirectoryExists( $tempDir );
+        $this->app->useStoragePath( $storagePath );
 
         $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
 
@@ -386,8 +388,11 @@ class GitHubUpdateSourceTest extends TestCase
             $source->downloadUpdate( 'v2.0.0' );
             $this->fail( 'Expected UpdateException to be thrown.' );
         } catch ( UpdateException $e ) {
-            $leftover = is_dir( $tempDir ) ? glob( $tempDir . '/update-*.zip' ) : [];
+            $leftover = glob( $tempDir . '/update-*.zip' ) ?: [];
             $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
+        } finally {
+            $this->app->useStoragePath( $originalStorage );
+            File::deleteDirectory( $storagePath );
         }
     }
 

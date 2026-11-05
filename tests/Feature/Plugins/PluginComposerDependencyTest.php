@@ -600,7 +600,7 @@ describe( 'Composer-package activation gate', function (): void {
 
 describe( 'Install-time Composer packages (#430)', function (): void {
     beforeEach( function (): void {
-        $this->pluginsPath = base_path( 'plugins' );
+        $this->pluginsPath = testPluginsDirectory();
         $this->zipPaths    = [];
 
         File::ensureDirectoryExists( $this->pluginsPath );

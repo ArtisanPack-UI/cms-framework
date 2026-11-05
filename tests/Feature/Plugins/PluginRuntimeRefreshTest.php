@@ -9,6 +9,7 @@ use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 
 /**
@@ -19,7 +20,7 @@ beforeEach( function (): void {
     $this->manager         = app( PluginManager::class );
     $this->resetter        = app( WebOpcacheResetter::class );
     $this->testPluginsPath = __DIR__ . '/../../Support/Plugins';
-    $this->pluginsPath     = base_path( 'plugins' );
+    $this->pluginsPath     = testPluginsDirectory();
     $this->routeCache      = app()->getCachedRoutesPath();
     $this->hadRoutes       = is_file( $this->routeCache );
 
@@ -138,6 +139,62 @@ describe( 'activating a plugin', function (): void {
 
         expect( fn () => $this->manager->activate( 'not-installed' ) )->toThrow( Exception::class );
         expect( $this->manager->phpReloadRequired() )->toBeFalse();
+    } );
+} );
+
+describe( 'in a host app\'s test suite (#456)', function (): void {
+    it( 'leaves the web server\'s OPcache alone when web_reset is unset, without flagging a reload', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', null );
+        Log::spy();
+        ( $this->installValidPlugin )();
+        $artisan = ( $this->swapArtisan )();
+
+        expect( $this->manager->activate( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->resetter->resets )->toBe( 0 )
+            ->and( $this->manager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->manager->phpReloadRequired() )->toBeFalse()
+            ->and( $artisan->calls )->toBe( ['queue:restart'] );
+
+        Log::shouldNotHaveReceived( 'warning' );
+    } );
+
+    it( 'leaves the web server\'s OPcache alone when web_reset is off', function ( mixed $setting ): void {
+        config()->set( 'cms.updates.opcache.web_reset', $setting );
+        ( $this->installValidPlugin )();
+
+        $this->manager->activate( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 0 )
+            ->and( $this->manager->phpReloadRequired() )->toBeFalse();
+    } )->with( [false, 'false', '0'] );
+
+    it( 'resets when web_reset is unset outside a test run', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', null );
+        $environment      = $this->app['env'];
+        $this->app['env'] = 'production';
+        ( $this->installValidPlugin )();
+
+        try {
+            $this->manager->activate( 'valid-plugin' );
+        } finally {
+            $this->app['env'] = $environment;
+        }
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+    } );
+
+    it( 'does not carry a skip over to the next change', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', false );
+        ( $this->installValidPlugin )();
+        $this->manager->activate( 'valid-plugin' );
+
+        config()->set( 'cms.updates.opcache.web_reset', true );
+        $this->resetter->method = null;
+        $this->manager->deactivate( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( $this->manager->phpReloadRequired() )->toBeTrue();
     } );
 } );
 

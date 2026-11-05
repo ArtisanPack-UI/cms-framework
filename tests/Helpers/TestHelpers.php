@@ -67,3 +67,42 @@ if ( ! function_exists( 'invokeMethod' ) ) {
         return $method->invokeArgs( $object, $parameters );
     }
 }
+
+if ( ! function_exists( 'testPluginsDirectory' ) ) {
+    /**
+     * Absolute path to the plugins directory this test process uses.
+     *
+     * Under `pest --parallel` each process gets its own directory (see
+     * `TestCase::getEnvironmentSetUp()`), so tests must build plugin paths
+     * from the configured directory rather than `base_path( 'plugins' )`, or
+     * one process's cleanup deletes fixtures another is using (#458).
+     *
+     * @param  string  $path  Path inside the plugins directory.
+     *
+     * @return string The absolute path.
+     */
+    function testPluginsDirectory( string $path = '' ): string
+    {
+        $directory = base_path( (string) config( 'cms.plugins.directory', 'plugins' ) );
+
+        return '' === $path ? $directory : $directory . '/' . ltrim( $path, '/' );
+    }
+}
+
+if ( ! function_exists( 'testThemesDirectory' ) ) {
+    /**
+     * Absolute path to the themes directory this test process uses.
+     *
+     * The themes counterpart of {@see testPluginsDirectory()} (#458).
+     *
+     * @param  string  $path  Path inside the themes directory.
+     *
+     * @return string The absolute path.
+     */
+    function testThemesDirectory( string $path = '' ): string
+    {
+        $directory = base_path( (string) config( 'cms.themes.directory', 'themes' ) );
+
+        return '' === $path ? $directory : $directory . '/' . ltrim( $path, '/' );
+    }
+}

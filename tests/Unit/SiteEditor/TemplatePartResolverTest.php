@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\File;
 uses( RefreshDatabase::class );
 
 beforeEach( function (): void {
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->themeSlug  = 'test-theme';
     $this->themeFiles = $this->themesPath . '/' . $this->themeSlug . '/parts';
 

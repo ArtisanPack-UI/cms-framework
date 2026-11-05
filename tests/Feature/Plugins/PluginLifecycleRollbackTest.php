@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Schema;
 beforeEach( function (): void {
     $this->manager         = app( PluginManager::class );
     $this->testPluginsPath = __DIR__ . '/../../Support/Plugins';
-    $this->pluginsPath     = base_path( 'plugins' );
+    $this->pluginsPath     = testPluginsDirectory();
     File::ensureDirectoryExists( $this->pluginsPath );
 } );
 

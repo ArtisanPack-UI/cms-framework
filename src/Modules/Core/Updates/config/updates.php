@@ -295,8 +295,15 @@ return [
     | the CLI, such as by `workshop:checkin` (#438). If none works there, the
     | install still succeeds and only the log warning tells the operator.
     |
+    | `web_reset` turns the whole chain off or on. Left unset, it is off while
+    | the application runs its unit tests and on otherwise, so a test suite
+    | that installs or activates plugins and themes never reaches a real
+    | PHP-FPM socket, the loopback route or the reload command (#456). A
+    | skipped reset is not reported as PHP-FPM needing a reload.
+    |
     */
     'opcache' => [
+        'web_reset'    => env( 'CMS_UPDATES_OPCACHE_WEB_RESET' ),
         'fastcgi'      => env( 'CMS_UPDATES_OPCACHE_FASTCGI', true ),
         'fpm_socket'   => env( 'CMS_UPDATES_FPM_SOCKET' ),
         'loopback'     => env( 'CMS_UPDATES_OPCACHE_LOOPBACK', true ),

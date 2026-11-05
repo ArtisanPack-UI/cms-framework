@@ -62,6 +62,41 @@ expect()->extend( 'toBeOne', function () {
 // Load test helpers
 require_once __DIR__ . '/Helpers/TestHelpers.php';
 
+/*
+| Under `pest --parallel`, give each process its own `bootstrap/cache` files.
+| Plugin and theme tests write `routes-v7.php` into Testbench's shared
+| skeleton, and cache clears remove `services.php`, `packages.php` and the
+| compiled views, so another process booting or rendering at that moment
+| loads the wrong routes or finds its files gone (#458). Set before any
+| application boots; Laravel reads the cache paths through
+| `Application::normalizeCachePath()` and the view path through `view.compiled`.
+*/
+$parallelToken = getenv( 'TEST_TOKEN' );
+
+if ( is_scalar( $parallelToken ) && '' !== (string) $parallelToken ) {
+    foreach ( [
+        'APP_CONFIG_CACHE'   => 'config',
+        'APP_EVENTS_CACHE'   => 'events',
+        'APP_PACKAGES_CACHE' => 'packages',
+        'APP_ROUTES_CACHE'   => 'routes-v7',
+        'APP_SERVICES_CACHE' => 'services',
+    ] as $variable => $file ) {
+        $_SERVER[ $variable ] = $_ENV[ $variable ] = "bootstrap/cache/{$file}-test-{$parallelToken}.php";
+    }
+
+    // Theme activation and updates run a real `view:clear`, which would
+    // delete compiled views another process is about to include.
+    $compiledViews = sys_get_temp_dir() . "/cms-framework-views-test-{$parallelToken}";
+
+    if ( ! is_dir( $compiledViews ) ) {
+        mkdir( $compiledViews, 0755, true );
+    }
+
+    $_SERVER['VIEW_COMPILED_PATH'] = $_ENV['VIEW_COMPILED_PATH'] = $compiledViews;
+}
+
+unset( $parallelToken, $variable, $file, $compiledViews );
+
 function something(): void
 {
     // ..
