@@ -376,24 +376,17 @@ class GitHubUpdateSourceTest extends TestCase
         // A storage path of its own, so a download another test process
         // leaves in the shared `storage/app/temp` under `pest --parallel`
         // isn't counted as this one's leftover (#458).
-        $originalStorage = storage_path();
-        $storagePath     = sys_get_temp_dir() . '/cmsfw-github-download-' . bin2hex( random_bytes( 6 ) );
-        $tempDir         = $storagePath . '/app/temp';
-        File::ensureDirectoryExists( $tempDir );
-        $this->app->useStoragePath( $storagePath );
+        withIsolatedStoragePath( function ( string $storagePath ): void {
+            $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
 
-        $source = new GitHubUpdateSource( 'https://github.com/user/repo', '1.0.0' );
-
-        try {
-            $source->downloadUpdate( 'v2.0.0' );
-            $this->fail( 'Expected UpdateException to be thrown.' );
-        } catch ( UpdateException $e ) {
-            $leftover = glob( $tempDir . '/update-*.zip' ) ?: [];
-            $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
-        } finally {
-            $this->app->useStoragePath( $originalStorage );
-            File::deleteDirectory( $storagePath );
-        }
+            try {
+                $source->downloadUpdate( 'v2.0.0' );
+                $this->fail( 'Expected UpdateException to be thrown.' );
+            } catch ( UpdateException $e ) {
+                $leftover = glob( $storagePath . '/app/temp/update-*.zip' ) ?: [];
+                $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
+            }
+        } );
     }
 
     /**

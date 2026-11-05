@@ -85,12 +85,20 @@ if ( is_scalar( $parallelToken ) && '' !== (string) $parallelToken ) {
     }
 
     // Theme activation and updates run a real `view:clear`, which would
-    // delete compiled views another process is about to include.
-    $compiledViews = sys_get_temp_dir() . "/cms-framework-views-test-{$parallelToken}";
+    // delete compiled views another process is about to include. The
+    // directory gets a random name and is created exclusively, owner-only:
+    // tokens repeat across runs, so a predictable path in the shared temp
+    // directory could be pre-seeded with a compiled view that Blade would
+    // then include. It is removed when the worker exits.
+    $compiledViews = sys_get_temp_dir() . '/cms-framework-views-' . bin2hex( random_bytes( 16 ) ) . "-{$parallelToken}";
 
-    if ( ! is_dir( $compiledViews ) ) {
-        mkdir( $compiledViews, 0755, true );
+    if ( ! mkdir( $compiledViews, 0700 ) ) {
+        throw new RuntimeException( "Could not create the compiled-view directory {$compiledViews}." );
     }
+
+    register_shutdown_function( static function () use ( $compiledViews ): void {
+        Illuminate\Support\Facades\File::deleteDirectory( $compiledViews );
+    } );
 
     $_SERVER['VIEW_COMPILED_PATH'] = $_ENV['VIEW_COMPILED_PATH'] = $compiledViews;
 }

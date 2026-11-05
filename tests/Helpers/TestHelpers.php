@@ -106,3 +106,35 @@ if ( ! function_exists( 'testThemesDirectory' ) ) {
         return '' === $path ? $directory : $directory . '/' . ltrim( $path, '/' );
     }
 }
+
+if ( ! function_exists( 'withIsolatedStoragePath' ) ) {
+    /**
+     * Run a callback with the application's storage path pointed at a fresh
+     * temporary directory, then restore it and remove the directory.
+     *
+     * Testbench's `storage/` is shared by every `pest --parallel` process, so
+     * a test that asserts nothing is left in `storage/app/temp` can see
+     * another process's download there (#458).
+     *
+     * @template TResult
+     *
+     * @param  callable(string): TResult  $callback  Receives the storage path.
+     *
+     * @return TResult What the callback returned.
+     */
+    function withIsolatedStoragePath( callable $callback ): mixed
+    {
+        $original = storage_path();
+        $isolated = sys_get_temp_dir() . '/cms-framework-storage-' . bin2hex( random_bytes( 16 ) );
+
+        Illuminate\Support\Facades\File::ensureDirectoryExists( $isolated . '/app/temp' );
+        app()->useStoragePath( $isolated );
+
+        try {
+            return $callback( $isolated );
+        } finally {
+            app()->useStoragePath( $original );
+            Illuminate\Support\Facades\File::deleteDirectory( $isolated );
+        }
+    }
+}

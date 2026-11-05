@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Orchestra\Testbench\TestCase;
 use RuntimeException;
+use Throwable;
 use ZipArchive;
 
 /**
@@ -366,6 +367,68 @@ class OpcacheResetTest extends TestCase
             $this->assertFileExists( $target . '/app/Old.php' );
             $this->assertSame( ['composer', 'caches', 'opcache-reset', 'queue-restart'], $manager->calls, 'The queue workers restart after OPcache is reset (#457).' );
             $this->assertFalse( $manager->phpReloadRequired() );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/app/Old.php' );
+            @rmdir( $target . '/app' );
+            @rmdir( $target );
+            @unlink( $backupPath );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Test that an automatic rollback signals the queue workers again after
+     * the compiled caches are cleared, because `optimize:clear` runs
+     * `cache:clear`, which can flush the `queue:restart` signal (#457).
+     *
+     * @since 2.18.0
+     */
+    public function test_automatic_rollback_restarts_queue_workers_after_clearing_the_caches(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-restart-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/Old.php', "<?php\n// old\n" );
+        $backup->close();
+
+        $manager = new class( $backupPath ) extends RecordingApplicationUpdateManager {
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function clearCompiledCachesAfterFailure(): void
+            {
+                $this->calls[] = 'optimize-clear';
+            }
+        };
+        $manager->sapi               = 'fpm-fcgi';
+        $manager->opcacheResetResult = true;
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callHandleFailure( new RuntimeException( 'composer install failed' ) );
+
+            $clear = array_search( 'optimize-clear', $manager->calls, true );
+
+            $this->assertNotFalse( $clear );
+            $this->assertContains( 'queue-restart', array_slice( $manager->calls, $clear + 1 ), 'The workers must be signalled after the cache clear that can flush the signal.' );
         } finally {
             app()->setBasePath( $originalBase );
             @unlink( $target . '/app/Old.php' );

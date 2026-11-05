@@ -3829,6 +3829,12 @@ class ApplicationUpdateManager
                 // service cache (#308).
                 $this->clearCompiledCachesAfterFailure();
 
+                // `rollback()` already signalled the queue workers, but
+                // `optimize:clear` above runs `cache:clear`, which can flush
+                // the `queue:restart` signal from the default cache before a
+                // worker reads it. Signal again now the cache is final (#457).
+                $this->restartQueueWorkers( 'rolling back the update' );
+
                 $this->state()->markRollback( true );
             } catch ( Throwable $e ) {
                 // Rollback failed - this is critical. Preserve the original
