@@ -95,7 +95,12 @@ class PluginsController extends Controller
      *
      * Endpoint: POST /api/v1/plugins/install
      *
+     * The response reports how the web server's OPcache was reset
+     * (`opcache_reset_method`), and when no reset reached it, sets
+     * `php_reload_required` and a `warning` (#453).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  InstallPluginRequest  $request  Validated request carrying the uploaded plugin_zip.
      *
@@ -120,10 +125,10 @@ class PluginsController extends Controller
             ] );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => __( 'Plugin installed successfully' ),
             'plugin'  => $plugin,
-        ], 201 );
+        ], $this->managerRefreshPayload( __( 'The plugin was installed, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the plugin\'s files.' ) ) ), 201 );
     }
 
     /**
@@ -136,7 +141,12 @@ class PluginsController extends Controller
      *
      * Endpoint: POST /api/v1/plugins/{slug}/activate
      *
+     * The response reports how the web server's OPcache was reset
+     * (`opcache_reset_method`), and when no reset reached it, sets
+     * `php_reload_required` and a `warning` (#453).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  string  $slug  Plugin slug identifier.
      *
@@ -190,9 +200,9 @@ class PluginsController extends Controller
             ] );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => __( 'Plugin activated successfully' ),
-        ] );
+        ], $this->managerRefreshPayload( __( 'The plugin was activated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site loads the plugin.' ) ) ) );
     }
 
     /**
@@ -200,7 +210,12 @@ class PluginsController extends Controller
      *
      * Endpoint: POST /api/v1/plugins/{slug}/deactivate
      *
+     * The response reports how the web server's OPcache was reset
+     * (`opcache_reset_method`), and when no reset reached it, sets
+     * `php_reload_required` and a `warning` (#453).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  string  $slug  Plugin slug identifier.
      *
@@ -231,9 +246,9 @@ class PluginsController extends Controller
             ] );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => __( 'Plugin deactivated successfully' ),
-        ] );
+        ], $this->managerRefreshPayload( __( 'The plugin was deactivated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site stops loading the plugin.' ) ) ) );
     }
 
     /**
@@ -241,7 +256,12 @@ class PluginsController extends Controller
      *
      * Endpoint: DELETE /api/v1/plugins/{slug}
      *
+     * The response reports how the web server's OPcache was reset
+     * (`opcache_reset_method`), and when no reset reached it, sets
+     * `php_reload_required` and a `warning` (#453).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome.
      *
      * @param  string  $slug  Plugin slug identifier.
      *
@@ -265,9 +285,9 @@ class PluginsController extends Controller
             ] );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => __( 'Plugin deleted successfully' ),
-        ] );
+        ], $this->managerRefreshPayload( __( 'The plugin was deleted, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site stops loading the plugin.' ) ) ) );
     }
 
     /**
@@ -288,7 +308,16 @@ class PluginsController extends Controller
      *
      * Endpoint: POST /api/v1/plugins/{slug}/update
      *
+     * When an update was installed, the response also reports how the web
+     * server's OPcache was reset (`opcache_reset_method`), and when no reset
+     * reached it, sets `php_reload_required` and a `warning` telling the
+     * admin to reload PHP-FPM (#450). When a failed update was rolled back
+     * and no reset reached the web server, the error response says so too:
+     * the 409 carries the same fields, and the 422's error bag gains a
+     * `php_reload_required` message (#454).
+     *
      * @since 1.0.0
+     * @since 2.18.0 Reports the OPcache reset outcome, after an update or its rollback.
      *
      * @param  string  $slug  Plugin slug identifier.
      *
@@ -306,36 +335,36 @@ class PluginsController extends Controller
             // Render the same structured 409 that `activate()` does, whose
             // payload carries the version numbers a generic error bag cannot
             // express, instead of a generic 422.
-            return response()->json( [
+            return response()->json( array_merge( [
                 'message'          => $e->getMessage(),
                 'code'             => 'plugin_incompatible',
                 'plugin'           => $e->pluginSlug,
                 'constraint'       => $e->constraint,
                 'required_version' => $e->requiredVersion,
                 'host_version'     => $e->hostVersion,
-            ], 409 );
+            ], $this->rollbackRefreshPayload() ), 409 );
         } catch ( PluginUpdateException $e ) {
             // `UpdateManager` funnels every in-flight failure — unknown slug,
             // download, checksum mismatch, failed swap, and unsatisfiable
             // dependency/conflict — through this type, carrying the underlying
             // reason verbatim.
-            throw ValidationException::withMessages( [
+            throw ValidationException::withMessages( array_merge( [
                 'slug' => $e->getMessage(),
-            ] );
+            ], $this->rollbackReloadErrors() ) );
         } catch ( Exception $e ) {
             report( $e );
 
-            throw ValidationException::withMessages( [
+            throw ValidationException::withMessages( array_merge( [
                 'slug' => __( 'An unexpected error occurred while updating the plugin.' ),
-            ] );
+            ], $this->rollbackReloadErrors() ) );
         }
 
-        return response()->json( [
+        return response()->json( array_merge( [
             'message' => $updated
                 ? __( 'Plugin updated successfully' )
                 : __( 'Plugin is already up to date.' ),
             'updated' => $updated,
-        ] );
+        ], $updated ? $this->runtimeRefreshPayload() : [] ) );
     }
 
     /**
@@ -469,5 +498,112 @@ class PluginsController extends Controller
             'order'   => $order,
             'results' => $results,
         ] );
+    }
+
+    /**
+     * How the last update reached the running site, for the update response.
+     *
+     * @since 2.18.0
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function runtimeRefreshPayload(): array
+    {
+        return $this->refreshPayload(
+            $this->updateManager->opcacheResetMethod(),
+            $this->updateManager->phpReloadRequired(),
+            __( 'The plugin was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' ),
+        );
+    }
+
+    /**
+     * How the last install, activation, deactivation or delete reached the
+     * running site, for its response (#453).
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $warning  What to tell the admin when PHP-FPM needs a reload.
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function managerRefreshPayload( string $warning ): array
+    {
+        return $this->refreshPayload(
+            $this->pluginManager->opcacheResetMethod(),
+            $this->pluginManager->phpReloadRequired(),
+            $warning,
+        );
+    }
+
+    /**
+     * How a rolled-back update's restored files reached the running site,
+     * for a JSON error response (#454).
+     *
+     * @since 2.18.0
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function rollbackRefreshPayload(): array
+    {
+        return $this->refreshPayload(
+            $this->updateManager->opcacheResetMethod(),
+            $this->updateManager->phpReloadRequired(),
+            $this->rollbackReloadWarning(),
+        );
+    }
+
+    /**
+     * An extra error-bag entry telling the admin to reload PHP-FPM when a
+     * rolled-back update's OPcache reset reached no web server (#454).
+     *
+     * @since 2.18.0
+     *
+     * @return array<string, string> `php_reload_required` => message, or empty.
+     */
+    protected function rollbackReloadErrors(): array
+    {
+        if ( ! $this->updateManager->phpReloadRequired() ) {
+            return [];
+        }
+
+        return ['php_reload_required' => $this->rollbackReloadWarning()];
+    }
+
+    /**
+     * The warning for a rolled-back update that left PHP-FPM needing a
+     * reload.
+     *
+     * @since 2.18.0
+     *
+     * @return string The translated warning.
+     */
+    protected function rollbackReloadWarning(): string
+    {
+        return __( 'The update was rolled back, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the restored version.' );
+    }
+
+    /**
+     * Build the OPcache outcome fields for a response.
+     *
+     * @since 2.18.0
+     *
+     * @param  string|null  $method  How OPcache was reset, or null when no reset reached the web server.
+     * @param  bool  $reloadRequired  Whether PHP-FPM needs a reload.
+     * @param  string  $warning  What to tell the admin when it does.
+     *
+     * @return array{opcache_reset_method: string|null, php_reload_required: bool, warning?: string}
+     */
+    protected function refreshPayload( ?string $method, bool $reloadRequired, string $warning ): array
+    {
+        $payload = [
+            'opcache_reset_method' => $method,
+            'php_reload_required'  => $reloadRequired,
+        ];
+
+        if ( $reloadRequired ) {
+            $payload['warning'] = $warning;
+        }
+
+        return $payload;
     }
 }

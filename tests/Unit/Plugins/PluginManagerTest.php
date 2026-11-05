@@ -15,7 +15,7 @@ beforeEach( function (): void {
 describe( 'Plugin Discovery', function (): void {
     it( 'discovers plugins from filesystem', function (): void {
         // Copy test plugins to plugins directory
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
 
@@ -35,7 +35,7 @@ describe( 'Plugin Discovery', function (): void {
     } );
 
     it( 'merges database status with discovered plugins', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
 
@@ -58,8 +58,8 @@ describe( 'Plugin Discovery', function (): void {
 
     it( 'returns empty array when plugins directory does not exist', function (): void {
         // Temporarily rename plugins directory
-        $pluginsPath = base_path( 'plugins' );
-        $tempPath    = base_path( 'plugins-temp' );
+        $pluginsPath = testPluginsDirectory();
+        $tempPath    = testPluginsDirectory() . '-temp';
 
         if ( File::exists( $pluginsPath ) ) {
             File::move( $pluginsPath, $tempPath );
@@ -79,7 +79,7 @@ describe( 'Plugin Discovery', function (): void {
 
 describe( 'Get Plugin', function (): void {
     it( 'retrieves a specific plugin by slug', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
 
@@ -118,7 +118,7 @@ describe( 'Get Plugin', function (): void {
             ->and( $this->manager->getPlugin( 'plugin@special' ) )->toBeNull();
 
         // Valid characters
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
 
@@ -130,7 +130,7 @@ describe( 'Get Plugin', function (): void {
 
 describe( 'Author Name Resolution', function (): void {
     it( 'exposes a display-safe author_name for a string author', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
 
@@ -144,7 +144,7 @@ describe( 'Author Name Resolution', function (): void {
     } );
 
     it( 'flattens an object-form author into author_name', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $pluginsPath . '/object-author-plugin' );
 
@@ -159,7 +159,7 @@ describe( 'Author Name Resolution', function (): void {
     } );
 
     it( 'includes author_name for every discovered plugin', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $pluginsPath . '/object-author-plugin' );
 
@@ -217,7 +217,7 @@ describe( 'Manifest Validation', function (): void {
 
 describe( 'Manifest Parsing', function (): void {
     it( 'parses valid JSON manifest', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath );
         File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $pluginsPath . '/valid-plugin' );
 

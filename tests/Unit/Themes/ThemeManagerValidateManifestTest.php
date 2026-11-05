@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
     $this->manager    = app( ThemeManager::class );
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->tmpPath    = storage_path( 'app/themes-validate-tmp' );
     $this->testSlugs  = [];
 

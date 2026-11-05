@@ -111,8 +111,51 @@ class GlobalStylesEmitter
      *
      * v13: target both `.wp-block-{name}` and `.wp-block-artisanpack-{name}`
      * for `artisanpack/*` blocks, so forks of core blocks match (#405).
+     *
+     * v14: move a block's `border` and `shadow` declarations to the inner
+     * element visual-editor paints them on (an Image's `<img>`), as the
+     * Blade front end does (#449).
      */
-    private const SCHEMA_VERSION = 'v13';
+    private const SCHEMA_VERSION = 'v14';
+
+    /**
+     * Visual-editor's block style compiler, whose public
+     * `FEATURE_SELECTORS` map (visual-editor 1.20+) says which inner
+     * element each block paints a declaration group on. Kept as a string
+     * so cms-framework doesn't need visual-editor installed.
+     *
+     * @since 2.18.0
+     */
+    private const VISUAL_EDITOR_BLOCK_STYLE_COMPILER = 'ArtisanPackUI\\VisualEditor\\BlockStyles\\BlockStyleCssCompiler';
+
+    /**
+     * Copy of visual-editor 1.20's `BlockStyleCssCompiler::FEATURE_SELECTORS`,
+     * used when an older visual-editor (where it is protected) or none is
+     * installed. Keyed by block name, then by declaration group (`root`
+     * covers the groups without their own entry); each value is a suffix
+     * for the block's wrapper selectors.
+     *
+     * @since 2.18.0
+     *
+     * @var array<string, array<string, string>>
+     */
+    private const FEATURE_SELECTORS = [
+        'button'              => ['root' => ' .wp-block-button__link'],
+        'table'               => ['root' => ' > table'],
+        'image'               => ['border' => ' img', 'shadow' => ' img'],
+        'post-featured-image' => ['border' => ' img', 'shadow' => ' img'],
+        'avatar'              => ['border' => ' img'],
+    ];
+
+    /**
+     * Keeps a theme border moved to an inner element off a block that
+     * paints a gradient border on its wrapper (its `ve-gb-*` scope class),
+     * so the two frames don't stack. Mirrors visual-editor's
+     * `ThemeJsonTokensCompiler::GRADIENT_BORDER_GUARD`.
+     *
+     * @since 2.18.0
+     */
+    private const GRADIENT_BORDER_GUARD = ':not([class^="ve-gb-"], [class*=" ve-gb-"])';
 
     /**
      * Palette slugs whose `.has-{slug}-color` rule shares its name with a
@@ -1347,9 +1390,15 @@ class GlobalStylesEmitter
      * → `.wp-block-card, .wp-block-artisanpack-card`) (#201, #405),
      * wrapped in `:root :where(…)` (#390).
      *
+     * A block's `border` and `shadow` declarations go to the inner
+     * element it paints them on, from {@see self::featureSuffixes()}, so
+     * the editor canvas matches the Blade front end: an Image's border
+     * frames the `<img>`, not the figure and its caption (#449).
+     *
      * @since 2.5.0
      * @since 2.15.0 Wraps rules in `:root :where(…)`.
      * @since 2.15.3 `artisanpack/*` blocks target both class forms.
+     * @since 2.18.0 Moves border and shadow declarations to the block's inner element.
      *
      * @param  array<string, mixed>  $styles
      *
@@ -1378,8 +1427,8 @@ class GlobalStylesEmitter
 
             $declarations = $this->stylesRootDeclarations( $blockStyles );
 
-            if ( [] !== $declarations ) {
-                $rules[] = $this->flatSpecificitySelector( $selector ) . ' {' . "\n" . $this->formatDeclarations( $declarations ) . "\n" . '}';
+            foreach ( $this->targetBlockDeclarations( $blockName, $selector, $declarations ) as $targetSelector => $targetDeclarations ) {
+                $rules[] = $this->flatSpecificitySelector( $targetSelector ) . ' {' . "\n" . $this->formatDeclarations( $targetDeclarations ) . "\n" . '}';
             }
 
             foreach ( $this->blockElementStyleBlocks( $selector, $blockStyles ) as $rule ) {
@@ -1388,6 +1437,131 @@ class GlobalStylesEmitter
         }
 
         return $rules;
+    }
+
+    /**
+     * Split one block's declarations across the selectors they land on.
+     *
+     * Declarations stay on the block's wrapper unless their group has a
+     * suffix in {@see self::featureSuffixes()}; those go to the wrapper
+     * selectors with the suffix appended (each one, for an `artisanpack/*`
+     * selector list). A moved border also skips gradient-border wrappers
+     * ({@see self::GRADIENT_BORDER_GUARD}). Groups that share a selector
+     * share a rule, and the wrapper comes first.
+     *
+     * @since 2.18.0
+     *
+     * @param  string                                   $blockName     The `{namespace}/{name}` key.
+     * @param  string                                   $selector      From {@see self::blockSelector()}.
+     * @param  array<int, array{0: string, 1: string}>  $declarations  From {@see self::stylesRootDeclarations()}.
+     *
+     * @return array<string, array<int, array{0: string, 1: string}>> Declarations keyed by selector list, without empty entries.
+     */
+    protected function targetBlockDeclarations( string $blockName, string $selector, array $declarations ): array
+    {
+        $features = $this->featureSuffixes( $blockName );
+        $targets  = [$selector => []];
+
+        if ( [] === $features ) {
+            $targets[ $selector ] = $declarations;
+
+            return array_filter( $targets );
+        }
+
+        $wrappers = array_map( 'trim', explode( ',', $selector ) );
+
+        foreach ( $declarations as $declaration ) {
+            $group  = $this->declarationGroup( $declaration[0] );
+            $target = $selector;
+
+            if ( isset( $features[ $group ] ) ) {
+                $guard  = 'border' === $group ? self::GRADIENT_BORDER_GUARD : '';
+                $target = implode( ', ', array_map(
+                    static fn ( string $wrapper ): string => $wrapper . $guard . $features[ $group ],
+                    $wrappers,
+                ) );
+            }
+
+            $targets[ $target ][] = $declaration;
+        }
+
+        return array_filter( $targets );
+    }
+
+    /**
+     * The per-group selector suffixes for a block's inner elements.
+     *
+     * Mirrors visual-editor's `ThemeJsonTokensCompiler::featureSuffixes()`:
+     * only `core/` and `artisanpack/` blocks are mapped, and a `root`
+     * entry (Button, Table) moves the shadow only, so the groups this
+     * emitter always printed on those wrappers stay there.
+     *
+     * @since 2.18.0
+     *
+     * @return array<string, string> Selector suffixes keyed by declaration group.
+     */
+    protected function featureSuffixes( string $blockName ): array
+    {
+        [$namespace, $name] = explode( '/', $blockName, 2 ) + [1 => ''];
+
+        if ( 'core' !== $namespace && 'artisanpack' !== $namespace ) {
+            return [];
+        }
+
+        $features = $this->featureSelectorMap()[ $name ] ?? [];
+
+        if ( ! is_array( $features ) ) {
+            return [];
+        }
+
+        if ( isset( $features['root'] ) ) {
+            $features['shadow'] ??= $features['root'];
+
+            unset( $features['root'] );
+        }
+
+        return array_filter( $features, 'is_string' );
+    }
+
+    /**
+     * Visual-editor's `FEATURE_SELECTORS` map when it is public (1.20+),
+     * otherwise this emitter's copy of it.
+     *
+     * @since 2.18.0
+     *
+     * @return array<string, array<string, string>>
+     */
+    protected function featureSelectorMap(): array
+    {
+        $constant = self::VISUAL_EDITOR_BLOCK_STYLE_COMPILER . '::FEATURE_SELECTORS';
+
+        if ( class_exists( self::VISUAL_EDITOR_BLOCK_STYLE_COMPILER ) && defined( $constant ) ) {
+            $map = constant( $constant );
+
+            if ( is_array( $map ) ) {
+                return $map;
+            }
+        }
+
+        return self::FEATURE_SELECTORS;
+    }
+
+    /**
+     * The theme.json declaration group a CSS property belongs to, in the
+     * terms of {@see self::FEATURE_SELECTORS}: `border` for every
+     * `border-*` property (including radius and per-side borders),
+     * `shadow` for `box-shadow`, and `other` for the rest, which never
+     * move off the wrapper.
+     *
+     * @since 2.18.0
+     */
+    protected function declarationGroup( string $property ): string
+    {
+        if ( 'box-shadow' === $property ) {
+            return 'shadow';
+        }
+
+        return str_starts_with( $property, 'border' ) ? 'border' : 'other';
     }
 
     /**

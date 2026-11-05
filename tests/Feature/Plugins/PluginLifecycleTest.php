@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\File;
 beforeEach( function (): void {
     $this->manager         = app( PluginManager::class );
     $this->testPluginsPath = __DIR__ . '/../../Support/Plugins';
-    $this->pluginsPath     = base_path( 'plugins' );
+    $this->pluginsPath     = testPluginsDirectory();
 
     // Ensure plugins directory exists
     File::ensureDirectoryExists( $this->pluginsPath );

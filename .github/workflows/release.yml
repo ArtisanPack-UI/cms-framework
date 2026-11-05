@@ -63,7 +63,7 @@ jobs:
       - name: Run tests
         env:
           XDEBUG_MODE: off
-        run: vendor/bin/pest --no-coverage
+        run: vendor/bin/pest --parallel --no-coverage
 
   release:
     needs: test

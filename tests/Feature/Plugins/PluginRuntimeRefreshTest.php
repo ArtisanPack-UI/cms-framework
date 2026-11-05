@@ -1,0 +1,354 @@
+<?php
+
+declare( strict_types=1 );
+
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\IncompatiblePluginException;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
+use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
+use Illuminate\Process\PendingProcess;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Process;
+
+/**
+ * Coverage for #453: plugin installs, activations, deactivations and deletes
+ * make their change live on a production host, the way updates do since #450.
+ */
+beforeEach( function (): void {
+    $this->manager         = app( PluginManager::class );
+    $this->resetter        = app( WebOpcacheResetter::class );
+    $this->testPluginsPath = __DIR__ . '/../../Support/Plugins';
+    $this->pluginsPath     = testPluginsDirectory();
+    $this->routeCache      = app()->getCachedRoutesPath();
+    $this->hadRoutes       = is_file( $this->routeCache );
+
+    File::ensureDirectoryExists( $this->pluginsPath );
+    config()->set( 'cms.plugins.cacheEnabled', false );
+
+    $this->installValidPlugin = function ( array $attributes = [] ): Plugin {
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+
+        return Plugin::create( array_merge( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => json_decode( File::get( $this->pluginsPath . '/valid-plugin/plugin.json' ), true ),
+        ], $attributes ) );
+    };
+
+    // Stand a recording double in for the Artisan facade. Testbench's console
+    // kernel is `final`, so `Artisan::shouldReceive()` cannot mock it.
+    $this->swapArtisan = function (): object {
+        $artisan = new class {
+            public array $calls = [];
+
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                $this->calls[] = $command;
+
+                return 0;
+            }
+        };
+
+        Artisan::swap( $artisan );
+
+        return $artisan;
+    };
+} );
+
+afterEach( function (): void {
+    foreach ( ['valid-plugin', 'object-author-plugin'] as $slug ) {
+        if ( File::exists( $this->pluginsPath . '/' . $slug ) ) {
+            File::deleteDirectory( $this->pluginsPath . '/' . $slug );
+        }
+    }
+
+    if ( ! $this->hadRoutes && is_file( $this->routeCache ) ) {
+        File::delete( $this->routeCache );
+    }
+} );
+
+describe( 'activating a plugin', function (): void {
+    it( 'resets OPcache, signals the queue workers and reports how', function (): void {
+        ( $this->installValidPlugin )();
+        $artisan = ( $this->swapArtisan )();
+
+        expect( $this->manager->activate( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->resetter->resets )->toBe( 1 )
+            ->and( $artisan->calls )->toBe( ['queue:restart'] )
+            ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' )
+            ->and( $this->manager->phpReloadRequired() )->toBeFalse();
+    } );
+
+    it( 'rebuilds a route cache autoClearFrameworkCaches cleared, so the plugin\'s routes exist', function (): void {
+        config()->set( 'cms.plugins.autoClearFrameworkCaches', true );
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+        ( $this->installValidPlugin )();
+
+        $this->manager->activate( 'valid-plugin' );
+
+        expect( is_file( $this->routeCache ) )->toBeFalse();
+        Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+            && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+    } );
+
+    it( 'does not compile a route cache the site never had', function (): void {
+        File::delete( $this->routeCache );
+        Process::fake();
+        ( $this->installValidPlugin )();
+
+        $this->manager->activate( 'valid-plugin' );
+
+        Process::assertNotRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+            && in_array( 'route:cache', $process->command, true ) );
+    } );
+
+    it( 'flags a PHP-FPM reload when no OPcache reset reaches the web server', function (): void {
+        $this->resetter->method = null;
+        ( $this->installValidPlugin )();
+
+        $this->manager->activate( 'valid-plugin' );
+
+        expect( $this->manager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->manager->phpReloadRequired() )->toBeTrue();
+    } );
+
+    it( 'neither resets OPcache nor restarts workers when the activation is refused', function (): void {
+        $plugin = ( $this->installValidPlugin )();
+        $plugin->update( ['meta' => array_merge( $plugin->meta, ['min_host_version' => '999.0.0'] )] );
+        $artisan = ( $this->swapArtisan )();
+
+        expect( fn () => $this->manager->activate( 'valid-plugin' ) )
+            ->toThrow( IncompatiblePluginException::class );
+
+        expect( $this->resetter->resets )->toBe( 0 )
+            ->and( $artisan->calls )->toBe( [] );
+    } );
+
+    it( 'still refreshes, then rethrows, when an activated listener throws', function (): void {
+        ( $this->installValidPlugin )();
+        $artisan = ( $this->swapArtisan )();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Listener exploded.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.activated', $listener );
+
+        try {
+            expect( fn () => $this->manager->activate( 'valid-plugin' ) )
+                ->toThrow( RuntimeException::class, 'Listener exploded.' );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->value( 'is_active' ) )->toBeTruthy()
+                ->and( $this->resetter->resets )->toBe( 1 )
+                ->and( $artisan->calls )->toContain( 'queue:restart' )
+                ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.activated', $listener );
+        }
+    } );
+
+    it( 'does not report an earlier change\'s outcome for a refused activation', function (): void {
+        $this->resetter->method = null;
+        ( $this->installValidPlugin )();
+        $this->manager->activate( 'valid-plugin' );
+
+        expect( $this->manager->phpReloadRequired() )->toBeTrue();
+
+        expect( fn () => $this->manager->activate( 'not-installed' ) )->toThrow( Exception::class );
+        expect( $this->manager->phpReloadRequired() )->toBeFalse();
+    } );
+} );
+
+describe( 'in a host app\'s test suite (#456)', function (): void {
+    it( 'leaves the web server\'s OPcache alone when web_reset is unset, without flagging a reload', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', null );
+        Log::spy();
+        ( $this->installValidPlugin )();
+        $artisan = ( $this->swapArtisan )();
+
+        expect( $this->manager->activate( 'valid-plugin' ) )->toBeTrue()
+            ->and( $this->resetter->resets )->toBe( 0 )
+            ->and( $this->manager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->manager->phpReloadRequired() )->toBeFalse()
+            ->and( $artisan->calls )->toBe( ['queue:restart'] );
+
+        Log::shouldNotHaveReceived( 'warning' );
+    } );
+
+    it( 'leaves the web server\'s OPcache alone when web_reset is off', function ( mixed $setting ): void {
+        config()->set( 'cms.updates.opcache.web_reset', $setting );
+        ( $this->installValidPlugin )();
+
+        $this->manager->activate( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 0 )
+            ->and( $this->manager->phpReloadRequired() )->toBeFalse();
+    } )->with( [false, 'false', '0'] );
+
+    it( 'resets when web_reset is unset outside a test run', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', null );
+        $environment      = $this->app['env'];
+        $this->app['env'] = 'production';
+        ( $this->installValidPlugin )();
+
+        try {
+            $this->manager->activate( 'valid-plugin' );
+        } finally {
+            $this->app['env'] = $environment;
+        }
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+    } );
+
+    it( 'does not carry a skip over to the next change', function (): void {
+        config()->set( 'cms.updates.opcache.web_reset', false );
+        ( $this->installValidPlugin )();
+        $this->manager->activate( 'valid-plugin' );
+
+        config()->set( 'cms.updates.opcache.web_reset', true );
+        $this->resetter->method = null;
+        $this->manager->deactivate( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( $this->manager->phpReloadRequired() )->toBeTrue();
+    } );
+} );
+
+describe( 'deactivating and deleting a plugin', function (): void {
+    it( 'refreshes after a deactivation', function (): void {
+        ( $this->installValidPlugin )( ['is_active' => true] );
+        $artisan = ( $this->swapArtisan )();
+
+        $this->manager->deactivate( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( $artisan->calls )->toBe( ['queue:restart'] );
+    } );
+
+    it( 'refreshes once for a delete, not again for its deactivate', function (): void {
+        config()->set( 'cms.plugins.autoClearFrameworkCaches', true );
+        ( $this->installValidPlugin )( ['is_active' => true] );
+        $artisan = ( $this->swapArtisan )();
+
+        $this->manager->delete( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( array_count_values( $artisan->calls )['queue:restart'] )->toBe( 1 );
+    } );
+
+    it( 'still refreshes once when a delete fails after its deactivate', function (): void {
+        config()->set( 'cms.plugins.autoClearFrameworkCaches', true );
+        ( $this->installValidPlugin )( ['is_active' => true] );
+        $artisan = ( $this->swapArtisan )();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Delete vetoed.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.deleting', $listener );
+
+        try {
+            expect( fn () => $this->manager->delete( 'valid-plugin' ) )
+                ->toThrow( RuntimeException::class, 'Delete vetoed.' );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->value( 'is_active' ) )->toBeFalsy()
+                ->and( $this->resetter->resets )->toBe( 1 )
+                ->and( array_count_values( $artisan->calls )['queue:restart'] ?? 0 )->toBe( 1 );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.deleting', $listener );
+        }
+    } );
+
+    it( 'does not refresh when a deactivating listener vetoes before anything is saved', function (): void {
+        config()->set( 'cms.plugins.autoClearFrameworkCaches', false );
+        ( $this->installValidPlugin )( ['is_active' => true] );
+        $artisan = ( $this->swapArtisan )();
+
+        $listener = function (): void {
+            throw new RuntimeException( 'Deactivation vetoed.' );
+        };
+        addAction( 'ap.cmsFramework.plugin.deactivating', $listener );
+
+        try {
+            expect( fn () => $this->manager->deactivate( 'valid-plugin' ) )
+                ->toThrow( RuntimeException::class, 'Deactivation vetoed.' );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->value( 'is_active' ) )->toBeTruthy()
+                ->and( $this->resetter->resets )->toBe( 0 )
+                ->and( $artisan->calls )->toBe( [] );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.deactivating', $listener );
+        }
+    } );
+} );
+
+describe( 'installing a plugin', function (): void {
+    it( 'refreshes after installing from disk', function (): void {
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        $artisan = ( $this->swapArtisan )();
+
+        $this->manager->installFromDisk( 'valid-plugin' );
+
+        expect( $this->resetter->resets )->toBe( 1 )
+            ->and( $artisan->calls )->toBe( ['queue:restart'] )
+            ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+    } );
+
+    it( 'refreshes once for a sync that installs several plugins', function (): void {
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $this->pluginsPath . '/object-author-plugin' );
+        $artisan = ( $this->swapArtisan )();
+
+        $results = $this->manager->syncFromDisk();
+
+        expect( array_column( $results, 'status', 'slug' ) )->toMatchArray( [
+            'valid-plugin'         => 'installed',
+            'object-author-plugin' => 'installed',
+        ] )
+            ->and( $this->resetter->resets )->toBe( 1 )
+            ->and( array_count_values( $artisan->calls )['queue:restart'] )->toBe( 1 );
+    } );
+
+    it( 'still refreshes, then rethrows, when a failure escapes the sync', function (): void {
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        File::copyDirectory( $this->testPluginsPath . '/object-author-plugin', $this->pluginsPath . '/object-author-plugin' );
+        $artisan = ( $this->swapArtisan )();
+
+        // Not one of the exceptions the sync turns into a `failed` row.
+        $listener = function ( string $slug ): void {
+            if ( 'valid-plugin' === $slug ) {
+                throw new RuntimeException( 'Listener exploded.' );
+            }
+        };
+        addAction( 'ap.cmsFramework.plugin.installing', $listener );
+
+        try {
+            expect( fn () => $this->manager->syncFromDisk() )
+                ->toThrow( RuntimeException::class, 'Listener exploded.' );
+
+            expect( $this->resetter->resets )->toBe( 1 )
+                ->and( $artisan->calls )->toBe( ['queue:restart'] )
+                ->and( $this->manager->opcacheResetMethod() )->toBe( 'fastcgi' );
+        } finally {
+            removeAction( 'ap.cmsFramework.plugin.installing', $listener );
+        }
+    } );
+
+    it( 'does not refresh for a sync that changed nothing', function (): void {
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        $this->manager->syncFromDisk();
+        $this->resetter->resets = 0;
+        $artisan                = ( $this->swapArtisan )();
+
+        $results = $this->manager->syncFromDisk();
+
+        expect( array_unique( array_column( $results, 'status' ) ) )->toBe( ['unchanged'] )
+            ->and( $this->resetter->resets )->toBe( 0 )
+            ->and( $artisan->calls )->toBe( [] );
+    } );
+} );

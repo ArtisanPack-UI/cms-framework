@@ -3,14 +3,23 @@
 declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
+use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
+use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
 
 beforeEach( function (): void {
+    // A CLI update resets PHP-FPM's OPcache (#450); never reach for a real one.
+    app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
+
     $this->admin      = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->tmpPath    = storage_path( 'app/theme-update-api-tmp' );
     $this->testSlugs  = [];
 
@@ -184,9 +193,40 @@ describe( 'POST /v1/themes/{slug}/update', function (): void {
 
         $response->assertOk()
             ->assertJsonPath( 'updated', true )
-            ->assertJsonPath( 'theme.version', '2.0.0' );
+            ->assertJsonPath( 'theme.version', '2.0.0' )
+            ->assertJsonPath( 'opcache_reset_method', 'fastcgi' )
+            ->assertJsonPath( 'php_reload_required', false )
+            ->assertJsonMissingPath( 'warning' );
 
         expect( File::get( $this->themesPath . '/api-update-theme/index.blade.php' ) )->toBe( 'new' );
+    } );
+
+    it( 'tells the admin to reload PHP-FPM when no OPcache reset reached it (#450)', function (): void {
+        $this->actingAs( $this->admin );
+        app( WebOpcacheResetter::class )->method = null;
+
+        installApiTestTheme( $this->themesPath, 'api-reload-theme', [
+            'slug'    => 'api-reload-theme',
+            'name'    => 'API Reload Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs );
+
+        $zipPath = buildApiThemeUpdateZip( $this->tmpPath, 'api-reload-theme', [
+            'slug'    => 'api-reload-theme',
+            'name'    => 'API Reload Theme',
+            'version' => '2.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ] );
+
+        fakeApiThemeRelease( 'api-reload-theme', 'v2.0.0', $zipPath );
+
+        $this->postJson( '/v1/themes/api-reload-theme/update' )
+            ->assertOk()
+            ->assertJsonPath( 'updated', true )
+            ->assertJsonPath( 'opcache_reset_method', null )
+            ->assertJsonPath( 'php_reload_required', true )
+            ->assertJsonPath( 'warning', 'The theme was updated, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the new version.' );
     } );
 
     it( 'reports no-op when the theme is already current', function (): void {
@@ -203,7 +243,9 @@ describe( 'POST /v1/themes/{slug}/update', function (): void {
 
         $response = $this->postJson( '/v1/themes/api-current-theme/update' );
 
-        $response->assertOk()->assertJsonPath( 'updated', false );
+        $response->assertOk()
+            ->assertJsonPath( 'updated', false )
+            ->assertJsonMissingPath( 'php_reload_required' );
     } );
 
     it( 'returns a 422 errors bag keyed by slug for a theme that is not installed', function (): void {
@@ -236,11 +278,59 @@ describe( 'POST /v1/themes/{slug}/update', function (): void {
 
         fakeApiThemeRelease( 'api-broken-theme', 'v2.0.0', $zipPath );
 
+        // Nothing was swapped, so there is no rollback to report on (#454),
+        // even on a host where no OPcache reset would reach PHP-FPM.
+        app( WebOpcacheResetter::class )->method = null;
+
         $response = $this->postJson( '/v1/themes/api-broken-theme/update' );
 
-        $response->assertStatus( 422 )->assertJsonValidationErrors( ['slug'] );
+        $response->assertStatus( 422 )
+            ->assertJsonValidationErrors( ['slug'] )
+            ->assertJsonMissingValidationErrors( ['php_reload_required'] );
 
         expect( File::get( $this->themesPath . '/api-broken-theme/index.blade.php' ) )->toBe( 'original' );
+    } );
+
+    it( 'tells the admin to reload PHP-FPM when a rolled-back update could not reset OPcache (#454)', function (): void {
+        $this->actingAs( $this->admin );
+        app( WebOpcacheResetter::class )->method = null;
+
+        installApiTestTheme( $this->themesPath, 'api-rollback-theme', [
+            'slug'    => 'api-rollback-theme',
+            'name'    => 'API Rollback Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs, ['index.blade.php' => 'original'] );
+
+        $zipPath = buildApiThemeUpdateZip( $this->tmpPath, 'api-rollback-theme', [
+            'slug'    => 'api-rollback-theme',
+            'name'    => 'API Rollback Theme',
+            'version' => '2.0.0',
+        ], ['index.blade.php' => 'replacement'] );
+
+        fakeApiThemeRelease( 'api-rollback-theme', 'v2.0.0', $zipPath );
+
+        // A swap that disturbs the live directory and then fails, so the
+        // backup is restored.
+        app()->instance( UpdateManager::class, new UpdateManager(
+            new class( app( SettingsManager::class ), app( WpThemeJsonValidator::class ) ) extends ThemeManager {
+                public function swapStagedTheme( string $slug, string $stagedThemePath ): void
+                {
+                    File::deleteDirectory( $this->getThemesPath() . '/' . $slug );
+
+                    throw new RuntimeException( 'Swap died halfway.' );
+                }
+            },
+        ) );
+
+        $this->postJson( '/v1/themes/api-rollback-theme/update' )
+            ->assertStatus( 422 )
+            ->assertJsonValidationErrors( [
+                'slug'                => 'Swap died halfway.',
+                'php_reload_required' => 'The update was rolled back, but PHP-FPM\'s OPcache could not be reset. Reload PHP-FPM so the site runs the restored version.',
+            ] );
+
+        expect( File::get( $this->themesPath . '/api-rollback-theme/index.blade.php' ) )->toBe( 'original' );
     } );
 
     it( 'requires authentication', function (): void {

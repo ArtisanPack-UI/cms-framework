@@ -4,6 +4,7 @@ declare( strict_types=1 );
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Settings\Managers\SettingsManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeNotFoundException;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeUpdateException;
@@ -11,15 +12,21 @@ use ArtisanPackUI\CMSFramework\Modules\Themes\Exceptions\ThemeValidationExceptio
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Themes\Validation\WpThemeJsonValidator;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 
 beforeEach( function (): void {
+    // A CLI update resets PHP-FPM's OPcache (#450); never reach for a real one.
+    app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
+
     $this->themeManager  = app( ThemeManager::class );
     $this->updateManager = new UpdateManager( $this->themeManager );
 
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->tmpPath    = storage_path( 'app/theme-update-tmp' );
     $this->testSlugs  = [];
 
@@ -842,6 +849,24 @@ describe( 'Theme Updating', function (): void {
             ->and( json_decode( File::get( $themePath . '/theme.json' ), true )['version'] )->toBe( '1.0.0' );
     } );
 
+    it( 'gives each backup of the same version its own archive, even within the same second', function (): void {
+        $slug = 'twin-backup-theme';
+        installTestTheme( $this->themesPath, $slug, [
+            'slug'    => $slug,
+            'name'    => 'Twin Backup Theme',
+            'version' => '1.0.0',
+        ], $this->testSlugs, ['index.blade.php' => 'original'] );
+
+        // The name used to end in `time()` alone, so two backups in the same
+        // second overwrote each other (#460).
+        $first  = invokeMethod( $this->updateManager, 'backupTheme', [$slug, '1.0.0'] );
+        $second = invokeMethod( $this->updateManager, 'backupTheme', [$slug, '1.0.0'] );
+
+        expect( $first )->not->toBe( $second )
+            ->and( File::exists( $first ) )->toBeTrue()
+            ->and( File::exists( $second ) )->toBeTrue();
+    } );
+
     it( 'restores from backup and deletes files the update added when the swap is undone', function (): void {
         $slug      = 'rollback-theme';
         $themePath = installTestTheme( $this->themesPath, $slug, [
@@ -1056,5 +1081,163 @@ describe( 'cms:themes:check-updates command', function (): void {
             ->expectsOutputToContain( 'Failed to check a-failing-theme' )
             ->expectsOutputToContain( 'b-working-theme' )
             ->assertExitCode( 1 );
+    } );
+} );
+
+describe( 'Making the update live on production hosts (#450)', function (): void {
+    beforeEach( function (): void {
+        config()->set( 'cms.updates.allow_unverified_updates', true );
+
+        $this->routeCache = app()->getCachedRoutesPath();
+        $this->hadRoutes  = is_file( $this->routeCache );
+
+        installTestTheme( $this->themesPath, 'prod-theme', [
+            'slug'    => 'prod-theme',
+            'name'    => 'Prod Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs );
+
+        $this->zipPath = buildThemeUpdateZip( $this->tmpPath, 'prod-theme', [
+            'slug'    => 'prod-theme',
+            'name'    => 'Prod Theme',
+            'version' => '2.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ] );
+
+        fakeThemeRelease( 'prod-theme', 'v2.0.0', $this->zipPath );
+    } );
+
+    afterEach( function (): void {
+        if ( ! $this->hadRoutes && is_file( $this->routeCache ) ) {
+            File::delete( $this->routeCache );
+        }
+    } );
+
+    it( 'rebuilds a route cache the site had, in a fresh process', function (): void {
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+
+        expect( $this->updateManager->updateTheme( 'prod-theme' ) )->toBeTrue();
+
+        Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+            && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+    } );
+
+    it( 'resets the web server\'s OPcache, reports how, and signals the queue workers', function (): void {
+        $resetter = app( WebOpcacheResetter::class );
+
+        expect( $this->updateManager->updateTheme( 'prod-theme' ) )->toBeTrue()
+            ->and( $resetter->resets )->toBe( 1 )
+            ->and( $this->updateManager->opcacheResetMethod() )->toBe( 'fastcgi' )
+            ->and( $this->updateManager->phpReloadRequired() )->toBeFalse()
+            ->and( Cache::get( 'illuminate:queue:restart' ) )->not->toBeNull();
+    } );
+
+    it( 'resets OPcache before the updated hook runs', function (): void {
+        $resetter = app( WebOpcacheResetter::class );
+        $seen     = null;
+
+        addAction( 'ap.cmsFramework.theme.updated', function () use ( $resetter, &$seen ): void {
+            $seen = $resetter->resets;
+        } );
+
+        $this->updateManager->updateTheme( 'prod-theme' );
+
+        expect( $seen )->toBe( 1 );
+    } );
+
+    it( 'flags a PHP-FPM reload when no OPcache reset reaches the web server', function (): void {
+        app( WebOpcacheResetter::class )->method = null;
+
+        expect( $this->updateManager->updateTheme( 'prod-theme' ) )->toBeTrue()
+            ->and( $this->updateManager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->updateManager->phpReloadRequired() )->toBeTrue();
+    } );
+
+    it( 'does not reset OPcache when the update fails', function (): void {
+        $resetter = app( WebOpcacheResetter::class );
+
+        addAction( 'ap.cmsFramework.theme.updating', function (): void {
+            throw new RuntimeException( 'Vetoed.' );
+        } );
+
+        expect( fn () => $this->updateManager->updateTheme( 'prod-theme' ) )->toThrow( RuntimeException::class );
+        expect( $resetter->resets )->toBe( 0 )
+            ->and( $this->updateManager->phpReloadRequired() )->toBeFalse();
+    } );
+} );
+
+describe( 'Making a rolled-back update\'s restored files live (#454)', function (): void {
+    beforeEach( function (): void {
+        config()->set( 'cms.updates.allow_unverified_updates', true );
+
+        $this->routeCache = app()->getCachedRoutesPath();
+        $this->hadRoutes  = is_file( $this->routeCache );
+
+        installTestTheme( $this->themesPath, 'rollback-prod-theme', [
+            'slug'    => 'rollback-prod-theme',
+            'name'    => 'Rollback Prod Theme',
+            'version' => '1.0.0',
+            'update'  => ['github' => 'owner/repo'],
+        ], $this->testSlugs, ['index.blade.php' => 'original'] );
+
+        $this->zipPath = buildThemeUpdateZip( $this->tmpPath, 'rollback-prod-theme', [
+            'slug'    => 'rollback-prod-theme',
+            'name'    => 'Rollback Prod Theme',
+            'version' => '2.0.0',
+        ], ['index.blade.php' => 'replacement'] );
+
+        fakeThemeRelease( 'rollback-prod-theme', 'v2.0.0', $this->zipPath );
+
+        // A swap that disturbs the live directory and then fails, so the
+        // backup has to be restored.
+        $this->failingUpdateManager = new UpdateManager(
+            new class( app( SettingsManager::class ), app( WpThemeJsonValidator::class ) ) extends ThemeManager {
+                public function swapStagedTheme( string $slug, string $stagedThemePath ): void
+                {
+                    File::deleteDirectory( $this->getThemesPath() . '/' . $slug );
+
+                    throw new RuntimeException( 'Swap died halfway.' );
+                }
+            },
+        );
+    } );
+
+    afterEach( function (): void {
+        if ( ! $this->hadRoutes && is_file( $this->routeCache ) ) {
+            File::delete( $this->routeCache );
+        }
+    } );
+
+    it( 'rebuilds the caches, resets OPcache and signals the queue workers after restoring the backup', function (): void {
+        $resetter = app( WebOpcacheResetter::class );
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+        Cache::forget( 'illuminate:queue:restart' );
+
+        expect( fn () => $this->failingUpdateManager->updateTheme( 'rollback-prod-theme' ) )
+            ->toThrow( ThemeUpdateException::class, 'Swap died halfway.' );
+
+        expect( File::get( $this->themesPath . '/rollback-prod-theme/index.blade.php' ) )->toBe( 'original' )
+            ->and( $resetter->resets )->toBe( 1 )
+            ->and( $this->failingUpdateManager->opcacheResetMethod() )->toBe( 'fastcgi' )
+            ->and( $this->failingUpdateManager->phpReloadRequired() )->toBeFalse()
+            ->and( Cache::get( 'illuminate:queue:restart' ) )->not->toBeNull();
+
+        Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+            && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+    } );
+
+    it( 'flags a PHP-FPM reload when the rollback\'s OPcache reset reaches no web server', function (): void {
+        app( WebOpcacheResetter::class )->method = null;
+
+        expect( fn () => $this->failingUpdateManager->updateTheme( 'rollback-prod-theme' ) )
+            ->toThrow( ThemeUpdateException::class );
+
+        expect( $this->failingUpdateManager->opcacheResetMethod() )->toBeNull()
+            ->and( $this->failingUpdateManager->phpReloadRequired() )->toBeTrue();
     } );
 } );

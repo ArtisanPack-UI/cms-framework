@@ -30,6 +30,12 @@
             nikic/php-parser instead of producing a report.
         -->
         <ini name="memory_limit" value="512M"/>
+        <!--
+            Hosts' test suites skip the web-server OPcache reset (#456). This
+            suite tests that reset, with every mechanism stubbed or faked, so
+            it opts back in. Tests that cover the skip unset it.
+        -->
+        <env name="CMS_UPDATES_OPCACHE_WEB_RESET" value="true"/>
     </php>
     <source>
         <include>

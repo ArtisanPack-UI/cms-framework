@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\View;
 
 beforeEach( function (): void {
     $this->manager    = app( ThemeManager::class );
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->testSlugs  = [];
 
     File::ensureDirectoryExists( $this->themesPath );

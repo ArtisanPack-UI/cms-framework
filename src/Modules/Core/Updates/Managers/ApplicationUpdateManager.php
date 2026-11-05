@@ -4,7 +4,10 @@ declare( strict_types=1 );
 
 namespace ArtisanPackUI\CMSFramework\Modules\Core\Updates\Managers;
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RebuildsCompiledCaches;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResetsWebOpcache;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RestartsQueueWorkers;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateRunStatus;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateStep;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
@@ -38,7 +41,10 @@ use ZipArchive;
  */
 class ApplicationUpdateManager
 {
+    use RebuildsCompiledCaches;
+    use ResetsWebOpcache;
     use ResolvesCliPhpBinary;
+    use RestartsQueueWorkers;
 
     /**
      * Default composer install command shipped with the framework. Used as the
@@ -148,16 +154,6 @@ class ApplicationUpdateManager
      * @since 2.16.0
      */
     protected ?string $opcacheResetMethod = null;
-
-    /**
-     * Why each web OPcache reset mechanism failed on the last attempt, keyed
-     * by mechanism, for the warning logged when none worked.
-     *
-     * @since 2.16.0
-     *
-     * @var array<string, string>
-     */
-    protected array $webOpcacheResetFailures = [];
 
     /**
      * Whether the shutdown guard has already been registered, so repeated
@@ -736,6 +732,11 @@ class ApplicationUpdateManager
         // The restore rewrote PHP files the web server may hold compiled
         // bytecode for, the update's own included (#425).
         $this->resetOpcache();
+
+        // A queue worker can hold classes it loaded from the failed release,
+        // above all the one that ran `PerformUpdateJob`, so stop them running
+        // it now the snapshot is back (#457).
+        $this->restartQueueWorkers( 'rolling back the update' );
     }
 
     /**
@@ -842,7 +843,12 @@ class ApplicationUpdateManager
     /**
      * Run the ten update steps under an already-held update lock.
      *
+     * Once every file is final, the compiled caches the site had are rebuilt,
+     * the web server's OPcache is reset and the queue workers are signalled
+     * to restart, before maintenance mode is lifted.
+     *
      * @since 2.7.1
+     * @since 2.18.0 Signals the queue workers to restart after the update.
      *
      * @param  string  $targetVersion  Version being installed.
      * @param  UpdateInfo  $updateInfo  Resolved update metadata.
@@ -926,6 +932,11 @@ class ApplicationUpdateManager
             // Last, once every file on disk is final, so the web server stops
             // running bytecode compiled from the pre-update tree (#425).
             $this->resetOpcache();
+
+            // Queue workers hold the pre-update framework classes in memory,
+            // the one running this update's job included, so signal them to
+            // restart on the new code, as plugin and theme updates do (#452).
+            $this->restartQueueWorkers( 'the update' );
 
             // Step 10: Disable maintenance mode
             $this->beginStep( UpdateStep::DisableMaintenanceMode );
@@ -1272,32 +1283,6 @@ class ApplicationUpdateManager
         }
 
         return false;
-    }
-
-    /**
-     * Strip control characters from an attacker-controlled value before it
-     * reaches a log record.
-     *
-     * Entry names come from the archive. They already go into the log
-     * *context* array rather than being interpolated into the message, which
-     * is the important half — but a name carrying newlines or terminal escape
-     * sequences can still corrupt a plain-text log or a console tailing it.
-     *
-     * @since 2.7.1
-     *
-     * @param  string  $value  Untrusted value.
-     *
-     * @return string Value with control characters removed and length bounded.
-     */
-    protected function sanitizeForLog( string $value ): string
-    {
-        $clean = preg_replace( '/[\x00-\x1F\x7F]/u', '', $value );
-
-        if ( ! is_string( $clean ) ) {
-            $clean = preg_replace( '/[\x00-\x1F\x7F]/', '', $value ) ?? '';
-        }
-
-        return mb_strimwidth( $clean, 0, 512, '…' );
     }
 
     /**
@@ -2687,84 +2672,6 @@ class ApplicationUpdateManager
     }
 
     /**
-     * The `artisan` commands that rebuild the compiled caches the site has in
-     * place right now, in the order they should run.
-     *
-     * Read before `clearCaches()` drops them, so the update puts back exactly
-     * what the operator had cached, and nothing they had not. The files are
-     * checked directly because `configurationIsCached()` and its siblings
-     * memoise their answer for the life of the process, which on a
-     * long-running queue worker can predate the operator's last `optimize`.
-     *
-     * @since 2.15.6
-     *
-     * @return array<int, string> Cache commands, e.g. `config:cache`.
-     */
-    protected function cachedArtifacts(): array
-    {
-        $app      = app();
-        $commands = [];
-
-        if ( is_file( $app->getCachedConfigPath() ) ) {
-            $commands[] = 'config:cache';
-        }
-
-        if ( is_file( $app->getCachedRoutesPath() ) ) {
-            $commands[] = 'route:cache';
-        }
-
-        if ( is_file( $app->getCachedEventsPath() ) ) {
-            $commands[] = 'event:cache';
-        }
-
-        return $commands;
-    }
-
-    /**
-     * Rebuild the compiled caches that were in place before the update (#425).
-     *
-     * Each command runs in a fresh PHP process rather than through
-     * `Artisan::call()`. This process still holds the pre-update classes in
-     * memory, so a cache compiled here could describe providers and routes
-     * that no longer match the code on disk. A route cache naming a middleware
-     * alias the stale provider never registered is the 500 #425 reports.
-     *
-     * Best-effort by design: the update is already applied, and a missing
-     * cache only costs performance until the operator rebuilds it, so a
-     * failure is logged rather than thrown.
-     *
-     * @since 2.15.6
-     *
-     * @param  array<int, string>  $commands  Cache commands from `cachedArtifacts()`.
-     */
-    protected function rebuildCaches( array $commands ): void
-    {
-        foreach ( $commands as $command ) {
-            try {
-                $result = Process::timeout( 120 )
-                    ->path( base_path() )
-                    ->run( [$this->resolvePhpBinary(), 'artisan', $command] );
-
-                if ( $result->successful() ) {
-                    continue;
-                }
-
-                $error = '' !== trim( $result->errorOutput() ) ? $result->errorOutput() : $result->output();
-            } catch ( Throwable $e ) {
-                $error = $e->getMessage();
-            }
-
-            Log::warning(
-                "cms-framework: could not rebuild a compiled cache after the update. Run `php artisan {$command}` on the host.",
-                [
-                    'command' => $command,
-                    'error'   => $this->sanitizeForLog( trim( $error ) ),
-                ],
-            );
-        }
-    }
-
-    /**
      * Reset OPcache so the web server stops running bytecode compiled from the
      * pre-update tree (#425, #429).
      *
@@ -2784,18 +2691,16 @@ class ApplicationUpdateManager
      */
     protected function resetOpcache(): void
     {
-        $reset = $this->attemptOpcacheReset();
-
-        if ( $this->runningUnderCli() ) {
-            $method = $this->resetWebOpcache();
-        } else {
-            $method = false === $reset ? null : 'web-request';
-        }
+        $method = $this->resetOpcacheForWebServer();
 
         $this->opcacheResetMethod = $method;
-        $this->phpReloadRequired  = null === $method;
+        $this->phpReloadRequired  = null === $method && ! $this->webOpcacheResetWasSkipped();
 
-        $this->state()->recordOpcacheReset( $method );
+        $this->state()->recordOpcacheReset( $method, $this->phpReloadRequired );
+
+        if ( $this->webOpcacheResetWasSkipped() ) {
+            return;
+        }
 
         if ( null !== $method ) {
             if ( $this->runningUnderCli() ) {
@@ -2816,68 +2721,6 @@ class ApplicationUpdateManager
         } else {
             Log::warning( 'cms-framework: OPcache could not be reset after the update (check `opcache.restrict_api`). Reload PHP-FPM so it serves the updated code.' );
         }
-    }
-
-    /**
-     * Reset this process's OPcache.
-     *
-     * @since 2.15.6
-     *
-     * @return bool|null True when reset, false when the reset failed, null
-     *                   when OPcache is not enabled for this SAPI.
-     */
-    protected function attemptOpcacheReset(): ?bool
-    {
-        return WebOpcacheResetter::resetThisProcess( $this->runningUnderCli() );
-    }
-
-    /**
-     * Reset the web server's OPcache from a CLI or queued run (#429).
-     *
-     * Tries FastCGI to the FPM socket, then the signed loopback route, then
-     * the operator's `cms.updates.php_reload_command`. Why each one failed is
-     * kept in {@see $webOpcacheResetFailures} for the warning.
-     *
-     * @since 2.16.0
-     *
-     * @return string|null The mechanism that worked, or null when none did.
-     */
-    protected function resetWebOpcache(): ?string
-    {
-        $resetter = app( WebOpcacheResetter::class );
-        $method   = $resetter->reset();
-
-        $this->webOpcacheResetFailures = array_map(
-            fn ( string $reason ): string => $this->sanitizeForLog( $reason ),
-            $resetter->failures(),
-        );
-
-        return $method;
-    }
-
-    /**
-     * Whether this process runs under a CLI SAPI, whose OPcache is not shared
-     * with the web server.
-     *
-     * @since 2.15.6
-     *
-     * @return bool True for the CLI and phpdbg SAPIs.
-     */
-    protected function runningUnderCli(): bool
-    {
-        return in_array( $this->phpSapi(), ['cli', 'phpdbg'], true );
-    }
-
-    /**
-     * The SAPI this process runs under.
-     *
-     * @since 2.15.6
-     *
-     * @return string The PHP SAPI name.
-     */
-    protected function phpSapi(): string
-    {
-        return PHP_SAPI;
     }
 
     /**
@@ -3923,8 +3766,10 @@ class ApplicationUpdateManager
             $this->clearCompiledCachesAfterFailure();
 
             // The new code is on disk, so the web server must stop running the
-            // pre-update bytecode before the site comes back up (#425).
+            // pre-update bytecode before the site comes back up (#425), and
+            // the queue workers must stop running the old classes (#452).
             $this->resetOpcache();
+            $this->restartQueueWorkers( 'the update' );
 
             // The code and schema are already in place, so the site can serve
             // the new version. Bring it back up (best-effort, as before).
@@ -3984,6 +3829,12 @@ class ApplicationUpdateManager
                 // service cache (#308).
                 $this->clearCompiledCachesAfterFailure();
 
+                // `rollback()` already signalled the queue workers, but
+                // `optimize:clear` above runs `cache:clear`, which can flush
+                // the `queue:restart` signal from the default cache before a
+                // worker reads it. Signal again now the cache is final (#457).
+                $this->restartQueueWorkers( 'rolling back the update' );
+
                 $this->state()->markRollback( true );
             } catch ( Throwable $e ) {
                 // Rollback failed - this is critical. Preserve the original
@@ -4024,8 +3875,10 @@ class ApplicationUpdateManager
         $this->clearCompiledCachesAfterFailure();
 
         // Whatever the tree now holds, it is not what the web server compiled
-        // before the update started (#425).
+        // before the update started (#425), nor what a queue worker that
+        // loaded classes mid-update holds (#457).
         $this->resetOpcache();
+        $this->restartQueueWorkers( 'the failed update' );
 
         $this->state()->markRollback( null );
 

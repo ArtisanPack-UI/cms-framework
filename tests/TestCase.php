@@ -12,12 +12,15 @@ namespace ArtisanPackUI\CMSFramework\Tests;
 
 use ArtisanPackUI\Ai\AiServiceProvider;
 use ArtisanPackUI\CMSFramework\CMSFrameworkServiceProvider;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Tests\Support\TestUser;
 use ArtisanPackUI\Hooks\Providers\HooksServiceProvider;
 use ArtisanPackUI\Rbac\RbacServiceProvider;
 use ArtisanPackUI\Security\SecurityServiceProvider;
 use Dedoc\Scramble\ScrambleServiceProvider;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\ParallelTesting;
 use Laravel\Sanctum\SanctumServiceProvider;
 
 /**
@@ -30,6 +33,11 @@ class TestCase extends \Orchestra\Testbench\TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Plugin and theme installs, activations and updates reset PHP-FPM's
+        // OPcache from the CLI (#438, #450, #453). Never reach for a real FPM
+        // socket or the loopback route from a test.
+        $this->app->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
 
         // Load the package's migrations (includes users, roles, permissions, settings, etc.)
         $this->loadMigrationsFrom( __DIR__ . '/../database/migrations' );
@@ -84,5 +92,17 @@ class TestCase extends \Orchestra\Testbench\TestCase
             'database' => ':memory:',
             'prefix'   => '',
         ] );
+
+        // 3. Under `pest --parallel`, give each process its own plugins and
+        //    themes directories. They live under Testbench's shared skeleton,
+        //    so otherwise one process's cleanup deletes the fixtures another
+        //    is using (#458). Tests build paths with testPluginsDirectory()
+        //    and testThemesDirectory().
+        $token = ParallelTesting::token();
+
+        if ( is_string( $token ) && '' !== $token ) {
+            $app['config']->set( 'cms.plugins.directory', "plugins-test-{$token}" );
+            $app['config']->set( 'cms.themes.directory', "themes-test-{$token}" );
+        }
     }
 }

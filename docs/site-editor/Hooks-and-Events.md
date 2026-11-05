@@ -124,9 +124,19 @@ The filter runs in two places:
 
 | Action | Arguments | Since | Purpose |
 |---|---|---|---|
-| `ap.cmsFramework.siteEditor.reverted` | `(string $type, ?string $slug, string $theme)` | 2.16.0 | Fires after a revert deletes a DB override for the active theme. `$type` is `template`, `template-part`, `global-styles` or `menu-location`. `$slug` is the template or part slug, or the menu location key; it is `null` for `global-styles`, which has one row per theme. `$theme` is the theme slug the row belonged to. |
+| `ap.cmsFramework.siteEditor.reverted` | `(string $type, ?string $slug, string $theme)` | 2.16.0 | Fires after a revert deletes a DB override. `$type` is `template`, `template-part`, `global-styles` or `menu-location`. `$slug` is the template or part slug, or the menu location key; it is `null` for `global-styles`, which has one row per theme. `$theme` is the theme slug the row belonged to, which isn't always the active theme. |
 
-The action fires from `TemplateResolver::revert()`, `TemplatePartResolver::revert()`, `GlobalStylesResolver::revert()` and `Menus::unassign()` (which `MenuResolver::revert()` calls), so it covers the `DELETE` API endpoints as well as reverts from console commands, jobs and direct calls. It fires only when a row was actually deleted. Nothing fires when there was no override to revert, or when a `deleting` listener cancels the delete by returning `false`; in both cases the method returns `false`.
+The action fires from two places:
+
+- **cms-framework.** `TemplateResolver::revert()`, `TemplatePartResolver::revert()`, `GlobalStylesResolver::revert()` and `Menus::unassign()` (which `MenuResolver::revert()` calls), so it covers cms-framework's `DELETE` API endpoints as well as reverts from console commands, jobs and direct calls. These always revert the active theme's override.
+- **visual-editor.** Since visual-editor 1.20.0, `TemplateController::destroy()` and `TemplatePartController::destroy()` fire it for `DELETE /visual-editor/api/templates/{slug}` and `DELETE /visual-editor/api/template-parts/{slug}`, with a `$type` of `template` or `template-part`. These endpoints don't call the resolvers, and they can revert an override for a theme that isn't active, by numeric id or with `?theme=`.
+
+It fires only when a row was actually deleted. Nothing fires when there was no override to revert, or when a `deleting` listener cancels the delete by returning `false`. In both cases the cms-framework methods return `false`, and visual-editor responds with a 404 or a 409.
+
+Listeners should follow two rules:
+
+- **Use the `$theme` argument.** Don't assume the revert was for the active theme, or look the active theme up in the listener.
+- **Don't treat `$slug` or `$theme` as safe.** visual-editor passes the values from the deleted row, so they haven't been through `SlugValidator`. Validate them before using them in something like a filesystem path.
 
 Use it to invalidate caches the same way you do on save:
 

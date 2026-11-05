@@ -2,12 +2,14 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginInstallationException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use Composer\Autoload\ClassLoader;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
@@ -19,6 +21,9 @@ use Illuminate\Support\ServiceProvider;
 beforeEach( function (): void {
     // A fresh install migrates in a subprocess (#431); never spawn a real one.
     Process::fake();
+
+    // A CLI install resets PHP-FPM's OPcache (#438); never reach for a real one.
+    app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
 
     $this->installer = new FakeComposerPackageInstaller;
     app()->instance( ComposerPackageInstallerInterface::class, $this->installer );
@@ -595,7 +600,7 @@ describe( 'Composer-package activation gate', function (): void {
 
 describe( 'Install-time Composer packages (#430)', function (): void {
     beforeEach( function (): void {
-        $this->pluginsPath = base_path( 'plugins' );
+        $this->pluginsPath = testPluginsDirectory();
         $this->zipPaths    = [];
 
         File::ensureDirectoryExists( $this->pluginsPath );

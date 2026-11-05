@@ -240,8 +240,12 @@ class UpdateStateStore
      * @param  string|null  $method  `web-request`, `fastcgi`, `loopback` or
      *                               `command`, or null when no reset reached
      *                               the web server.
+     * @param  bool|null  $reloadRequired  Whether PHP-FPM still needs a reload;
+     *                                     null means only when `$method` is
+     *                                     null. False when the reset was
+     *                                     skipped on purpose (#456).
      */
-    public function recordOpcacheReset( ?string $method ): void
+    public function recordOpcacheReset( ?string $method, ?bool $reloadRequired = null ): void
     {
         if ( null === $this->read() ) {
             return;
@@ -249,7 +253,7 @@ class UpdateStateStore
 
         $this->merge( [
             'opcache_reset_method' => $method,
-            'php_reload_required'  => null === $method,
+            'php_reload_required'  => $reloadRequired ?? null === $method,
         ] );
     }
 

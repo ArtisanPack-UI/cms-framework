@@ -150,11 +150,17 @@ addFilter('ap.cmsFramework.admin.middleware', function (array $middleware) {
 
 `HasContentFilters::applySearchFilter()` — used by both `BlogManager::getArchiveQuery()` and `PageManager::getPageQuery()` — runs the assembled search query through `ap.cmsFramework.search.query` with `(Builder $q, string $term, array $context)` where `$context` carries the calling manager class, the queried model class, and the full filter array. Enough for a subscriber to swap in a full-text index or route to an external search service.
 
+## Query: Custom Taxonomies
+
+> **Added in 2.18.0** ([#439](https://github.com/ArtisanPack-UI/cms-framework/issues/439)).
+
+`QueryRuntime` handles `category`/`post_category` and `post_tag`/`tag` itself. Any other `taxQuery.taxonomy` runs `ap.cmsFramework.query.taxQuery` with `(Builder $query, string $taxonomy, array $terms, string $operator, string $postType)`, so a host can constrain the query against its own term storage. With no listener, the query stays unfiltered. See [Custom taxonomies](blog/Query-Runtime.md#custom-taxonomies).
+
 ## Site Editor: Reverts
 
 > **Added in 2.16.0** ([#423](https://github.com/ArtisanPack-UI/cms-framework/issues/423)).
 
-Reverting a template, template part or global-styles override, or unassigning a menu location, fires `ap.cmsFramework.siteEditor.reverted` with `(string $type, ?string $slug, string $theme)` after the row is deleted. The row is deleted through its model, so `eloquent.deleting` / `eloquent.deleted` fire too. See [Site Editor: Hooks and Events](site-editor/Hooks-and-Events.md#framework-actions).
+Reverting a template, template part or global-styles override, or unassigning a menu location, fires `ap.cmsFramework.siteEditor.reverted` with `(string $type, ?string $slug, string $theme)` after the row is deleted. The row is deleted through its model, so `eloquent.deleting` / `eloquent.deleted` fire too. Since visual-editor 1.20.0, its site-editor `DELETE` endpoints fire the action as well, and they can revert a theme that isn't active, so use `$theme` rather than assuming the active theme. See [Site Editor: Hooks and Events](site-editor/Hooks-and-Events.md#framework-actions).
 
 ## Conventions
 

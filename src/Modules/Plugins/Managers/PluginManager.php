@@ -5,7 +5,7 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\HasManifestParsing;
-use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ResolvesCliPhpBinary;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionChange;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\CircularDependencyException;
@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use ReflectionClass;
 use RuntimeException;
@@ -41,7 +42,7 @@ use ZipArchive;
 class PluginManager
 {
     use HasManifestParsing;
-    use ResolvesCliPhpBinary;
+    use RefreshesRuntimeAfterExtensionChange;
 
     /**
      * Timeout, in seconds, for the fresh-process package migrate (#431).
@@ -174,6 +175,12 @@ class PluginManager
      *    `cms.plugins.autoInstallComposerDependencies` is on (#430)
      * 6. Register in database
      * 7. Fire installation hooks
+     * 8. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers (#453). {@see opcacheResetMethod()}
+     *    and {@see phpReloadRequired()} report how that went.
+     *
+     * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the install.
      *
      * @param  string  $zipPath  Absolute path to uploaded ZIP file
      *
@@ -184,83 +191,11 @@ class PluginManager
      */
     public function installFromZip( string $zipPath ): Plugin
     {
-        $this->validateZip( $zipPath );
-
-        $slug         = $this->extractZip( $zipPath );
-        $manifestPath = $this->getPluginsPath() . '/' . $slug . '/plugin.json';
-        $manifest     = $this->parseManifest( $manifestPath );
-
-        // A ZIP whose `plugin.json` is missing (e.g. nested below the slug root)
-        // or unparseable yields a null manifest. Clean up the extracted directory
-        // and fail with a clear reason instead of tripping validateManifest()'s
-        // `array` type hint and stranding the orphaned files.
-        if ( null === $manifest ) {
-            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
-
-            throw PluginValidationException::invalidManifest(
-                "Plugin ZIP for '{$slug}' is missing a readable plugin.json at its root.",
-            );
-        }
-
-        $this->validateManifest( $manifest );
-
-        // `validateManifest()` already enforced that a non-empty, well-formed
-        // `slug` is present. Now make sure it matches the extracted directory
-        // name. The row's `slug` is derived from the directory while `meta` is
-        // seated verbatim from the manifest, so a divergence lets a plugin
-        // declare — and later, on uninstall, remove — permission rows namespaced
-        // under a different plugin's slug. Mirror the Themes module, which
-        // asserts the same match after extraction.
-        if ( $manifest['slug'] !== $slug ) {
-            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
-
-            throw PluginValidationException::invalidManifest(
-                "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
-            );
-        }
-
-        // Check if already installed
-        if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
-            throw PluginInstallationException::alreadyInstalled( $slug );
-        }
-
-        // Install the plugin's declared Composer packages (#430) before the row
-        // exists, so a plugin whose dependencies cannot be installed is never
-        // listed. Remove the extracted directory on any failure, exactly like the
-        // invalid-manifest paths above, so a retry starts clean: a directory
-        // left behind without a row would make every later upload of this slug
-        // fail `isSlugTaken()`. Anything other than a Composer-dependency
-        // failure (e.g. from seating the new autoload maps) is rethrown as is.
-        try {
-            $this->installComposerDependenciesForManifest( $slug, $manifest );
-        } catch ( ComposerDependencyNotSatisfiedException $e ) {
-            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
-
-            throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
-        } catch ( Throwable $e ) {
-            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
-
-            throw $e;
-        }
-
-        doAction( 'ap.cmsFramework.plugin.installing', $slug );
-
-        // Register in database
-        $plugin = Plugin::create( [
-            'slug'             => $slug,
-            'name'             => $manifest['name'],
-            'version'          => $manifest['version'],
-            'is_active'        => false,
-            'service_provider' => $manifest['service_provider'] ?? null,
-            'meta'             => $manifest,
-            'installed_at'     => now(),
-        ] );
-
-        $this->clearCaches();
-
-        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
-
-        return $plugin;
+        return $this->withRuntimeRefresh(
+            'installing a plugin',
+            [],
+            fn (): Plugin => $this->installPluginFromZip( $zipPath ),
+        );
     }
 
     /**
@@ -283,7 +218,12 @@ class PluginManager
      * the framework did not put it there, and it is often a developer's working
      * copy or part of the host's own repository.
      *
+     * Since 2.18.0 it rebuilds the compiled caches the site had, resets the
+     * web server's OPcache and signals the queue workers afterwards, like the
+     * ZIP path (#453).
+     *
      * @since 2.9.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the install.
      *
      * @param  string  $slug  Plugin slug (validated against the plugins directory).
      *
@@ -295,56 +235,11 @@ class PluginManager
      */
     public function installFromDisk( string $slug ): Plugin
     {
-        $discovered = $this->getPlugin( $slug );
-
-        if ( null === $discovered ) {
-            throw PluginNotFoundException::forSlug( $slug );
-        }
-
-        $manifest = $discovered['manifest'];
-
-        $this->validateManifest( $manifest );
-
-        // Same guard `installFromZip()` applies after extraction: the row's
-        // `slug` is derived from the directory while `meta` is seated verbatim
-        // from the manifest, so a divergence would let a plugin declare — and
-        // later, on uninstall, remove — permission rows namespaced under a
-        // different plugin's slug.
-        if ( $manifest['slug'] !== $slug ) {
-            throw PluginValidationException::invalidManifest(
-                "Manifest slug '{$manifest['slug']}' must match plugin directory slug '{$slug}'.",
-            );
-        }
-
-        if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
-            throw PluginInstallationException::alreadyInstalled( $slug );
-        }
-
-        // Same Composer-package step as `installFromZip()` (#430), minus the
-        // cleanup: the on-disk plugin is left exactly where it was found.
-        try {
-            $this->installComposerDependenciesForManifest( $slug, $manifest );
-        } catch ( ComposerDependencyNotSatisfiedException $e ) {
-            throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
-        }
-
-        doAction( 'ap.cmsFramework.plugin.installing', $slug );
-
-        $plugin = Plugin::create( [
-            'slug'             => $slug,
-            'name'             => $manifest['name'],
-            'version'          => $manifest['version'],
-            'is_active'        => false,
-            'service_provider' => $manifest['service_provider'] ?? null,
-            'meta'             => $manifest,
-            'installed_at'     => now(),
-        ] );
-
-        $this->clearCaches();
-
-        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
-
-        return $plugin;
+        return $this->withRuntimeRefresh(
+            'installing a plugin',
+            ['plugin'     => $slug],
+            fn (): Plugin => $this->installPluginFromDisk( $slug ),
+        );
     }
 
     /**
@@ -359,7 +254,13 @@ class PluginManager
      * deactivated one back on. Idempotent and safe to run repeatedly — the
      * obvious fit for a deploy that ships plugins in the repo.
      *
+     * The runtime is refreshed once for the whole sync (#453), and only when
+     * a plugin was installed, updated or failed part-way, rather than once per
+     * installed plugin. A failure that escapes the sync still refreshes before
+     * it is rethrown, since plugins registered before it must go live too.
+     *
      * @since 2.9.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers once after a sync that changed something.
      *
      * @return array<int,array{slug:string,status:string,message:string}> One
      *              result row per discovered plugin. `status` is one of
@@ -367,35 +268,33 @@ class PluginManager
      */
     public function syncFromDisk(): array
     {
-        $results = [];
+        if ( $this->runtimeRefreshDepth > 0 ) {
+            return $this->syncPluginsFromDisk();
+        }
 
-        foreach ( $this->discoverPlugins() as $discovered ) {
-            $slug     = $discovered['slug'];
-            $manifest = $discovered['manifest'];
+        $cachedArtifacts = $this->cachedArtifacts();
 
-            try {
-                $existing = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
+        $this->resetRuntimeRefreshOutcome();
 
-                if ( null === $existing ) {
-                    $this->installFromDisk( $slug );
+        try {
+            $results = $this->withoutRuntimeRefresh( fn (): array => $this->syncPluginsFromDisk() );
+        } catch ( Throwable $e ) {
+            // Plugins registered before the failure, and any Composer packages
+            // installed for them, still have to go live. Which ones is unknown
+            // here, so refresh fully, then report the original failure.
+            $this->refreshRuntime( 'syncing plugins from disk', [], $cachedArtifacts );
 
-                    $results[] = [
-                        'slug'    => $slug,
-                        'status'  => 'installed',
-                        'message' => 'Registered from disk.',
-                    ];
+            throw $e;
+        }
 
-                    continue;
-                }
+        $changed = array_filter( $results, fn ( array $result ): bool => 'unchanged' !== $result['status'] );
 
-                $results[] = $this->refreshInstalledPlugin( $existing, $manifest );
-            } catch ( PluginValidationException | PluginInstallationException | PluginNotFoundException $e ) {
-                $results[] = [
-                    'slug'    => $slug,
-                    'status'  => 'failed',
-                    'message' => $e->getMessage(),
-                ];
-            }
+        if ( [] !== $changed ) {
+            $this->refreshRuntime(
+                'syncing plugins from disk',
+                ['plugins' => array_column( $changed, 'slug' )],
+                $cachedArtifacts,
+            );
         }
 
         return $results;
@@ -412,6 +311,14 @@ class PluginManager
      * 5. Update database (is_active = true)
      * 6. Run migrations shipped by the plugin's Composer packages (#338, #430)
      * 7. Fire activation hooks
+     * 8. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers (#453), so the plugin's routes,
+     *    classes and listeners are live on a production host.
+     *    {@see opcacheResetMethod()} and {@see phpReloadRequired()} report how
+     *    that went.
+     *
+     * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the activation.
      *
      * @param  string  $slug  Plugin slug
      *
@@ -421,150 +328,11 @@ class PluginManager
      */
     public function activate( string $slug ): bool
     {
-        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
-
-        if ( ! $plugin ) {
-            throw PluginNotFoundException::forSlug( $slug );
-        }
-
-        // Host-version compatibility gate (#183). Runs before any state mutation.
-        $this->assertHostVersionCompatible( $plugin );
-
-        // Plugin dependency + conflict gate (#45). Also runs before any state
-        // mutation so a plugin missing its dependencies never half-activates.
-        $this->assertDependenciesSatisfied( $plugin );
-
-        // Composer-package dependency gate (#323). Resolves — and, when enabled,
-        // installs — the manifest `composer` block, then registers the vendor
-        // PSR-4 prefixes so the classes are autoloadable before the plugin's
-        // service provider boots below. Runs before any state mutation so a
-        // failed resolution fails closed without a half-activated plugin.
-        // Returns true when packages were freshly installed this request, so
-        // the caller can run migrations the packages ship after the plugin's
-        // service provider has booted (and registered them) — see #338.
-        //
-        // Packages installed earlier in this same process — by the update of
-        // an active plugin, just before it reactivates — count as installed
-        // too: their providers are just as absent from this process (#431).
-        $composerPackagesInstalled = $this->ensureComposerDependencies( $plugin )
-            || isset( $this->composerPackagesInstalledThisProcess[ $plugin->slug ] );
-
-        // With auto-install on, the packages are normally installed when the
-        // plugin is installed or updated (#430), so this activation finds them
-        // already satisfied. Their migrations can't run at install time — the
-        // package's service provider, which registers them, only boots once the
-        // plugin is active — so run the idempotent package migrate on every
-        // activation of a plugin that declares packages. With auto-install off
-        // this is exactly the pre-2.16 rule: only after an install, which then
-        // never happens.
-        $runComposerPackageMigrations = $composerPackagesInstalled
-            || ( config( 'cms.plugins.autoInstallComposerDependencies', true )
-                && ! empty( $plugin->required_composer_packages ) );
-
-        doAction( 'ap.cmsFramework.plugin.activating', $slug );
-
-        $priorPsr4              = [];
-        $migrationsAttempted    = false;
-        $serviceProviderStarted = false;
-
-        try {
-            if ( isset( $plugin->meta['autoload'] ) ) {
-                // Snapshot the PSR-4 map BEFORE adding, so rollback can
-                // restore prior paths for shared namespaces instead of
-                // wiping them with setPsr4($ns, []). Registering the
-                // autoloader is an in-memory ClassLoader change, never a DB
-                // write, so it sits outside the transaction.
-                $priorPsr4 = $this->snapshotPsr4( $plugin->meta['autoload']['psr-4'] ?? [] );
-                $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
-            }
-
-            if ( isset( $plugin->meta['migrations_path'] ) ) {
-                // Run migrations OUTSIDE the transaction below. A plugin's
-                // CREATE TABLE implicitly commits the open transaction on
-                // MySQL/MariaDB, so wrapping migrations would leave the
-                // transaction's own commit() with nothing to commit —
-                // throwing "There is no active transaction" after the table
-                // was already created (#333). DDL was never atomic there in
-                // the first place; migration rollback is handled explicitly
-                // in the catch via $migrationsAttempted. Flip the flag BEFORE
-                // the Artisan call so a mid-migration failure still triggers
-                // that rollback.
-                $migrationsAttempted = true;
-                $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
-            }
-
-            // Only the genuinely transactional DB writes stay wrapped: the
-            // permission seed and the is_active flip.
-            DB::transaction( function () use ( $plugin, &$serviceProviderStarted ): void {
-                if ( $plugin->hasServiceProvider() ) {
-                    $provider = app()->register( $plugin->service_provider );
-                    $this->bridgeManifestRegistrations( $provider );
-                    $serviceProviderStarted = true;
-                }
-
-                $this->seedPermissions( $plugin );
-
-                $plugin->is_active = true;
-                $plugin->save();
-            } );
-
-            // Run migrations that Composer packages installed this activation
-            // ship (#338). The plugin's own migrations already ran above at
-            // the --path-scoped step; this catches migrations a just-installed
-            // vendor package registers through its service provider's
-            // `loadMigrationsFrom()`. Runs AFTER the plugin's service provider
-            // is registered above so the package provider — which the plugin
-            // provider typically pulls in — has already announced its
-            // migration paths to the migrator. Idempotent by filename, so
-            // migrations already applied are skipped.
-            //
-            // When the packages were installed by this very activation, their
-            // providers are not registered in this process: the regenerated
-            // package manifest is only read at boot. Migrate in a fresh process
-            // instead, which boots that manifest (#431).
-            if ( $composerPackagesInstalled ) {
-                $this->runComposerPackageMigrationsInFreshProcess( $plugin );
-
-                unset( $this->composerPackagesInstalledThisProcess[ $plugin->slug ] );
-            } elseif ( $runComposerPackageMigrations ) {
-                $this->runComposerPackageMigrations( $plugin );
-            }
-        } catch ( Throwable $e ) {
-            // Roll back any partial activation state (#182).
-            $this->rollbackFailedActivation( $plugin, $priorPsr4, $migrationsAttempted );
-
-            throw $e;
-        }
-
-        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
-            $this->clearFrameworkCaches();
-        }
-
-        $this->clearCaches();
-
-        // Announce the plugin's hooks are online. Fires AFTER the transaction
-        // commits so a rolled-back activation does not leak a `.hookRegistered`
-        // event to subscribers — mirrors the placement of `.activated` below.
-        // The service provider's `register()` / `boot()` is where a plugin
-        // typically calls addAction/addFilter; the manifest's optional `hooks`
-        // field lets plugin authors enumerate what came online for observers,
-        // and an empty array still fires so every activation emits a per-plugin
-        // signal.
-        if ( $serviceProviderStarted ) {
-            $declaredHooks = is_array( $plugin->meta['hooks'] ?? null )
-                ? $plugin->meta['hooks']
-                : [];
-
-            doAction(
-                'ap.cmsFramework.plugin.hookRegistered',
-                $plugin->slug,
-                $declaredHooks,
-            );
-        }
-
-        doAction( 'ap.cmsFramework.plugin.activated', $slug, $plugin );
-
-        return true;
+        return $this->withRuntimeRefresh(
+            'activating a plugin',
+            ['plugin'   => $slug],
+            fn (): bool => $this->activatePlugin( $slug ),
+        );
     }
 
     /**
@@ -575,8 +343,14 @@ class PluginManager
      * 2. Fire deactivation hooks (plugin can cleanup here)
      * 3. Update database (is_active = false)
      * 4. Clear caches
+     * 5. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers (#453), so the plugin's routes
+     *    and listeners are gone on a production host too
      *
      * Note: Does NOT rollback migrations. Plugin handles cleanup via hooks.
+     *
+     * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the deactivation.
      *
      * @param  string  $slug  Plugin slug
      * @param  bool  $force  Skip the active-dependents guard (used by delete())
@@ -588,34 +362,11 @@ class PluginManager
      */
     public function deactivate( string $slug, bool $force = false ): bool
     {
-        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
-
-        if ( ! $plugin ) {
-            throw PluginNotFoundException::forSlug( $slug );
-        }
-
-        // Dependent-plugin guard (#45). Refuse to pull a dependency out from
-        // under still-active plugins unless the caller explicitly forces it.
-        if ( ! $force ) {
-            $activeDependents = $this->activeDependents( $slug );
-            if ( ! empty( $activeDependents ) ) {
-                throw DependencyNotSatisfiedException::hasActiveDependents( $slug, $activeDependents );
-            }
-        }
-
-        doAction( 'ap.cmsFramework.plugin.deactivating', $slug );
-
-        $plugin->is_active = false;
-        $plugin->save();
-
-        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
-            $this->clearFrameworkCaches();
-        }
-        $this->clearCaches();
-
-        doAction( 'ap.cmsFramework.plugin.deactivated', $slug );
-
-        return true;
+        return $this->withRuntimeRefresh(
+            'deactivating a plugin',
+            ['plugin'   => $slug],
+            fn (): bool => $this->deactivatePlugin( $slug, $force ),
+        );
     }
 
     /**
@@ -629,6 +380,12 @@ class PluginManager
      * 5. Remove from database
      * 6. Remove from filesystem (if $deleteFiles = true)
      * 7. Clear caches
+     * 8. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers, once for the whole delete
+     *    including its deactivate (#453)
+     *
+     * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the delete.
      *
      * @param  string  $slug  Plugin slug
      * @param  bool  $deleteFiles  Whether to delete plugin files
@@ -639,71 +396,11 @@ class PluginManager
      */
     public function delete( string $slug, bool $deleteFiles = true ): bool
     {
-        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
-
-        if ( ! $plugin ) {
-            throw PluginNotFoundException::forSlug( $slug );
-        }
-
-        // Deactivate if active. Forced past the dependents guard: deletion is a
-        // deliberate teardown, and blocking it here would leave the plugin
-        // half-removed. Dependents are surfaced by getDependents() for the UI.
-        if ( $plugin->is_active ) {
-            // Record any still-active dependents so an operator can trace a
-            // later failure back to this forced removal.
-            $orphaned = $this->activeDependents( $slug );
-            if ( ! empty( $orphaned ) ) {
-                logger()->warning( "Deleting plugin '{$slug}' leaves active dependents unsatisfied.", [
-                    'dependents' => $orphaned,
-                ] );
-            }
-
-            $this->deactivate( $slug, true );
-        }
-
-        doAction( 'ap.cmsFramework.plugin.deleting', $slug );
-
-        // Plugin-owned uninstall entry point (#358). Runs whether or not the
-        // plugin was active, unlike a `deleting` listener, and before the
-        // migration rollback so it can still read the plugin's own tables.
-        $this->runUninstaller( $plugin );
-
-        // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
-        // accidentally drop plugin-owned data.
-        if ( $plugin->rollback_migrations_on_delete && isset( $plugin->meta['migrations_path'] ) ) {
-            try {
-                $this->resetMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
-            } catch ( Throwable $e ) {
-                logger()->error( "Failed to rollback migrations for plugin: {$slug}", [
-                    'exception' => $e->getMessage(),
-                ] );
-            }
-        }
-
-        // Remove seeded permissions (#182).
-        $this->removeSeededPermissions( $plugin );
-
-        // Remove from database
-        $plugin->delete();
-
-        // Remove from filesystem. Build the path from the trusted database slug,
-        // not the raw route parameter, so a value that only matches a row after
-        // sanitization can never point the delete at an unvalidated path.
-        if ( $deleteFiles ) {
-            $pluginPath = $this->getPluginsPath() . '/' . $plugin->slug;
-            if ( File::exists( $pluginPath ) ) {
-                File::deleteDirectory( $pluginPath );
-            }
-        }
-
-        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
-            $this->clearFrameworkCaches();
-        }
-        $this->clearCaches();
-
-        doAction( 'ap.cmsFramework.plugin.deleted', $slug );
-
-        return true;
+        return $this->withRuntimeRefresh(
+            'deleting a plugin',
+            ['plugin'   => $slug],
+            fn (): bool => $this->deletePlugin( $slug, $deleteFiles ),
+        );
     }
 
     /**
@@ -966,12 +663,514 @@ class PluginManager
         $installed = $this->resolveAndInstallComposerDependencies( $slug, $requirements );
 
         if ( $installed ) {
-            $this->registerComposerPackageAutoloaders();
+            $this->seatInstalledComposerPackages( $slug );
 
             $this->composerPackagesInstalledThisProcess[ $slug ] = true;
         }
 
         return $installed;
+    }
+
+    /**
+     * Install a plugin from a ZIP file, without the runtime refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $zipPath  Absolute path to uploaded ZIP file
+     *
+     * @throws PluginValidationException If ZIP or manifest is invalid
+     * @throws PluginInstallationException If extraction, the Composer-package install, or registration fails
+     *
+     * @return Plugin The installed plugin model
+     */
+    protected function installPluginFromZip( string $zipPath ): Plugin
+    {
+        $this->validateZip( $zipPath );
+
+        $slug         = $this->extractZip( $zipPath );
+        $manifestPath = $this->getPluginsPath() . '/' . $slug . '/plugin.json';
+        $manifest     = $this->parseManifest( $manifestPath );
+
+        // A ZIP whose `plugin.json` is missing (e.g. nested below the slug root)
+        // or unparseable yields a null manifest. Clean up the extracted directory
+        // and fail with a clear reason instead of tripping validateManifest()'s
+        // `array` type hint and stranding the orphaned files.
+        if ( null === $manifest ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw PluginValidationException::invalidManifest(
+                "Plugin ZIP for '{$slug}' is missing a readable plugin.json at its root.",
+            );
+        }
+
+        $this->validateManifest( $manifest );
+
+        // `validateManifest()` already enforced that a non-empty, well-formed
+        // `slug` is present. Now make sure it matches the extracted directory
+        // name. The row's `slug` is derived from the directory while `meta` is
+        // seated verbatim from the manifest, so a divergence lets a plugin
+        // declare — and later, on uninstall, remove — permission rows namespaced
+        // under a different plugin's slug. Mirror the Themes module, which
+        // asserts the same match after extraction.
+        if ( $manifest['slug'] !== $slug ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw PluginValidationException::invalidManifest(
+                "Manifest slug '{$manifest['slug']}' must match extracted directory slug '{$slug}'.",
+            );
+        }
+
+        // Check if already installed
+        if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
+            throw PluginInstallationException::alreadyInstalled( $slug );
+        }
+
+        // Install the plugin's declared Composer packages (#430) before the row
+        // exists, so a plugin whose dependencies cannot be installed is never
+        // listed. Remove the extracted directory on any failure, exactly like the
+        // invalid-manifest paths above, so a retry starts clean: a directory
+        // left behind without a row would make every later upload of this slug
+        // fail `isSlugTaken()`. Anything other than a Composer-dependency
+        // failure (e.g. from seating the new autoload maps) is rethrown as is.
+        try {
+            $this->installComposerDependenciesForManifest( $slug, $manifest );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
+        } catch ( Throwable $e ) {
+            File::deleteDirectory( $this->getPluginsPath() . '/' . $slug );
+
+            throw $e;
+        }
+
+        doAction( 'ap.cmsFramework.plugin.installing', $slug );
+
+        // Register in database
+        $plugin = Plugin::create( [
+            'slug'             => $slug,
+            'name'             => $manifest['name'],
+            'version'          => $manifest['version'],
+            'is_active'        => false,
+            'service_provider' => $manifest['service_provider'] ?? null,
+            'meta'             => $manifest,
+            'installed_at'     => now(),
+        ] );
+
+        $this->notePersistedRuntimeChange();
+
+        $this->clearCaches();
+
+        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
+
+        return $plugin;
+    }
+
+    /**
+     * Install a plugin that already exists on disk, without the runtime
+     * refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  Plugin slug (validated against the plugins directory).
+     *
+     * @throws PluginNotFoundException If no discoverable plugin exists for the slug.
+     * @throws PluginValidationException If the on-disk manifest is invalid.
+     * @throws PluginInstallationException If the plugin is already registered, or its Composer packages cannot be installed.
+     *
+     * @return Plugin The installed plugin model.
+     */
+    protected function installPluginFromDisk( string $slug ): Plugin
+    {
+        $discovered = $this->getPlugin( $slug );
+
+        if ( null === $discovered ) {
+            throw PluginNotFoundException::forSlug( $slug );
+        }
+
+        $manifest = $discovered['manifest'];
+
+        $this->validateManifest( $manifest );
+
+        // Same guard `installFromZip()` applies after extraction: the row's
+        // `slug` is derived from the directory while `meta` is seated verbatim
+        // from the manifest, so a divergence would let a plugin declare — and
+        // later, on uninstall, remove — permission rows namespaced under a
+        // different plugin's slug.
+        if ( $manifest['slug'] !== $slug ) {
+            throw PluginValidationException::invalidManifest(
+                "Manifest slug '{$manifest['slug']}' must match plugin directory slug '{$slug}'.",
+            );
+        }
+
+        if ( Plugin::where( 'slug', sanitizeText( $slug ) )->exists() ) {
+            throw PluginInstallationException::alreadyInstalled( $slug );
+        }
+
+        // Same Composer-package step as `installFromZip()` (#430), minus the
+        // cleanup: the on-disk plugin is left exactly where it was found.
+        try {
+            $this->installComposerDependenciesForManifest( $slug, $manifest );
+        } catch ( ComposerDependencyNotSatisfiedException $e ) {
+            throw PluginInstallationException::composerDependenciesFailed( $slug, $e );
+        }
+
+        doAction( 'ap.cmsFramework.plugin.installing', $slug );
+
+        $plugin = Plugin::create( [
+            'slug'             => $slug,
+            'name'             => $manifest['name'],
+            'version'          => $manifest['version'],
+            'is_active'        => false,
+            'service_provider' => $manifest['service_provider'] ?? null,
+            'meta'             => $manifest,
+            'installed_at'     => now(),
+        ] );
+
+        $this->notePersistedRuntimeChange();
+
+        $this->clearCaches();
+
+        doAction( 'ap.cmsFramework.plugin.installed', $slug, $plugin );
+
+        return $plugin;
+    }
+
+    /**
+     * Register every plugin discovered on disk, without the runtime refresh.
+     *
+     * @since 2.18.0
+     *
+     * @return array<int,array{slug:string,status:string,message:string}> One
+     *              result row per discovered plugin.
+     */
+    protected function syncPluginsFromDisk(): array
+    {
+        $results = [];
+
+        foreach ( $this->discoverPlugins() as $discovered ) {
+            $slug     = $discovered['slug'];
+            $manifest = $discovered['manifest'];
+
+            try {
+                $existing = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
+
+                if ( null === $existing ) {
+                    $this->installFromDisk( $slug );
+
+                    $results[] = [
+                        'slug'    => $slug,
+                        'status'  => 'installed',
+                        'message' => 'Registered from disk.',
+                    ];
+
+                    continue;
+                }
+
+                $results[] = $this->refreshInstalledPlugin( $existing, $manifest );
+            } catch ( PluginValidationException | PluginInstallationException | PluginNotFoundException $e ) {
+                $results[] = [
+                    'slug'    => $slug,
+                    'status'  => 'failed',
+                    'message' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return $results;
+    }
+
+    /**
+     * Activate a plugin, without the runtime refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  Plugin slug
+     *
+     * @throws PluginNotFoundException If plugin doesn't exist
+     *
+     * @return bool True on success
+     */
+    protected function activatePlugin( string $slug ): bool
+    {
+        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
+
+        if ( ! $plugin ) {
+            throw PluginNotFoundException::forSlug( $slug );
+        }
+
+        // Host-version compatibility gate (#183). Runs before any state mutation.
+        $this->assertHostVersionCompatible( $plugin );
+
+        // Plugin dependency + conflict gate (#45). Also runs before any state
+        // mutation so a plugin missing its dependencies never half-activates.
+        $this->assertDependenciesSatisfied( $plugin );
+
+        // Composer-package dependency gate (#323). Resolves — and, when enabled,
+        // installs — the manifest `composer` block, then registers the vendor
+        // PSR-4 prefixes so the classes are autoloadable before the plugin's
+        // service provider boots below. Runs before any state mutation so a
+        // failed resolution fails closed without a half-activated plugin.
+        // Returns true when packages were freshly installed this request, so
+        // the caller can run migrations the packages ship after the plugin's
+        // service provider has booted (and registered them) — see #338.
+        //
+        // Packages installed earlier in this same process — by the update of
+        // an active plugin, just before it reactivates — count as installed
+        // too: their providers are just as absent from this process (#431).
+        $composerPackagesInstalled = $this->ensureComposerDependencies( $plugin )
+            || isset( $this->composerPackagesInstalledThisProcess[ $plugin->slug ] );
+
+        // With auto-install on, the packages are normally installed when the
+        // plugin is installed or updated (#430), so this activation finds them
+        // already satisfied. Their migrations can't run at install time — the
+        // package's service provider, which registers them, only boots once the
+        // plugin is active — so run the idempotent package migrate on every
+        // activation of a plugin that declares packages. With auto-install off
+        // this is exactly the pre-2.16 rule: only after an install, which then
+        // never happens.
+        $runComposerPackageMigrations = $composerPackagesInstalled
+            || ( config( 'cms.plugins.autoInstallComposerDependencies', true )
+                && ! empty( $plugin->required_composer_packages ) );
+
+        doAction( 'ap.cmsFramework.plugin.activating', $slug );
+
+        $priorPsr4              = [];
+        $migrationsAttempted    = false;
+        $serviceProviderStarted = false;
+
+        try {
+            if ( isset( $plugin->meta['autoload'] ) ) {
+                // Snapshot the PSR-4 map BEFORE adding, so rollback can
+                // restore prior paths for shared namespaces instead of
+                // wiping them with setPsr4($ns, []). Registering the
+                // autoloader is an in-memory ClassLoader change, never a DB
+                // write, so it sits outside the transaction.
+                $priorPsr4 = $this->snapshotPsr4( $plugin->meta['autoload']['psr-4'] ?? [] );
+                $this->registerAutoloader( $plugin->slug, $plugin->meta['autoload'] );
+            }
+
+            if ( isset( $plugin->meta['migrations_path'] ) ) {
+                // Run migrations OUTSIDE the transaction below. A plugin's
+                // CREATE TABLE implicitly commits the open transaction on
+                // MySQL/MariaDB, so wrapping migrations would leave the
+                // transaction's own commit() with nothing to commit —
+                // throwing "There is no active transaction" after the table
+                // was already created (#333). DDL was never atomic there in
+                // the first place; migration rollback is handled explicitly
+                // in the catch via $migrationsAttempted. Flip the flag BEFORE
+                // the Artisan call so a mid-migration failure still triggers
+                // that rollback.
+                $migrationsAttempted = true;
+                $this->runMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+            }
+
+            // Only the genuinely transactional DB writes stay wrapped: the
+            // permission seed and the is_active flip.
+            DB::transaction( function () use ( $plugin, &$serviceProviderStarted ): void {
+                if ( $plugin->hasServiceProvider() ) {
+                    $provider = app()->register( $plugin->service_provider );
+                    $this->bridgeManifestRegistrations( $provider );
+                    $serviceProviderStarted = true;
+                }
+
+                $this->seedPermissions( $plugin );
+
+                $plugin->is_active = true;
+                $plugin->save();
+            } );
+
+            // Run migrations that Composer packages installed this activation
+            // ship (#338). The plugin's own migrations already ran above at
+            // the --path-scoped step; this catches migrations a just-installed
+            // vendor package registers through its service provider's
+            // `loadMigrationsFrom()`. Runs AFTER the plugin's service provider
+            // is registered above so the package provider — which the plugin
+            // provider typically pulls in — has already announced its
+            // migration paths to the migrator. Idempotent by filename, so
+            // migrations already applied are skipped.
+            //
+            // When the packages were installed by this very activation, their
+            // providers are not registered in this process: the regenerated
+            // package manifest is only read at boot. Migrate in a fresh process
+            // instead, which boots that manifest (#431).
+            if ( $composerPackagesInstalled ) {
+                $this->runComposerPackageMigrationsInFreshProcess( $plugin );
+
+                unset( $this->composerPackagesInstalledThisProcess[ $plugin->slug ] );
+            } elseif ( $runComposerPackageMigrations ) {
+                $this->runComposerPackageMigrations( $plugin );
+            }
+        } catch ( Throwable $e ) {
+            // Roll back any partial activation state (#182).
+            $this->rollbackFailedActivation( $plugin, $priorPsr4, $migrationsAttempted );
+
+            throw $e;
+        }
+
+        // The activation is committed. A listener that throws below must
+        // not leave the site on stale caches and bytecode (#453).
+        $this->notePersistedRuntimeChange();
+
+        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+            $this->clearFrameworkCaches();
+        }
+
+        $this->clearCaches();
+
+        // Announce the plugin's hooks are online. Fires AFTER the transaction
+        // commits so a rolled-back activation does not leak a `.hookRegistered`
+        // event to subscribers — mirrors the placement of `.activated` below.
+        // The service provider's `register()` / `boot()` is where a plugin
+        // typically calls addAction/addFilter; the manifest's optional `hooks`
+        // field lets plugin authors enumerate what came online for observers,
+        // and an empty array still fires so every activation emits a per-plugin
+        // signal.
+        if ( $serviceProviderStarted ) {
+            $declaredHooks = is_array( $plugin->meta['hooks'] ?? null )
+                ? $plugin->meta['hooks']
+                : [];
+
+            doAction(
+                'ap.cmsFramework.plugin.hookRegistered',
+                $plugin->slug,
+                $declaredHooks,
+            );
+        }
+
+        doAction( 'ap.cmsFramework.plugin.activated', $slug, $plugin );
+
+        return true;
+    }
+
+    /**
+     * Deactivate a plugin, without the runtime refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  Plugin slug
+     * @param  bool  $force  Skip the active-dependents guard
+     *
+     * @throws PluginNotFoundException If plugin doesn't exist
+     * @throws DependencyNotSatisfiedException If active plugins still depend on it and $force is false
+     *
+     * @return bool True on success
+     */
+    protected function deactivatePlugin( string $slug, bool $force ): bool
+    {
+        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
+
+        if ( ! $plugin ) {
+            throw PluginNotFoundException::forSlug( $slug );
+        }
+
+        // Dependent-plugin guard (#45). Refuse to pull a dependency out from
+        // under still-active plugins unless the caller explicitly forces it.
+        if ( ! $force ) {
+            $activeDependents = $this->activeDependents( $slug );
+            if ( ! empty( $activeDependents ) ) {
+                throw DependencyNotSatisfiedException::hasActiveDependents( $slug, $activeDependents );
+            }
+        }
+
+        doAction( 'ap.cmsFramework.plugin.deactivating', $slug );
+
+        $plugin->is_active = false;
+        $plugin->save();
+
+        $this->notePersistedRuntimeChange();
+
+        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+            $this->clearFrameworkCaches();
+        }
+        $this->clearCaches();
+
+        doAction( 'ap.cmsFramework.plugin.deactivated', $slug );
+
+        return true;
+    }
+
+    /**
+     * Delete a plugin, without the runtime refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  Plugin slug
+     * @param  bool  $deleteFiles  Whether to delete plugin files
+     *
+     * @throws PluginNotFoundException If plugin doesn't exist
+     *
+     * @return bool True on success
+     */
+    protected function deletePlugin( string $slug, bool $deleteFiles ): bool
+    {
+        $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
+
+        if ( ! $plugin ) {
+            throw PluginNotFoundException::forSlug( $slug );
+        }
+
+        // Deactivate if active. Forced past the dependents guard: deletion is a
+        // deliberate teardown, and blocking it here would leave the plugin
+        // half-removed. Dependents are surfaced by getDependents() for the UI.
+        if ( $plugin->is_active ) {
+            // Record any still-active dependents so an operator can trace a
+            // later failure back to this forced removal.
+            $orphaned = $this->activeDependents( $slug );
+            if ( ! empty( $orphaned ) ) {
+                logger()->warning( "Deleting plugin '{$slug}' leaves active dependents unsatisfied.", [
+                    'dependents' => $orphaned,
+                ] );
+            }
+
+            $this->deactivate( $slug, true );
+        }
+
+        doAction( 'ap.cmsFramework.plugin.deleting', $slug );
+
+        // Plugin-owned uninstall entry point (#358). Runs whether or not the
+        // plugin was active, unlike a `deleting` listener, and before the
+        // migration rollback so it can still read the plugin's own tables.
+        $this->runUninstaller( $plugin );
+
+        // Opt-in migration rollback (#182). Guarded by manifest flag so hosts don't
+        // accidentally drop plugin-owned data.
+        if ( $plugin->rollback_migrations_on_delete && isset( $plugin->meta['migrations_path'] ) ) {
+            try {
+                $this->resetMigrations( $plugin->slug, $plugin->meta['migrations_path'] );
+            } catch ( Throwable $e ) {
+                logger()->error( "Failed to rollback migrations for plugin: {$slug}", [
+                    'exception' => $e->getMessage(),
+                ] );
+            }
+        }
+
+        // Remove seeded permissions (#182).
+        $this->removeSeededPermissions( $plugin );
+
+        // Remove from database
+        $plugin->delete();
+
+        $this->notePersistedRuntimeChange();
+
+        // Remove from filesystem. Build the path from the trusted database slug,
+        // not the raw route parameter, so a value that only matches a row after
+        // sanitization can never point the delete at an unvalidated path.
+        if ( $deleteFiles ) {
+            $pluginPath = $this->getPluginsPath() . '/' . $plugin->slug;
+            if ( File::exists( $pluginPath ) ) {
+                File::deleteDirectory( $pluginPath );
+            }
+        }
+
+        if ( config( 'cms.plugins.autoClearFrameworkCaches', false ) ) {
+            $this->clearFrameworkCaches();
+        }
+        $this->clearCaches();
+
+        doAction( 'ap.cmsFramework.plugin.deleted', $slug );
+
+        return true;
     }
 
     /**
@@ -2143,7 +2342,7 @@ class PluginManager
         if ( $installed ) {
             // Packages were just installed this request; seat the regenerated
             // autoload maps so their classes are usable before the provider boots.
-            $this->registerComposerPackageAutoloaders();
+            $this->seatInstalledComposerPackages( $plugin->slug );
         }
 
         return $installed;
@@ -2168,7 +2367,8 @@ class PluginManager
      * @throws ComposerDependencyNotSatisfiedException When the requirements cannot be satisfied.
      *
      * @return bool True when at least one package was installed. The caller
-     *              seats the regenerated autoload maps.
+     *              seats the regenerated autoload maps and resets OPcache,
+     *              through {@see seatInstalledComposerPackages()}.
      */
     protected function resolveAndInstallComposerDependencies( string $slug, array $requirements ): bool
     {
@@ -2240,11 +2440,106 @@ class PluginManager
             // disabled, with `opcache.validate_timestamps=0`). Fail closed —
             // never boot a provider whose classes may be unresolvable — but say
             // so, since a fresh request (which reads the regenerated metadata)
-            // completes the step without reinstalling.
+            // completes the step without reinstalling. That request only sees
+            // the regenerated metadata if the web server's OPcache is reset.
+            $this->resetOpcacheAfterComposerInstall( $slug );
+
             throw ComposerDependencyNotSatisfiedException::installedButUnverified( $slug, $result );
         }
 
         return true;
+    }
+
+    /**
+     * Seat freshly installed packages on this process's class loader, then
+     * make them visible to every later web request (#438).
+     *
+     * The reset comes second so the in-request reads of the autoload maps,
+     * which invalidate each file first, are finished before the cache is
+     * cleared. It still runs if seating throws: the packages are on disk and
+     * in the host's `composer.json` by then, even when the plugin that asked
+     * for them is removed.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  The plugin the packages were installed for.
+     */
+    protected function seatInstalledComposerPackages( string $slug ): void
+    {
+        try {
+            $this->registerComposerPackageAutoloaders();
+        } finally {
+            $this->resetOpcacheAfterComposerInstall( $slug );
+        }
+    }
+
+    /**
+     * Reset the web server's OPcache after `composer require` rewrote the
+     * host's autoloader and package manifest (#438).
+     *
+     * A new request boots through `vendor/autoload.php`, `autoload_real.php`
+     * and `autoload_static.php`, and Laravel reads its providers from
+     * `bootstrap/cache/packages.php` and `services.php`. With
+     * `opcache.validate_timestamps=0`, PHP-FPM keeps serving its compiled
+     * pre-install copies of all of them, so the package's classes and service
+     * provider don't exist for the site until it is reloaded.
+     *
+     * A failed reset doesn't fail the install, which has already succeeded.
+     * When no reset reaches the web server, the operator is told to reload
+     * PHP-FPM.
+     *
+     * Inside a {@see withRuntimeRefresh()} scope the reset is left to the
+     * scope, which makes it once the change is done, or after it fails.
+     *
+     * @since 2.18.0
+     *
+     * @param  string  $slug  The plugin the packages were installed for.
+     */
+    protected function resetOpcacheAfterComposerInstall( string $slug ): void
+    {
+        $slug = $this->sanitizeForLog( $slug );
+
+        // Inside an install, activation or update, the reset after the whole
+        // change covers the Composer install too, so OPcache is reset once
+        // per request rather than twice (#453).
+        if ( $this->deferOpcacheResetToScope() ) {
+            return;
+        }
+
+        $method = $this->resetOpcacheForWebServer();
+
+        if ( $this->webOpcacheResetWasSkipped() ) {
+            return;
+        }
+
+        if ( null !== $method ) {
+            if ( $this->runningUnderCli() ) {
+                Log::info( "cms-framework: reset PHP-FPM's OPcache after installing plugin Composer packages ({$method}).", [
+                    'plugin'   => $slug,
+                    'php_sapi' => $this->phpSapi(),
+                ] );
+            }
+
+            return;
+        }
+
+        if ( $this->runningUnderCli() ) {
+            Log::warning(
+                'cms-framework: plugin Composer packages were installed outside the web server, and PHP-FPM\'s OPcache could not be reset. If OPcache runs with `opcache.validate_timestamps=0`, reload PHP-FPM so it can load them, or set `cms.updates.opcache.fpm_socket` or `cms.updates.php_reload_command`.',
+                [
+                    'plugin'   => $slug,
+                    'php_sapi' => $this->phpSapi(),
+                    'attempts' => $this->webOpcacheResetFailures,
+                ],
+            );
+
+            return;
+        }
+
+        Log::warning(
+            'cms-framework: OPcache could not be reset after installing plugin Composer packages (check `opcache.restrict_api`). Reload PHP-FPM so it can load them.',
+            ['plugin' => $slug],
+        );
     }
 
     /**

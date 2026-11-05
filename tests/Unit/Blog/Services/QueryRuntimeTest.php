@@ -30,6 +30,10 @@ beforeEach( function (): void {
     $this->runtime = app( QueryRuntime::class );
 } );
 
+afterEach( function (): void {
+    removeAllFilters( 'ap.cmsFramework.query.taxQuery' );
+} );
+
 function publishedPost( int $userId, string $title, ?string $publishedAt = null, ?int $offsetMinutes = null ): Post
 {
     $publishedAt = $publishedAt ?? now()->subDay()->toDateTimeString();
@@ -406,6 +410,288 @@ it( 'ignores taxQuery operators outside the V1 IN subset', function (): void {
     // `NOT IN` is not implemented in V1 — the runtime drops the
     // constraint entirely, so both posts come back.
     expect( $result->total() )->toBe( 2 );
+} );
+
+it( 'drops a built-in taxQuery constraint whose operator is not a string', function (): void {
+    $cat = PostCategory::create( ['name' => 'Laravel', 'slug' => 'laravel'] );
+    $a   = publishedPost( $this->user->id, 'A' );
+    $a->categories()->attach( $cat->id );
+    publishedPost( $this->user->id, 'B' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'category', 'terms' => [$cat->id], 'operator' => false],
+    ] );
+
+    expect( $result->total() )->toBe( 2 );
+} );
+
+it( 'treats a null taxQuery operator as the IN default', function (): void {
+    $cat = PostCategory::create( ['name' => 'Laravel', 'slug' => 'laravel'] );
+    $a   = publishedPost( $this->user->id, 'A' );
+    $a->categories()->attach( $cat->id );
+    publishedPost( $this->user->id, 'B' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'category', 'terms' => [$cat->id], 'operator' => null],
+    ] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $a->id );
+} );
+
+it( 'does not run the taxQuery filter for mapped taxonomies', function ( string $taxonomy ): void {
+    $calls = 0;
+
+    addFilter( 'ap.cmsFramework.query.taxQuery', function ( Builder $query ) use ( &$calls ): Builder {
+        $calls++;
+
+        return $query;
+    } );
+
+    $cat = PostCategory::create( ['name' => 'Laravel', 'slug' => 'laravel'] );
+    $tag = PostTag::create( ['name' => 'Cache', 'slug' => 'cache'] );
+
+    $matched = publishedPost( $this->user->id, 'Matched' );
+    $matched->categories()->attach( $cat->id );
+    $matched->tags()->attach( $tag->id );
+
+    publishedPost( $this->user->id, 'Unmatched' );
+
+    $terms = in_array( $taxonomy, ['category', 'post_category'], true ) ? [$cat->id] : [$tag->id];
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => $taxonomy, 'terms' => $terms],
+    ] );
+
+    expect( $calls )->toBe( 0 )
+        ->and( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $matched->id );
+} )->with( ['category', 'post_category', 'post_tag', 'tag'] );
+
+it( 'does not run the taxQuery filter for a mapped taxonomy with an operator outside IN', function (): void {
+    $calls = 0;
+
+    addFilter( 'ap.cmsFramework.query.taxQuery', function ( Builder $query ) use ( &$calls ): Builder {
+        $calls++;
+
+        return $query;
+    } );
+
+    $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'category', 'terms' => [1], 'operator' => 'NOT IN'],
+    ] );
+
+    expect( $calls )->toBe( 0 );
+} );
+
+it( 'leaves the query unfiltered for an unmapped taxonomy with no listener', function (): void {
+    publishedPost( $this->user->id, 'A' );
+    publishedPost( $this->user->id, 'B' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [7]],
+    ] );
+
+    expect( $result->total() )->toBe( 2 );
+} );
+
+it( 'leaves the query unfiltered when listeners ignore the unmapped taxonomy', function (): void {
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query, string $taxonomy ): Builder => 'other' === $taxonomy ? $query->whereRaw( '1 = 0' ) : $query,
+    );
+
+    publishedPost( $this->user->id, 'A' );
+    publishedPost( $this->user->id, 'B' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [7]],
+    ] );
+
+    expect( $result->total() )->toBe( 2 );
+} );
+
+it( 'passes an unmapped taxonomy to the taxQuery filter', function ( string $postType, string $model ): void {
+    registerQueryRuntimeType( 'docs', Page::class );
+
+    $received = null;
+
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        function ( Builder $query, string $taxonomy, array $terms, string $operator, string $postType ) use ( &$received ): Builder {
+            $received = [$query->getModel()::class, $taxonomy, $terms, $operator, $postType];
+
+            return $query;
+        },
+    );
+
+    $this->runtime->resolve( [
+        'postType' => $postType,
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => ['7', 9]],
+    ] );
+
+    expect( $received )->toBe( [$model, 'packages', [7, 9], 'IN', $postType] );
+} )->with( [
+    'posts'       => ['post', Post::class],
+    'pages'       => ['page', Page::class],
+    'custom type' => ['docs', Page::class],
+] );
+
+it( 'passes operators outside IN to the taxQuery filter so a listener can implement them', function (): void {
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query, string $taxonomy, array $terms, string $operator ): Builder => 'NOT IN' === $operator
+            ? $query->whereNotIn( 'id', $terms )
+            : $query,
+    );
+
+    $excluded = publishedPost( $this->user->id, 'Excluded' );
+    $kept     = publishedPost( $this->user->id, 'Kept' );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [$excluded->id], 'operator' => 'not in'],
+    ] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $kept->id );
+} );
+
+it( 'normalizes the operator it passes to the taxQuery filter', function (): void {
+    $received = null;
+
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        function ( Builder $query, string $taxonomy, array $terms, string $operator ) use ( &$received ): Builder {
+            $received = [$taxonomy, $operator];
+
+            return $query;
+        },
+    );
+
+    $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'product.cat', 'terms' => [7], 'operator' => "  not \t exists "],
+    ] );
+
+    expect( $received )->toBe( ['product.cat', 'NOT EXISTS'] );
+} );
+
+it( 'does not run the taxQuery filter for a malformed taxonomy or an unknown operator', function ( array $taxQuery ): void {
+    $calls = 0;
+
+    addFilter( 'ap.cmsFramework.query.taxQuery', function ( Builder $query ) use ( &$calls ): Builder {
+        $calls++;
+
+        return $query;
+    } );
+
+    $this->runtime->resolve( ['postType' => 'post', 'taxQuery' => $taxQuery] );
+
+    expect( $calls )->toBe( 0 );
+} )->with( [
+    'markup in taxonomy'    => [['taxonomy' => '<b>packages</b>', 'terms' => [7]]],
+    'markup in operator'    => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => '<i>in</i>']],
+    'unknown operator'      => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => 'BETWEEN']],
+    'sql in operator'       => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => 'IN) OR 1=1 --']],
+    'space in taxonomy'     => [['taxonomy' => 'my packages', 'terms' => [7]]],
+    'taxonomy over 64 long' => [['taxonomy' => str_repeat( 'a', 65 ), 'terms' => [7]]],
+    'trailing newline'      => [['taxonomy' => "packages\n", 'terms' => [7]]],
+    'false operator'        => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => false]],
+    'array operator'        => [['taxonomy' => 'packages', 'terms' => [7], 'operator' => ['IN']]],
+] );
+
+it( 'does not run the taxQuery filter without a taxonomy or terms', function ( array $taxQuery ): void {
+    $calls = 0;
+
+    addFilter( 'ap.cmsFramework.query.taxQuery', function ( Builder $query ) use ( &$calls ): Builder {
+        $calls++;
+
+        return $query;
+    } );
+
+    $this->runtime->resolve( ['postType' => 'post', 'taxQuery' => $taxQuery] );
+
+    expect( $calls )->toBe( 0 );
+} )->with( [
+    'no terms'            => [['taxonomy' => 'packages', 'terms' => []]],
+    'no taxonomy'         => [['terms' => [7]]],
+    'non-string taxonomy' => [['taxonomy' => 7, 'terms' => [7]]],
+] );
+
+it( 'applies a taxQuery listener constraint with ordering and pagination intact', function (): void {
+    $oldest = publishedPost( $this->user->id, 'Oldest', null, 30 );
+    $middle = publishedPost( $this->user->id, 'Middle', null, 20 );
+    $newest = publishedPost( $this->user->id, 'Newest', null, 10 );
+
+    publishedPost( $this->user->id, 'Other term', null, 5 );
+
+    $termPosts = [7 => [$oldest->id, $middle->id, $newest->id]];
+
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query, string $taxonomy, array $terms ): Builder => 'packages' === $taxonomy
+            ? $query->whereIn( 'id', $termPosts[ $terms[0] ] )
+            : $query,
+    );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'perPage'  => 2,
+        'order'    => 'asc',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [7]],
+    ] );
+
+    expect( $result->total() )->toBe( 3 )
+        ->and( $result->lastPage() )->toBe( 2 )
+        ->and( array_map( fn ( Post $post ): int => $post->id, $result->items() ) )->toBe( [$oldest->id, $middle->id] );
+} );
+
+it( 'applies every taxQuery listener when each returns the builder', function (): void {
+    $first  = publishedPost( $this->user->id, 'First' );
+    $second = publishedPost( $this->user->id, 'Second' );
+    $third  = publishedPost( $this->user->id, 'Third' );
+
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query ): Builder => $query->whereIn( 'id', [$first->id, $second->id] ),
+    );
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query ): Builder => $query->whereIn( 'id', [$second->id, $third->id] ),
+    );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'post',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [7]],
+    ] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $second->id );
+} );
+
+it( 'keeps the published constraint when a taxQuery listener constrains the query', function (): void {
+    $published = publishedPage( $this->user->id, 'Published' );
+    $draft     = draftPage( $this->user->id, 'Draft' );
+
+    addFilter(
+        'ap.cmsFramework.query.taxQuery',
+        fn ( Builder $query ): Builder => $query->whereIn( 'id', [$published->id, $draft->id] ),
+    );
+
+    $result = $this->runtime->resolve( [
+        'postType' => 'page',
+        'taxQuery' => ['taxonomy' => 'packages', 'terms' => [7]],
+    ] );
+
+    expect( $result->total() )->toBe( 1 )
+        ->and( $result->items()[0]->id )->toBe( $published->id );
 } );
 
 it( 'throws when an unknown postType is requested', function (): void {

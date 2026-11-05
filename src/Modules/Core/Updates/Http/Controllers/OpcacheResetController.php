@@ -17,11 +17,12 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 
 /**
- * Resets OPcache inside the web server, for an update or rollback that ran
- * from the CLI or a queue worker and so could not reach PHP-FPM's cache.
+ * Resets OPcache inside the web server, for an update, rollback or plugin
+ * Composer install that ran from the CLI or a queue worker and so could not
+ * reach PHP-FPM's cache.
  *
- * The route sits behind the `signed:relative` middleware, and the updater
- * signs each URL for one minute only. Its only effect is an `opcache_reset()`,
+ * The route sits behind the `signed:relative` middleware, and each URL is
+ * signed for one minute only. Its only effect is an `opcache_reset()`,
  * so a leaked URL can do no more than cost the site a few recompiles.
  *
  * @since 2.16.0

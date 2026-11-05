@@ -14,6 +14,7 @@ namespace ArtisanPackUI\CMSFramework\Modules\Themes\Managers;
 
 use Artisan;
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionChange;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
@@ -55,6 +56,7 @@ use ZipArchive;
 class UpdateManager
 {
     use ManagesExtensionUpdates;
+    use RefreshesRuntimeAfterExtensionChange;
 
     /**
      * Constructs the UpdateManager instance.
@@ -271,14 +273,19 @@ class UpdateManager
      * 4. Back up the installed directory to `cms.themes.backupPath`.
      * 5. Swap the staged directory into place.
      * 6. Forget the discovery and update caches, re-register view paths.
-     * 7. Fire `ap.cmsFramework.theme.updated`.
+     * 7. Rebuild the compiled caches the site had, reset the web server's
+     *    OPcache and signal the queue workers (#450). {@see opcacheResetMethod()}
+     *    and {@see phpReloadRequired()} report how that went.
+     * 8. Fire `ap.cmsFramework.theme.updated`.
      *
      * A failure at or after step 5 restores from the backup and forgets the
      * caches again. The restore deletes the live directory outright before
      * re-extracting the backup, so files the update *added* are removed rather
-     * than left orphaned alongside the restored ones (#272).
+     * than left orphaned alongside the restored ones (#272). It then gets the
+     * same refresh as step 7, so the restored version is what runs (#454).
      *
      * @since 2.8.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the update or its rollback.
      *
      * @param  string  $slug  Theme slug.
      *
@@ -289,6 +296,10 @@ class UpdateManager
      */
     public function updateTheme( string $slug ): bool
     {
+        // First, so a failure before anything changed never reports an
+        // earlier update's outcome.
+        $this->resetRuntimeRefreshOutcome();
+
         $manifest = $this->themeManager->getTheme( $slug );
 
         if ( null === $manifest ) {
@@ -305,6 +316,8 @@ class UpdateManager
         $newVersion = (string) $updateInfo['version'];
 
         doAction( 'ap.cmsFramework.theme.updating', $slug, $oldVersion, $newVersion );
+
+        $cachedArtifacts = $this->cachedArtifacts();
 
         $zipPath       = null;
         $stagingPath   = null;
@@ -341,6 +354,12 @@ class UpdateManager
             if ( $swapAttempted ) {
                 $this->restoreFromBackup( $slug, $backupPath );
                 $this->refreshThemeState( $slug );
+
+                // The swap may have put the failed version's files in front
+                // of PHP-FPM, so make the restored version live the way a
+                // successful update is (#454). Never throws, so the failure
+                // below is still the one reported.
+                $this->refreshRuntimeAfterRollback( 'theme', $slug, $cachedArtifacts );
             }
 
             throw $this->wrapUpdateFailure( $slug, $e );
@@ -360,6 +379,12 @@ class UpdateManager
         // `theme.updating` above is its update-path equivalent; the post hooks
         // are notifications, and `installFromZip()` fires `theme.installed`
         // the same way.
+        // Once the new files are final, make them live (#450): rebuild the
+        // caches the site had, reset PHP-FPM's OPcache and signal the queue
+        // workers. Before the `updated` hook, so a listener that throws
+        // can't leave the site on stale bytecode. Never throws.
+        $this->refreshRuntimeAfterUpdate( 'theme', $slug, $cachedArtifacts );
+
         doAction( 'ap.cmsFramework.theme.updated', $slug, $newVersion, $newManifest );
 
         return true;
@@ -617,7 +642,9 @@ class UpdateManager
 
         File::ensureDirectoryExists( $backupDir );
 
-        $backupFile = $backupDir . '/' . $slug . '-' . $version . '-' . time() . '.zip';
+        // The random suffix keeps two backups of the same theme version taken
+        // in the same second from sharing a file (#460).
+        $backupFile = $backupDir . '/' . $slug . '-' . $version . '-' . time() . '-' . bin2hex( random_bytes( 8 ) ) . '.zip';
 
         $zip = new ZipArchive;
 

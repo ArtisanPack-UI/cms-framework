@@ -2,12 +2,14 @@
 
 declare( strict_types=1 );
 
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\WebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Contracts\ComposerPackageInstallerInterface;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\PluginUpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\PluginManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Managers\UpdateManager;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Models\Plugin;
 use ArtisanPackUI\CMSFramework\Tests\Support\Composer\FakeComposerPackageInstaller;
+use ArtisanPackUI\CMSFramework\Tests\Support\Composer\RecordingWebOpcacheResetter;
 use ArtisanPackUI\CMSFramework\Tests\Support\Plugins\PluginTestHelper;
 use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\Artisan;
@@ -16,10 +18,13 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 
 beforeEach( function (): void {
+    // A CLI install resets PHP-FPM's OPcache (#438); never reach for a real one.
+    app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
+
     $this->pluginManager   = app( PluginManager::class );
     $this->updateManager   = new UpdateManager( $this->pluginManager );
     $this->testPluginsPath = __DIR__ . '/../../Support/Plugins';
-    $this->pluginsPath     = base_path( 'plugins' );
+    $this->pluginsPath     = testPluginsDirectory();
 
     // Ensure plugins directory exists
     File::ensureDirectoryExists( $this->pluginsPath );
@@ -42,10 +47,7 @@ afterEach( function (): void {
     }
 
     // Cleanup temp files
-    $tempFiles = array_merge(
-        File::glob( storage_path( 'app/temp-plugin-*.zip' ) ),
-        File::glob( storage_path( 'app/test-update-*.zip' ) ),
-    );
+    $tempFiles = File::glob( storage_path( 'app/test-update-*.zip' ) );
     foreach ( $tempFiles as $tempFile ) {
         File::delete( $tempFile );
     }
@@ -241,6 +243,28 @@ describe( 'Backup and Restore', function (): void {
         expect( $zip->numFiles )->toBeGreaterThan( 0 );
 
         $zip->close();
+    } );
+
+    it( 'gives each backup of the same version its own archive, even within the same second', function (): void {
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'    => 'valid-plugin',
+            'name'    => 'Valid Test Plugin',
+            'version' => '1.0.0',
+        ] );
+
+        // The name used to end in `time()` alone, so two backups in the same
+        // second overwrote each other (#460).
+        $first  = invokeMethod( $this->updateManager, 'backupPlugin', ['valid-plugin'] );
+        $second = invokeMethod( $this->updateManager, 'backupPlugin', ['valid-plugin'] );
+
+        expect( $first )->not->toBe( $second )
+            ->and( File::exists( $first ) )->toBeTrue()
+            ->and( File::exists( $second ) )->toBeTrue();
     } );
 
     it( 'restores plugin from backup', function (): void {
@@ -516,7 +540,7 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
         $artisan = $swapArtisan();
 
         expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
-        expect( $artisan->calls )->toBe( ['route:clear', 'config:clear', 'view:clear'] );
+        expect( $artisan->calls )->toBe( ['route:clear', 'config:clear', 'view:clear', 'queue:restart'] );
 
         File::delete( $zipPath );
     } );
@@ -527,7 +551,7 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
         $artisan = $swapArtisan();
 
         expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
-        expect( $artisan->calls )->toBe( [] );
+        expect( $artisan->calls )->toBe( ['queue:restart'] );
 
         File::delete( $zipPath );
     } );
@@ -541,7 +565,8 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
 
         expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
             ->toThrow( PluginUpdateException::class );
-        expect( $artisan->calls )->toBe( [] );
+        // Only the rollback's runtime refresh (#454), no clear.
+        expect( $artisan->calls )->toBe( ['queue:restart'] );
 
         File::delete( $zipPath );
     } );
@@ -559,7 +584,7 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
         try {
             expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
                 ->toThrow( PluginUpdateException::class );
-            expect( $artisan->calls )->toBe( [] );
+            expect( $artisan->calls )->toBe( ['queue:restart'] );
             expect( Plugin::where( 'slug', 'valid-plugin' )->first()->version )->toBe( '1.0.0' );
         } finally {
             removeAction( 'ap.cmsFramework.plugin.updated', $listener );
@@ -577,6 +602,7 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
             expect( $artisan->calls )->toBe( [
                 'route:clear', 'config:clear', 'view:clear',
                 'route:clear', 'config:clear', 'view:clear',
+                'queue:restart',
             ] );
         } finally {
             File::delete( $zipPath );
@@ -596,11 +622,248 @@ describe( 'Framework cache clearing on update (#359)', function (): void {
         try {
             expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
                 ->toThrow( PluginUpdateException::class, 'Listener type error.' );
-            expect( $artisan->calls )->toBe( [] );
+            expect( $artisan->calls )->toBe( ['queue:restart'] );
             expect( Plugin::where( 'slug', 'valid-plugin' )->first()->version )->toBe( '1.0.0' );
             expect( File::exists( $this->pluginsPath . '/valid-plugin/src/Stub.php' ) )->toBeFalse();
         } finally {
             removeAction( 'ap.cmsFramework.plugin.updated', $listener );
+            File::delete( $zipPath );
+        }
+    } );
+} );
+
+describe( 'Making the update live on production hosts (#450)', function (): void {
+    $prepareUpdate = function ( bool $isActive = false ): string {
+        File::copyDirectory(
+            $this->testPluginsPath . '/valid-plugin',
+            $this->pluginsPath . '/valid-plugin',
+        );
+
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => $isActive,
+            'meta'      => [
+                'slug'       => 'valid-plugin',
+                'name'       => 'Valid Test Plugin',
+                'version'    => '1.0.0',
+                'update_url' => 'https://example.com/updates/valid-plugin',
+            ],
+        ] );
+
+        $zipPath = PluginTestHelper::buildUpdateZip();
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
+
+        return $zipPath;
+    };
+
+    beforeEach( function (): void {
+        $this->routeCache = app()->getCachedRoutesPath();
+        $this->hadRoutes  = is_file( $this->routeCache );
+    } );
+
+    afterEach( function (): void {
+        if ( ! $this->hadRoutes && is_file( $this->routeCache ) ) {
+            File::delete( $this->routeCache );
+        }
+    } );
+
+    it( 'rebuilds a route cache the site had, in a fresh process, even with autoClearFrameworkCaches off', function () use ( $prepareUpdate ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => false] );
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+        $zipPath = $prepareUpdate->call( $this );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
+
+            Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+            Process::assertNotRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && in_array( 'config:cache', $process->command, true ) );
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'rebuilds the route cache after an active plugin\'s deactivate/activate cleared it', function () use ( $prepareUpdate ): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+        $zipPath = $prepareUpdate->call( $this, true );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
+
+            Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'does not compile a route cache the site never had', function () use ( $prepareUpdate ): void {
+        File::delete( $this->routeCache );
+        Process::fake();
+        $zipPath = $prepareUpdate->call( $this );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue();
+
+            Process::assertNotRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && in_array( 'route:cache', $process->command, true ) );
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'resets the web server\'s OPcache and reports how', function () use ( $prepareUpdate ): void {
+        $resetter = app( WebOpcacheResetter::class );
+        $zipPath  = $prepareUpdate->call( $this );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+                ->and( $resetter->resets )->toBe( 1 )
+                ->and( $this->updateManager->opcacheResetMethod() )->toBe( 'fastcgi' )
+                ->and( $this->updateManager->phpReloadRequired() )->toBeFalse();
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'flags a PHP-FPM reload when no OPcache reset reaches the web server', function () use ( $prepareUpdate ): void {
+        $resetter         = app( WebOpcacheResetter::class );
+        $resetter->method = null;
+        $zipPath          = $prepareUpdate->call( $this );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+                ->and( $this->updateManager->opcacheResetMethod() )->toBeNull()
+                ->and( $this->updateManager->phpReloadRequired() )->toBeTrue();
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'resets OPcache and restarts workers after the update rolls back (#454)', function (): void {
+        $resetter = app( WebOpcacheResetter::class );
+        $artisan  = new class {
+            public array $calls = [];
+
+            public function call( $command, array $parameters = [], $outputBuffer = null ): int
+            {
+                $this->calls[] = $command;
+
+                return 0;
+            }
+        };
+
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => ['slug' => 'valid-plugin', 'name' => 'Valid Test Plugin', 'version' => '1.0.0', 'update_url' => 'https://example.com/updates/valid-plugin'],
+        ] );
+        $zipPath = PluginTestHelper::buildUpdateZip( ['migrations_path' => '../../database/migrations'] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
+
+        Artisan::swap( $artisan );
+
+        try {
+            expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+                ->toThrow( PluginUpdateException::class );
+            expect( $resetter->resets )->toBe( 1 )
+                ->and( $artisan->calls )->toBe( ['queue:restart'] )
+                ->and( $this->updateManager->opcacheResetMethod() )->toBe( 'fastcgi' )
+                ->and( $this->updateManager->phpReloadRequired() )->toBeFalse();
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+    it( 'resets OPcache once when updating an active plugin, not once per deactivate and activate (#453)', function () use ( $prepareUpdate ): void {
+        $resetter = app( WebOpcacheResetter::class );
+        $zipPath  = $prepareUpdate->call( $this, true );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+                ->and( $resetter->resets )->toBe( 1 );
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'rebuilds the route cache an active plugin\'s deactivate cleared when the update rolls back (#454)', function (): void {
+        config( ['cms.plugins.autoClearFrameworkCaches' => true] );
+        File::ensureDirectoryExists( dirname( $this->routeCache ) );
+        File::put( $this->routeCache, '<?php' );
+        Process::fake();
+
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => true,
+            'meta'      => ['slug' => 'valid-plugin', 'name' => 'Valid Test Plugin', 'version' => '1.0.0', 'update_url' => 'https://example.com/updates/valid-plugin'],
+        ] );
+        $zipPath = PluginTestHelper::buildUpdateZip( ['migrations_path' => '../../database/migrations'] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
+
+        try {
+            expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+                ->toThrow( PluginUpdateException::class );
+
+            expect( Plugin::where( 'slug', 'valid-plugin' )->first()->is_active )->toBeTrue();
+            Process::assertRan( fn ( PendingProcess $process ): bool => is_array( $process->command )
+                && ['artisan', 'route:cache'] === array_slice( $process->command, 1 ) );
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'flags a PHP-FPM reload when a rolled-back update\'s OPcache reset reaches no web server (#454)', function (): void {
+        $resetter         = app( WebOpcacheResetter::class );
+        $resetter->method = null;
+
+        File::copyDirectory( $this->testPluginsPath . '/valid-plugin', $this->pluginsPath . '/valid-plugin' );
+        Plugin::create( [
+            'slug'      => 'valid-plugin',
+            'name'      => 'Valid Test Plugin',
+            'version'   => '1.0.0',
+            'is_active' => false,
+            'meta'      => ['slug' => 'valid-plugin', 'name' => 'Valid Test Plugin', 'version' => '1.0.0', 'update_url' => 'https://example.com/updates/valid-plugin'],
+        ] );
+        $zipPath = PluginTestHelper::buildUpdateZip( ['migrations_path' => '../../database/migrations'] );
+        PluginTestHelper::fakeUpdateFeed( 'valid-plugin', '2.0.0', $zipPath );
+
+        try {
+            expect( fn () => $this->updateManager->updatePlugin( 'valid-plugin' ) )
+                ->toThrow( PluginUpdateException::class );
+            expect( $this->updateManager->opcacheResetMethod() )->toBeNull()
+                ->and( $this->updateManager->phpReloadRequired() )->toBeTrue();
+        } finally {
+            File::delete( $zipPath );
+        }
+    } );
+
+    it( 'does not report an earlier update\'s outcome for a later update that found nothing to do', function () use ( $prepareUpdate ): void {
+        $resetter         = app( WebOpcacheResetter::class );
+        $resetter->method = null;
+        $zipPath          = $prepareUpdate->call( $this );
+
+        try {
+            expect( $this->updateManager->updatePlugin( 'valid-plugin' ) )->toBeTrue()
+                ->and( $this->updateManager->phpReloadRequired() )->toBeTrue();
+
+            expect( fn () => $this->updateManager->updatePlugin( 'missing-plugin' ) )
+                ->toThrow( PluginUpdateException::class );
+            expect( $this->updateManager->phpReloadRequired() )->toBeFalse();
+        } finally {
             File::delete( $zipPath );
         }
     } );

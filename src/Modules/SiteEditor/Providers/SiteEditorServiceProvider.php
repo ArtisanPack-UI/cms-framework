@@ -118,6 +118,11 @@ class SiteEditorServiceProvider extends ServiceProvider
      * collision (mirrors `CMSFrameworkServiceProvider::registerVisualEditorBridge`'s
      * merge order on `ap.visual-editor.resources`).
      *
+     * The merges use `array_replace()`, not `array_merge()`: PHP stores an
+     * all-digit slug such as `404` as an integer key, and `array_merge()`
+     * renumbers integer keys instead of overwriting them, which would leave
+     * a static `404` entry and a resolved `404` template side by side.
+     *
      * @since 2.0.0
      */
     public function registerVisualEditorSiteEditorFilters(): void
@@ -131,7 +136,7 @@ class SiteEditorServiceProvider extends ServiceProvider
                 return $templates;
             }
 
-            return array_merge( $this->buildTemplateFilterMap( $this->app->make( TemplateResolver::class ) ), $templates );
+            return array_replace( $this->buildTemplateFilterMap( $this->app->make( TemplateResolver::class ) ), $templates );
         } );
 
         addFilter( 'ap.visual-editor.template-parts', function ( array $parts ): array {
@@ -139,7 +144,7 @@ class SiteEditorServiceProvider extends ServiceProvider
                 return $parts;
             }
 
-            return array_merge( $this->buildTemplateFilterMap( $this->app->make( TemplatePartResolver::class ) ), $parts );
+            return array_replace( $this->buildTemplateFilterMap( $this->app->make( TemplatePartResolver::class ) ), $parts );
         } );
 
         addFilter( 'ap.visual-editor.patterns', function ( array $patterns ): array {
@@ -147,7 +152,7 @@ class SiteEditorServiceProvider extends ServiceProvider
                 return $patterns;
             }
 
-            return array_merge( $this->app->make( PatternResolver::class )->toFilterMap(), $patterns );
+            return array_replace( $this->app->make( PatternResolver::class )->toFilterMap(), $patterns );
         } );
 
         // Singleton filter — `?ResolvedGlobalStyles` array shape (or null when no
@@ -173,7 +178,7 @@ class SiteEditorServiceProvider extends ServiceProvider
                 return $existing;
             }
 
-            return array_merge( $this->app->make( MenuResolver::class )->all(), $existing );
+            return array_replace( $this->app->make( MenuResolver::class )->all(), $existing );
         } );
     }
 

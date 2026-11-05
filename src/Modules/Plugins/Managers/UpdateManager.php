@@ -5,10 +5,12 @@ declare( strict_types=1 );
 namespace ArtisanPackUI\CMSFramework\Modules\Plugins\Managers;
 
 use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\ManagesExtensionUpdates;
+use ArtisanPackUI\CMSFramework\Modules\Core\Managers\Concerns\RefreshesRuntimeAfterExtensionChange;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Enums\UpdateType;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Exceptions\UpdateException;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\ExtensionArchive;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\MetadataClient;
+use ArtisanPackUI\CMSFramework\Modules\Core\Updates\Support\StreamsDownloadsToDisk;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateChecker;
 use ArtisanPackUI\CMSFramework\Modules\Core\Updates\UpdateCheckerFactory;
 use ArtisanPackUI\CMSFramework\Modules\Plugins\Exceptions\ComposerDependencyNotSatisfiedException;
@@ -30,6 +32,8 @@ use ZipArchive;
 class UpdateManager
 {
     use ManagesExtensionUpdates;
+    use RefreshesRuntimeAfterExtensionChange;
+    use StreamsDownloadsToDisk;
 
     /**
      * @param  PluginManager  $pluginManager  Used to deactivate and reactivate a plugin around an update.
@@ -220,6 +224,17 @@ class UpdateManager
     /**
      * Update a plugin to latest version.
      *
+     * Once the update is in place, the compiled caches the site had are
+     * rebuilt, the web server's OPcache is reset and the queue workers are
+     * signalled, so the site runs the new version without a manual PHP-FPM
+     * reload (#450). A failed update that is rolled back gets the same
+     * refresh once its backup is restored, so the restored version is what
+     * runs (#454). {@see opcacheResetMethod()} and
+     * {@see phpReloadRequired()} report how that went.
+     *
+     * @since 1.0.0
+     * @since 2.18.0 Rebuilds caches, resets OPcache and restarts queue workers after the update or its rollback.
+     *
      * @param  string  $slug  Plugin slug
      *
      * @throws PluginUpdateException On update failure
@@ -228,6 +243,10 @@ class UpdateManager
      */
     public function updatePlugin( string $slug ): bool
     {
+        // First, so a failure before anything changed never reports an
+        // earlier update's outcome.
+        $this->resetRuntimeRefreshOutcome();
+
         $plugin = Plugin::where( 'slug', sanitizeText( $slug ) )->first();
 
         if ( ! $plugin ) {
@@ -257,6 +276,10 @@ class UpdateManager
         $backupPath             = null;
         $zipPath                = null;
 
+        // Read before the deactivate/activate below can clear them, so the
+        // caches the site had are the ones rebuilt (#450).
+        $cachedArtifacts = $this->cachedArtifacts();
+
         doAction( 'ap.cmsFramework.plugin.updating', $slug, $oldVersion, $updateInfo['version'] );
 
         try {
@@ -266,8 +289,11 @@ class UpdateManager
             // 2. Deactivate if active. Forced past the dependents guard (#45):
             //    this is a temporary deactivate/reactivate around an in-place
             //    update, not a teardown, so active dependents must not abort it.
+            //    Without a runtime refresh: step 10 refreshes once (#453).
             if ( $wasActive ) {
-                $this->pluginManager->deactivate( $slug, true );
+                $this->pluginManager->withoutRuntimeRefresh(
+                    fn (): bool => $this->pluginManager->deactivate( $slug, true ),
+                );
             }
 
             // 3. Download new version
@@ -320,7 +346,10 @@ class UpdateManager
             //     no-op when `cms.plugins.autoInstallComposerDependencies` is
             //     off. A failure throws ComposerDependencyNotSatisfiedException
             //     and unwinds through the backup-restore path below.
-            $this->pluginManager->installComposerDependenciesForManifest( $plugin->slug, $manifest );
+            //     Its OPcache reset (#438) is left to step 10 or the rollback.
+            $this->pluginManager->withoutRuntimeRefresh(
+                fn (): bool => $this->pluginManager->installComposerDependenciesForManifest( $plugin->slug, $manifest ),
+            );
 
             // 6. Update database
             $plugin->version          = $updateInfo['version'];
@@ -328,9 +357,11 @@ class UpdateManager
             $plugin->service_provider = $manifest['service_provider'] ?? null;
             $plugin->save();
 
-            // 7. Reactivate if was active
+            // 7. Reactivate if was active, again leaving the refresh to step 10.
             if ( $wasActive ) {
-                $this->pluginManager->activate( $slug );
+                $this->pluginManager->withoutRuntimeRefresh(
+                    fn (): bool => $this->pluginManager->activate( $slug ),
+                );
             }
 
             // 8. Cleanup. Forget the cached check so it no longer advertises
@@ -353,14 +384,21 @@ class UpdateManager
                 $this->pluginManager->clearFrameworkCaches();
             }
 
+            // 10. Make the new version live (#450): rebuild the caches the
+            //     site had, whatever `autoClearFrameworkCaches` says, then
+            //     reset PHP-FPM's OPcache and signal the queue workers. With
+            //     a route cache in place a plugin's routes are exactly what
+            //     `routes-v7.php` holds, so re-registering them at runtime
+            //     can't help. Never throws.
+            $this->refreshRuntimeAfterUpdate( 'plugin', $plugin->slug, $cachedArtifacts );
+
             return true;
         } catch ( IncompatiblePluginException $e ) {
             // The DB row was already updated with the new manifest at step 6,
             // but the reactivate at step 7 rejected the new min_framework_version / min_app_version.
             // Restore files AND DB so the plugin isn't stranded pointing at a
             // version whose files no longer exist.
-            $this->restoreFromBackup( $plugin->slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+            $this->rollBackFailedUpdate( $plugin, $backupPath, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive, $cachedArtifacts );
 
             throw $e;
         } catch ( DependencyNotSatisfiedException | PluginConflictException | ComposerDependencyNotSatisfiedException $e ) {
@@ -371,8 +409,7 @@ class UpdateManager
             // dependency reason instead of collapsing it into the generic
             // `downloadFailed()`, which would misreport a satisfiable-dependency
             // problem as a network error.
-            $this->restoreFromBackup( $plugin->slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+            $this->rollBackFailedUpdate( $plugin, $backupPath, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive, $cachedArtifacts );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( UpdateException $e ) {
@@ -380,8 +417,7 @@ class UpdateManager
             // failure, and collapsing it into `downloadFailed()` hides the one
             // detail an operator needs to tell a corrupted mirror apart from a
             // release that shipped without a `.sha256` sidecar.
-            $this->restoreFromBackup( $plugin->slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+            $this->rollBackFailedUpdate( $plugin, $backupPath, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive, $cachedArtifacts );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( PluginValidationException $e ) {
@@ -390,14 +426,12 @@ class UpdateManager
             // — restore the old files and revert the row — and surface the
             // reason through the type the controller renders verbatim, instead
             // of collapsing it into the generic `downloadFailed()`.
-            $this->restoreFromBackup( $plugin->slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+            $this->rollBackFailedUpdate( $plugin, $backupPath, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive, $cachedArtifacts );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } catch ( Exception $e ) {
             // Restore from backup on failure
-            $this->restoreFromBackup( $plugin->slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+            $this->rollBackFailedUpdate( $plugin, $backupPath, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive, $cachedArtifacts );
 
             throw PluginUpdateException::downloadFailed( $slug );
         } catch ( Throwable $e ) {
@@ -406,8 +440,7 @@ class UpdateManager
             // leave the update half-applied with no restore. It is never a
             // network failure, so surface its message instead of
             // `downloadFailed()`.
-            $this->restoreFromBackup( $plugin->slug, $backupPath );
-            $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+            $this->rollBackFailedUpdate( $plugin, $backupPath, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive, $cachedArtifacts );
 
             throw PluginUpdateException::updateFailed( $slug, $e->getMessage() );
         } finally {
@@ -681,6 +714,48 @@ class UpdateManager
     }
 
     /**
+     * Undo a failed update: restore the files from the backup, revert the
+     * row, then make the restored version live (#454).
+     *
+     * The failed version's files may already be compiled into PHP-FPM's
+     * shared OPcache (step 7's reactivate loads its service provider), and
+     * the deactivate around an active plugin's update can have cleared the
+     * compiled caches. So once the backup has been restored, the caches the
+     * site had are rebuilt, OPcache is reset and the queue workers are
+     * signalled, as after a successful update. {@see opcacheResetMethod()}
+     * and {@see phpReloadRequired()} report how that went. Never throws.
+     *
+     * Nothing changed on disk when the backup itself failed, since it is the
+     * first step, so then there is nothing to refresh.
+     *
+     * @since 2.18.0
+     *
+     * @param  Plugin  $plugin  The plugin being updated.
+     * @param  string|null  $backupPath  Path to the backup, or null when the backup step failed.
+     * @param  string  $oldVersion  Version before the update.
+     * @param  array|null  $oldMeta  Manifest before the update.
+     * @param  string|null  $oldServiceProvider  Service provider before the update.
+     * @param  bool  $wasActive  Activation state before the update.
+     * @param  array<int, string>  $cachedArtifacts  From `cachedArtifacts()`, read before the update.
+     */
+    protected function rollBackFailedUpdate(
+        Plugin $plugin,
+        ?string $backupPath,
+        string $oldVersion,
+        ?array $oldMeta,
+        ?string $oldServiceProvider,
+        bool $wasActive,
+        array $cachedArtifacts,
+    ): void {
+        $this->restoreFromBackup( $plugin->slug, $backupPath );
+        $this->revertPluginRow( $plugin, $oldVersion, $oldMeta, $oldServiceProvider, $wasActive );
+
+        if ( null !== $backupPath ) {
+            $this->refreshRuntimeAfterRollback( 'plugin', $plugin->slug, $cachedArtifacts );
+        }
+    }
+
+    /**
      * Reset the DB row to the pre-update version/manifest/service_provider so
      * a failed update doesn't leave the row pointing at a version whose files
      * were rolled back.
@@ -727,7 +802,9 @@ class UpdateManager
             File::makeDirectory( $backupDir, 0755, true );
         }
 
-        $backupFile = $backupDir . '/' . $slug . '-' . $plugin->version . '-' . time() . '.zip';
+        // The random suffix keeps two backups of the same plugin version taken
+        // in the same second from sharing a file (#460).
+        $backupFile = $backupDir . '/' . $slug . '-' . $plugin->version . '-' . time() . '-' . bin2hex( random_bytes( 8 ) ) . '.zip';
 
         $zip = new ZipArchive;
 
@@ -883,7 +960,7 @@ class UpdateManager
      * streams the archive to disk via `StreamsDownloadsToDisk` instead of
      * buffering it in memory, enforces https on the download and every
      * redirect, and gives us a digest to verify against. Legacy `update_url`
-     * plugins keep the original buffered `Http::get()` path.
+     * plugins stream through the same trait via `downloadUpdate()`.
      *
      * @param  Plugin  $plugin  Plugin being updated.
      * @param  array  $updateInfo  Update info from `checkPluginUpdate()`.
@@ -911,7 +988,13 @@ class UpdateManager
                 throw PluginUpdateException::downloadFailed( $plugin->slug );
             }
 
-            $zipPath = $this->downloadUpdate( $downloadUrl );
+            try {
+                $zipPath = $this->downloadUpdate( $downloadUrl );
+            } catch ( UpdateException ) {
+                // A non-2xx response is a download failure, not an integrity
+                // failure, so keep reporting it as one.
+                throw PluginUpdateException::downloadFailed( $plugin->slug );
+            }
 
             try {
                 $this->verifyArchiveChecksum( $zipPath, $updateInfo['sha256'] ?? null, $version );
@@ -942,21 +1025,22 @@ class UpdateManager
     /**
      * Download plugin update from URL.
      *
+     * Streams the archive to its own randomly named temp file. The previous
+     * `time()`-based name let two updates downloading in the same second
+     * write to the same file, so one update could extract the other's
+     * archive after its own checksum had passed, and either update's cleanup
+     * deleted the other's archive (#460).
+     *
+     * @since 2.18.0 Streams to a randomly named file via `StreamsDownloadsToDisk`.
+     *
      * @param  string  $updateUrl  URL to download ZIP
+     *
+     * @throws UpdateException When the response is not a 2xx.
      *
      * @return string Path to downloaded file
      */
     protected function downloadUpdate( string $updateUrl ): string
     {
-        $response = Http::timeout( 60 )->get( $updateUrl );
-
-        if ( ! $response->successful() ) {
-            throw new Exception( 'Failed to download update' );
-        }
-
-        $tempPath = storage_path( 'app/temp-plugin-' . time() . '.zip' );
-        File::put( $tempPath, $response->body() );
-
-        return $tempPath;
+        return $this->streamDownloadToTempFile( $updateUrl );
     }
 }

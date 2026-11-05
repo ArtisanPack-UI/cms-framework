@@ -364,6 +364,16 @@ class RecordingApplicationUpdateManager extends ApplicationUpdateManager
     /**
      * {@inheritDoc}
      *
+     * @since 2.18.0
+     */
+    protected function restartQueueWorkers( string $after, array $context = [] ): void
+    {
+        $this->calls[] = 'queue-restart';
+    }
+
+    /**
+     * {@inheritDoc}
+     *
      * @since 2.7.1
      */
     protected function forceLiftMaintenanceMode(): void

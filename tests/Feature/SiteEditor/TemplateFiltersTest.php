@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 uses( RefreshDatabase::class );
 
 beforeEach( function (): void {
-    $this->themesPath  = base_path( 'themes' );
+    $this->themesPath  = testThemesDirectory();
     $this->themeSlug   = 'test-theme';
     $this->templates   = $this->themesPath . '/' . $this->themeSlug . '/templates';
     $this->parts       = $this->themesPath . '/' . $this->themeSlug . '/parts';
@@ -103,6 +103,20 @@ describe( 'ap.visual-editor.templates filter wiring', function (): void {
 
         expect( $merged['page']['theme'] )->toBe( 'override' );
     } );
+
+    it( 'keeps an all-digit slug as one entry when a static entry collides with it (#447)', function (): void {
+        File::put( $this->templates . '/404.html', '<!-- file -->' );
+        File::put( $this->templates . '/500.html', '<!-- file -->' );
+
+        $merged = applyFilters( 'ap.visual-editor.templates', [
+            '404' => ['slug' => '404', 'theme' => 'override', 'source' => 'theme'],
+        ] );
+
+        expect( $merged )->toHaveCount( 2 )
+            ->and( $merged )->toHaveKeys( [404, 500] )
+            ->and( $merged[404]['theme'] )->toBe( 'override' )
+            ->and( $merged[500]['slug'] )->toBe( '500' );
+    } );
 } );
 
 describe( 'ap.visual-editor.template-parts filter wiring', function (): void {
@@ -137,6 +151,17 @@ describe( 'ap.visual-editor.template-parts filter wiring', function (): void {
             ->and( $templates )->not->toHaveKey( 'header' )
             ->and( $parts )->toHaveKey( 'header' )
             ->and( $parts )->not->toHaveKey( 'page' );
+    } );
+
+    it( 'keeps an all-digit slug as one entry when a static entry collides with it (#447)', function (): void {
+        File::put( $this->parts . '/404.html', '<!-- part -->' );
+
+        $merged = applyFilters( 'ap.visual-editor.template-parts', [
+            '404' => ['slug' => '404', 'theme' => 'override', 'area' => 'general'],
+        ] );
+
+        expect( $merged )->toHaveCount( 1 )
+            ->and( $merged[404]['theme'] )->toBe( 'override' );
     } );
 } );
 

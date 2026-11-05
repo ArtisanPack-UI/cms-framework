@@ -130,6 +130,9 @@ plugin is activated, deactivated or deleted, and since 2.13.0 after an
 inactive plugin is updated ( an active plugin's update already clears through
 its deactivate/activate ). It's convenient in development, but in production
 it deletes the compiled caches that `route:cache` / `config:cache` built.
+Since 2.18.0, a plugin or theme update rebuilds the caches the site had before
+the update regardless of this flag, so production keeps its cached routes and
+config.
 
 ### Host Application Version
 

@@ -839,6 +839,16 @@ existing lock, and every install is logged. This is controlled by
 `cms.plugins.autoInstallComposerDependencies`, which is **on by default** since
 2.16.0 (it was off before).
 
+**OPcache.** With `opcache.validate_timestamps=0`, PHP-FPM never re-reads the
+autoloader and package manifest that `composer require` rewrites, so the
+framework resets OPcache after an install *(2.18.0)*. From a web request it calls
+`opcache_reset()`. From the CLI, which has its own cache, it reaches PHP-FPM the
+way the self-updater does; see
+[Resetting PHP-FPM's OPcache from the CLI](self-updater.md#resetting-php-fpms-opcache-from-the-cli-2160).
+If no reset reaches PHP-FPM, the install still succeeds and a warning in the log
+tells you to reload it. Until then, the package's classes aren't loadable on the
+site.
+
 > **Security note.** Packages are installed when a plugin is *installed*, not
 > when it is activated. Laravel's package discovery registers their service
 > providers, so they boot on every request even while the plugin is inactive,
@@ -1062,6 +1072,36 @@ runs after the `updated` hook. An active plugin is already cleared by the
 deactivate / activate around the update, so the extra clear only runs for an
 inactive one. See [Configuration](./Configuration.md#plugin-framework-cache-clearing).
 
+**Going live on production hosts (2.18.0).** After a successful update,
+whatever `autoClearFrameworkCaches` says, the config, route and event caches the
+site had before the update are rebuilt in a fresh process, the web server's
+OPcache is reset (the self-updater's chain: `opcache_reset()` in a web request,
+otherwise `cms.updates.opcache.fpm_socket`, the signed loopback route, then
+`cms.updates.php_reload_command`), and `queue:restart` signals the workers. With
+a route cache in place, a plugin's routes are exactly what `routes-v7.php`
+holds, so this is what makes new named routes resolve. None of it fails the
+update. `POST /api/v1/plugins/{slug}/update` reports `opcache_reset_method` and
+`php_reload_required`, plus a `warning` to reload PHP-FPM when no reset
+reached it.
+
+A rolled-back update gets the same refresh once its backup is restored, so
+PHP-FPM serves the restored version rather than bytecode compiled from the
+failed one, and the caches a deactivate cleared are rebuilt. When no OPcache
+reset reached the web server, the failed update's 422 adds a
+`php_reload_required` message to its error bag, and the 409 for an
+incompatible version carries `opcache_reset_method` and `php_reload_required`.
+
+Installs, activations, deactivations and deletes get the same refresh too, so
+a newly activated plugin's named routes resolve under `route:cache` without
+`optimize`. `PluginManager` reports the outcome through `opcacheResetMethod()`
+and `phpReloadRequired()`, and the install, activate, deactivate and delete
+endpoints return the same fields as the update endpoint. The refresh runs once
+per request: an update's own deactivate and reactivate, a delete's deactivate,
+and the OPcache reset after a plugin's Composer install
+([#438](https://github.com/ArtisanPack-UI/cms-framework/issues/438)) are folded
+into it, and `cms:plugins:sync` refreshes once for the whole sync, only when
+something changed.
+
 ## Testing your plugin
 
 Plugins ship their own Pest / PHPUnit test suites. A minimal `TestCase`
@@ -1087,6 +1127,16 @@ abstract class TestCase extends BaseTestCase
 Test what matters: your admin page renders, your migrations run, your hook
 subscriptions fire, and any custom field types round-trip through
 `HasCustomFields`.
+
+Since 2.18, installing, activating, deactivating, deleting or updating a
+plugin or theme resets the web server's OPcache. Under the CLI that means a
+FastCGI request to a PHP-FPM socket, an HTTP request to the signed loopback
+route, or the operator's reload command. While `APP_ENV` is `testing`, the
+framework skips that chain unless `cms.updates.opcache.web_reset`
+(`CMS_UPDATES_OPCACHE_WEB_RESET`) is set, so your suite needs nothing extra.
+`opcacheResetMethod()` returns `null` and `phpReloadRequired()` returns `false`
+after a skipped reset. See
+[Resetting PHP-FPM's OPcache from the CLI](self-updater.md#resetting-php-fpms-opcache-from-the-cli-2160).
 
 ---
 

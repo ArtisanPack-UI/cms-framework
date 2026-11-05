@@ -346,23 +346,20 @@ class CustomJsonUpdateSourceTest extends TestCase
             'example.com/releases/cms-2.0.0.zip' => Http::response( 'partial', 500 ),
         ] );
 
-        $tempDir = storage_path( 'app/temp' );
+        // A storage path of its own, so a download another test process
+        // leaves in the shared `storage/app/temp` under `pest --parallel`
+        // isn't counted as this one's leftover (#458).
+        withIsolatedStoragePath( function ( string $storagePath ): void {
+            $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
 
-        if ( is_dir( $tempDir ) ) {
-            foreach ( glob( $tempDir . '/update-*.zip' ) ?: [] as $file ) {
-                @unlink( $file );
+            try {
+                $source->downloadUpdate( 'latest' );
+                $this->fail( 'Expected UpdateException to be thrown.' );
+            } catch ( UpdateException $e ) {
+                $leftover = glob( $storagePath . '/app/temp/update-*.zip' ) ?: [];
+                $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
             }
-        }
-
-        $source = new CustomJsonUpdateSource( 'https://example.com/updates.json', '1.0.0' );
-
-        try {
-            $source->downloadUpdate( 'latest' );
-            $this->fail( 'Expected UpdateException to be thrown.' );
-        } catch ( UpdateException $e ) {
-            $leftover = is_dir( $tempDir ) ? glob( $tempDir . '/update-*.zip' ) : [];
-            $this->assertSame( [], $leftover, 'Expected partial download to be removed on failure.' );
-        }
+        } );
     }
 
     /**

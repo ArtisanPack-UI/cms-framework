@@ -72,6 +72,16 @@ class QueryRuntime
     ];
 
     /**
+     * Operators a `taxQuery` may hand to `ap.cmsFramework.query.taxQuery`,
+     * mirroring WordPress's `tax_query`.
+     *
+     * @since 2.18.0
+     *
+     * @var array<int, string>
+     */
+    protected const TAX_QUERY_OPERATORS = ['IN', 'NOT IN', 'AND', 'EXISTS', 'NOT EXISTS'];
+
+    /**
      * Whether each model table has a `status` column, keyed by
      * `connection|table`.
      *
@@ -390,7 +400,21 @@ class QueryRuntime
      * `category` / `post_tag` for both posts and pages (Page exposes
      * the same `categories()` and `tags()` relations as Post).
      *
+     * Any other taxonomy goes to the `ap.cmsFramework.query.taxQuery`
+     * filter, with any operator in {@see self::TAX_QUERY_OPERATORS}
+     * (not only `IN`), so a host can constrain the builder
+     * against its own term storage. Listeners mutate the builder in
+     * place, the same as `ap.cmsFramework.search.query`, so the filter's
+     * final return value is ignored. They must still return the builder,
+     * because each listener receives the previous one's return value.
+     * Without a listener the taxonomy is a no-op. The taxonomy and
+     * operator can come from block attributes, so only an operator in
+     * {@see self::TAX_QUERY_OPERATORS} and a taxonomy of 1-64 letters,
+     * digits, `_`, `-`, `.` or `:` reach the filter. Listeners must
+     * still bind them.
+     *
      * @since 2.0.0
+     * @since 2.18.0 Passes unmapped taxonomies to `ap.cmsFramework.query.taxQuery`.
      *
      * @param  array<string, mixed>  $attributes
      */
@@ -404,12 +428,17 @@ class QueryRuntime
         $taxonomy = isset( $taxQuery['taxonomy'] ) && is_string( $taxQuery['taxonomy'] )
             ? $taxQuery['taxonomy']
             : null;
-        $operator = isset( $taxQuery['operator'] ) && is_string( $taxQuery['operator'] )
-            ? strtoupper( $taxQuery['operator'] )
-            : 'IN';
+        // `IN` only when no operator is given. One that is present but not a
+        // string is invalid, so it drops the constraint like any unknown
+        // operator rather than passing as `IN`.
+        $operator = match ( true ) {
+            ! isset( $taxQuery['operator'] )      => 'IN',
+            is_string( $taxQuery['operator'] )    => strtoupper( $taxQuery['operator'] ),
+            default                               => null,
+        };
         $terms    = $this->normalizeIdList( $taxQuery['terms'] ?? null );
 
-        if ( null === $taxonomy || [] === $terms || 'IN' !== $operator ) {
+        if ( null === $taxonomy || [] === $terms ) {
             return;
         }
 
@@ -419,7 +448,32 @@ class QueryRuntime
             default                      => null,
         };
 
+        if ( null === $operator ) {
+            return;
+        }
+
         if ( null === $relation ) {
+            $operator = (string) preg_replace( '/\s+/', ' ', trim( $operator ) );
+
+            // `\z`, not `$`: `$` also matches before a trailing newline.
+            if ( ! in_array( $operator, self::TAX_QUERY_OPERATORS, true )
+                || 1 !== preg_match( '/^[A-Za-z0-9_.:-]{1,64}\z/', $taxonomy ) ) {
+                return;
+            }
+
+            applyFilters(
+                'ap.cmsFramework.query.taxQuery',
+                $query,
+                $taxonomy,
+                $terms,
+                $operator,
+                $postType,
+            );
+
+            return;
+        }
+
+        if ( 'IN' !== $operator ) {
             return;
         }
 

@@ -403,6 +403,10 @@ The updater now calls `opcache_reset()` once the files on disk are final: after 
 - If no reset reaches the web server (from the CLI, or because `opcache.restrict_api` blocks it), the updater logs a warning, records `php_reload_required: true` in the update state, and `update:perform`, `update:rollback` and `update:status` tell the operator to reload PHP-FPM.
 - `ApplicationUpdateManager::phpReloadRequired()` returns the same flag for the last update or rollback that instance ran, and `opcacheResetMethod()` returns how the reset happened, for an admin UI that wants to show it.
 
+Since 2.18 the updater also runs `queue:restart` after the OPcache reset, both after a successful update and when a failure finishes forward on the new code. Long-running queue workers hold the pre-update framework and job classes in memory, so without it they kept running the old version until someone restarted them by hand. `queue:restart` only writes a timestamp to the cache, so each worker, including the one running a queued update's `PerformUpdateJob`, exits after its current job and its supervisor starts it on the new code. A failure is logged and doesn't fail the update.
+
+A rollback runs `queue:restart` too, after its OPcache reset: when a failure restores the snapshot, when `update:rollback` restores one by hand, and when a failure with no snapshot to restore leaves the tree as it is. A worker can hold classes it loaded from the failed release, above all the one that ran `PerformUpdateJob` and extracted it, so without this it kept running them after the rollback.
+
 #### Resetting PHP-FPM's OPcache from the CLI (2.16.0)
 
 The CLI is the recommended way to run an update, so a CLI update should not leave FPM on stale bytecode until someone remembers to reload it. After a CLI or queued run, the updater tries these in order and stops at the first that works:
@@ -412,6 +416,10 @@ The CLI is the recommended way to run an update, so a CLI update should not leav
 3. **Operator command** (`command`). `CMS_UPDATES_PHP_RELOAD_COMMAND`, for example `sudo -S service php8.4-fpm reload`, runs from `base_path()`. It is empty by default. If it fails, the log records its exit code and output but not the command itself, in case it carries a password for `sudo -S`.
 
 OPcache's shared memory belongs to the FPM master process, so resetting it through any pool resets it for every pool. The mechanism that worked is recorded as `opcache_reset_method` in the update state (`web-request` when the update itself ran under FPM), and `update:status` shows it as **OPcache reset**. `update:perform` and `update:rollback` print it too. If all three fail, the warning described above appears in the log, with the reason each mechanism failed, and in the console output. `CMS_UPDATES_OPCACHE_FASTCGI=false` turns off the first mechanism, and `CMS_UPDATES_OPCACHE_TIMEOUT` (default 5 seconds) bounds the FastCGI and loopback requests.
+
+Since 2.18.0 the same chain and settings also run after a plugin's Composer packages are installed from the CLI. See [Composer-package dependencies](plugin-authoring.md#composer-package-dependencies).
+
+`CMS_UPDATES_OPCACHE_WEB_RESET` (`cms.updates.opcache.web_reset`) turns the whole chain off or on. Left unset, it is off while the application runs its unit tests (`APP_ENV=testing`) and on otherwise, so a test suite that installs, activates or updates plugins and themes never reaches a real PHP-FPM socket, the loopback route or the reload command. The process's own `opcache_reset()` still runs. A skipped reset records `opcache_reset_method` as `null` without setting `php_reload_required` or logging a warning. Set it to `true` to run the chain in tests anyway, with each mechanism faked, or to `false` to turn it off on a host.
 
 The installation has to be running 2.16 before an update starts for this to apply, because the updating process runs the updater code that was installed before the update.
 
