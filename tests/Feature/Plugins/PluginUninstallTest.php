@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 
 beforeEach( function (): void {
     $this->manager     = app( PluginManager::class );
-    $this->pluginsPath = base_path( 'plugins' );
+    $this->pluginsPath = testPluginsDirectory();
     $this->pluginPath  = $this->pluginsPath . '/plugin-with-uninstaller';
 
     File::ensureDirectoryExists( $this->pluginsPath );

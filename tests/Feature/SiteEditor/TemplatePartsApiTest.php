@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
     $this->user        = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
-    $this->themesPath  = base_path( 'themes' );
+    $this->themesPath  = testThemesDirectory();
     $this->themeSlug   = 'test-theme';
     $this->themeParts  = $this->themesPath . '/' . $this->themeSlug . '/parts';
 

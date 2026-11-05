@@ -732,6 +732,11 @@ class ApplicationUpdateManager
         // The restore rewrote PHP files the web server may hold compiled
         // bytecode for, the update's own included (#425).
         $this->resetOpcache();
+
+        // A queue worker can hold classes it loaded from the failed release,
+        // above all the one that ran `PerformUpdateJob`, so stop them running
+        // it now the snapshot is back (#457).
+        $this->restartQueueWorkers( 'rolling back the update' );
     }
 
     /**
@@ -2689,9 +2694,13 @@ class ApplicationUpdateManager
         $method = $this->resetOpcacheForWebServer();
 
         $this->opcacheResetMethod = $method;
-        $this->phpReloadRequired  = null === $method;
+        $this->phpReloadRequired  = null === $method && ! $this->webOpcacheResetWasSkipped();
 
-        $this->state()->recordOpcacheReset( $method );
+        $this->state()->recordOpcacheReset( $method, $this->phpReloadRequired );
+
+        if ( $this->webOpcacheResetWasSkipped() ) {
+            return;
+        }
 
         if ( null !== $method ) {
             if ( $this->runningUnderCli() ) {
@@ -3820,6 +3829,12 @@ class ApplicationUpdateManager
                 // service cache (#308).
                 $this->clearCompiledCachesAfterFailure();
 
+                // `rollback()` already signalled the queue workers, but
+                // `optimize:clear` above runs `cache:clear`, which can flush
+                // the `queue:restart` signal from the default cache before a
+                // worker reads it. Signal again now the cache is final (#457).
+                $this->restartQueueWorkers( 'rolling back the update' );
+
                 $this->state()->markRollback( true );
             } catch ( Throwable $e ) {
                 // Rollback failed - this is critical. Preserve the original
@@ -3860,8 +3875,10 @@ class ApplicationUpdateManager
         $this->clearCompiledCachesAfterFailure();
 
         // Whatever the tree now holds, it is not what the web server compiled
-        // before the update started (#425).
+        // before the update started (#425), nor what a queue worker that
+        // loaded classes mid-update holds (#457).
         $this->resetOpcache();
+        $this->restartQueueWorkers( 'the failed update' );
 
         $this->state()->markRollback( null );
 

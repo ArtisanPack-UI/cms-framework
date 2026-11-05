@@ -6,6 +6,7 @@ use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\ContentTypeManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Managers\CustomFieldManager;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\ContentType;
 use ArtisanPackUI\CMSFramework\Modules\ContentTypes\Models\CustomField;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 
 beforeEach( function (): void {
@@ -341,18 +342,30 @@ test( 'generate migration creates valid migration file', function (): void {
         'required'      => false,
     ] );
 
-    $migrationPath = $manager->generateMigration( $field, 'add' );
+    // Generate into a database path of its own. Testbench's
+    // `database/migrations` is shared by every `pest --parallel` process,
+    // and another process migrating while this file exists would try to run
+    // it, or find it deleted mid-run (#458).
+    $originalDatabasePath = database_path();
+    $databasePath         = sys_get_temp_dir() . '/cms-framework-database-' . bin2hex( random_bytes( 16 ) );
+    File::ensureDirectoryExists( $databasePath . '/migrations' );
+    app()->useDatabasePath( $databasePath );
 
-    expect( file_exists( $migrationPath ) )->toBeTrue();
-    expect( $migrationPath )->toContain( 'add_subtitle_to_content_types.php' );
+    try {
+        $migrationPath = $manager->generateMigration( $field, 'add' );
 
-    $content = file_get_contents( $migrationPath );
-    expect( $content )->toContain( 'Schema::table' );
-    expect( $content )->toContain( 'articles' );
-    expect( $content )->toContain( 'subtitle' );
+        expect( file_exists( $migrationPath ) )->toBeTrue()
+            ->and( $migrationPath )->toStartWith( $databasePath . '/migrations/' )
+            ->and( $migrationPath )->toContain( 'add_subtitle_to_content_types.php' );
 
-    // Cleanup
-    unlink( $migrationPath );
+        $content = file_get_contents( $migrationPath );
+        expect( $content )->toContain( 'Schema::table' );
+        expect( $content )->toContain( 'articles' );
+        expect( $content )->toContain( 'subtitle' );
+    } finally {
+        app()->useDatabasePath( $originalDatabasePath );
+        File::deleteDirectory( $databasePath );
+    }
 } );
 
 test( 'custom field manager works with app container', function (): void {

@@ -7,7 +7,7 @@ use ArtisanPackUI\CMSFramework\Modules\Themes\Managers\ThemeManager;
 use Illuminate\Support\Facades\File;
 
 beforeEach( function (): void {
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->themeSlug  = 'test-theme';
     $this->themeRoot  = $this->themesPath . '/' . $this->themeSlug;
 
@@ -34,7 +34,7 @@ function makeReader( mixed $activeTheme = null ): ThemeStylesheetReader
     $manager->shouldReceive( 'validateSlug' )->andReturnUsing(
         static fn ( string $slug ): bool => (bool) preg_match( '/^[a-zA-Z0-9_-]+$/', $slug ),
     );
-    $manager->shouldReceive( 'getThemesPath' )->andReturn( base_path( 'themes' ) );
+    $manager->shouldReceive( 'getThemesPath' )->andReturn( testThemesDirectory() );
 
     return new ThemeStylesheetReader( $manager );
 }
@@ -154,7 +154,7 @@ describe( 'ThemeStylesheetReader memoization', function (): void {
         $manager->shouldReceive( 'validateSlug' )
             ->andReturnUsing( static fn ( string $s ): bool => true );
         $manager->shouldReceive( 'getThemesPath' )
-            ->andReturn( base_path( 'themes' ) );
+            ->andReturn( testThemesDirectory() );
 
         $reader = new ThemeStylesheetReader( $manager );
 

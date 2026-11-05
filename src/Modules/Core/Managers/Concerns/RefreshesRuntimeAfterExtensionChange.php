@@ -286,7 +286,8 @@ trait RefreshesRuntimeAfterExtensionChange
      * Reset the web server's OPcache after a change and record the outcome.
      *
      * When no reset reaches the web server, the operator is told to reload
-     * PHP-FPM, through the log and {@see phpReloadRequired()}.
+     * PHP-FPM, through the log and {@see phpReloadRequired()}. A reset that
+     * `cms.updates.opcache.web_reset` skipped is neither (#456).
      *
      * @since 2.18.0
      *
@@ -305,7 +306,11 @@ trait RefreshesRuntimeAfterExtensionChange
         }
 
         $this->opcacheResetMethod = $method;
-        $this->phpReloadRequired  = null === $method;
+        $this->phpReloadRequired  = null === $method && ! $this->webOpcacheResetWasSkipped();
+
+        if ( $this->webOpcacheResetWasSkipped() ) {
+            return;
+        }
 
         if ( null !== $method ) {
             if ( $this->runningUnderCli() ) {

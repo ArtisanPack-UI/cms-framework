@@ -93,7 +93,7 @@ function writeThemeFileFor( string $context, string $themeRoot, string $slug ): 
 
 beforeEach( function (): void {
     $this->user       = grantPermissions( TestUser::factory()->create(), 'manage-themes', 'manage-content' );
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->themeSlug  = 'test-theme';
 
     File::ensureDirectoryExists( $this->themesPath . '/' . $this->themeSlug );

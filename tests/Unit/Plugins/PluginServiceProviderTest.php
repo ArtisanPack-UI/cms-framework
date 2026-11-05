@@ -465,8 +465,8 @@ it( 'resolves pluginPath and pluginConfig from the manifest', function (): void 
         }
     };
 
-    expect( $provider->exposePluginPath() )->toEndWith( '/plugins/my-plugin' )
-        ->and( $provider->exposePluginPath( 'resources/js' ) )->toEndWith( '/plugins/my-plugin/resources/js' )
+    expect( $provider->exposePluginPath() )->toBe( testPluginsDirectory( 'my-plugin' ) )
+        ->and( $provider->exposePluginPath( 'resources/js' ) )->toBe( testPluginsDirectory( 'my-plugin/resources/js' ) )
         ->and( $provider->exposePluginConfig( 'name' ) )->toBe( 'My Plugin' )
         ->and( $provider->exposePluginConfig( 'nested.key' ) )->toBe( 'value' )
         ->and( $provider->exposePluginConfig( 'missing' ) )->toBeNull();
@@ -687,7 +687,7 @@ it( 'publishes a relative entry directory on the plugin asset route', function (
     expect( $registry->federatedModules()['reports-plugin']['entry'] )
         ->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) )
         ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBe( [
-            'directory' => base_path( 'plugins/reports-plugin/dist/assets' ),
+            'directory' => testPluginsDirectory( 'reports-plugin/dist/assets' ),
             'entry'     => 'remoteEntry.js',
         ] );
 } );
@@ -778,7 +778,7 @@ it( 'passes a root-relative entry URL through unchanged', function (): void {
 it( 'serves a filesystem path inside the plugin as its plugin-relative entry', function (): void {
     $provider = manifestProvider(
         ['slug' => 'reports-plugin'],
-        fn ( $p ) => $p->imperativeFederatedModule( 'reports', base_path( 'plugins/reports-plugin/dist/remoteEntry.js' ) ),
+        fn ( $p ) => $p->imperativeFederatedModule( 'reports', testPluginsDirectory( 'reports-plugin/dist/remoteEntry.js' ) ),
     );
 
     $provider->boot();
@@ -789,13 +789,13 @@ it( 'serves a filesystem path inside the plugin as its plugin-relative entry', f
         ->toBe( url( 'plugins/reports-plugin/assets/remoteEntry.js' ) )
         ->not->toContain( base_path() )
         ->and( $registry->assetDirectory( 'reports-plugin' ) )->toBe( [
-            'directory' => base_path( 'plugins/reports-plugin/dist' ),
+            'directory' => testPluginsDirectory( 'reports-plugin/dist' ),
             'entry'     => 'remoteEntry.js',
         ] );
 } );
 
 it( 'matches a backslash-separated filesystem path, as Laravel builds them on Windows', function (): void {
-    $entry = str_replace( '/', '\\', base_path( 'plugins/reports-plugin/dist/remoteEntry.js' ) );
+    $entry = str_replace( '/', '\\', testPluginsDirectory( 'reports-plugin/dist/remoteEntry.js' ) );
 
     $provider = manifestProvider(
         ['slug' => 'reports-plugin'],
@@ -855,7 +855,7 @@ it( 'refuses a second, different asset directory for the same plugin', function 
     $registry = app( PluginRegistry::class );
 
     expect( $registry->federatedModules() )->toHaveKey( 'reports' )->not->toHaveKey( 'reports-extra' )
-        ->and( $registry->assetDirectory( 'reports-plugin' )['directory'] )->toBe( base_path( 'plugins/reports-plugin/dist' ) );
+        ->and( $registry->assetDirectory( 'reports-plugin' )['directory'] )->toBe( testPluginsDirectory( 'reports-plugin/dist' ) );
 
     Log::shouldHaveReceived( 'warning' )->once();
 } );

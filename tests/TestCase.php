@@ -20,6 +20,7 @@ use ArtisanPackUI\Rbac\RbacServiceProvider;
 use ArtisanPackUI\Security\SecurityServiceProvider;
 use Dedoc\Scramble\ScrambleServiceProvider;
 use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\ParallelTesting;
 use Laravel\Sanctum\SanctumServiceProvider;
 
 /**
@@ -91,5 +92,17 @@ class TestCase extends \Orchestra\Testbench\TestCase
             'database' => ':memory:',
             'prefix'   => '',
         ] );
+
+        // 3. Under `pest --parallel`, give each process its own plugins and
+        //    themes directories. They live under Testbench's shared skeleton,
+        //    so otherwise one process's cleanup deletes the fixtures another
+        //    is using (#458). Tests build paths with testPluginsDirectory()
+        //    and testThemesDirectory().
+        $token = ParallelTesting::token();
+
+        if ( is_string( $token ) && '' !== $token ) {
+            $app['config']->set( 'cms.plugins.directory', "plugins-test-{$token}" );
+            $app['config']->set( 'cms.themes.directory', "themes-test-{$token}" );
+        }
     }
 }

@@ -26,7 +26,7 @@ beforeEach( function (): void {
     $this->themeManager  = app( ThemeManager::class );
     $this->updateManager = new UpdateManager( $this->themeManager );
 
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->tmpPath    = storage_path( 'app/theme-update-tmp' );
     $this->testSlugs  = [];
 

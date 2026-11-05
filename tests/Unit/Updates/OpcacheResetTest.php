@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
 use Orchestra\Testbench\TestCase;
 use RuntimeException;
+use Throwable;
 use ZipArchive;
 
 /**
@@ -156,6 +157,52 @@ class OpcacheResetTest extends TestCase
     }
 
     /**
+     * Test that a CLI update in a test suite, where `web_reset` is unset,
+     * leaves PHP-FPM alone and neither warns nor records a needed reload
+     * (#456).
+     *
+     * @since 2.18.0
+     */
+    public function test_cli_update_skips_the_web_reset_under_unit_tests_when_web_reset_is_unset(): void
+    {
+        config( ['cms.updates.opcache.web_reset' => null] );
+        Log::spy();
+
+        $manager                     = $this->managerWithUpdateAvailable();
+        $manager->sapi               = 'cli';
+        $manager->opcacheResetResult = true;
+
+        $this->assertTrue( $manager->performUpdate() );
+
+        $this->assertContains( 'opcache-reset', $manager->calls, 'The process\'s own OPcache is still reset.' );
+        $this->assertNotContains( 'web-opcache-reset', $manager->calls );
+        $this->assertFalse( $manager->phpReloadRequired() );
+        $this->assertNull( $manager->opcacheResetMethod() );
+        $this->assertFalse( $manager->updateState()['php_reload_required'] );
+        $this->assertNull( $manager->updateState()['opcache_reset_method'] );
+
+        Log::shouldNotHaveReceived( 'warning' );
+    }
+
+    /**
+     * Test that `web_reset` set to false skips the web reset (#456).
+     *
+     * @since 2.18.0
+     */
+    public function test_cli_update_skips_the_web_reset_when_web_reset_is_off(): void
+    {
+        config( ['cms.updates.opcache.web_reset' => false] );
+
+        $manager       = $this->managerWithUpdateAvailable();
+        $manager->sapi = 'cli';
+
+        $this->assertTrue( $manager->performUpdate() );
+
+        $this->assertNotContains( 'web-opcache-reset', $manager->calls );
+        $this->assertFalse( $manager->phpReloadRequired() );
+    }
+
+    /**
      * Test that a CLI rollback also reaches PHP-FPM.
      *
      * @since 2.16.0
@@ -276,6 +323,13 @@ class OpcacheResetTest extends TestCase
         $this->expectFailure( $manager );
 
         $this->assertContains( 'opcache-reset', $manager->calls );
+
+        // A worker that loaded classes mid-update must stop running them (#457).
+        $this->assertContains( 'queue-restart', $manager->calls );
+        $this->assertGreaterThan(
+            array_search( 'opcache-reset', $manager->calls, true ),
+            array_search( 'queue-restart', $manager->calls, true ),
+        );
     }
 
     /**
@@ -311,8 +365,70 @@ class OpcacheResetTest extends TestCase
             $manager->rollback( $backupPath );
 
             $this->assertFileExists( $target . '/app/Old.php' );
-            $this->assertSame( ['composer', 'caches', 'opcache-reset'], $manager->calls );
+            $this->assertSame( ['composer', 'caches', 'opcache-reset', 'queue-restart'], $manager->calls, 'The queue workers restart after OPcache is reset (#457).' );
             $this->assertFalse( $manager->phpReloadRequired() );
+        } finally {
+            app()->setBasePath( $originalBase );
+            @unlink( $target . '/app/Old.php' );
+            @rmdir( $target . '/app' );
+            @rmdir( $target );
+            @unlink( $backupPath );
+            @rmdir( $tempRoot );
+        }
+    }
+
+    /**
+     * Test that an automatic rollback signals the queue workers again after
+     * the compiled caches are cleared, because `optimize:clear` runs
+     * `cache:clear`, which can flush the `queue:restart` signal (#457).
+     *
+     * @since 2.18.0
+     */
+    public function test_automatic_rollback_restarts_queue_workers_after_clearing_the_caches(): void
+    {
+        $tempRoot = sys_get_temp_dir() . '/cmsfw-rollback-restart-' . bin2hex( random_bytes( 6 ) );
+        $target   = $tempRoot . '/target';
+        mkdir( $target . '/app', 0755, true );
+
+        $backupPath = $tempRoot . '/backup.zip';
+        $backup     = new ZipArchive;
+        $this->assertTrue( true === $backup->open( $backupPath, ZipArchive::CREATE | ZipArchive::OVERWRITE ) );
+        $backup->addFromString( 'app/Old.php', "<?php\n// old\n" );
+        $backup->close();
+
+        $manager = new class( $backupPath ) extends RecordingApplicationUpdateManager {
+            public function __construct( string $preparedBackupPath )
+            {
+                $this->backupPath = $preparedBackupPath;
+            }
+
+            public function callHandleFailure( Throwable $e ): void
+            {
+                $this->handleUpdateFailure( $e );
+            }
+
+            protected function verifyComposerBinaryAvailable(): void
+            {
+            }
+
+            protected function clearCompiledCachesAfterFailure(): void
+            {
+                $this->calls[] = 'optimize-clear';
+            }
+        };
+        $manager->sapi               = 'fpm-fcgi';
+        $manager->opcacheResetResult = true;
+
+        $originalBase = base_path();
+        app()->setBasePath( $target );
+
+        try {
+            $manager->callHandleFailure( new RuntimeException( 'composer install failed' ) );
+
+            $clear = array_search( 'optimize-clear', $manager->calls, true );
+
+            $this->assertNotFalse( $clear );
+            $this->assertContains( 'queue-restart', array_slice( $manager->calls, $clear + 1 ), 'The workers must be signalled after the cache clear that can flush the signal.' );
         } finally {
             app()->setBasePath( $originalBase );
             @unlink( $target . '/app/Old.php' );

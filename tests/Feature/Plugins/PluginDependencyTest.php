@@ -220,7 +220,7 @@ describe( 'Manager query helpers', function (): void {
     } );
 
     it( 'resolves requires from the manifest for a plugin not yet in the database', function (): void {
-        $pluginsPath = base_path( 'plugins' );
+        $pluginsPath = testPluginsDirectory();
         File::ensureDirectoryExists( $pluginsPath . '/diskonly' );
         File::put( $pluginsPath . '/diskonly/plugin.json', json_encode( [
             'slug'     => 'diskonly',

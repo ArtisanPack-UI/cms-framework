@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
 uses( RefreshDatabase::class );
 
 beforeEach( function (): void {
-    $this->themesPath  = base_path( 'themes' );
+    $this->themesPath  = testThemesDirectory();
     $this->themeSlug   = 'test-theme';
     $this->templates   = $this->themesPath . '/' . $this->themeSlug . '/templates';
     $this->parts       = $this->themesPath . '/' . $this->themeSlug . '/parts';

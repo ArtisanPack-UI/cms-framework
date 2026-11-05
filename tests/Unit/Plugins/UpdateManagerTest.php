@@ -668,20 +668,21 @@ describe( 'Update Archive Download', function (): void {
             'https://github.com/owner/repo/releases/download/v2.0.0/test-plugin.zip' => Http::response( 'fake-zip-content' ),
         ] );
 
-        $temporaryArchives = fn (): array => glob( storage_path( 'app/temp/update-*.zip' ) ) ?: [];
+        // A storage path of its own, so a download another test process
+        // leaves in the shared `storage/app/temp` under `pest --parallel`
+        // isn't counted as this one's leftover (#458).
+        withIsolatedStoragePath( function ( string $storagePath ) use ( $plugin ): void {
+            expect( fn () => invokeMethod( $this->updateManager, 'downloadUpdateArchive', [
+                $plugin,
+                [
+                    'version'      => '2.0.0',
+                    'download_url' => 'https://github.com/owner/repo/releases/download/v2.0.0/test-plugin.zip',
+                    'sha256'       => null,
+                ],
+            ] ) )->toThrow( UpdateException::class );
 
-        $before = $temporaryArchives();
-
-        expect( fn () => invokeMethod( $this->updateManager, 'downloadUpdateArchive', [
-            $plugin,
-            [
-                'version'      => '2.0.0',
-                'download_url' => 'https://github.com/owner/repo/releases/download/v2.0.0/test-plugin.zip',
-                'sha256'       => null,
-            ],
-        ] ) )->toThrow( UpdateException::class );
-
-        expect( $temporaryArchives() )->toBe( $before );
+            expect( glob( $storagePath . '/app/temp/update-*.zip' ) ?: [] )->toBe( [] );
+        } );
     } );
 } );
 

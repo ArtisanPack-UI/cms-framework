@@ -19,7 +19,7 @@ beforeEach( function (): void {
     app()->instance( WebOpcacheResetter::class, new RecordingWebOpcacheResetter );
 
     $this->admin      = grantPermissions( TestUser::factory()->create(), 'manage-themes' );
-    $this->themesPath = base_path( 'themes' );
+    $this->themesPath = testThemesDirectory();
     $this->tmpPath    = storage_path( 'app/theme-update-api-tmp' );
     $this->testSlugs  = [];
 

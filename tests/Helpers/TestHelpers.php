@@ -67,3 +67,74 @@ if ( ! function_exists( 'invokeMethod' ) ) {
         return $method->invokeArgs( $object, $parameters );
     }
 }
+
+if ( ! function_exists( 'testPluginsDirectory' ) ) {
+    /**
+     * Absolute path to the plugins directory this test process uses.
+     *
+     * Under `pest --parallel` each process gets its own directory (see
+     * `TestCase::getEnvironmentSetUp()`), so tests must build plugin paths
+     * from the configured directory rather than `base_path( 'plugins' )`, or
+     * one process's cleanup deletes fixtures another is using (#458).
+     *
+     * @param  string  $path  Path inside the plugins directory.
+     *
+     * @return string The absolute path.
+     */
+    function testPluginsDirectory( string $path = '' ): string
+    {
+        $directory = base_path( (string) config( 'cms.plugins.directory', 'plugins' ) );
+
+        return '' === $path ? $directory : $directory . '/' . ltrim( $path, '/' );
+    }
+}
+
+if ( ! function_exists( 'testThemesDirectory' ) ) {
+    /**
+     * Absolute path to the themes directory this test process uses.
+     *
+     * The themes counterpart of {@see testPluginsDirectory()} (#458).
+     *
+     * @param  string  $path  Path inside the themes directory.
+     *
+     * @return string The absolute path.
+     */
+    function testThemesDirectory( string $path = '' ): string
+    {
+        $directory = base_path( (string) config( 'cms.themes.directory', 'themes' ) );
+
+        return '' === $path ? $directory : $directory . '/' . ltrim( $path, '/' );
+    }
+}
+
+if ( ! function_exists( 'withIsolatedStoragePath' ) ) {
+    /**
+     * Run a callback with the application's storage path pointed at a fresh
+     * temporary directory, then restore it and remove the directory.
+     *
+     * Testbench's `storage/` is shared by every `pest --parallel` process, so
+     * a test that asserts nothing is left in `storage/app/temp` can see
+     * another process's download there (#458).
+     *
+     * @template TResult
+     *
+     * @param  callable(string): TResult  $callback  Receives the storage path.
+     *
+     * @return TResult What the callback returned.
+     */
+    function withIsolatedStoragePath( callable $callback ): mixed
+    {
+        $original = storage_path();
+        $isolated = sys_get_temp_dir() . '/cms-framework-storage-' . bin2hex( random_bytes( 16 ) );
+
+        Illuminate\Support\Facades\File::ensureDirectoryExists( $isolated . '/app/temp' );
+        app()->useStoragePath( $isolated );
+
+        try {
+            return $callback( $isolated );
+        } finally {
+            app()->useStoragePath( $original );
+            Illuminate\Support\Facades\File::deleteDirectory( $isolated );
+        }
+    }
+}

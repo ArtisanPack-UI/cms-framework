@@ -36,6 +36,14 @@ trait ResetsWebOpcache
     protected array $webOpcacheResetFailures = [];
 
     /**
+     * Whether the last attempt left the web server's OPcache alone because
+     * `cms.updates.opcache.web_reset` turned the reset off (#456).
+     *
+     * @since 2.18.0
+     */
+    protected bool $webOpcacheResetSkipped = false;
+
+    /**
      * Reset the OPcache the web server runs from.
      *
      * With `opcache.validate_timestamps=0` (Laravel Forge's OPcache
@@ -45,6 +53,11 @@ trait ResetsWebOpcache
      * queue worker it only clears this process's own cache, so
      * {@see resetWebOpcache()} reaches the web server another way.
      *
+     * Under the CLI the web server is left alone when
+     * {@see shouldResetWebOpcache()} says so, such as in a test suite. Null
+     * is returned then too, and {@see webOpcacheResetWasSkipped()} tells the
+     * two apart, so a skip is not reported as PHP-FPM needing a reload.
+     *
      * @since 2.18.0
      *
      * @return string|null `web-request`, or under the CLI the mechanism that
@@ -52,13 +65,64 @@ trait ResetsWebOpcache
      */
     protected function resetOpcacheForWebServer(): ?string
     {
+        $this->webOpcacheResetSkipped  = false;
+        $this->webOpcacheResetFailures = [];
+
         $reset = $this->attemptOpcacheReset();
 
         if ( $this->runningUnderCli() ) {
+            if ( ! $this->shouldResetWebOpcache() ) {
+                $this->webOpcacheResetSkipped = true;
+
+                return null;
+            }
+
             return $this->resetWebOpcache();
         }
 
         return false === $reset ? null : 'web-request';
+    }
+
+    /**
+     * Whether the last {@see resetOpcacheForWebServer()} left the web
+     * server's OPcache alone on purpose rather than failing to reset it.
+     *
+     * @since 2.18.0
+     *
+     * @return bool True when `cms.updates.opcache.web_reset` skipped it.
+     */
+    protected function webOpcacheResetWasSkipped(): bool
+    {
+        return $this->webOpcacheResetSkipped;
+    }
+
+    /**
+     * Whether a CLI run should reach for the web server's OPcache at all.
+     *
+     * Reaching it means a FastCGI request to a real PHP-FPM socket, an HTTP
+     * request to the loopback route, or the operator's reload command. A host
+     * app's or plugin's test suite activating a plugin must do none of those
+     * (#456), so `cms.updates.opcache.web_reset` left unset turns the reset
+     * off while the application runs its unit tests, and on otherwise.
+     * Setting it to true or false overrides that either way.
+     *
+     * @since 2.18.0
+     *
+     * @return bool True when the web server's OPcache should be reset.
+     */
+    protected function shouldResetWebOpcache(): bool
+    {
+        $setting = config( 'cms.updates.opcache.web_reset' );
+
+        if ( null === $setting || '' === $setting ) {
+            return ! app()->runningUnitTests();
+        }
+
+        if ( is_bool( $setting ) ) {
+            return $setting;
+        }
+
+        return ! in_array( strtolower( trim( (string) $setting ) ), ['0', 'false', 'off', 'no'], true );
     }
 
     /**

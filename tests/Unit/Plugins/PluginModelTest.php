@@ -91,7 +91,7 @@ it( 'returns correct path', function (): void {
         'version' => '1.0.0',
     ] );
 
-    $expectedPath = base_path( 'plugins/test-plugin' );
+    $expectedPath = testPluginsDirectory( 'test-plugin' );
 
     expect( $plugin->getPath() )->toBe( $expectedPath );
 } );
